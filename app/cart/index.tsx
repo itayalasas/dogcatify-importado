@@ -190,7 +190,6 @@ export default function Cart() {
           ]
         );
       }
-
     } catch (error) {
       console.error('Error in Mercado Pago checkout:', error);
       Alert.alert(
