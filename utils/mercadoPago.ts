@@ -452,7 +452,6 @@ export const createMultiPartnerOrder = async (
 
         console.log(`Order created for partner ${partnerId}:`, order.id);
 
-
         orders.push(order);
 
       } catch (partnerError) {
@@ -497,8 +496,7 @@ export const createMultiPartnerOrder = async (
         partnerConfig,
         order.commission_amount,
         order.partner_amount,
-        shippingCost,
-        shippingAddress
+        shippingCost
       );
       
       paymentPreferences.push(preference);
@@ -636,8 +634,7 @@ export const createMarketplacePaymentPreference = async (
             state_name: 'Provincia'
           }
         }
-        }
-      };
+    };
     
     console.log('Final preference data:', {
       items_count: preferenceData.items.length,
