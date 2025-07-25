@@ -479,7 +479,8 @@ export const createMultiPartnerOrder = async (
         customerInfo,
         primaryPartnerConfig,
         totalAmount,
-        shippingCost
+        shippingCost,
+        shippingAddress
       );
       
       paymentPreferences.push(marketplacePreference);
