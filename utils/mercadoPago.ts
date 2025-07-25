@@ -400,8 +400,8 @@ export const createMultiPartnerOrder = async (
     // Use the first partner as the primary partner for the unified order
     const primaryPartnerId = cartItems[0].partnerId;
     
-    // Generate a UUID for the order (let PostgreSQL generate it)
-    const unifiedOrderId = crypto.randomUUID();
+    // Generate a simple unique ID for temporary use
+    const tempOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
     // Prepare order data
     const orderData = {
@@ -441,25 +441,26 @@ export const createMultiPartnerOrder = async (
       }
     };
 
-    // Insert the unified order into database
-    const { data: insertedOrder, error } = await supabaseClient
+    // Insert the unified order into database (let PostgreSQL generate the UUID)
+    const insertResult = await supabaseClient
       .from('orders')
-      .insert([orderData])
-      .select()
-      .single();
+      .insert([orderData]);
 
-    if (error) {
-      console.error('Error creating unified order:', error);
-      throw error;
+    if (insertResult.error) {
+      console.error('Error creating unified order:', insertResult.error);
+      throw insertResult.error;
     }
 
-    const actualOrderId = insertedOrder?.id || unifiedOrderId;
-    console.log('Unified order created:', actualOrderId);
+    console.log('Unified order created successfully');
+    
+    // Since we can't get the generated ID easily, we'll use the temp ID for the payment preference
+    // The webhook will match by external_reference
+    const orderIdForPayment = tempOrderId;
 
     // Create the unified order object for return
     const unifiedOrder = {
       ...orderData,
-      id: actualOrderId,
+      id: orderIdForPayment,
       customerId: orderData.customer_id,
       totalAmount: orderData.total_amount,
       commissionAmount: orderData.commission_amount,
@@ -474,7 +475,7 @@ export const createMultiPartnerOrder = async (
     
     // Create a single payment preference for the unified order
     const preference = await createUnifiedPaymentPreference(
-      actualOrderId,
+      orderIdForPayment,
       cartItems,
       customerInfo,
       primaryPartnerConfig,
@@ -644,14 +645,8 @@ export const createUnifiedPaymentPreference = async (
       sandbox_init_point: preference.sandbox_init_point
     });
     
-    // Update the unified order with payment preference ID
-    await supabaseClient
-      .from('orders')
-      .update({
-        payment_preference_id: preference.id,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', actualOrderId);
+    // Note: We'll update the order with payment preference ID via webhook
+    // since we don't have the actual order ID from the insert operation
 
     return preference;
   } catch (error) {
