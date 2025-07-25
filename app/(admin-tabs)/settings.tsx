@@ -41,8 +41,31 @@ export default function AdminSettings() {
   useEffect(() => {
     if (currentUser?.email === 'admin@dogcatify.com') {
       loadAdminMpConfig();
+      loadCommissionConfig();
     }
   }, [currentUser]);
+
+  const loadCommissionConfig = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('admin_settings')
+        .select('value')
+        .eq('key', 'commission_config')
+        .single();
+      
+      if (data && !error) {
+        const config = data.value || {};
+        setSettings(prev => ({
+          ...prev,
+          globalCommission: config.global_commission?.toString() || '5.0',
+          commissionType: config.commission_type || 'percentage',
+          fixedCommission: config.fixed_commission?.toString() || '100'
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading commission config:', error);
+    }
+  };
 
   const loadAdminMpConfig = async () => {
     try {
@@ -318,7 +341,11 @@ export default function AdminSettings() {
   };
 
   const handleCommissionChange = (value: string) => {
-    setSettings(prev => ({ ...prev, globalCommission: value }));
+    // Validate that it's a valid number
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue) && numValue >= 0 && numValue <= 100) {
+      setSettings(prev => ({ ...prev, globalCommission: value }));
+    }
   };
 
   const handleCommissionTypeChange = (type: string) => {
@@ -326,7 +353,37 @@ export default function AdminSettings() {
   };
 
   const handleFixedCommissionChange = (value: string) => {
-    setSettings(prev => ({ ...prev, fixedCommission: value }));
+    // Validate that it's a valid number
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue) && numValue >= 0) {
+      setSettings(prev => ({ ...prev, fixedCommission: value }));
+    }
+  };
+
+  const handleSaveCommissionConfig = async () => {
+    try {
+      const configData = {
+        global_commission: parseFloat(settings.globalCommission),
+        commission_type: settings.commissionType,
+        fixed_commission: parseFloat(settings.fixedCommission),
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await supabaseClient
+        .from('admin_settings')
+        .upsert({
+          key: 'commission_config',
+          value: configData,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+
+      Alert.alert('Éxito', 'Configuración de comisiones guardada correctamente');
+    } catch (error) {
+      console.error('Error saving commission config:', error);
+      Alert.alert('Error', 'No se pudo guardar la configuración de comisiones');
+    }
   };
 
   const handleBackupData = () => {
@@ -617,7 +674,7 @@ export default function AdminSettings() {
           
           <Button
             title="Guardar Configuración"
-            onPress={() => Alert.alert('Configuración', 'Configuración de comisiones guardada correctamente')}
+            onPress={handleSaveCommissionConfig}
             variant="primary"
             size="large"
             style={styles.saveButton}
