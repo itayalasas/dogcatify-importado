@@ -32,6 +32,7 @@ export default function Cart() {
   const validateCartItems = async () => {
     console.log('Validating cart items...');
     const validatedItems = [];
+    const partnersWithoutMP = [];
     
     for (const item of cart) {
       try {
@@ -51,11 +52,11 @@ export default function Cart() {
         
         // Check if partner has MP configured
         if (!productData.partners.mercadopago_connected || !productData.partners.mercadopago_config) {
-          Alert.alert(
-            'Negocio sin pagos configurados',
-            `El negocio "${productData.partners.business_name}" no tiene configurado Mercado Pago y no puede procesar pagos en este momento. El producto "${item.name}" será removido del carrito.`
-          );
-          removeFromCart(item.id);
+          partnersWithoutMP.push({
+            partnerName: productData.partners.business_name,
+            productName: item.name,
+            itemId: item.id
+          });
           continue;
         }
         
@@ -72,6 +73,25 @@ export default function Cart() {
         console.error(`Error validating item ${item.id}:`, error);
         removeFromCart(item.id);
       }
+    }
+    
+    // Show alert for partners without MP and remove their products
+    if (partnersWithoutMP.length > 0) {
+      const partnerNames = [...new Set(partnersWithoutMP.map(p => p.partnerName))];
+      Alert.alert(
+        'Negocios sin pagos configurados',
+        `Los siguientes negocios no tienen configurado Mercado Pago y sus productos serán removidos del carrito:\n\n${partnerNames.join('\n')}\n\nPor favor contacta con los negocios para que configuren sus pagos.`,
+        [
+          {
+            text: 'Entendido',
+            onPress: () => {
+              // Remove all products from partners without MP
+              partnersWithoutMP.forEach(p => removeFromCart(p.itemId));
+            }
+          }
+        ]
+      );
+      return [];
     }
     
     return validatedItems;
@@ -149,16 +169,24 @@ export default function Cart() {
       console.log('Orders created:', orders.length);
       console.log('Payment preferences created:', paymentPreferences.length);
 
-      if (paymentPreferences.length === 1) {
-        // Single partner - redirect to MP checkout
+      // Group partners by their Mercado Pago configuration
+      const partnersByConfig = new Map();
+      
+      for (const order of orders) {
+        const partnerId = order.partner_id;
+        if (!partnersByConfig.has(partnerId)) {
+          partnersByConfig.set(partnerId, []);
+        }
+        partnersByConfig.get(partnerId).push(order);
+      }
+      
+      if (partnersByConfig.size === 1) {
+        // Single partner - direct checkout
         const preference = paymentPreferences[0];
         const checkoutUrl = preference.init_point || preference.sandbox_init_point;
         
         if (checkoutUrl) {
-          // Clear cart after successful order creation
           clearCart();
-          
-          // Open Mercado Pago checkout using WebBrowser
           try {
             await WebBrowser.openBrowserAsync(checkoutUrl);
           } catch (browserError) {
@@ -169,16 +197,21 @@ export default function Cart() {
           throw new Error('No se pudo obtener la URL de pago');
         }
       } else {
-        // Multiple partners - handle differently
+        // Multiple partners - marketplace checkout with automatic split
+        const partnerNames = Array.from(partnersByConfig.keys()).map(partnerId => {
+          const order = orders.find(o => o.partner_id === partnerId);
+          return validatedItems.find(item => item.partnerId === partnerId)?.partnerName || 'Tienda';
+        });
+        
         Alert.alert(
-          'Múltiples vendedores',
-          'Tu carrito contiene productos de múltiples vendedores. Se procesarán como pedidos separados.',
+          'Compra de múltiples tiendas',
+          `Tu carrito contiene productos de ${partnersByConfig.size} tiendas diferentes:\n\n${partnerNames.join('\n')}\n\nSe procesará como una sola compra con distribución automática de pagos.`,
           [
             { text: 'Cancelar', style: 'cancel' },
             { 
-              text: 'Continuar', 
+              text: 'Proceder al Pago', 
               onPress: async () => {
-                // For now, redirect to the first payment
+                // Use the first payment preference (marketplace handles the split)
                 const firstPreference = paymentPreferences[0];
                 const checkoutUrl = firstPreference.init_point || firstPreference.sandbox_init_point;
                 
@@ -190,6 +223,8 @@ export default function Cart() {
                     console.error('Error opening browser:', browserError);
                     Alert.alert('Error', 'No se pudo abrir la página de pago');
                   }
+                } else {
+                  Alert.alert('Error', 'No se pudo generar la preferencia de pago');
                 }
               }
             }
