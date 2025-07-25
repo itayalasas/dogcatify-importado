@@ -176,7 +176,7 @@ export default function Cart() {
             { text: 'Cancelar', style: 'cancel' },
             { 
               text: 'Continuar', 
-              onPress: () => {
+              onPress: async () => {
                 // For now, redirect to the first payment
                 const firstPreference = paymentPreferences[0];
                 const checkoutUrl = firstPreference.init_point || firstPreference.sandbox_init_point;
