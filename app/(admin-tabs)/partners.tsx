@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert } from 'react-native';
-import { Plus, DollarSign, Percent, Calendar, Package } from 'lucide-react-native';
+import { Plus, DollarSign, Percent, Calendar, Package, Search } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -20,6 +20,8 @@ interface Subscription {
 export default function AdminPartners() {
   const { currentUser } = useAuth();
   const [partners, setPartners] = useState<any[]>([]);
+  const [filteredPartners, setFilteredPartners] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showCommissionModal, setShowCommissionModal] = useState(false);
   const [selectedPartner, setSelectedPartner] = useState<any>(null);
@@ -53,6 +55,20 @@ export default function AdminPartners() {
     fetchPartners();
   }, [currentUser]);
 
+  useEffect(() => {
+    // Filter partners based on search query
+    if (searchQuery.trim()) {
+      setFilteredPartners(
+        partners.filter(partner => 
+          partner.businessName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          partner.businessType.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      );
+    } else {
+      setFilteredPartners(partners);
+    }
+  }, [searchQuery, partners]);
+
   const fetchPartners = async () => {
     try {
       console.log('Fetching partners...');
@@ -79,6 +95,7 @@ export default function AdminPartners() {
       })) || [];
 
       setPartners(partnersData);
+      setFilteredPartners(partnersData);
 
       // Set up real-time subscription
       const channel = supabaseClient
@@ -117,6 +134,15 @@ export default function AdminPartners() {
         .eq('id', selectedPartner.id);
 
       if (error) throw error;
+
+      // Update local state immediately
+      setPartners(prevPartners => 
+        prevPartners.map(partner => 
+          partner.id === selectedPartner.id 
+            ? { ...partner, commissionPercentage: parseFloat(newCommission) }
+            : partner
+        )
+      );
 
       setNewCommission('');
       setSelectedPartner(null);
@@ -177,11 +203,37 @@ export default function AdminPartners() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchBar}>
+            <Search size={20} color="#9CA3AF" />
+            <Input
+              placeholder="Buscar aliados por nombre o tipo..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              style={styles.searchInput}
+            />
+          </View>
+        </View>
+
         {/* Partners Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🤝 Aliados Activos ({partners.length})</Text>
+          <Text style={styles.sectionTitle}>🤝 Aliados Activos ({filteredPartners.length})</Text>
           
-          {partners.map((partner) => (
+          {filteredPartners.length === 0 ? (
+            <Card style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>
+                {searchQuery ? 'No se encontraron aliados' : 'No hay aliados activos'}
+              </Text>
+              <Text style={styles.emptySubtitle}>
+                {searchQuery 
+                  ? 'Intenta con otros términos de búsqueda'
+                  : 'Los aliados verificados aparecerán aquí'
+                }
+              </Text>
+            </Card>
+          ) : (
+            filteredPartners.map((partner) => (
             <Card key={partner.id} style={styles.partnerCard}>
               <View style={styles.partnerHeader}>
                 <View style={styles.partnerInfo}>
@@ -226,7 +278,8 @@ export default function AdminPartners() {
                 </View>
               </View>
             </Card>
-          ))}
+            ))
+          )}
         </View>
       </ScrollView>
 
@@ -513,5 +566,24 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     textAlign: 'center',
+  },
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    paddingHorizontal: 0,
   },
 });
