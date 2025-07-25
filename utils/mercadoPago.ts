@@ -178,14 +178,14 @@ export const getPartnerMercadoPagoConfig = async (partnerId: string) => {
   try {
     const { data, error } = await supabaseClient
       .from('partners')
-      .select('mercadopago_config, commission_percentage')
+      .select('mercadopago_config, commission_percentage, mercadopago_connected, business_name')
       .eq('id', partnerId)
       .single();
 
     if (error) throw error;
 
-    if (!data?.mercadopago_config?.user_id) {
-      throw new Error(`Partner ${partnerId} doesn't have Mercado Pago configured`);
+    if (!data?.mercadopago_connected || !data?.mercadopago_config?.access_token) {
+      throw new Error(`Partner "${data?.business_name || partnerId}" no tiene Mercado Pago configurado`);
     }
 
     return {

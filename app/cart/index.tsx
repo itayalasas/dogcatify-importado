@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import { createMultiPartnerOrder } from '../../utils/mercadoPago';
+import { supabaseClient } from '../../lib/supabase';
 import { Platform } from 'react-native';
 
 export default function Cart() {
@@ -72,6 +73,37 @@ export default function Cart() {
     try {
       console.log('Starting Mercado Pago checkout process...');
       
+      // Validate that all partners have Mercado Pago configured before proceeding
+      const partnerIds = [...new Set(cart.map(item => item.partnerId))];
+      const partnersWithoutMP: string[] = [];
+      
+      for (const partnerId of partnerIds) {
+        try {
+          const { data: partnerData, error } = await supabaseClient
+            .from('partners')
+            .select('business_name, mercadopago_connected, mercadopago_config')
+            .eq('id', partnerId)
+            .single();
+          
+          if (error || !partnerData?.mercadopago_connected || !partnerData?.mercadopago_config?.access_token) {
+            partnersWithoutMP.push(partnerData?.business_name || 'Tienda desconocida');
+          }
+        } catch (error) {
+          console.error(`Error checking MP config for partner ${partnerId}:`, error);
+          partnersWithoutMP.push('Tienda desconocida');
+        }
+      }
+      
+      if (partnersWithoutMP.length > 0) {
+        Alert.alert(
+          'Pago no disponible',
+          `Los siguientes negocios no tienen Mercado Pago configurado y no pueden procesar pagos en línea:\n\n• ${partnersWithoutMP.join('\n• ')}\n\nPor favor contacta directamente con el negocio o selecciona productos de otros vendedores.`,
+          [{ text: 'Entendido' }]
+        );
+        setLoading(false);
+        return;
+      }
+      
       // Create orders and payment preferences for each partner
       const { orders, paymentPreferences } = await createMultiPartnerOrder(
         cart,
@@ -121,7 +153,7 @@ export default function Cart() {
       console.error('Error in Mercado Pago checkout:', error);
       Alert.alert(
         'Error en el pago',
-        'No se pudo procesar el pago con Mercado Pago. Por favor intenta nuevamente.'
+        error.message || 'No se pudo procesar el pago con Mercado Pago. Por favor intenta nuevamente.'
       );
     } finally {
       setLoading(false);
