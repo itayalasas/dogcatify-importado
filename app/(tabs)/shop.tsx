@@ -69,8 +69,6 @@ export default function Shop() {
       partnerId: product.partner_id,
       partnerName: product.partner_name || 'Tienda'
     });
-    
-    Alert.alert('Agregado al carrito', 'El producto se agregó correctamente al carrito');
   };
 
   // Filter products by category and search query

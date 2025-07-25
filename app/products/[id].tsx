@@ -126,8 +126,6 @@ export default function ProductDetail() {
       partnerId: product.partner_id,
       partnerName: partnerInfo?.businessName || 'Tienda'
     });
-    
-    Alert.alert('Producto agregado', 'El producto se agregó al carrito correctamente');
   };
 
   const handleToggleFavorite = async () => {
