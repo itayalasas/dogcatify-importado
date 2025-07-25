@@ -681,8 +681,11 @@ const styles = StyleSheet.create({
     color: '#10B981',
   },
   orderActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
+    flexDirection: 'column',
     gap: 12,
+    marginTop: 12,
+  },
+  actionButton: {
+    width: '100%',
   },
 });
