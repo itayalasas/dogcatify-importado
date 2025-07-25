@@ -416,7 +416,30 @@ export const createMultiPartnerOrder = async (
       payment_method: 'mercadopago',
       status: 'pending',
       created_at: new Date().toISOString(),
-      // Note: partner_breakdown column will be added in future migration
+      partner_breakdown: {
+        partners: cartItems.reduce((acc, item) => {
+          if (!acc[item.partnerId]) {
+            acc[item.partnerId] = {
+              partner_id: item.partnerId,
+              partner_name: item.partnerName,
+              items: [],
+              subtotal: 0
+            };
+          }
+          acc[item.partnerId].items.push({
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            total: item.price * item.quantity
+          });
+          acc[item.partnerId].subtotal += item.price * item.quantity;
+          return acc;
+        }, {}),
+        total_partners: [...new Set(cartItems.map(item => item.partnerId))].length,
+        commission_split: commissionAmount,
+        shipping_cost: shippingCost
+      }
     };
 
     // Insert the unified order into database
