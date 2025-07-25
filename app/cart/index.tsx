@@ -142,7 +142,8 @@ export default function Cart() {
       const { orders, paymentPreferences } = await createMultiPartnerOrder(
         validatedItems,
         currentUser,
-        shippingAddress.trim()
+        shippingAddress.trim(),
+        calculateShipping()
       );
 
       console.log('Orders created:', orders.length);
