@@ -159,10 +159,6 @@ export default function AdminAnalytics() {
           console.error('Admin override query exception:', adminError);
         }
       }
-        .from('orders')
-        .select('id, status, total_amount, commission_amount, partner_amount, created_at', { count: 'exact' });
-
-      if (ordersError) {
         console.error('Error fetching orders:', ordersError);
       } else {
         console.log('Orders data fetched successfully:', ordersData?.length || 0, 'orders');
