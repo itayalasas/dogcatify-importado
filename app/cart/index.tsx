@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert } from 'react-native';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { ArrowLeft, Plus, Minus, Trash2, ShoppingCart, CreditCard } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -156,11 +157,12 @@ export default function Cart() {
           // Clear cart after successful order creation
           clearCart();
           
-          // Open Mercado Pago checkout
-          if (typeof window !== 'undefined') {
-            window.open(checkoutUrl, '_blank');
-          } else {
-            Alert.alert('Redirigiendo a Mercado Pago', 'Se abrirá la página de pago');
+          // Open Mercado Pago checkout using WebBrowser
+          try {
+            await WebBrowser.openBrowserAsync(checkoutUrl);
+          } catch (browserError) {
+            console.error('Error opening browser:', browserError);
+            Alert.alert('Error', 'No se pudo abrir la página de pago');
           }
         } else {
           throw new Error('No se pudo obtener la URL de pago');
@@ -181,8 +183,11 @@ export default function Cart() {
                 
                 if (checkoutUrl) {
                   clearCart();
-                  if (typeof window !== 'undefined') {
-                    window.open(checkoutUrl, '_blank');
+                  try {
+                    await WebBrowser.openBrowserAsync(checkoutUrl);
+                  } catch (browserError) {
+                    console.error('Error opening browser:', browserError);
+                    Alert.alert('Error', 'No se pudo abrir la página de pago');
                   }
                 }
               }
