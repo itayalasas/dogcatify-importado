@@ -497,7 +497,8 @@ export const createMultiPartnerOrder = async (
         partnerConfig,
         order.commission_amount,
         order.partner_amount,
-        shippingCost
+        shippingCost,
+        shippingAddress
       );
       
       paymentPreferences.push(preference);
@@ -521,7 +522,8 @@ export const createMarketplacePaymentPreference = async (
   customerInfo: any,
   primaryPartnerConfig: any,
   totalAmount: number,
-  shippingCost: number
+  shippingCost: number,
+  shippingAddress: string
 ): Promise<any> => {
   try {
     const marketplaceAccessToken = await getMarketplaceAccessToken();
@@ -589,7 +591,7 @@ export const createMarketplacePaymentPreference = async (
         },
         shipments: {
           receiver_address: {
-            street_name: shippingAddress || 'No especificada',
+            street_name: shippingAddress,
             street_number: '',
             zip_code: '',
             city_name: 'Ciudad',
