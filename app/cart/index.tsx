@@ -211,6 +211,7 @@ export default function Cart() {
 
   // Call ping immediately
   useEffect(() => {
+  useEffect(() => {
     ping();
   }, []);
 
