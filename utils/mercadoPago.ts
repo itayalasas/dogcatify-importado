@@ -188,7 +188,7 @@ export const getPartnerMercadoPagoConfig = async (partnerId: string) => {
     
     console.log('Partner data found:', data);
 
-    if (!data?.mercadopago_connected || !data?.mercadopago_config?.access_token) {
+    if (!data?.mercadopago_connected || !data?.mercadopago_config) {
       console.log('Partner MP status:', {
         mercadopago_connected: data?.mercadopago_connected,
         has_config: !!data?.mercadopago_config,
@@ -197,10 +197,19 @@ export const getPartnerMercadoPagoConfig = async (partnerId: string) => {
       throw new Error(`Partner "${data?.business_name || partnerId}" no tiene Mercado Pago configurado`);
     }
 
+    // Verificar que tenga access_token
+    if (!data.mercadopago_config.access_token) {
+      throw new Error(`Partner "${data.business_name}" no tiene access_token configurado`);
+    }
+
+    console.log('MP config validation passed for partner:', data.business_name);
+
     return {
       ...data.mercadopago_config,
       commission_percentage: data.commission_percentage || 5.0,
-      business_name: data.business_name
+      business_name: data.business_name,
+      // Para configuraciones manuales, usar el partner_id como user_id si no existe
+      user_id: data.mercadopago_config.user_id || data.mercadopago_config.account_id || partnerId
     };
   } catch (error) {
     console.error('Error getting partner MP config:', error);
@@ -265,6 +274,13 @@ export const createPaymentPreference = async (
     // Calculate totals
     const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     
+    console.log('Creating payment preference with config:', {
+      partner_user_id: partnerConfig.user_id,
+      commission: commissionAmount,
+      partner_amount: partnerAmount,
+      is_oauth: partnerConfig.is_oauth
+    });
+
     const preferenceData = {
       items: items.map(item => ({
         id: item.id,
@@ -290,17 +306,17 @@ export const createPaymentPreference = async (
       external_reference: orderId,
       notification_url: `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/mercadopago-webhook`,
       marketplace: 'DogCatiFy',
-      marketplace_fee: commissionAmount,
-      collector_id: parseInt(partnerConfig.user_id), // Partner's MP user ID
       statement_descriptor: 'DOGCATIFY'
     };
 
-    console.log('Creating payment preference with marketplace split:', {
-      total: subtotal,
-      commission: commissionAmount,
-      partner_amount: partnerAmount,
-      collector_id: partnerConfig.user_id
-    });
+    // Solo agregar marketplace_fee y collector_id si es configuración OAuth
+    if (partnerConfig.is_oauth && partnerConfig.user_id && !isNaN(parseInt(partnerConfig.user_id))) {
+      preferenceData.marketplace_fee = commissionAmount;
+      preferenceData.collector_id = parseInt(partnerConfig.user_id);
+      console.log('Using OAuth marketplace split with collector_id:', partnerConfig.user_id);
+    } else {
+      console.log('Using manual configuration - no marketplace split');
+    }
 
     const response = await fetch(`${MP_BASE_URL}/checkout/preferences`, {
       method: 'POST',
