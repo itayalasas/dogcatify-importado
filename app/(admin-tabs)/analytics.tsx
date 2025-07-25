@@ -12,7 +12,15 @@ export default function AdminAnalytics() {
     totalPartners: 0,
     totalPosts: 0,
     totalBookings: 0,
+    totalOrders: 0,
+    pendingOrders: 0,
+    confirmedOrders: 0,
+    shippedOrders: 0,
+    deliveredOrders: 0,
+    cancelledOrders: 0,
     totalRevenue: 0,
+    totalCommissions: 0,
+    averageCommissionRate: 5.2,
     monthlyGrowth: 0,
     activePromotions: 0,
     totalViews: 0,
@@ -71,13 +79,41 @@ export default function AdminAnalytics() {
 
       console.log('Total revenue calculated:', totalRevenue);
 
+      // Fetch orders data
+      const { data: orders, count: totalOrders } = await supabaseClient
+        .from('orders')
+        .select('*', { count: 'exact' });
+
+      console.log('Total orders count:', totalOrders);
+
+      // Calculate orders by status
+      const pendingOrders = orders?.filter(order => order.status === 'pending').length || 0;
+      const confirmedOrders = orders?.filter(order => order.status === 'confirmed').length || 0;
+      const shippedOrders = orders?.filter(order => order.status === 'shipped').length || 0;
+      const deliveredOrders = orders?.filter(order => order.status === 'delivered').length || 0;
+      const cancelledOrders = orders?.filter(order => order.status === 'cancelled').length || 0;
+
+      // Calculate total revenue from orders and commissions
+      const ordersRevenue = orders?.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0) || 0;
+      const totalCommissions = orders?.reduce((sum, order) => sum + (Number(order.commission_amount) || 0), 0) || 0;
+
+      console.log('Orders revenue calculated:', ordersRevenue);
+      console.log('Total commissions calculated:', totalCommissions);
+
       setAnalytics(prev => ({
         ...prev,
         totalUsers: totalUsers || 0,
         totalPartners: totalPartners || 0,
         totalPosts: totalPosts || 0,
         totalBookings: totalBookings || 0,
-        totalRevenue
+        totalOrders: totalOrders || 0,
+        pendingOrders,
+        confirmedOrders,
+        shippedOrders,
+        deliveredOrders,
+        cancelledOrders,
+        totalRevenue: totalRevenue + ordersRevenue,
+        totalCommissions
       }));
     } catch (error) {
       console.error('Error fetching analytics:', error);
@@ -151,6 +187,79 @@ export default function AdminAnalytics() {
           </View>
         </View>
 
+        {/* Orders Analytics */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📦 Analíticas de Pedidos</Text>
+          <View style={styles.metricsGrid}>
+            <Card style={styles.metricCard}>
+              <View style={styles.metricHeader}>
+                <Package size={24} color="#3B82F6" />
+                <Text style={styles.metricValue}>{analytics.totalOrders.toLocaleString()}</Text>
+              </View>
+              <Text style={styles.metricLabel}>Total Pedidos</Text>
+            </Card>
+
+            <Card style={styles.metricCard}>
+              <View style={styles.metricHeader}>
+                <Clock size={24} color="#F59E0B" />
+                <Text style={styles.metricValue}>{analytics.pendingOrders.toLocaleString()}</Text>
+              </View>
+              <Text style={styles.metricLabel}>Pendientes</Text>
+            </Card>
+
+            <Card style={styles.metricCard}>
+              <View style={styles.metricHeader}>
+                <TrendingUp size={24} color="#10B981" />
+                <Text style={styles.metricValue}>{analytics.confirmedOrders.toLocaleString()}</Text>
+              </View>
+              <Text style={styles.metricLabel}>Confirmados</Text>
+            </Card>
+
+            <Card style={styles.metricCard}>
+              <View style={styles.metricHeader}>
+                <Package size={24} color="#8B5CF6" />
+                <Text style={styles.metricValue}>{analytics.deliveredOrders.toLocaleString()}</Text>
+              </View>
+              <Text style={styles.metricLabel}>Entregados</Text>
+            </Card>
+          </View>
+
+          {/* Orders Status Breakdown */}
+          <Card style={styles.ordersBreakdownCard}>
+            <Text style={styles.ordersBreakdownTitle}>Estado de Pedidos</Text>
+            <View style={styles.ordersBreakdown}>
+              <View style={styles.orderStatusItem}>
+                <View style={[styles.statusIndicator, { backgroundColor: '#F59E0B' }]} />
+                <Text style={styles.orderStatusLabel}>Pendientes</Text>
+                <Text style={styles.orderStatusValue}>{analytics.pendingOrders}</Text>
+              </View>
+              
+              <View style={styles.orderStatusItem}>
+                <View style={[styles.statusIndicator, { backgroundColor: '#3B82F6' }]} />
+                <Text style={styles.orderStatusLabel}>Confirmados</Text>
+                <Text style={styles.orderStatusValue}>{analytics.confirmedOrders}</Text>
+              </View>
+              
+              <View style={styles.orderStatusItem}>
+                <View style={[styles.statusIndicator, { backgroundColor: '#10B981' }]} />
+                <Text style={styles.orderStatusLabel}>Enviados</Text>
+                <Text style={styles.orderStatusValue}>{analytics.shippedOrders}</Text>
+              </View>
+              
+              <View style={styles.orderStatusItem}>
+                <View style={[styles.statusIndicator, { backgroundColor: '#059669' }]} />
+                <Text style={styles.orderStatusLabel}>Entregados</Text>
+                <Text style={styles.orderStatusValue}>{analytics.deliveredOrders}</Text>
+              </View>
+              
+              <View style={styles.orderStatusItem}>
+                <View style={[styles.statusIndicator, { backgroundColor: '#EF4444' }]} />
+                <Text style={styles.orderStatusLabel}>Cancelados</Text>
+                <Text style={styles.orderStatusValue}>{analytics.cancelledOrders}</Text>
+              </View>
+            </View>
+          </Card>
+        </View>
         {/* Revenue Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>💰 Ingresos y Comisiones</Text>
@@ -168,13 +277,37 @@ export default function AdminAnalytics() {
             <View style={styles.revenueDetails}>
               <View style={styles.revenueDetail}>
                 <Text style={styles.revenueDetailLabel}>Comisión promedio</Text>
-                <Text style={styles.revenueDetailValue}>5.2%</Text>
+                <Text style={styles.revenueDetailValue}>{analytics.averageCommissionRate}%</Text>
               </View>
               <View style={styles.revenueDetail}>
                 <Text style={styles.revenueDetailLabel}>Ingresos por comisiones</Text>
                 <Text style={styles.revenueDetailValue}>
-                  {formatCurrency(analytics.totalRevenue * 0.052)}
+                  {formatCurrency(analytics.totalCommissions)}
                 </Text>
+              </View>
+            </View>
+            
+            <View style={styles.commissionBreakdown}>
+              <Text style={styles.commissionBreakdownTitle}>Desglose de Comisiones</Text>
+              <View style={styles.commissionStats}>
+                <View style={styles.commissionStat}>
+                  <Text style={styles.commissionStatLabel}>Total facturado</Text>
+                  <Text style={styles.commissionStatValue}>
+                    {formatCurrency(analytics.totalRevenue)}
+                  </Text>
+                </View>
+                <View style={styles.commissionStat}>
+                  <Text style={styles.commissionStatLabel}>Comisiones DogCatiFy</Text>
+                  <Text style={styles.commissionStatValue}>
+                    {formatCurrency(analytics.totalCommissions)}
+                  </Text>
+                </View>
+                <View style={styles.commissionStat}>
+                  <Text style={styles.commissionStatLabel}>Pagado a aliados</Text>
+                  <Text style={styles.commissionStatValue}>
+                    {formatCurrency(analytics.totalRevenue - analytics.totalCommissions)}
+                  </Text>
+                </View>
               </View>
             </View>
           </Card>
@@ -455,5 +588,70 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     textAlign: 'center',
+  },
+  ordersBreakdownCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+  },
+  ordersBreakdownTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 16,
+  },
+  ordersBreakdown: {
+    gap: 12,
+  },
+  orderStatusItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  statusIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  orderStatusLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    flex: 1,
+  },
+  orderStatusValue: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+  },
+  commissionBreakdown: {
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 16,
+  },
+  commissionBreakdownTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  commissionStats: {
+    gap: 8,
+  },
+  commissionStat: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  commissionStatLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  commissionStatValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
   },
 });
