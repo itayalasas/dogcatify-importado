@@ -13,7 +13,9 @@ interface DashboardStats {
   activeProducts: number;
   pendingBookings: number;
   pendingOrders: number;
+  processingOrders: number;
   completedBookings: number;
+  completedOrders: number;
   monthlyRevenue: number;
   averageRating: number;
 }
@@ -26,9 +28,11 @@ export default function PartnerDashboard() {
     todayRevenue: 0,
     totalCustomers: 0,
     activeProducts: 0,
-    pendingOrders: 0,
     pendingBookings: 0,
+    pendingOrders: 0,
+    processingOrders: 0,
     completedBookings: 0,
+    completedOrders: 0,
     monthlyRevenue: 0,
     averageRating: 0,
   });
@@ -101,13 +105,14 @@ export default function PartnerDashboard() {
   }, [currentUser, businessId]);
 
   const fetchDashboardData = async (partnerId: string) => {
-    // Get today's date range for filtering
-    const today = new Date();
-    console.log('Fetching dashboard data for partner ID:', partnerId);
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-
     try {
+      console.log('Fetching dashboard data for partner ID:', partnerId);
+      
+      // Get today's date range for filtering
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+      
       // Fetch bookings
       const { data: bookingsData, error: bookingsError } = await supabaseClient
         .from('bookings')
@@ -118,6 +123,7 @@ export default function PartnerDashboard() {
       if (bookingsError) throw bookingsError;
       
       const bookings = bookingsData || [];
+      console.log(`Found ${bookings.length} total bookings for partner`);
       
       // Calculate stats
       const todayBookings = bookings.filter(booking => {
@@ -129,6 +135,7 @@ export default function PartnerDashboard() {
       const completedBookings = bookings.filter(booking => booking.status === 'completed');
       
       const todayRevenue = todayBookings.reduce((sum, booking) => sum + (booking.total_amount || 0), 0);
+      console.log(`Today's stats: ${todayBookings.length} bookings, $${todayRevenue} revenue`);
       
       // Get recent bookings
       const recent = bookings
@@ -137,13 +144,45 @@ export default function PartnerDashboard() {
       
       setRecentBookings(recent);
       
+      // Fetch orders data
+      const { data: ordersData, error: ordersError } = await supabaseClient
+        .from('orders')
+        .select('*')
+        .eq('partner_id', partnerId)
+        .order('created_at', { ascending: false });
+      
+      if (ordersError) {
+        console.error('Error fetching orders:', ordersError);
+      }
+      
+      const orders = ordersData || [];
+      console.log(`Found ${orders.length} total orders for partner`);
+      
+      // Calculate order stats
+      const todayOrders = orders.filter(order => {
+        const orderDate = new Date(order.created_at);
+        return orderDate >= startOfDay && orderDate < endOfDay;
+      });
+      
+      const pendingOrders = orders.filter(order => order.status === 'pending');
+      const completedOrders = orders.filter(order => order.status === 'delivered');
+      const processingOrders = orders.filter(order => ['confirmed', 'processing', 'shipped'].includes(order.status));
+      
+      const todayOrdersRevenue = todayOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+      const totalOrdersRevenue = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+      
+      console.log(`Orders stats: ${pendingOrders.length} pending, ${completedOrders.length} completed`);
+      
       setStats(prev => ({
         ...prev,
         todayBookings: todayBookings.length,
-        todayRevenue,
+        todayRevenue: todayRevenue + todayOrdersRevenue,
         pendingBookings: pendingBookings.length,
         completedBookings: completedBookings.length,
-        monthlyRevenue: calculateMonthlyRevenue(bookings),
+        pendingOrders: pendingOrders.length,
+        completedOrders: completedOrders.length,
+        processingOrders: processingOrders.length,
+        monthlyRevenue: calculateMonthlyRevenue(bookings) + calculateMonthlyOrdersRevenue(orders),
       }));
       
       // Get customer count
@@ -154,30 +193,57 @@ export default function PartnerDashboard() {
         }
       });
       
+      // Add customers from orders
+      orders.forEach(order => {
+        if (order.customer_id) {
+          uniqueCustomers.add(order.customer_id);
+        }
+      });
+      
       setStats(prev => ({
         ...prev,
         totalCustomers: uniqueCustomers.size,
       }));
       
-      // Fetch products if it's a shop
-      if (partnerProfile?.businessType === 'shop' || partnerProfile?.features?.products) {
+      // Fetch products count
+      try {
         const { data: productsData, error: productsError } = await supabaseClient
           .from('partner_products')
-          .select('*', { count: 'exact', head: true })
+          .select('id', { count: 'exact', head: true })
           .eq('partner_id', partnerId)
           .eq('is_active', true);
         
-        if (!productsError) {
+        if (productsError) {
+          console.error('Error fetching products count:', productsError);
+        } else {
+          const productsCount = productsData?.length || 0;
+          console.log(`Found ${productsCount} active products for partner`);
+          
           setStats(prev => ({
             ...prev,
-            activeProducts: productsData?.length || 0,
+            activeProducts: productsCount,
           }));
         }
+      } catch (error) {
+        console.error('Error in products fetch:', error);
       }
       
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     }
+  };
+
+  const calculateMonthlyOrdersRevenue = (orders: any[]) => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    
+    const monthlyOrders = orders.filter((order: any) => {
+      const orderDate = new Date(order.created_at);
+      return orderDate >= startOfMonth && orderDate <= endOfMonth;
+    });
+    
+    return monthlyOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
   };
 
   const calculateMonthlyRevenue = (bookings: any[]) => {
@@ -345,7 +411,7 @@ export default function PartnerDashboard() {
             <Card style={styles.statCard}>
               <View style={styles.statHeader}>
                 <Clock size={20} color="#F59E0B" />
-                <Text style={styles.statValue}>{stats.pendingBookings}</Text>
+                <Text style={styles.statValue}>{stats.pendingBookings + stats.pendingOrders}</Text>
               </View>
               <Text style={styles.statLabel}>Pendientes</Text>
             </Card>
@@ -353,9 +419,9 @@ export default function PartnerDashboard() {
             <Card style={styles.statCard}>
               <View style={styles.statHeader}>
                 <TrendingUp size={20} color="#8B5CF6" />
-                <Text style={styles.statValue}>{stats.completedBookings}</Text>
+                <Text style={styles.statValue}>{stats.completedBookings + stats.completedOrders}</Text>
               </View>
-              <Text style={styles.statLabel}>Completadas</Text>
+              <Text style={styles.statLabel}>Completados</Text>
             </Card>
           </View>
         </View>
