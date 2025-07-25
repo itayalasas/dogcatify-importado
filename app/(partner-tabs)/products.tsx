@@ -356,25 +356,6 @@ export default function PartnerProducts() {
           </View>
         </Card>
 
-        {/* Panel de depuración (solo en desarrollo) */}
-        {__DEV__ && (
-          <Card style={styles.debugCard}>
-            <Text style={styles.debugTitle}>Información de depuración</Text>
-            <Text style={styles.debugText}>Business ID: {businessId}</Text>
-            <Text style={styles.debugText}>Productos cargados: {products.length}</Text>
-            <Text style={styles.debugText}>Tipo de negocio: {partnerProfile?.businessType}</Text>
-            <Text style={styles.debugText}>Características: {JSON.stringify(partnerProfile?.features)}</Text>
-            <Button
-              title="Recargar productos"
-              onPress={() => {
-                setLoading(true);
-                fetchProducts(businessId as string);
-              }}
-              size="small"
-            />
-          </Card>
-        )}
-
         {products.length === 0 ? (
           <Card style={styles.emptyCard}>
             <Package size={48} color="#9CA3AF" />
@@ -473,6 +454,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+    paddingTop: 50,
   },
   header: {
     flexDirection: 'row',

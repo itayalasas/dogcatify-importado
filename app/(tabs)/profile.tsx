@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Switch, Modal, TextInput, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { Settings, CreditCard as Edit3, LogOut, Bell, Shield, CircleHelp as HelpCircle, Globe, Fingerprint, Eye, Mail, Lock, Building } from 'lucide-react-native';
+import { Settings, CreditCard as Edit3, LogOut, Bell, Shield, CircleHelp as HelpCircle, Globe, Fingerprint, Eye, Mail, Lock, Building, Package, CreditCard } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -354,6 +354,19 @@ export default function Profile() {
           <Settings size={22} color="#6B7280" />
         </TouchableOpacity>
       </View>
+        {/* Mercado Pago Configuration - Only show if user has verified businesses */}
+        {partnerProfile && partnerProfile.isVerified && (
+          <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/profile/mercadopago-config')}>
+            <CreditCard size={20} color="#6B7280" />
+            <Text style={styles.menuText}>Configurar Mercado Pago</Text>
+            <View style={styles.mpStatusBadge}>
+              <Text style={styles.mpStatusText}>
+                {partnerProfile.mercadopago_connected ? '✅ Conectado' : '⚠️ Pendiente'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
+        
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Card style={styles.profileCard}>
           <View style={styles.profileHeader}>
@@ -442,6 +455,11 @@ export default function Profile() {
           <TouchableOpacity style={styles.menuItem} onPress={handleRegisterBusiness}>
             <Building size={20} color="#6B7280" />
             <Text style={styles.menuText}>Registrar Negocio</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/orders')}>
+            <Package size={20} color="#6B7280" />
+            <Text style={styles.menuText}>Mis Pedidos</Text>
           </TouchableOpacity>
           
           {isBiometricSupported && (
@@ -809,6 +827,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#111827',
     textAlign: 'center',
+  },
+  mpStatusBadge: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginLeft: 'auto',
+  },
+  mpStatusText: {
+    fontSize: 11,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
   },
   partnerStatusBadge: {
     backgroundColor: '#F3F4F6',

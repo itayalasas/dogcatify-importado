@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Share, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, ShoppingCart, Star, Plus, Minus, Heart, Share2, Truck, Package, Clock } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
@@ -11,7 +11,7 @@ import { useCart } from '@/contexts/CartContext';
 export default function ProductDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { currentUser } = useAuth();
-  const { addToCart } = useCart();
+  const { addToCart, getCartCount } = useCart();
   const [product, setProduct] = useState<any>(null);
   const [partnerInfo, setPartnerInfo] = useState<any>(null);
   const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
@@ -19,10 +19,37 @@ export default function ProductDetail() {
   const [quantity, setQuantity] = useState(1);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+
+  const cartCount = getCartCount();
 
   useEffect(() => {
     fetchProductDetails();
+    checkIfFavorite();
   }, [id]);
+
+  const checkIfFavorite = async () => {
+    if (!currentUser) return;
+    
+    try {
+      const { data: userData, error } = await supabaseClient
+        .from('profiles')
+        .select('favorite_products')
+        .eq('id', currentUser.id)
+        .single();
+      
+      if (error) {
+        console.error('Error checking favorites:', error);
+        return;
+      }
+      
+      if (userData && userData.favorite_products) {
+        setIsFavorite(userData.favorite_products.includes(id));
+      }
+    } catch (error) {
+      console.error('Error checking if product is favorite:', error);
+    }
+  };
 
   const fetchProductDetails = async () => {
     try {
@@ -72,15 +99,7 @@ export default function ProductDetail() {
         
         // Check if product is in user's favorites
         if (currentUser) {
-          const { data: userData, error: userError } = await supabaseClient
-            .from('profiles')
-            .select('favorite_products')
-            .eq('id', currentUser.id)
-            .single();
-            
-          if (userData && !userError) {
-            setIsFavorite(userData.favorite_products?.includes(productData.id) || false);
-          }
+          checkIfFavorite();
         }
       }
     } catch (error) {
@@ -117,6 +136,7 @@ export default function ProductDetail() {
       return;
     }
     
+    setFavoriteLoading(true);
     try {
       const { data: userData, error: fetchError } = await supabaseClient
         .from('profiles')
@@ -142,12 +162,49 @@ export default function ProductDetail() {
       if (updateError) throw updateError;
       
       setIsFavorite(!isFavorite);
+      
+      // Show feedback to user
+      Alert.alert(
+        isFavorite ? 'Eliminado de favoritos' : 'Agregado a favoritos',
+        isFavorite ? 'El producto se eliminó de tus favoritos' : 'El producto se agregó a tus favoritos'
+      );
     } catch (error) {
       console.error('Error updating favorites:', error);
       Alert.alert('Error', 'No se pudo actualizar los favoritos');
+    } finally {
+      setFavoriteLoading(false);
     }
   };
 
+  const handleShare = async () => {
+    try {
+      const shareContent = {
+        message: `¡Mira este producto en DogCatiFy! ${product?.name} por ${formatPrice(product?.price || 0)}`,
+        url: `https://dogcatify.com/products/${id}`, // URL del producto
+        title: product?.name || 'Producto en DogCatiFy'
+      };
+
+      if (Platform.OS === 'web') {
+        // Para web, usar Web Share API si está disponible
+        if (navigator.share) {
+          await navigator.share(shareContent);
+        } else {
+          // Fallback: copiar al portapapeles
+          await navigator.clipboard.writeText(`${shareContent.message} - ${shareContent.url}`);
+          Alert.alert('Enlace copiado', 'El enlace del producto se copió al portapapeles');
+        }
+      } else {
+        // Para móvil, usar Share nativo
+        await Share.share(shareContent);
+      }
+    } catch (error) {
+      console.error('Error sharing product:', error);
+      // No mostrar error si el usuario cancela
+      if (error.message && !error.message.includes('cancelled')) {
+        Alert.alert('Error', 'No se pudo compartir el producto');
+      }
+    }
+  };
   const handleQuantityChange = (delta: number) => {
     const newQuantity = quantity + delta;
     if (newQuantity >= 1 && newQuantity <= (product?.stock || 10)) {
@@ -196,6 +253,11 @@ export default function ProductDetail() {
         <Text style={styles.title}>Detalle del Producto</Text>
         <TouchableOpacity onPress={() => router.push('/cart')} style={styles.cartButton}>
           <ShoppingCart size={24} color="#111827" />
+          {cartCount > 0 && (
+            <View style={styles.cartBadge}>
+              <Text style={styles.cartBadgeText}>{cartCount}</Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -250,17 +312,18 @@ export default function ProductDetail() {
           <TouchableOpacity 
             style={styles.favoriteButton}
             onPress={handleToggleFavorite}
+            disabled={favoriteLoading}
           >
             <Heart 
               size={20} 
-              color={isFavorite ? '#EF4444' : '#6B7280'} 
+              color={isFavorite ? '#EF4444' : '#FFFFFF'} 
               fill={isFavorite ? '#EF4444' : 'none'}
             />
           </TouchableOpacity>
           
           {/* Share Button */}
-          <TouchableOpacity style={styles.shareButton}>
-            <Share2 size={20} color="#6B7280" />
+          <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
+            <Share2 size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
 
@@ -410,6 +473,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+    paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
@@ -431,6 +495,23 @@ const styles = StyleSheet.create({
   },
   cartButton: {
     padding: 8,
+    position: 'relative',
+  },
+  cartBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cartBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
   },
   content: {
     flex: 1,
@@ -493,7 +574,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 16,
     right: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     borderRadius: 20,
     width: 40,
     height: 40,
@@ -504,7 +585,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 16,
     right: 64,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     borderRadius: 20,
     width: 40,
     height: 40,

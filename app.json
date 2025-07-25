@@ -17,10 +17,11 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": ["**/*"],
-    "sdkVersion": "50.0.0",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "plugins": [
-      "expo-router",
+      "expo-router"
     ],
     "experiments": {
       "typedRoutes": true
@@ -30,7 +31,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "your-project-id"
+        "projectId": "0618d9ae-6714-46bb-adce-f4ee57fff324"
       }
     },
     "ios": {
@@ -68,6 +69,7 @@
       "icon": "./assets/images/icon.png",
       "color": "#2D6A6F"
     },
-    "privacy": "public"
+    "privacy": "public",
+    "owner": "pedro86cu"
   }
 }

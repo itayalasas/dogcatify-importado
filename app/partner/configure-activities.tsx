@@ -85,6 +85,7 @@ export default function ConfigureActivities() {
 
   const fetchActivities = async () => {
     try {
+      console.log('Fetching activities for partner:', partnerId);
       const { data, error } = await supabaseClient
         .from('partner_services')
         .select('*')
@@ -92,16 +93,19 @@ export default function ConfigureActivities() {
       
       if (error) throw error;
       
+      console.log('Activities fetched:', data?.length || 0);
       const activitiesData = data.map(activity => ({
         id: activity.id,
         name: activity.name,
         description: activity.description || '',
         duration: activity.duration || 0,
         price: activity.price || 0,
-        isActive: activity.is_active
+        isActive: activity.is_active,
+        images: activity.images || []
       })) as Activity[];
       
       setActivities(activitiesData);
+      console.log('Activities state updated with:', activitiesData.length, 'items');
     } catch (error) {
       console.error('Error fetching activities:', error);
     }
@@ -181,42 +185,17 @@ export default function ConfigureActivities() {
   };
 
   const handleAddActivity = async () => {
-    if (!activityName.trim() || !activityDuration || !activityPrice) {
-      Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const serviceData = {
-        partner_id: partnerId,
-        name: activityName.trim(),
-        description: activityDescription.trim() || '',
-        duration: parseInt(activityDuration),
-        price: parseFloat(activityPrice),
-        is_active: true,
-        created_at: new Date().toISOString(),
-      };
-
-      const { error } = await supabaseClient
-        .from('partner_services')
-        .insert(serviceData);
-      
-      if (error) throw error;
-      
-      // Reset form
-      setActivityName('');
-      setActivityDescription('');
-      setActivityDuration('');
-      setActivityPrice('');
-      setShowAddModal(false);
-      
-      Alert.alert('Éxito', 'Actividad agregada correctamente');
-    } catch (error) {
-      console.error('Error adding activity:', error);
-      Alert.alert('Error', 'No se pudo agregar la actividad');
-    } finally {
-      setLoading(false);
+    // Navigate to the full add service form
+    if (partnerProfile && partnerProfile.id) {
+      router.push({
+        pathname: '/partner/add-service',
+        params: {
+          partnerId: partnerProfile.id,
+          businessType: partnerProfile.businessType
+        }
+      });
+    } else {
+      Alert.alert('Error', 'No se pudo obtener la información del negocio');
     }
   };
 
@@ -302,7 +281,7 @@ export default function ConfigureActivities() {
             </View>
           </View>
         </View>
-        <TouchableOpacity style={styles.addButton} onPress={() => setShowAddModal(true)}>
+        <TouchableOpacity style={styles.addButton} onPress={handleAddActivity}>
           <Plus size={24} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
@@ -323,7 +302,7 @@ export default function ConfigureActivities() {
             </Text>
             <Button
               title="Agregar Actividad"
-              onPress={() => setShowAddModal(true)}
+             onPress={handleAddActivity}
               size="medium"
             />
           </Card>
@@ -331,6 +310,18 @@ export default function ConfigureActivities() {
           <View style={styles.activitiesList}>
             {activities.map((activity) => (
               <Card key={activity.id} style={styles.activityCard}>
+                {/* Service Image Background */}
+                {activity.images && activity.images.length > 0 && (
+                  <View style={styles.activityImageContainer}>
+                    <Image 
+                      source={{ uri: activity.images[0] }} 
+                      style={styles.activityImage}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.activityImageOverlay} />
+                  </View>
+                )}
+                
                 <View style={styles.activityHeader}>
                   <View style={styles.activityInfo}>
                     <Text style={styles.activityName}>{activity.name}</Text>
@@ -367,18 +358,22 @@ export default function ConfigureActivities() {
                 </View>
 
                 <View style={styles.activityActions}>
-                  <Button
-                    title={activity.isActive ? 'Desactivar' : 'Activar'}
-                    onPress={() => handleToggleActivity(activity.id, activity.isActive)}
-                    variant={activity.isActive ? 'outline' : 'primary'}
-                    size="small"
-                  />
-                  <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => handleDeleteActivity(activity.id)}
-                  >
-                    <X size={16} color="#EF4444" />
-                  </TouchableOpacity>
+                  <View style={styles.actionButtonsRow}>
+                    <View style={{ flex: 2 }}>
+                      <Button
+                        title={activity.isActive ? 'Desactivar' : 'Activar'}
+                        onPress={() => handleToggleActivity(activity.id, activity.isActive)}
+                        variant={activity.isActive ? 'outline' : 'primary'}
+                        size="medium"
+                      />
+                    </View>
+                    <TouchableOpacity
+                      style={styles.deleteButton}
+                      onPress={() => handleDeleteActivity(activity.id)}
+                    >
+                      <X size={16} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </Card>
             ))}
@@ -483,6 +478,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+    paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
@@ -583,16 +579,44 @@ const styles = StyleSheet.create({
   },
   activityCard: {
     padding: 16,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  activityImageContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1,
+  },
+  activityImage: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+  },
+  activityImageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    zIndex: 2,
   },
   activityHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 12,
+    position: 'relative',
+    zIndex: 3,
   },
   activityInfo: {
     flex: 1,
     marginRight: 12,
+    position: 'relative',
+    zIndex: 3,
   },
   activityName: {
     fontSize: 16,
@@ -610,6 +634,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
+    position: 'relative',
+    zIndex: 3,
   },
   activityStatusText: {
     fontSize: 12,
@@ -619,6 +645,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 16,
     marginBottom: 16,
+    position: 'relative',
+    zIndex: 3,
   },
   activityDetail: {
     flexDirection: 'row',
@@ -631,14 +659,27 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   activityActions: {
+    flexDirection: 'column',
+    gap: 8,
+    marginTop: 8,
+    position: 'relative',
+    zIndex: 3,
+  },
+  actionButtonsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
   },
   deleteButton: {
-    padding: 8,
+    flex: 1,
+    padding: 12,
     backgroundColor: '#FEE2E2',
     borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
   },
   modalOverlay: {
     flex: 1,

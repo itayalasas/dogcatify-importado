@@ -188,7 +188,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('AuthContext - Attempting login with Supabase for:', email);
 
-      const { data, error } = await supabaseSignIn(email, password);
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email,
+        password
+      });
       
       if (error) {
         console.error('AuthContext - Login error:', error.message); 
@@ -196,7 +199,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Handle specific session errors
         if (error.message?.includes('session_not_found') || error.message?.includes('JWT')) {
           console.log('AuthContext - Session error during login, clearing state');
-          await supabaseSignOut();
+          await supabaseClient.auth.signOut();
         }
         
         throw error;
@@ -232,13 +235,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               followingCount: profile.following?.length || 0,
             };
             
+            console.log('AuthContext - Login successful, setting user:', user.email);
+            setCurrentUser(user);
             return user;
           }
         } catch (error: any) {
           console.error('Error loading user profile after login:', error);
           if (error.message?.includes('session_not_found') || error.message?.includes('JWT')) {
             console.log('AuthContext - Session error after login, signing out');
-            await supabaseSignOut();
+            await supabaseClient.auth.signOut();
           }
         }
       }
@@ -254,13 +259,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('AuthContext - Starting registration for:', email);
       
-      const { data, error } = await supabaseSignUp(email, password, { displayName });
+      const { data, error } = await supabaseClient.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: 'https://dogcatify.com/auth/login',
+          data: {
+            display_name: displayName,
+          },
+        },
+      });
       
       if (error) throw error;
       console.log('AuthContext - Registration successful, user created');
       
       // Sign out after registration to force email confirmation
-      await supabaseSignOut();
+      await supabaseClient.auth.signOut();
       setCurrentUser(null);
     } catch (error) {
       console.error('Register error:', error);
@@ -271,8 +285,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     try {
       console.log('AuthContext - Logging out user');
-      const result = await supabaseSignOut();
-      if (result.error) throw result.error;
+      const { error } = await supabaseClient.auth.signOut();
+      if (error) throw error;
       
       // Clear local state
       setCurrentUser(null);

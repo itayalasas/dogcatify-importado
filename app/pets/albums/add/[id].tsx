@@ -19,7 +19,6 @@ export default function AddPhoto() {
   const [loading, setLoading] = useState(false);
   const [isShared, setIsShared] = useState(false);
   const [validatingImages, setValidatingImages] = useState(false);
-  const [hasShared, setHasShared] = useState(false);
 
   const handleSelectPhoto = async () => {
     try {
@@ -161,30 +160,32 @@ export default function AddPhoto() {
 
   const uploadImageToStorage = async (imageAsset: ImagePickerAsset, albumId: string): Promise<string> => {
     try {
-      // Crear una estructura de carpetas similar a Firebase
+      console.log('Starting image upload for:', imageAsset.uri);
+      
+      // Create a unique filename
       const filename = `pets/albums/${id}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-        
-        const formData = new FormData();
-        formData.append('file', {
-          uri: imageAsset.uri,
-          type: 'image/jpeg',
-          name: filename,
-        } as any);
-        
-        const { data, error } = await supabaseClient.storage
-          .from('dogcatify')
-          .upload(filename, formData, {
-            contentType: 'image/jpeg',
-            cacheControl: '3600',
-          });
-
-        if (error) throw error;
-
-        const { data: { publicUrl } } = supabaseClient.storage
-          .from('dogcatify')
-          .getPublicUrl(filename);
-        
-        return publicUrl;
+      
+      console.log('Uploading to path:', filename);
+      
+      // Upload to Supabase storage
+      const uploadResult = await supabaseClient.storage
+        .from('dogcatify')
+        .upload(filename, imageAsset.uri);
+      
+      console.log('Upload result:', uploadResult);
+      
+      if (uploadResult.error) {
+        console.error('Upload error:', uploadResult.error);
+        throw uploadResult.error;
+      }
+      
+      // Get public URL
+      const { data: { publicUrl } } = supabaseClient.storage
+        .from('dogcatify')
+        .getPublicUrl(filename);
+      
+      console.log('Generated public URL:', publicUrl);
+      return publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
       throw error;
@@ -220,25 +221,6 @@ export default function AddPhoto() {
     }
   };
 
-  const handleSharePost = async () => {
-    try {
-      // Mark as shared in UI
-      setHasShared(true);
-      
-      // Prepare content to share - using pet name if available
-      const shareMessage = `¡Mira las fotos de mi mascota en DogCatiFy!`;
-      const shareUrl = 'https://dogcatify.com';
-      
-      // Use React Native's Share API
-      await Share.share({
-        message: shareMessage,
-        url: shareUrl,
-      });
-    } catch (error) {
-      console.error('Error sharing post:', error);
-      Alert.alert('Error', 'No se pudo compartir la publicación');
-    }
-  };
 
   const handleSavePhotos = async () => {
     if (selectedImages.length === 0) {
@@ -256,14 +238,26 @@ export default function AddPhoto() {
 
     setLoading(true);
     try {
+      console.log('Starting to save photos, total images:', selectedImages.length);
+      
       // Upload all images to Firebase Storage
       const uploadPromises = selectedImages.map(image => uploadImageToStorage(image, albumId));
-      const imageUrls = await Promise.all(uploadPromises);
+      
+      console.log('Starting parallel uploads...');
+      let imageUrls;
+      try {
+        imageUrls = await Promise.all(uploadPromises);
+        console.log('All uploads completed, URLs:', imageUrls);
+      } catch (uploadError) {
+        console.error('Error during uploads:', uploadError);
+        throw new Error('Error al subir las imágenes: ' + uploadError.message);
+      }
 
+      console.log('Saving album to database...');
       // Save album to Firestore
-      const { error: albumError } = await supabaseClient
+      const albumResult = await supabaseClient
         .from('pet_albums')
-        .insert([{
+        .insert({
           pet_id: id,
           user_id: currentUser.id,
           title: photoTitle.trim() || 'Álbum sin título',
@@ -271,12 +265,19 @@ export default function AddPhoto() {
           images: imageUrls,
           is_shared: isShared,
           created_at: new Date().toISOString()
-        }]);
+        });
 
-      if (albumError) throw albumError;
+      console.log('Album save result:', albumResult);
+      if (albumResult.error) {
+        console.error('Album save error:', albumResult.error);
+        throw albumResult.error;
+      }
+      
+      console.log('Album saved successfully');
 
       // If user wants to share as post, create a post
       if (isShared) {
+        console.log('Creating post for shared album...');
         const { data: petData, error: petError } = await supabaseClient
           .from('pets')
           .select('*')
@@ -284,10 +285,11 @@ export default function AddPhoto() {
           .single();
           
         if (petData && !petError) {
+          console.log('Pet data found, creating post...');
           // Crear post directamente aquí en lugar de usar una función separada
-          const { error: postError } = await supabaseClient
+          const postResult = await supabaseClient
             .from('posts')
-            .insert([{
+            .insert({
               user_id: currentUser.id,
               pet_id: id,
               content: photoDescription || `Nuevas fotos de ${petData.name} 📸`,
@@ -302,11 +304,13 @@ export default function AddPhoto() {
                 name: petData.name,
                 species: petData.species === 'dog' ? 'Perro' : 'Gato'
               }
-            }]);
+            });
             
-          if (postError) {
-            console.error('Error creating post:', postError);
+          if (postResult.error) {
+            console.error('Error creating post:', postResult.error);
             // No lanzar error para no interrumpir el flujo principal
+          } else {
+            console.log('Post created successfully');
           }
         }
       }
@@ -391,7 +395,7 @@ export default function AddPhoto() {
               onPress={() => setIsShared(!isShared)}
             >
               <View style={[styles.checkbox, isShared && styles.checkedCheckbox]}>
-                {isShared && <Share size={16} color="#FFFFFF" />}
+                {isShared && <Share2 size={16} color="#FFFFFF" />}
               </View>
               <Text style={styles.shareOptionText}>
                 Compartir como publicación en el feed

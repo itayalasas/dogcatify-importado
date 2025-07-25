@@ -208,32 +208,47 @@ export default function AddService() {
 
   const uploadImage = async (imageUri: string, path: string): Promise<string> => {
     try {
-      // Fetch the image as a blob
+      console.log('Starting image upload for:', imageUri);
+      console.log('Upload path:', path);
+      
+      // Create a unique filename
+      const filename = `partners/${partnerId}/services/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+      console.log('Generated filename:', filename);
+      
+      // Fetch the image and convert to blob
+      console.log('Fetching image from URI...');
       const response = await fetch(imageUri);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.status}`);
+      }
+      
       const blob = await response.blob();
+      console.log('Image converted to blob, size:', blob.size);
       
-      // Create form data for upload
-      const formData = new FormData();
-      formData.append('file', {
-        uri: imageUri,
-        type: 'image/jpeg',
-        name: path,
-      } as any);
-      
-      // Upload to Supabase storage
+      // Upload blob to Supabase storage
+      console.log('Uploading blob to Supabase storage...');
       const { data, error } = await supabaseClient.storage
         .from('dogcatify')
-        .upload(path, formData, {
+        .upload(filename, blob, {
           contentType: 'image/jpeg',
           cacheControl: '3600',
+          upsert: false
         });
       
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase storage error:', error);
+        throw new Error(`Storage upload failed: ${error.message}`);
+      }
+      
+      console.log('Upload successful, data:', data);
       
       // Get the public URL
-      const { data: { publicUrl } } = supabaseClient.storage
+      const { data: urlData } = supabaseClient.storage
         .from('dogcatify')
-        .getPublicUrl(path);
+        .getPublicUrl(filename);
+      
+      const publicUrl = urlData.publicUrl;
+      console.log('Generated public URL:', publicUrl);
       
       return publicUrl;
     } catch (error) {
@@ -281,11 +296,47 @@ export default function AddService() {
       
       if (images.length > 0) {
         console.log(`Subiendo ${images.length} imágenes...`);
-        for (let i = 0; i < images.length; i++) {
-          const path = `partners/${partnerId}/${businessType === 'shop' ? 'products' : 'services'}/${Date.now()}-${i}.jpg`;
-          const imageUrl = await uploadImage(images[i].uri, path);
-          imageUrls.push(imageUrl);
-          console.log(`Imagen ${i+1} subida: ${imageUrl.substring(0, 50)}...`);
+        
+        try {
+          for (let i = 0; i < images.length; i++) {
+            console.log(`Subiendo imagen ${i + 1} de ${images.length}...`);
+            const path = `partners/${partnerId}/${businessType === 'shop' ? 'products' : 'services'}/${Date.now()}-${i}.jpg`;
+            const imageUrl = await uploadImage(images[i].uri, path);
+            imageUrls.push(imageUrl);
+            console.log(`Imagen ${i+1} subida exitosamente`);
+          }
+          console.log('Todas las imágenes subidas exitosamente');
+        } catch (uploadError) {
+          console.error('Error durante la subida de imágenes:', uploadError);
+          
+          // Ofrecer opciones al usuario
+          Alert.alert(
+            'Error al subir imágenes',
+            'No se pudieron subir las imágenes. ¿Qué deseas hacer?',
+            [
+              {
+                text: 'Reintentar',
+                onPress: () => {
+                  // Reintentar la función completa
+                  handleSubmit();
+                  return;
+                }
+              },
+              {
+                text: 'Continuar sin imágenes',
+                onPress: () => {
+                  // Continuar sin imágenes
+                  handleSubmitWithoutImages();
+                  return;
+                }
+              },
+              {
+                text: 'Cancelar',
+                style: 'cancel'
+              }
+            ]
+          );
+          return;
         }
       }
 
@@ -352,14 +403,125 @@ export default function AddService() {
       Alert.alert(
         'Éxito',
         `${businessType === 'shop' ? 'Producto' : 'Servicio'} agregado correctamente`,
-        [{ text: 'OK', onPress: () => router.back() }]
+        [{ 
+          text: 'OK', 
+          onPress: () => {
+            // Navigate back to the configure activities screen to see the new service
+            router.push({
+              pathname: '/partner/configure-activities',
+              params: { 
+                partnerId: partnerId,
+                businessType: businessType 
+              }
+            });
+          }
+        }]
       );
     } catch (error) {
       console.error('Error adding service:', error);
+      
+      let errorMessage = 'Error desconocido';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
       Alert.alert(
-        'Error', 
-        `No se pudo agregar el ${businessType === 'shop' ? 'producto' : 'servicio'}: ${(error as Error).message}`
+        'Error al guardar', 
+        `No se pudo agregar el ${businessType === 'shop' ? 'producto' : 'servicio'}.\n\nDetalle: ${errorMessage}\n\nPor favor verifica tu conexión e intenta nuevamente.`
       );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmitWithoutImages = async () => {
+    if (!serviceName.trim() || !description.trim() || !category || !price) {
+      Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
+      return;
+    }
+
+    const config = getServiceConfig(businessType || '');
+    if (config.needsDuration && !duration.trim()) {
+      Alert.alert('Error', 'Por favor especifica la duración del servicio');
+      return;
+    }
+
+    if (config.needsStock && !stock.trim()) {
+      Alert.alert('Error', 'Por favor especifica el stock disponible');
+      return;
+    }
+
+    if (!currentUser || !partnerId) {
+      Alert.alert('Error', 'Información de usuario o aliado no disponible');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      console.log('Guardando sin imágenes...');
+      
+      // Determine table based on business type
+      const tableName = businessType === 'shop' ? 'partner_products' : 'partner_services';
+      console.log(`Guardando en tabla: ${tableName}`);
+      
+      if (businessType === 'shop') {
+        // Create product data
+        const productData = {
+          partner_id: partnerId,
+          name: serviceName.trim(),
+          description: description.trim() || '',
+          category: category.trim(),
+          price: parseFloat(price),
+          stock: parseInt(stock) || 10,
+          brand: brand.trim() || null,
+          weight: weight.trim() || null,
+          size: size.trim() || null,
+          color: color.trim() || null,
+          age_range: ageRange.trim() || null,
+          pet_type: petType.trim() || null,
+          partner_name: partnerProfile?.businessName || 'Tienda',
+          images: [], // Empty array for images
+          is_active: true,
+          created_at: new Date().toISOString()
+        };
+        
+        const { error } = await supabaseClient
+          .from('partner_products')
+          .insert(productData);
+        
+        if (error) throw error;
+        
+      } else {
+        // Create service data
+        const serviceData = {
+          partner_id: partnerId,
+          name: serviceName.trim(),
+          description: description.trim() || '',
+          category: category.trim(),
+          price: parseFloat(price),
+          duration: parseInt(duration) || 60,
+          images: [], // Empty array for images
+          is_active: true,
+          created_at: new Date().toISOString()
+        };
+        
+        const { error } = await supabaseClient
+          .from('partner_services')
+          .insert(serviceData);
+        
+        if (error) throw error;
+      }
+
+      Alert.alert(
+        'Éxito',
+        `${businessType === 'shop' ? 'Producto' : 'Servicio'} agregado correctamente (sin imágenes)`,
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+    } catch (error) {
+      console.error('Error saving without images:', error);
+      Alert.alert('Error', `No se pudo guardar el ${businessType === 'shop' ? 'producto' : 'servicio'}`);
     } finally {
       setLoading(false);
     }
@@ -594,6 +756,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+    paddingTop: 50,
   }, 
   header: {
     flexDirection: 'row',

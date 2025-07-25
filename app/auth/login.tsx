@@ -256,11 +256,6 @@ export default function Login() {
       </View>
 
       <View style={styles.form}>
-        <View style={styles.demoCredentials}>
-          <Text style={styles.demoTitle}>Credenciales de prueba:</Text>
-          <Text style={styles.demoText}>Usa tu cuenta real de Supabase</Text>
-          <Text style={styles.demoText}>o regístrate para crear una nueva</Text>
-        </View>
 
         <Input
           label={t('email')}
@@ -474,25 +469,5 @@ const styles = StyleSheet.create({
   biometricButton: {
     flex: 1,
     maxWidth: '48%',
-  },
-  demoCredentials: {
-    backgroundColor: '#FEF3C7',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#F59E0B',
-  },
-  demoTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Bold',
-    color: '#92400E',
-    marginBottom: 8,
-  },
-  demoText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#92400E',
-    marginBottom: 2,
   },
 });

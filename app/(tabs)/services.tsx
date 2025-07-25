@@ -10,7 +10,8 @@ import { router } from 'expo-router';
 // Ignore specific Firebase warnings that appear on logout
 LogBox.ignoreLogs([
   '[2025-07-11T02:50:13.958Z] @firebase/firestore:',
-  'Warning: Text strings must be rendered within a <Text> component.'
+  'Warning: Text strings must be rendered within a <Text> component.',
+  'Warning: Each child in a list should have a unique "key" prop.'
 ]);
 
 export default function Services() {
@@ -49,10 +50,16 @@ export default function Services() {
             .select('*')
             .eq('partner_id', partner.id)
             .eq('is_active', true)
-            .limit(1);
+            .order('created_at', { ascending: false })
+            .limit(3); // Get up to 3 services to have more image options
 
           if (servicesData && servicesData.length > 0 && !servicesError) {
             const serviceData = servicesData[0];
+            
+            // Collect all service images
+            const allServiceImages = servicesData
+              .filter(s => s.images && s.images.length > 0)
+              .flatMap(s => s.images);
             
             partnersWithServices.push({
               id: serviceData.id,
@@ -69,6 +76,8 @@ export default function Services() {
               price: serviceData.price,
               duration: serviceData.duration,
               category: partner.business_type,
+              serviceImages: allServiceImages, // Add all service images
+              images: serviceData.images || [], // Keep individual service images
             });
           }
         }

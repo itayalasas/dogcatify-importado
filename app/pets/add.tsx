@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Dimensions, TextInput, FlatList } from 'react-native';
 import { router, useLocalSearchParams, Link } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, ChevronDown, Check, Mars, Venus } from 'lucide-react-native';
+import { ArrowLeft, ChevronDown, Check, Mars, Venus, Search } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -14,8 +14,10 @@ interface BreedInfo {
   name: string;
   min_height?: number;
   max_height?: number;
-  min_weight?: number;
-  max_weight?: number;
+  min_weight_male?: number;
+  max_weight_male?: number;
+  min_weight_female?: number;
+  max_weight_female?: number;
   min_life_expectancy?: number;
   max_life_expectancy?: number;
   shedding?: number;
@@ -32,6 +34,23 @@ type WeightUnit = 'kg' | 'lb';
 
 const API_KEY = 'Dc+xEVg6S6WoHc7MbV9FLQ==vASOw63SGaFxuAi8';
 const { width: screenWidth } = Dimensions.get('window');
+
+// Lista completa de colores para mascotas
+const petColors = [
+  // Colores básicos
+  'Negro', 'Blanco', 'Marrón', 'Gris', 'Dorado', 'Crema', 'Beige',
+  // Combinaciones comunes
+  'Negro y blanco', 'Marrón y blanco', 'Gris y blanco', 'Dorado y blanco',
+  'Tricolor', 'Bicolor', 'Manchado', 'Atigrado', 'Rayado',
+  // Colores específicos de perros
+  'Chocolate', 'Canela', 'Arena', 'Rojizo', 'Rubio', 'Plateado',
+  'Merle', 'Brindle', 'Sable', 'Leonado', 'Caoba',
+  // Colores específicos de gatos
+  'Naranja', 'Calico', 'Carey', 'Siamés', 'Himalayo', 'Smoke',
+  'Tabby', 'Tortoiseshell', 'Colorpoint', 'Chinchilla',
+  // Otros
+  'Albino', 'Multicolor', 'Jaspeado', 'Moteado'
+];
 
 export default function AddPet() {
   const { currentUser } = useAuth();
@@ -50,6 +69,8 @@ export default function AddPet() {
   const [weight, setWeight] = useState('');
   const [weightUnit, setWeightUnit] = useState<WeightUnit>('kg');
   const [color, setColor] = useState('');
+  const [colorQuery, setColorQuery] = useState('');
+  const [showColorSuggestions, setShowColorSuggestions] = useState(false);
   const [isNeutered, setIsNeutered] = useState(false);
   const [hasChip, setHasChip] = useState(false);
   const [chipNumber, setChipNumber] = useState('');
@@ -59,7 +80,44 @@ export default function AddPet() {
   const [breedInfo, setBreedInfo] = useState<BreedInfo | null>(null);
   const [loadingBreedInfo, setLoadingBreedInfo] = useState(false);
   const [showSpeciesSelector, setShowSpeciesSelector] = useState(false);
-  
+  const [showAgeUnitSelector, setShowAgeUnitSelector] = useState(false);
+  const [showWeightUnitSelector, setShowWeightUnitSelector] = useState(false);
+  const [petImage, setPetImage] = useState<string | null>(null);
+
+  // Lista completa de colores para mascotas
+  const petColors = [
+    // Colores básicos
+    'Negro', 'Blanco', 'Marrón', 'Gris', 'Dorado', 'Crema', 'Beige',
+    // Combinaciones comunes
+    'Negro y blanco', 'Marrón y blanco', 'Gris y blanco', 'Dorado y blanco',
+    'Tricolor', 'Bicolor', 'Manchado', 'Atigrado', 'Rayado',
+    // Colores específicos de perros
+    'Chocolate', 'Canela', 'Arena', 'Rojizo', 'Rubio', 'Plateado',
+    'Merle', 'Brindle', 'Sable', 'Leonado', 'Caoba',
+    // Colores específicos de gatos
+    'Naranja', 'Calico', 'Carey', 'Siamés', 'Himalayo', 'Smoke',
+    'Tabby', 'Tortoiseshell', 'Colorpoint', 'Chinchilla',
+    // Otros
+    'Albino', 'Multicolor', 'Jaspeado', 'Moteado'
+  ];
+
+  const handleColorSelect = (selectedColor: string) => {
+    setColor(selectedColor);
+    setColorQuery(selectedColor);
+    setShowColorSuggestions(false);
+  };
+
+  const handleColorInputChange = (text: string) => {
+    setColorQuery(text);
+    setColor(text);
+    setShowColorSuggestions(text.length > 0);
+  };
+
+  // Filtrar colores basado en la búsqueda
+  const filteredColors = petColors.filter(petColor =>
+    petColor.toLowerCase().includes(colorQuery.toLowerCase())
+  );
+
   // Image picker functions
   const pickImage = async () => {
     try {
@@ -169,7 +227,7 @@ export default function AddPet() {
       // Fetch breed info when breed is selected
       fetchBreedInfo(params.selectedBreed, params.species || species);
     }
-  }, [params.species]);
+  }, [params.species, params.selectedBreed]);
 
   const fetchBreedInfo = async (breedName: string, speciesType: PetSpecies) => {
     if (!breedName) return;
@@ -215,7 +273,10 @@ export default function AddPet() {
   };
 
   const handleBreedSelect = () => {
-    if (!species) return;
+    if (!species) {
+      Alert.alert('Selecciona especie', 'Por favor selecciona primero la especie de tu mascota');
+      return;
+    }
     
     // Save the current name before navigating to breed selector
     if (name) {
@@ -230,23 +291,54 @@ export default function AddPet() {
   };
 
   const handleSubmit = async () => {
-    if (!name.trim() || !breed.trim() || !age.trim() || !weight.trim()) {
+    if (!name.trim() || !species || !breed.trim() || !age.trim() || !weight.trim() || !gender) {
       Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
-      console.log('Missing required fields'); 
       return;
     }
     
     if (!currentUser) {
       Alert.alert('Error', 'Debes estar autenticado para agregar una mascota');
-      console.log('User not authenticated');
       return;
     }
 
-    console.log('Submitting pet data...');
+    console.log('Validating for duplicate pets...');
     setIsLoading(true);
+    
     try {
-      // Usar la imagen de la raza como foto de la mascota
-      let photoURL = breedInfo?.image_link || null;
+      // Check if a pet with the same name, species, and breed already exists for this user
+      const { data: existingPets, error: checkError } = await supabaseClient
+        .from('pets')
+        .select('id, name, species, breed')
+        .eq('owner_id', currentUser.id)
+        .eq('name', name.trim())
+        .eq('species', species)
+        .eq('breed', breed.trim());
+      
+      if (checkError) {
+        console.error('Error checking for duplicate pets:', checkError);
+        Alert.alert('Error', 'No se pudo verificar si la mascota ya existe');
+        return;
+      }
+      
+      if (existingPets && existingPets.length > 0) {
+        console.log('Duplicate pet found:', existingPets[0]);
+        Alert.alert(
+          'Mascota ya registrada',
+          `Ya tienes una mascota registrada con el nombre "${name.trim()}", especie "${species === 'dog' ? 'Perro' : 'Gato'}" y raza "${breed.trim()}". Por favor verifica la información o usa un nombre diferente.`,
+          [{ text: 'Entendido', style: 'default' }]
+        );
+        return;
+      }
+      
+      console.log('No duplicate found, proceeding with pet creation...');
+      
+      // Upload image if selected
+      let photoURL = null;
+      if (petImage) {
+        photoURL = await uploadPetImage();
+      } else if (breedInfo?.image_link) {
+        photoURL = breedInfo.image_link;
+      }
       
       // Create pet data object
       const petData: any = {
@@ -264,7 +356,7 @@ export default function AddPet() {
           unit: weightUnit
         },
         color: color.trim() || null,
-        gender: gender || null,
+        gender: gender,
         is_neutered: isNeutered,
         has_chip: hasChip,
         chip_number: hasChip ? chipNumber.trim() : null,
@@ -279,10 +371,9 @@ export default function AddPet() {
       console.log('Pet data:', petData);
       
       // Insert pet directly using supabaseClient
-      const { data, error } = await supabaseClient
+      const { error } = await supabaseClient
         .from('pets')
-        .insert(petData)
-        .select();
+        .insert(petData);
       
       if (!error) {
         console.log('Pet created successfully');
@@ -296,16 +387,16 @@ export default function AddPet() {
         Alert.alert('Error', error.message || 'Error al agregar la mascota');
       }
     } catch (error) {
-      console.error('Error creating pet:', error);
-      Alert.alert('Error', 'Error al agregar la mascota');
+      console.error('Error in handleSubmit:', error);
+      Alert.alert('Error', 'Error al procesar la solicitud');
     } finally {
       setIsLoading(false);
     }
   };
 
   const speciesOptions = [
-    { value: 'dog', label: 'Perro' },
-    { value: 'cat', label: 'Gato' },
+    { value: 'dog', label: 'Perro', icon: '🐕' },
+    { value: 'cat', label: 'Gato', icon: '🐱' },
   ];
   
   const ageUnitOptions = [
@@ -320,8 +411,8 @@ export default function AddPet() {
   ];
 
   const genderOptions = [
-    { value: 'male', label: 'Macho' },
-    { value: 'female', label: 'Hembra' },
+    { value: 'male', label: 'Macho', icon: Mars },
+    { value: 'female', label: 'Hembra', icon: Venus },
   ];
 
   return (
@@ -331,69 +422,91 @@ export default function AddPet() {
           <ArrowLeft size={24} color="#374151" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Agregar Mascota</Text>
+        <View style={styles.placeholder} />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.form}>
-          <>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Nombre *</Text>
-            <Input
-              value={name}
-              onChangeText={setName}
-              placeholder="Nombre de tu mascota"
-              style={styles.input}
-            />
-          </View>
-
+          {/* Especie - Primer campo */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Especie *</Text>
             <TouchableOpacity
-              style={styles.speciesSelector}
+              style={styles.modernSelector}
               onPress={() => setShowSpeciesSelector(!showSpeciesSelector)}
             >
-              <Text style={styles.selectorText}>
-                {speciesOptions.find(opt => opt.value === species)?.label || 'Seleccionar'}
-              </Text>
+              <View style={styles.selectorContent}>
+                <Text style={styles.selectorIcon}>
+                  {speciesOptions.find(opt => opt.value === species)?.icon || '🐾'}
+                </Text>
+                <Text style={styles.selectorText}>
+                  {speciesOptions.find(opt => opt.value === species)?.label || 'Seleccionar especie'}
+                </Text>
+              </View>
               <ChevronDown size={20} color="#6B7280" />
             </TouchableOpacity>
             
             {showSpeciesSelector && (
-              <View style={styles.speciesOptions}>
+              <View style={styles.modernDropdown}>
                 {speciesOptions.map((option) => (
                   <TouchableOpacity
                     key={option.value}
-                    style={styles.speciesOption}
+                    style={[
+                      styles.modernDropdownOption,
+                      species === option.value && styles.selectedDropdownOption
+                    ]}
                     onPress={() => {
                       setSpecies(option.value as PetSpecies);
                       setShowSpeciesSelector(false);
+                      // Reset breed when species changes
+                      if (species !== option.value) {
+                        setBreed('');
+                        setBreedInfo(null);
+                      }
                     }}
                   >
-                    <Text style={styles.speciesOptionText}>{option.label}</Text>
+                    <Text style={styles.dropdownIcon}>{option.icon}</Text>
+                    <Text style={[
+                      styles.dropdownOptionText,
+                      species === option.value && styles.selectedDropdownOptionText
+                    ]}>
+                      {option.label}
+                    </Text>
+                    {species === option.value && (
+                      <Check size={16} color="#2D6A6F" />
+                    )}
                   </TouchableOpacity>
                 ))}
               </View>
             )}
           </View>
 
+          {/* Raza - Segundo campo */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Raza *</Text>
             <TouchableOpacity
-              style={styles.selector}
+              style={[styles.modernSelector, !species && styles.disabledSelector]}
               onPress={handleBreedSelect}
+              disabled={!species}
             >
-              <Text style={styles.selectorText}>
-                {breed || 'Seleccionar raza'}
-              </Text>
-              <ChevronDown size={20} color="#6B7280" />
+              <View style={styles.selectorContent}>
+                <Text style={styles.selectorIcon}>🏷️</Text>
+                <Text style={[
+                  styles.selectorText,
+                  !species && styles.disabledSelectorText
+                ]}>
+                  {breed || (species ? 'Seleccionar raza' : 'Primero selecciona la especie')}
+                </Text>
+              </View>
+              <ChevronDown size={20} color={!species ? "#D1D5DB" : "#6B7280"} />
             </TouchableOpacity>
             {loadingBreedInfo && (
               <Text style={styles.loadingText}>Buscando información de la raza...</Text>
             )}
           </View>
 
+          {/* Información de la raza */}
           {breedInfo && breed && (
-            <View style={styles.breedInfoContainer}>
+            <Card style={styles.breedInfoContainer}>
               <Text style={styles.breedInfoTitle}>Información de la raza {breed}</Text>
 
               {breedInfo.image_link && (
@@ -404,88 +517,99 @@ export default function AddPet() {
                 />
               )}
 
-              {breedInfo.min_height && breedInfo.max_height && (
-                <View style={styles.breedInfoCard}>
-                  <View style={styles.breedDetails}>
-                    <Text style={styles.breedDetailText}>
-                      Altura: {breedInfo.min_height} - {breedInfo.max_height} cm
+              <View style={styles.breedStatsGrid}>
+                {breedInfo.min_weight_male && breedInfo.max_weight_male && (
+                  <View style={styles.breedStat}>
+                    <Text style={styles.breedStatLabel}>Peso (Macho)</Text>
+                    <Text style={styles.breedStatValue}>
+                      {breedInfo.min_weight_male} - {breedInfo.max_weight_male} kg
                     </Text>
                   </View>
-                </View>
-              )}
+                )}
 
-              {breedInfo.min_weight && breedInfo.max_weight && (
-                <View style={styles.breedInfoCard}>
-                  <View style={styles.breedDetails}>
-                    <Text style={styles.breedDetailText}>
-                      Peso: {breedInfo.min_weight} - {breedInfo.max_weight} kg
+                {breedInfo.min_weight_female && breedInfo.max_weight_female && (
+                  <View style={styles.breedStat}>
+                    <Text style={styles.breedStatLabel}>Peso (Hembra)</Text>
+                    <Text style={styles.breedStatValue}>
+                      {breedInfo.min_weight_female} - {breedInfo.max_weight_female} kg
                     </Text>
                   </View>
-                </View>
-              )}
+                )}
 
-              {breedInfo.min_life_expectancy && breedInfo.max_life_expectancy && (
-                <View style={styles.breedInfoCard}>
-                  <View style={styles.breedDetails}>
-                    <Text style={styles.breedDetailText}>
-                      Esperanza de vida: {breedInfo.min_life_expectancy} - {breedInfo.max_life_expectancy} años
+                {breedInfo.min_life_expectancy && breedInfo.max_life_expectancy && (
+                  <View style={styles.breedStat}>
+                    <Text style={styles.breedStatLabel}>Esperanza de vida</Text>
+                    <Text style={styles.breedStatValue}>
+                      {breedInfo.min_life_expectancy} - {breedInfo.max_life_expectancy} años
                     </Text>
                   </View>
-                </View>
-              )}
+                )}
 
-              {breedInfo.energy !== undefined && (
-                <View style={styles.breedInfoCard}>
-                  <View style={styles.breedDetails}>
-                    <Text style={styles.breedDetailText}>
-                      Nivel de energía: {breedInfo.energy}/5
-                    </Text>
+                {breedInfo.energy !== undefined && (
+                  <View style={styles.breedStat}>
+                    <Text style={styles.breedStatLabel}>Energía</Text>
+                    <View style={styles.breedStatRating}>
+                      <Text style={styles.breedStatValue}>{breedInfo.energy}/5</Text>
+                      <View style={styles.ratingBar}>
+                        <View style={[styles.ratingFill, { width: `${(breedInfo.energy / 5) * 100}%` }]} />
+                      </View>
+                    </View>
                   </View>
-                </View>
-              )}
+                )}
 
-              {breedInfo.protectiveness !== undefined && (
-                <View style={styles.breedInfoCard}>
-                  <View style={styles.breedDetails}>
-                    <Text style={styles.breedDetailText}>
-                      Protectividad: {breedInfo.protectiveness}/5
-                    </Text>
+                {breedInfo.trainability !== undefined && (
+                  <View style={styles.breedStat}>
+                    <Text style={styles.breedStatLabel}>Entrenabilidad</Text>
+                    <View style={styles.breedStatRating}>
+                      <Text style={styles.breedStatValue}>{breedInfo.trainability}/5</Text>
+                      <View style={styles.ratingBar}>
+                        <View style={[styles.ratingFill, { width: `${(breedInfo.trainability / 5) * 100}%` }]} />
+                      </View>
+                    </View>
                   </View>
-                </View>
-              )}
-
-              {breedInfo.trainability !== undefined && (
-                <View style={styles.breedInfoCard}>
-                  <View style={styles.breedDetails}>
-                    <Text style={styles.breedDetailText}>
-                      Facilidad de entrenamiento: {breedInfo.trainability}/5
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {breedInfo.barking !== undefined && (
-                <View style={styles.breedInfoCard}>
-                  <View style={styles.breedDetails}>
-                    <Text style={styles.breedDetailText}>
-                      Nivel de ladrido: {breedInfo.barking}/5
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {breedInfo.shedding !== undefined && (
-                <View style={styles.breedInfoCard}>
-                  <View style={styles.breedDetails}>
-                    <Text style={styles.breedDetailText}>
-                      Nivel de muda: {breedInfo.shedding}/5
-                    </Text>
-                  </View>
-                </View>
-              )}
-            </View>
+                )}
+              </View>
+            </Card>
           )}
 
+          {/* Nombre - Después de la información de la raza */}
+          {/* Especie - Primer campo */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Nombre *</Text>
+            <Input
+              value={name}
+              onChangeText={setName}
+              placeholder="Nombre de tu mascota"
+              style={styles.input}
+            />
+          </View>
+
+          {/* Foto de la mascota */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Foto de la mascota</Text>
+            <View style={styles.imageContainer}>
+              {petImage ? (
+                <Image source={{ uri: petImage }} style={styles.petImage} />
+              ) : breedInfo?.image_link ? (
+                <Image source={{ uri: breedInfo.image_link }} style={styles.petImage} />
+              ) : (
+                <View style={styles.imagePlaceholder}>
+                  <Text style={styles.imagePlaceholderText}>📷</Text>
+                </View>
+              )}
+              
+              <View style={styles.imageButtons}>
+                <TouchableOpacity style={styles.imageButton} onPress={takePhoto}>
+                  <Text style={styles.imageButtonText}>Tomar foto</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
+                  <Text style={styles.imageButtonText}>Galería</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
+          {/* Edad y Peso en fila */}
           <View style={styles.row}>
             <View style={styles.inputGroupHalf}>
               <Text style={styles.label}>Edad *</Text>
@@ -501,19 +625,42 @@ export default function AddPet() {
             <View style={styles.inputGroupHalf}>
               <Text style={styles.label}>Unidad</Text>
               <TouchableOpacity
-                style={styles.selector}
-                onPress={() => {
-                  // Rotate through age units
-                  const currentIndex = ageUnitOptions.findIndex(opt => opt.value === ageUnit);
-                  const nextIndex = (currentIndex + 1) % ageUnitOptions.length;
-                  setAgeUnit(ageUnitOptions[nextIndex].value as AgeUnit);
-                }}
+                style={styles.modernSelector}
+                onPress={() => setShowAgeUnitSelector(!showAgeUnitSelector)}
               >
                 <Text style={styles.selectorText}>
                   {ageUnitOptions.find(opt => opt.value === ageUnit)?.label || 'Años'}
                 </Text>
                 <ChevronDown size={20} color="#6B7280" />
               </TouchableOpacity>
+              
+              {showAgeUnitSelector && (
+                <View style={styles.modernDropdown}>
+                  {ageUnitOptions.map((option) => (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[
+                        styles.modernDropdownOption,
+                        ageUnit === option.value && styles.selectedDropdownOption
+                      ]}
+                      onPress={() => {
+                        setAgeUnit(option.value as AgeUnit);
+                        setShowAgeUnitSelector(false);
+                      }}
+                    >
+                      <Text style={[
+                        styles.dropdownOptionText,
+                        ageUnit === option.value && styles.selectedDropdownOptionText
+                      ]}>
+                        {option.label}
+                      </Text>
+                      {ageUnit === option.value && (
+                        <Check size={16} color="#2D6A6F" />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
           </View>
 
@@ -532,66 +679,114 @@ export default function AddPet() {
             <View style={styles.inputGroupHalf}>
               <Text style={styles.label}>Unidad</Text>
               <TouchableOpacity
-                style={styles.selector}
-                onPress={() => {
-                  // Toggle between kg and lb
-                  setWeightUnit(weightUnit === 'kg' ? 'lb' : 'kg');
-                }}
+                style={styles.modernSelector}
+                onPress={() => setShowWeightUnitSelector(!showWeightUnitSelector)}
               >
                 <Text style={styles.selectorText}>
                   {weightUnitOptions.find(opt => opt.value === weightUnit)?.label || 'Kilogramos'}
                 </Text>
                 <ChevronDown size={20} color="#6B7280" />
               </TouchableOpacity>
+              
+              {showWeightUnitSelector && (
+                <View style={styles.modernDropdown}>
+                  {weightUnitOptions.map((option) => (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[
+                        styles.modernDropdownOption,
+                        weightUnit === option.value && styles.selectedDropdownOption
+                      ]}
+                      onPress={() => {
+                        setWeightUnit(option.value as WeightUnit);
+                        setShowWeightUnitSelector(false);
+                      }}
+                    >
+                      <Text style={[
+                        styles.dropdownOptionText,
+                        weightUnit === option.value && styles.selectedDropdownOptionText
+                      ]}>
+                        {option.label}
+                      </Text>
+                      {weightUnit === option.value && (
+                        <Check size={16} color="#2D6A6F" />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
           </View>
 
+          {/* Color con autocompletado */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Color</Text>
-            <Input
-              value={color}
-              onChangeText={setColor}
-              placeholder="Color de tu mascota"
-              style={styles.input}
-            />
+            <View style={styles.colorInputContainer}>
+              <TextInput
+                style={styles.colorInput}
+                value={colorQuery}
+                onChangeText={handleColorInputChange}
+                placeholder="Escribe o selecciona un color"
+                onFocus={() => setShowColorSuggestions(true)}
+              />
+              <Search size={20} color="#6B7280" style={styles.colorSearchIcon} />
+            </View>
+            
+            {showColorSuggestions && filteredColors.length > 0 && (
+              <View style={styles.colorSuggestions}>
+                {filteredColors.slice(0, 6).map((item) => (
+                  <TouchableOpacity
+                    key={item}
+                    style={styles.colorSuggestion}
+                    onPress={() => handleColorSelect(item)}
+                  >
+                    <Text style={styles.colorSuggestionText}>{item}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
 
+          {/* Género */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Género</Text>
+            <Text style={styles.label}>Género *</Text>
             <View style={styles.genderSelector}>
-              {genderOptions.map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[
-                    styles.genderOption,
-                    gender === option.value && styles.selectedGenderOption
-                  ]}
-                  onPress={() => setGender(option.value)}
-                >
-                  {option.value === 'male' ? (
-                    <Mars size={24} color={gender === 'male' ? '#FFFFFF' : '#6B7280'} />
-                  ) : (
-                    <Venus size={24} color={gender === 'female' ? '#FFFFFF' : '#6B7280'} />
-                  )}
-                  <Text style={[
-                    styles.genderOptionText,
-                    gender === option.value && styles.selectedGenderOptionText
-                  ]}>
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {genderOptions.map((option) => {
+                const IconComponent = option.icon;
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[
+                      styles.genderOption,
+                      gender === option.value && styles.selectedGenderOption
+                    ]}
+                    onPress={() => setGender(option.value)}
+                  >
+                    <IconComponent 
+                      size={24} 
+                      color={gender === option.value ? '#FFFFFF' : '#6B7280'} 
+                    />
+                    <Text style={[
+                      styles.genderOptionText,
+                      gender === option.value && styles.selectedGenderOptionText
+                    ]}>
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
 
+          {/* Estado - Checkboxes mejorados */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Estado</Text>
             <View style={styles.checkboxContainer}>
               <TouchableOpacity
-                style={styles.checkboxRow} 
+                style={styles.modernCheckboxRow} 
                 onPress={() => setIsNeutered(!isNeutered)}
               >
-                <View style={[styles.checkbox, isNeutered && styles.checkedCheckbox]}>
+                <View style={[styles.modernCheckbox, isNeutered && styles.checkedModernCheckbox]}>
                   {isNeutered && <Check size={16} color="#FFFFFF" />}
                 </View>
                 <Text style={styles.checkboxText}>
@@ -600,13 +795,15 @@ export default function AddPet() {
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={styles.checkboxRow} 
+                style={styles.modernCheckboxRow} 
                 onPress={() => setHasChip(!hasChip)}
               >
-                <View style={[styles.checkbox, hasChip && styles.checkedCheckbox]}>
+                <View style={[styles.modernCheckbox, hasChip && styles.checkedModernCheckbox]}>
                   {hasChip && <Check size={16} color="#FFFFFF" />}
                 </View>
-                <Text style={styles.checkboxText}>Tiene microchip</Text>
+                <Text style={styles.checkboxText}>
+                  Tiene microchip
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -638,14 +835,12 @@ export default function AddPet() {
           <Button
             title={isLoading ? "Agregando..." : "Agregar Mascota"}
             onPress={handleSubmit}
+            loading={isLoading}
             disabled={isLoading}
-            style={styles.submitButton}
+            size="large"
           />
-          </>
         </View>
       </ScrollView>
-
-      {/* Species Modal */}
     </SafeAreaView>
   );
 }
@@ -659,6 +854,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
     backgroundColor: '#FFFFFF',
@@ -666,12 +862,15 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E7EB',
   },
   backButton: {
-    marginRight: 16,
+    padding: 8,
   },
   headerTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
+  },
+  placeholder: {
+    width: 32,
   },
   content: {
     flex: 1,
@@ -681,52 +880,12 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     marginBottom: 20,
+    position: 'relative',
   },
   inputGroupHalf: {
     flex: 1,
     marginBottom: 16,
     marginHorizontal: 8,
-  },
-  imageContainer: {
-    alignItems: 'center',
-    marginVertical: 10,
-  },
-  petImage: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    marginBottom: 10,
-  },
-  imagePlaceholder: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderStyle: 'dashed',
-  },
-  imagePlaceholderText: {
-    fontSize: 50,
-  },
-  imageButtons: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  imageButton: {
-    backgroundColor: '#2D6A6F',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  imageButtonText: {
-    color: 'white',
-    fontFamily: 'Inter-Medium',
-    fontSize: 14,
   },
   label: {
     fontSize: 16,
@@ -738,7 +897,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
     borderColor: '#D1D5DB',
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 12,
     fontSize: 16,
@@ -748,158 +907,155 @@ const styles = StyleSheet.create({
     height: 100,
     textAlignVertical: 'top',
   },
-  selector: {
+  
+  // Modern selector styles
+  modernSelector: {
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    minHeight: 50,
   },
-  speciesSelector: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
+  disabledSelector: {
+    backgroundColor: '#F9FAFB',
     borderColor: '#E5E7EB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+  },
+  selectorContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    flex: 1,
+  },
+  selectorIcon: {
+    fontSize: 20,
+    marginRight: 12,
   },
   selectorText: {
     fontSize: 16,
+    fontFamily: 'Inter-Regular',
     color: '#111827',
-  },
-  row: {
-    flexDirection: 'row',
-    marginHorizontal: -8,
-    marginBottom: 4,
-  },
-  flex1: {
     flex: 1,
   },
-  submitButton: {
-    marginTop: 20,
-    marginBottom: 40,
-    backgroundColor: '#2D6A6F',
+  disabledSelectorText: {
+    color: '#9CA3AF',
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    width: '80%',
-    maxWidth: 300,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  modalOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  modalOptionText: {
-    fontSize: 16,
-    color: '#374151',
-    textAlign: 'center',
-  },
-  modalCancelButton: {
-    marginTop: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  modalCancelText: {
-    fontSize: 16,
-    color: '#DC2626',
-    textAlign: 'center',
-    fontFamily: 'Inter-Medium',
-  },
-  breedInfoContainer: {
-    marginBottom: 20,
-  },
-  breedInfoTitle: { 
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
-  },
-  breedImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  breedInfoCard: {
-    marginBottom: 10,
-    padding: 10,
-    backgroundColor: '#2D6A6F',
-    borderRadius: 8,
-  },
-  breedDetails: {
-    flexDirection: 'row',
-    backgroundColor: 'transparent',
-    alignItems: 'center',
-    borderColor: '#2D6A6F',
-  },
-  breedDetailText: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    padding: 4,
-  },
-  checkboxContainer: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    flexWrap: 'wrap',
-    gap: 20,
-    marginTop: 8,
-  },
-  checkboxRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  checkboxText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-  },
-  loadingText: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontStyle: 'italic',
-    marginTop: 4,
-  },
-  genderSelector: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  genderOption: {
-    width: '45%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+  
+  // Modern dropdown styles
+  modernDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    borderRadius: 8,
+    borderRadius: 12,
+    marginTop: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 1000,
+  },
+  modernDropdownOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  selectedDropdownOption: {
+    backgroundColor: '#F0F9FF',
+  },
+  dropdownIcon: {
+    fontSize: 18,
+    marginRight: 12,
+  },
+  dropdownOptionText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    flex: 1,
+  },
+  selectedDropdownOptionText: {
+    color: '#2D6A6F',
+    fontFamily: 'Inter-Medium',
+  },
+
+  // Color input styles
+  colorInputContainer: {
+    position: 'relative',
+  },
+  colorInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    paddingRight: 50,
+    fontSize: 16,
+    color: '#111827',
+    minHeight: 50,
+  },
+  colorSearchIcon: {
+    position: 'absolute',
+    right: 16,
+    top: 15,
+  },
+  colorSuggestions: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    marginTop: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 1000,
+    maxHeight: 200,
+  },
+  colorSuggestion: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  colorSuggestionText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+  },
+
+  // Gender selector styles
+  genderSelector: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  genderOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 16,
+    minHeight: 60,
   },
   selectedGenderOption: {
     backgroundColor: '#2D6A6F',
@@ -913,5 +1069,156 @@ const styles = StyleSheet.create({
   },
   selectedGenderOptionText: {
     color: '#FFFFFF',
-  }
+  },
+
+  // Modern checkbox styles
+  checkboxContainer: {
+    gap: 12,
+  },
+  modernCheckboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 50,
+  },
+  modernCheckbox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
+    borderRadius: 6,
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  checkedModernCheckbox: {
+    backgroundColor: '#2D6A6F',
+    borderColor: '#2D6A6F',
+  },
+  checkboxText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    flex: 1,
+  },
+
+  // Image styles
+  imageContainer: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  petImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    marginBottom: 12,
+    borderWidth: 3,
+    borderColor: '#E5E7EB',
+  },
+  imagePlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
+  },
+  imagePlaceholderText: {
+    fontSize: 40,
+  },
+  imageButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  imageButton: {
+    backgroundColor: '#2D6A6F',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  imageButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'Inter-Medium',
+    fontSize: 14,
+  },
+
+  // Breed info styles
+  breedInfoContainer: {
+    marginBottom: 20,
+    padding: 16,
+  },
+  breedInfoTitle: { 
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  breedImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  breedStatsGrid: {
+    gap: 12,
+  },
+  breedStat: {
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2D6A6F',
+  },
+  breedStatLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  breedStatValue: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  breedStatRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  ratingBar: {
+    flex: 1,
+    height: 6,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  ratingFill: {
+    height: '100%',
+    backgroundColor: '#2D6A6F',
+    borderRadius: 3,
+  },
+
+  // Layout styles
+  row: {
+    flexDirection: 'row',
+    marginHorizontal: -8,
+    marginBottom: 4,
+  },
+  loadingText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
 });

@@ -195,14 +195,29 @@ export default function PartnerOrders() {
     }).format(amount);
   };
 
+  // Helper function to get customer profile data
+  const getCustomerInfo = async (customerId: string) => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('profiles')
+        .select('display_name, email, phone')
+        .eq('id', customerId)
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error fetching customer info:', error);
+      return null;
+    }
+  };
+
   const renderOrder = (order: any) => (
     <Card key={order.id} style={styles.orderCard}>
       <View style={styles.orderHeader}>
         <View style={styles.orderInfo}>
           <Text style={styles.orderNumber}>Pedido #{order.id.slice(-6)}</Text>
-          <Text style={styles.customerName}>
-            {order.customerName || 'Cliente'}
-          </Text>
+          <Text style={styles.customerName}>Cliente</Text>
         </View>
         <View style={[
           styles.statusBadge,
@@ -219,13 +234,15 @@ export default function PartnerOrders() {
 
       <View style={styles.orderItems}>
         <Text style={styles.itemsTitle}>Productos:</Text>
-        {order.items && order.items.map((item: any, index: number) => (
+        {order.items && Array.isArray(order.items) && order.items.map((item: any, index: number) => (
           <View key={index} style={styles.orderItem}>
             <View style={styles.itemInfo}>
-              <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemQuantity}>x{item.quantity}</Text>
+              <Text style={styles.itemName}>{item.name || 'Producto'}</Text>
+              <Text style={styles.itemQuantity}>x{item.quantity || 1}</Text>
             </View>
-            <Text style={styles.itemPrice}>{formatCurrency(item.price * item.quantity)}</Text>
+            <Text style={styles.itemPrice}>
+              {formatCurrency((item.price || 0) * (item.quantity || 1))}
+            </Text>
           </View>
         ))}
       </View>
@@ -246,20 +263,11 @@ export default function PartnerOrders() {
             </Text>
           </View>
         )}
-        
-        {order.customerPhone && (
-          <View style={styles.orderDetail}>
-            <Phone size={16} color="#6B7280" />
-            <Text style={styles.orderDetailText}>
-              {order.customerPhone}
-            </Text>
-          </View>
-        )}
       </View>
 
       <View style={styles.orderTotal}>
         <Text style={styles.totalLabel}>Total:</Text>
-        <Text style={styles.totalAmount}>{formatCurrency(order.totalAmount)}</Text>
+        <Text style={styles.totalAmount}>{formatCurrency(order.totalAmount || 0)}</Text>
       </View>
 
       <View style={styles.orderActions}>
@@ -430,6 +438,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+    paddingTop: 50,
   },
   header: {
     flexDirection: 'row',

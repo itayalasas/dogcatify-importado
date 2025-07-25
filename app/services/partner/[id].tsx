@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, TextInput, Dimensions, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MapPin, Clock, Phone, Star, Search } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Clock, Phone, Star, Search, User } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient } from '../../../lib/supabase';
+
+const { width } = Dimensions.get('window');
 
 export default function PartnerServices() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -12,12 +14,19 @@ export default function PartnerServices() {
   const [partner, setPartner] = useState<any>(null);
   const [services, setServices] = useState<any[]>([]);
   const [filteredServices, setFilteredServices] = useState<any[]>([]);
+  const [partnerReviews, setPartnerReviews] = useState<any[]>([]);
+  const [averageRating, setAverageRating] = useState(0);
+  const [totalReviews, setTotalReviews] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showReviewsModal, setShowReviewsModal] = useState(false);
+  const [detailedReviews, setDetailedReviews] = useState<any[]>([]);
+  const [loadingDetailedReviews, setLoadingDetailedReviews] = useState(false);
 
   useEffect(() => {
     fetchPartnerDetails();
     fetchPartnerServices();
+    fetchPartnerReviews();
   }, [id]);
 
   useEffect(() => {
@@ -94,8 +103,101 @@ export default function PartnerServices() {
     }
   };
 
+  const fetchPartnerReviews = async () => {
+    try {
+      const { data: reviewsData, error } = await supabaseClient
+        .from('service_reviews')
+        .select(`
+          *,
+          profiles:customer_id(display_name, photo_url),
+          pets:pet_id(name),
+          partner_services:service_id(name)
+        `)
+        .eq('partner_id', id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setPartnerReviews(reviewsData || []);
+      
+      // Calculate average rating
+      if (reviewsData && reviewsData.length > 0) {
+        const avgRating = reviewsData.reduce((sum, review) => sum + review.rating, 0) / reviewsData.length;
+        setAverageRating(avgRating);
+        setTotalReviews(reviewsData.length);
+      }
+    } catch (error) {
+      console.error('Error fetching partner reviews:', error);
+    }
+  };
+
   const handleServicePress = (serviceId: string) => {
     router.push(`/services/${serviceId}`);
+  };
+
+  const handleShowReviews = () => {
+    setShowReviewsModal(true);
+    fetchDetailedReviews();
+  };
+
+  const fetchDetailedReviews = async () => {
+    if (detailedReviews.length > 0) return; // Already loaded
+    
+    setLoadingDetailedReviews(true);
+    try {
+      console.log('Fetching detailed reviews for partner:', partner?.id);
+      const { data: reviewsData, error } = await supabaseClient
+        .from('service_reviews')
+        .select('*')
+        .eq('partner_id', partner?.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+
+      console.log('Reviews data received:', reviewsData?.length || 0);
+      
+      // Fetch user profiles and service names for each review
+      const enrichedReviews = await Promise.all(
+        (reviewsData || []).map(async (review) => {
+          try {
+            // Fetch user profile
+            const { data: userProfile } = await supabaseClient
+              .from('profiles')
+              .select('display_name, photo_url')
+              .eq('id', review.customer_id)
+              .single();
+            
+            // Fetch service name
+            const { data: serviceData } = await supabaseClient
+              .from('partner_services')
+              .select('name')
+              .eq('id', review.service_id)
+              .single();
+            
+            return {
+              ...review,
+              user_profile: userProfile,
+              service_name: serviceData?.name
+            };
+          } catch (error) {
+            console.error('Error enriching review:', error);
+            return {
+              ...review,
+              user_profile: null,
+              service_name: null
+            };
+          }
+        })
+      );
+      
+      console.log('Enriched reviews:', enrichedReviews);
+      setDetailedReviews(enrichedReviews);
+    } catch (error) {
+      console.error('Error fetching detailed reviews:', error);
+    } finally {
+      setLoadingDetailedReviews(false);
+    }
   };
 
   const formatPrice = (price: number) => {
@@ -117,6 +219,38 @@ export default function PartnerServices() {
     }
   };
 
+  const renderStarRating = (rating: number, size: number = 16) => {
+    return (
+      <View style={styles.starRating}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <Star
+            key={star}
+            size={size}
+            color={star <= rating ? '#F59E0B' : '#E5E7EB'}
+            fill={star <= rating ? '#F59E0B' : 'none'}
+          />
+        ))}
+      </View>
+    );
+  };
+
+  const calculateReviewPercentages = () => {
+    if (detailedReviews.length === 0) return [];
+    
+    const counts = [0, 0, 0, 0, 0]; // For 1-5 stars
+    detailedReviews.forEach(review => {
+      if (review.rating >= 1 && review.rating <= 5) {
+        counts[review.rating - 1]++;
+      }
+    });
+    
+    return counts.map((count, index) => ({
+      stars: index + 1,
+      count,
+      percentage: detailedReviews.length > 0 ? (count / detailedReviews.length) * 100 : 0
+    })).reverse(); // Show 5 stars first
+  };
+  
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -133,7 +267,9 @@ export default function PartnerServices() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.title}>Servicios Disponibles</Text>
+        <View style={styles.titleContainer}>
+          <Text style={styles.title}>Servicios Disponibles</Text>
+        </View>
         <View style={styles.placeholder} />
       </View>
 
@@ -170,14 +306,14 @@ export default function PartnerServices() {
                 </View>
               </View>
               
-              {partner?.rating !== undefined && (
-                <View style={styles.ratingContainer}>
-                  <Star size={16} color="#F59E0B" fill="#F59E0B" />
-                  <Text style={styles.ratingText}>{partner.rating}</Text>
+              {averageRating > 0 && (
+                <TouchableOpacity style={styles.ratingContainer} onPress={handleShowReviews}>
+                  {renderStarRating(averageRating)}
+                  <Text style={styles.ratingText}>{averageRating.toFixed(1)}</Text>
                   <Text style={styles.reviewsText}>
-                    ({partner.reviews_count || partner.reviewsCount || 0} reseñas)
+                    ({totalReviews} reseñas)
                   </Text>
-                </View>
+                </TouchableOpacity>
               )}
             </View>
           </View>
@@ -238,6 +374,114 @@ export default function PartnerServices() {
           ))
         )}
       </ScrollView>
+
+      {/* Reviews Modal */}
+      <Modal
+        visible={showReviewsModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowReviewsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Reseñas de {partner?.businessName || partner?.business_name}
+              </Text>
+              <TouchableOpacity onPress={() => setShowReviewsModal(false)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {averageRating > 0 && (
+              <View style={styles.overallRating}>
+                <View style={styles.ratingDisplay}>
+                  <Text style={styles.averageRatingNumber}>
+                    {averageRating.toFixed(1)}
+                  </Text>
+                  {renderStarRating(Math.round(averageRating), 24)}
+                </View>
+                <Text style={styles.totalReviewsText}>
+                  Basado en {totalReviews} reseñas
+                </Text>
+              </View>
+            )}
+
+            {/* Rating Breakdown */}
+            {detailedReviews.length > 0 && (
+              <View style={styles.ratingBreakdown}>
+                <Text style={styles.breakdownTitle}>Distribución de calificaciones</Text>
+                {calculateReviewPercentages().map((item) => (
+                  <View key={item.stars} style={styles.breakdownRow}>
+                    <Text style={styles.breakdownStars}>{item.stars} ⭐</Text>
+                    <View style={styles.breakdownBar}>
+                      <View 
+                        style={[
+                          styles.breakdownBarFill, 
+                          { width: `${item.percentage}%` }
+                        ]} 
+                      />
+                    </View>
+                    <Text style={styles.breakdownPercentage}>
+                      {item.percentage.toFixed(0)}%
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            
+            <ScrollView style={styles.reviewsList} showsVerticalScrollIndicator={false}>
+              {loadingDetailedReviews ? (
+                <View style={styles.loadingContainer}>
+                  <Text style={styles.loadingText}>Cargando reseñas...</Text>
+                </View>
+              ) : detailedReviews.length === 0 ? (
+                <View style={styles.noReviewsContainer}>
+                  <Text style={styles.noReviewsText}>
+                    Aún no hay reseñas para este negocio
+                  </Text>
+                </View>
+              ) : (
+                detailedReviews.map((review) => (
+                  <View key={review.id} style={styles.reviewItem}>
+                    <View style={styles.reviewItemHeader}>
+                      <View style={styles.reviewerInfo}>
+                        <View style={styles.reviewerAvatar}>
+                          {review.user_profile?.photo_url ? (
+                            <Image 
+                              source={{ uri: review.user_profile.photo_url }} 
+                              style={styles.reviewerAvatarImage} 
+                            />
+                          ) : (
+                            <User size={16} color="#9CA3AF" />
+                          )}
+                        </View>
+                        <View style={styles.reviewerDetails}>
+                          <Text style={styles.reviewerName}>
+                            {review.user_profile?.display_name || 'Usuario'}
+                          </Text>
+                          <Text style={styles.reviewServiceInfo}>
+                            {review.service_name || 'Servicio'} • {new Date(review.created_at).toLocaleDateString()}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.reviewRatingContainer}>
+                        {renderStarRating(review.rating, 16)}
+                      </View>
+                    </View>
+                    
+                    {review.comment && (
+                      <Text style={styles.reviewComment}>
+                        {review.comment}
+                      </Text>
+                    )}
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -252,7 +496,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 50,
+    paddingBottom: 12,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
@@ -260,13 +505,17 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
   },
+  titleContainer: {
+    flex: 1,
+    alignItems: 'center',
+  },
   title: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
   },
   placeholder: {
-    width: 32,
+    width: 40,
   },
   content: {
     flex: 1,
@@ -281,6 +530,174 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
+  },
+  starRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    flex: 1,
+    maxHeight: '80%',
+    marginTop: 60,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    flex: 1,
+  },
+  modalCloseText: {
+    fontSize: 18,
+    color: '#6B7280',
+    padding: 4,
+  },
+  overallRating: {
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  ratingDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
+  averageRatingNumber: {
+    fontSize: 32,
+    fontFamily: 'Inter-Bold',
+    color: '#F59E0B',
+  },
+  totalReviewsText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  reviewsList: {
+    flex: 1,
+  },
+  ratingBreakdown: {
+    marginBottom: 20,
+  },
+  breakdownTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  breakdownStars: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    width: 40,
+  },
+  breakdownBar: {
+    flex: 1,
+    height: 8,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 4,
+    marginHorizontal: 12,
+  },
+  breakdownBarFill: {
+    height: '100%',
+    backgroundColor: '#F59E0B',
+    borderRadius: 4,
+  },
+  breakdownPercentage: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    width: 35,
+    textAlign: 'right',
+  },
+  reviewItem: {
+    backgroundColor: '#FAFAFA',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  reviewItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  reviewerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  reviewerAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    overflow: 'hidden',
+  },
+  reviewerAvatarImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  reviewerDetails: {
+    flex: 1,
+  },
+  reviewerName: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  reviewServiceInfo: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  reviewRatingContainer: {
+    alignItems: 'flex-end',
+  },
+  reviewComment: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    lineHeight: 20,
+  },
+  noReviewsContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  noReviewsText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
   },
   partnerCard: {
     marginBottom: 16,

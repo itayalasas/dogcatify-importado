@@ -326,7 +326,10 @@ export default function PartnerAgenda() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.push({
+            pathname: '/(partner-tabs)/dashboard',
+            params: { businessId: partnerId }
+          })} style={styles.backButton}>
             <ArrowLeft size={24} color="#111827" />
           </TouchableOpacity>
           <View style={styles.businessInfo}>

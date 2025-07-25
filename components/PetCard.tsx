@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
-import { Calendar, Scale } from 'lucide-react-native';
+import { Calendar, Scale, Trash2 } from 'lucide-react-native';
 import { Card } from './ui/Card';
 import { Pet } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -8,9 +8,10 @@ import { useLanguage } from '../contexts/LanguageContext';
 interface PetCardProps {
   pet: Pet;
   onPress: () => void;
+  onDelete?: (petId: string) => void;
 }
 
-export const PetCard: React.FC<PetCardProps> = ({ pet, onPress }) => {
+export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete }) => {
   const { t } = useLanguage();
 
   const formatAge = () => {
@@ -44,6 +45,17 @@ export const PetCard: React.FC<PetCardProps> = ({ pet, onPress }) => {
           style={styles.petImage} 
           onError={(e) => console.log('Error loading pet image:', pet.photoURL || pet.photo_url, e.nativeEvent.error)}
         />
+        {onDelete && (
+          <TouchableOpacity 
+            style={styles.deleteButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              onDelete(pet.id);
+            }}
+          >
+            <Trash2 size={16} color="#FFFFFF" />
+          </TouchableOpacity>
+        )}
         <View style={styles.content}>
           <View style={styles.header}>
             <Text style={styles.petName}>{pet.name}</Text>
@@ -154,5 +166,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'Inter-Medium',
     color: '#3B82F6',
+  },
+  deleteButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    borderRadius: 16,
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
   },
 });

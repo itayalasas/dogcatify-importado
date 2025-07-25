@@ -111,6 +111,8 @@ export default function ConfigureSchedulePage() {
         startTime: item.start_time,
         endTime: item.end_time,
         maxSlots: item.max_slots,
+        slotDuration: item.slot_duration,
+        isActive: item.is_active,
       }));
       
       // Sort by day of week (Sunday last)
@@ -217,11 +219,13 @@ export default function ConfigureSchedulePage() {
         .from('business_schedule')
         .update({
           is_active: !isActive,
-          updated_at: new Date().toISOString()
         })
         .eq('id', scheduleId);
       
       if (error) throw error;
+      
+      // Refresh the schedule data
+      fetchSchedule();
     } catch (error) {
       console.error('Error toggling schedule:', error);
       Alert.alert('Error', 'No se pudo actualizar el horario');
@@ -603,14 +607,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 20,
+    flexDirection: 'column',
     gap: 12,
+    marginTop: 20,
     marginBottom: 10,
   },
   cancelButton: {
-    flex: 1,
+    width: '100%',
     paddingVertical: 16,
     borderRadius: 8,
     alignItems: 'center',
@@ -624,14 +627,12 @@ const styles = StyleSheet.create({
     color: '#2D6A6F',
   },
   addButton: {
-    flex: 1,
+    width: '100%',
     backgroundColor: '#2D6A6F',
     paddingVertical: 16,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
-    marginRight: 12,
   },
   scheduleListCard: {
     marginBottom: 16,
@@ -684,15 +685,23 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   scheduleActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
+    flexDirection: 'column',
     alignItems: 'center',
     gap: 12,
+    marginTop: 8,
+  },
+  scheduleActionButton: {
+    width: '100%',
+    minHeight: 44,
   },
   deleteButton: {
+    width: '100%',
     padding: 8,
     backgroundColor: '#FEE2E2',
     borderRadius: 8, 
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
   },
   addButtonText: {
     fontSize: 16,

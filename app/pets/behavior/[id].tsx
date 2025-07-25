@@ -40,7 +40,7 @@ const behaviorTraits = [
 
 export default function PetBehaviorAssessment() {
   const { id } = useLocalSearchParams();
-  const { user } = useAuth();
+  const { currentUser } = useAuth();
   const [pet, setPet] = useState<Pet | null>(null);
   const [traits, setTraits] = useState<BehaviorTrait[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +52,7 @@ export default function PetBehaviorAssessment() {
 
   const fetchPetData = async () => {
     try {
-      const { data: petData, error: petError } = await supabase
+      const { data: petData, error: petError } = await supabaseClient
         .from('pets')
         .select('*')
         .eq('id', id)
@@ -63,7 +63,7 @@ export default function PetBehaviorAssessment() {
       setPet(petData);
 
       // Fetch existing behavior assessment
-      const { data: behaviorData, error: behaviorError } = await supabase
+      const { data: behaviorData, error: behaviorError } = await supabaseClient
         .from('pet_behavior')
         .select('*')
         .eq('pet_id', id)
@@ -182,18 +182,18 @@ export default function PetBehaviorAssessment() {
   };
 
   const saveAssessment = async () => {
-    if (!user || !pet) return;
+    if (!currentUser || !pet) return;
 
     setSaving(true);
     try {
       const assessmentData = {
         pet_id: pet.id,
-        user_id: user.id,
+        user_id: currentUser.id,
         traits: traits,
         assessment_date: new Date().toISOString(),
       };
 
-      const { error } = await supabase
+      const { error } = await supabaseClient
         .from('pet_behavior')
         .insert(assessmentData);
 
@@ -330,155 +330,183 @@ export default function PetBehaviorAssessment() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F9FAFB',
+    paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
-    backgroundColor: 'white',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: '#E5E7EB',
   },
   backButton: {
-    marginRight: 15,
+    padding: 8,
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginLeft: 12,
   },
   petInfo: {
-    margin: 20,
-    marginBottom: 10,
+    margin: 16,
+    marginBottom: 16,
   },
   petName: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 5,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    marginBottom: 4,
   },
   petBreed: {
     fontSize: 16,
-    color: '#666',
-    marginBottom: 10,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 12,
   },
   breedInfo: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F3F4F6',
     padding: 12,
     borderRadius: 8,
-    marginTop: 10,
+    marginTop: 8,
   },
   breedInfoTitle: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
     marginBottom: 8,
   },
   breedInfoItem: {
     fontSize: 13,
-    color: '#666',
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
     marginBottom: 4,
   },
   highlight: {
-    color: '#ff6b35',
-    fontWeight: '500',
+    color: '#EF4444',
+    fontFamily: 'Inter-Medium',
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginHorizontal: 20,
-    marginBottom: 5,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    marginTop: 8,
   },
   sectionSubtitle: {
     fontSize: 14,
-    color: '#666',
-    marginHorizontal: 20,
-    marginBottom: 20,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    lineHeight: 20,
   },
   traitsContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
   },
   traitCard: {
-    marginBottom: 15,
+    marginBottom: 12,
+    padding: 16,
   },
   traitName: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 5,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 4,
   },
   traitDescription: {
     fontSize: 14,
-    color: '#666',
-    marginBottom: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 16,
+    lineHeight: 18,
   },
   scoreContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
   scoreButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#e0e0e0',
+    borderColor: '#E5E7EB',
   },
   scoreButtonActive: {
-    backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
   },
   scoreText: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#666',
+    fontFamily: 'Inter-Bold',
+    color: '#6B7280',
   },
   scoreTextActive: {
-    color: 'white',
+    color: '#FFFFFF',
   },
   traitScoreBar: {
-    height: 6,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 3,
+    height: 8,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 4,
     overflow: 'hidden',
+    marginHorizontal: 4,
   },
   traitScoreBarFill: {
     height: '100%',
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#10B981',
+    borderRadius: 4,
   },
   recommendationsCard: {
-    margin: 20,
-    marginTop: 10,
+    margin: 16,
+    marginTop: 8,
   },
   recommendationsTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 12,
   },
   recommendationItem: {
     flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: 10,
     alignItems: 'flex-start',
   },
   recommendationBullet: {
     fontSize: 16,
-    color: '#4CAF50',
-    marginRight: 8,
+    color: '#10B981',
+    marginRight: 10,
     marginTop: 2,
   },
   recommendationText: {
     fontSize: 14,
-    color: '#666',
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
     flex: 1,
     lineHeight: 20,
   },
   saveContainer: {
-    padding: 20,
+    padding: 24,
+    paddingBottom: 60,
+    marginTop: 24,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 10,
   },
 });

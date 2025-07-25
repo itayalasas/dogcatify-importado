@@ -37,6 +37,175 @@ const getSupabaseAnonKey = () => {
   return process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 };
 
+// Query builder class to handle method chaining
+class QueryBuilder {
+  private table: string;
+  private selectColumns: string = '*';
+  private filters: Array<{column: string, operator: string, value: any}> = [];
+  private orderColumn?: string;
+  private orderAscending?: boolean;
+  private limitCount?: number;
+  private rangeStart?: number;
+  private rangeEnd?: number;
+  private countOption?: string;
+  private supabaseUrl: string;
+  private supabaseAnonKey: string;
+
+  constructor(table: string, supabaseUrl: string, supabaseAnonKey: string) {
+    this.table = table;
+    this.supabaseUrl = supabaseUrl;
+    this.supabaseAnonKey = supabaseAnonKey;
+  }
+
+  select(columns: string = '*', options?: any) {
+    this.selectColumns = columns;
+    if (options?.count) {
+      this.countOption = options.count;
+    }
+    return this;
+  }
+
+  eq(column: string, value: any) {
+    this.filters.push({ column, operator: 'eq', value });
+    return this;
+  }
+
+  in(column: string, values: any[]) {
+    this.filters.push({ column, operator: 'in', value: `(${values.map(v => `"${v}"`).join(',')})` });
+    return this;
+  }
+
+  neq(column: string, value: any) {
+    this.filters.push({ column, operator: 'neq', value });
+    return this;
+  }
+
+  gte(column: string, value: any) {
+    this.filters.push({ column, operator: 'gte', value });
+    return this;
+  }
+
+  lte(column: string, value: any) {
+    this.filters.push({ column, operator: 'lte', value });
+    return this;
+  }
+
+  lt(column: string, value: any) {
+    this.filters.push({ column, operator: 'lt', value });
+    return this;
+  }
+
+  gt(column: string, value: any) {
+    this.filters.push({ column, operator: 'gt', value });
+    return this;
+  }
+
+  order(column: string, options?: { ascending?: boolean }) {
+    this.orderColumn = column;
+    this.orderAscending = options?.ascending ?? false;
+    return this;
+  }
+
+  limit(count: number) {
+    this.limitCount = count;
+    return this;
+  }
+
+  range(start: number, end: number) {
+    this.rangeStart = start;
+    this.rangeEnd = end;
+    return this;
+  }
+
+  private buildUrl(): string {
+    let url = `${this.supabaseUrl}/rest/v1/${this.table}?select=${encodeURIComponent(this.selectColumns)}`;
+    
+    // Add filters
+    this.filters.forEach(filter => {
+      url += `&${encodeURIComponent(filter.column)}=${filter.operator}.${encodeURIComponent(filter.value)}`;
+    });
+    
+    // Add order
+    if (this.orderColumn) {
+      const orderDirection = this.orderAscending ? 'asc' : 'desc';
+      url += `&order=${encodeURIComponent(this.orderColumn)}.${orderDirection}`;
+    }
+    
+    // Add limit
+    if (this.limitCount) {
+      url += `&limit=${this.limitCount}`;
+    }
+    
+    // Add range
+    if (this.rangeStart !== undefined && this.rangeEnd !== undefined) {
+      url += `&offset=${this.rangeStart}&limit=${this.rangeEnd - this.rangeStart + 1}`;
+    }
+    
+    return url;
+  }
+
+  private async getHeaders() {
+    const token = await storage.getItem('supabase_token');
+    const headers: any = {
+      'apikey': this.supabaseAnonKey,
+      'Content-Type': 'application/json',
+    };
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    if (this.countOption) {
+      headers['Prefer'] = `count=${this.countOption}`;
+    }
+    
+    return headers;
+  }
+
+  async execute() {
+    try {
+      const url = this.buildUrl();
+      const headers = await this.getHeaders();
+      
+      const response = await fetch(url, { headers });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        return { data: null, error, count: null };
+      }
+      
+      const data = await response.json();
+      
+      // Get count from Content-Range header if requested
+      let count = null;
+      if (this.countOption) {
+        const contentRange = response.headers.get('Content-Range');
+        if (contentRange) {
+          const match = contentRange.match(/\/(\d+)$/);
+          count = match ? parseInt(match[1]) : null;
+        }
+      }
+      
+      return { data, error: null, count };
+    } catch (error) {
+      return { data: null, error, count: null };
+    }
+  }
+
+  async single() {
+    const result = await this.execute();
+    return {
+      data: result.data?.[0] || null,
+      error: result.error
+    };
+  }
+
+  // Make QueryBuilder thenable so it works with async/await
+  then(resolve: any, reject?: any) {
+    return this.execute().then(resolve, reject);
+  }
+}
+
 // Simple Supabase client implementation
 const createSupabaseClient = () => {
   const supabaseUrl = getSupabaseUrl();
@@ -140,6 +309,50 @@ const createSupabaseClient = () => {
         }
       },
       
+      refreshSession: async () => {
+        try {
+          const token = await storage.getItem('supabase_token');
+          if (!token) {
+            return { data: { session: null }, error: new Error('No token found') };
+          }
+          
+          const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': supabaseAnonKey,
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ refresh_token: token }),
+          });
+          
+          if (!response.ok) {
+            const error = await response.json();
+            return { data: { session: null }, error };
+          }
+          
+          const result = await response.json();
+          
+          // Store new token
+          if (result.access_token) {
+            await storage.setItem('supabase_token', result.access_token);
+            await storage.setItem('supabase_user', JSON.stringify(result.user));
+          }
+          
+          return { 
+            data: { 
+              session: { 
+                access_token: result.access_token,
+                user: result.user 
+              } 
+            }, 
+            error: null 
+          };
+        } catch (error) {
+          return { data: { session: null }, error };
+        }
+      },
+      
       getUser: async () => {
         try {
           const token = await storage.getItem('supabase_token');
@@ -155,6 +368,26 @@ const createSupabaseClient = () => {
           });
           
           if (!response.ok) {
+            // If unauthorized, try to refresh session
+            if (response.status === 401) {
+              console.log('AuthContext - Token expired, attempting refresh...');
+              const refreshResult = await supabaseClient.auth.refreshSession();
+              if (refreshResult.data?.session) {
+                // Retry with new token
+                const newToken = refreshResult.data.session.access_token;
+                const retryResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+                  headers: {
+                    'apikey': supabaseAnonKey,
+                    'Authorization': `Bearer ${newToken}`,
+                  },
+                });
+                
+                if (retryResponse.ok) {
+                  const user = await retryResponse.json();
+                  return { data: { user }, error: null };
+                }
+              }
+            }
             return { data: { user: null }, error: null };
           }
           
@@ -254,215 +487,52 @@ const createSupabaseClient = () => {
       },
     },
     
-    from: (table: string) => ({
-      select: (columns = '*', options?: any) => {
-        const buildQuery = async (filters: any = {}, orderBy?: string, rangeStart?: number, rangeEnd?: number) => {
-          try {
-            const token = await storage.getItem('supabase_token');
-            let url = `${supabaseUrl}/rest/v1/${table}?select=${columns}`;
-            
-            // Add filters
-            Object.entries(filters).forEach(([key, value]) => {
-              url += `&${key}=${value}`;
-            });
-            
-            // Add order
-            if (orderBy) {
-              url += `&order=${orderBy}`;
-            }
-            
-            // Add range
-            if (rangeStart !== undefined && rangeEnd !== undefined) {
-              url += `&limit=${rangeEnd - rangeStart + 1}&offset=${rangeStart}`;
-            }
-            
-            // Add count if requested
-            const headers: any = {
-              'apikey': supabaseAnonKey,
-              'Authorization': `Bearer ${token}`,
-            };
-            
-            if (options?.count) {
-              headers['Prefer'] = 'count=exact';
-            }
-            
-            const response = await fetch(url, { headers });
-            
-            if (!response.ok) {
-              const error = await response.json();
-              return { data: null, error, count: null };
-            }
-            
-            const data = await response.json();
-            const count = response.headers.get('Content-Range')?.split('/')[1];
-            
-            return { data, error: null, count: count ? parseInt(count) : null };
-          } catch (error) {
-            return { data: null, error, count: null };
-          }
-        };
-        
-        return {
-          eq: (column: string, value: any) => ({
-            single: async () => {
-              const result = await buildQuery({ [`${column}`]: `eq.${value}` });
-              return { 
-                data: result.data?.[0] || null, 
-                error: result.error 
-              };
-            },
-            order: (orderColumn: string, orderOptions?: any) => ({
-              range: (start: number, end: number) => ({
-                then: async (resolve: any) => {
-                  const orderParam = orderOptions?.ascending ? `${orderColumn}.asc` : `${orderColumn}.desc`;
-                  const result = await buildQuery({ 
-                    [`${column}`]: `eq.${value}` 
-                  }, orderParam, start, end);
-                  resolve(result);
-                }
-              }),
-              limit: (limitCount: number) => ({
-                then: async (resolve: any) => {
-                  const orderParam = orderOptions?.ascending ? `${orderColumn}.asc` : `${orderColumn}.desc`;
-                  const result = await buildQuery({ 
-                    [`${column}`]: `eq.${value}`,
-                    order: orderParam,
-                    limit: limitCount
-                  });
-                  resolve(result);
-                }
-              })
-            }),
-            then: async (resolve: any) => {
-              const result = await buildQuery({ [`${column}`]: `eq.${value}` });
-              resolve(result);
-            }
-          }),
-          order: (orderColumn: string, orderOptions?: any) => ({
-            range: (start: number, end: number) => ({
-              then: async (resolve: any) => {
-                const orderParam = orderOptions?.ascending ? `${orderColumn}.asc` : `${orderColumn}.desc`;
-                const result = await buildQuery({}, orderParam, start, end);
-                resolve(result);
-              }
-            }),
-            then: async (resolve: any) => {
-              const orderParam = orderOptions?.ascending ? `${orderColumn}.asc` : `${orderColumn}.desc`;
-              const result = await buildQuery({ order: orderParam });
-              resolve(result);
-            }
-          }),
-          then: async (resolve: any) => {
-            const result = await buildQuery();
-            resolve(result);
-          }
-        };
-      },
-      
-      insert: async (data: any) => {
-        try {
-          const token = await storage.getItem('supabase_token');
-          const response = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': supabaseAnonKey,
-              'Authorization': `Bearer ${token}`,
-              'Prefer': 'return=representation',
-            },
-            body: JSON.stringify(Array.isArray(data) ? data : [data]),
-          });
-          
-          if (!response.ok) {
-            const error = await response.json();
-            return { data: null, error };
-          }
-          
-          const result = await response.json();
-          return { data: result, error: null };
-        } catch (error) {
-          return { data: null, error };
-        }
-      },
-      
-      update: (data: any) => ({
-        eq: async (column: string, value: any) => {
-          try {
-            const token = await storage.getItem('supabase_token');
-            const response = await fetch(`${supabaseUrl}/rest/v1/${table}?${column}=eq.${value}`, {
-              method: 'PATCH',
-              headers: {
-                'Content-Type': 'application/json',
-                'apikey': supabaseAnonKey,
-                'Authorization': `Bearer ${token}`,
-                'Prefer': 'return=representation',
-              },
-              body: JSON.stringify(data),
-            });
-            
-            if (!response.ok) {
-              const error = await response.json();
-              return { data: null, error };
-            }
-            
-            const result = await response.json();
-            return { data: result, error: null };
-          } catch (error) {
-            return { data: null, error };
-          }
-        }
-      }),
-      
-      delete: () => ({
-        eq: async (column: string, value: any) => {
-          try {
-            const token = await storage.getItem('supabase_token');
-            const response = await fetch(`${supabaseUrl}/rest/v1/${table}?${column}=eq.${value}`, {
-              method: 'DELETE',
-              headers: {
-                'apikey': supabaseAnonKey,
-                'Authorization': `Bearer ${token}`,
-              },
-            });
-            
-            if (!response.ok) {
-              const error = await response.json();
-              return { error };
-            }
-            
-            return { error: null };
-          } catch (error) {
-            return { error };
-          }
-        }
-      })
-    }),
+    from: (table: string) => {
+      return new QueryBuilder(table, supabaseUrl, supabaseAnonKey);
+    },
     
     storage: {
       from: (bucket: string) => ({
         upload: async (path: string, file: any, options?: any) => {
           try {
             const token = await storage.getItem('supabase_token');
-            const formData = new FormData();
-            formData.append('file', file);
+            
+            // Handle different file types
+            let fileData;
+            if (file instanceof Blob) {
+              fileData = file;
+            } else if (typeof file === 'string') {
+              // If it's a URI, fetch it first
+              const response = await fetch(file);
+              fileData = await response.blob();
+            } else if (file.uri) {
+              // If it's an object with uri property
+              const response = await fetch(file.uri);
+              fileData = await response.blob();
+            } else {
+              fileData = file;
+            }
             
             const response = await fetch(`${supabaseUrl}/storage/v1/object/${bucket}/${path}`, {
               method: 'POST',
               headers: {
+                'Content-Type': 'application/octet-stream',
                 'apikey': supabaseAnonKey,
                 'Authorization': `Bearer ${token}`,
               },
-              body: formData,
+              body: fileData,
             });
             
             if (!response.ok) {
               const error = await response.json();
+              console.error('Storage upload error:', error);
               return { data: null, error };
             }
             
             const result = await response.json();
             return { data: result, error: null };
           } catch (error) {
+            console.error('Storage upload exception:', error);
             return { data: null, error };
           }
         },
@@ -546,8 +616,242 @@ const createSupabaseClient = () => {
   };
 };
 
-// Initialize the client
-let supabaseClient;
+// Add insert and update methods to QueryBuilder
+QueryBuilder.prototype.insert = async function(data: any) {
+  const token = await storage.getItem('supabase_token');
+  
+  const insertBuilder = {
+    select: () => ({
+      single: async () => {
+        try {
+          const response = await fetch(`${this.supabaseUrl}/rest/v1/${this.table}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': this.supabaseAnonKey,
+              'Authorization': `Bearer ${token}`,
+              'Prefer': 'return=representation',
+            },
+            body: JSON.stringify(Array.isArray(data) ? data : [data]),
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            return { data: null, error };
+          }
+
+          const result = await response.json();
+          return { data: result[0] || null, error: null };
+        } catch (error) {
+          return { data: null, error };
+        }
+      }
+    }),
+    
+    // Direct execution without select
+    execute: async () => {
+      try {
+        const response = await fetch(`${this.supabaseUrl}/rest/v1/${this.table}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': this.supabaseAnonKey,
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify(Array.isArray(data) ? data : [data]),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          return { data: null, error };
+        }
+
+        return { data: null, error: null };
+      } catch (error) {
+        return { data: null, error };
+      }
+    }
+  };
+  
+  // Make it thenable for direct await
+  insertBuilder.then = function(resolve: any, reject?: any) {
+    return insertBuilder.execute().then(resolve, reject);
+  };
+  
+  return insertBuilder;
+};
+
+QueryBuilder.prototype.update = function(data: any) {
+  const updateBuilder = {
+    eq: async (column: string, value: any) => {
+      try {
+        const token = await storage.getItem('supabase_token');
+        const response = await fetch(`${this.supabaseUrl}/rest/v1/${this.table}?${encodeURIComponent(column)}=eq.${encodeURIComponent(value)}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': this.supabaseAnonKey,
+            'Authorization': `Bearer ${token}`,
+            'Prefer': 'return=representation',
+          },
+          body: JSON.stringify(data),
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          return { data: null, error };
+        }
+        
+        const result = await response.json();
+        return { data: result, error: null };
+      } catch (error) {
+        return { data: null, error };
+      }
+    }
+  };
+  
+  return updateBuilder;
+};
+
+QueryBuilder.prototype.upsert = function(data: any) {
+  const upsertBuilder = {
+    eq: async (column: string, value: any) => {
+      try {
+        const token = await storage.getItem('supabase_token');
+        const response = await fetch(`${this.supabaseUrl}/rest/v1/${this.table}?${encodeURIComponent(column)}=eq.${encodeURIComponent(value)}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': this.supabaseAnonKey,
+            'Authorization': `Bearer ${token}`,
+            'Prefer': 'resolution=merge-duplicates,return=representation',
+          },
+          body: JSON.stringify(Array.isArray(data) ? data : [data]),
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          return { data: null, error };
+        }
+        
+        const result = await response.json();
+        return { data: result, error: null };
+      } catch (error) {
+        return { data: null, error };
+      }
+    },
+    
+    // Direct execution without eq
+    execute: async () => {
+      try {
+        const token = await storage.getItem('supabase_token');
+        const response = await fetch(`${this.supabaseUrl}/rest/v1/${this.table}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': this.supabaseAnonKey,
+            'Authorization': `Bearer ${token}`,
+            'Prefer': 'resolution=merge-duplicates,return=representation',
+          },
+          body: JSON.stringify(Array.isArray(data) ? data : [data]),
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          return { data: null, error };
+        }
+        
+        const result = await response.json();
+        return { data: result, error: null };
+      } catch (error) {
+        return { data: null, error };
+      }
+    }
+  };
+  
+  // Make it thenable for direct await
+  upsertBuilder.then = function(resolve: any, reject?: any) {
+    return upsertBuilder.execute().then(resolve, reject);
+  };
+  
+  return upsertBuilder;
+};
+
+QueryBuilder.prototype.delete = function() {
+  const deleteBuilder = {
+    eq: async (column: string, value: any) => {
+      try {
+        const token = await storage.getItem('supabase_token');
+        const response = await fetch(`${this.supabaseUrl}/rest/v1/${this.table}?${encodeURIComponent(column)}=eq.${encodeURIComponent(value)}`, {
+          method: 'DELETE',
+          headers: {
+            'apikey': this.supabaseAnonKey,
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          return { error };
+        }
+        
+        return { error: null };
+      } catch (error) {
+        return { error };
+      }
+    },
+    
+    in: async (column: string, values: any[]) => {
+      try {
+        const token = await storage.getItem('supabase_token');
+        const valuesString = `(${values.map(v => `"${v}"`).join(',')})`;
+        const response = await fetch(`${this.supabaseUrl}/rest/v1/${this.table}?${encodeURIComponent(column)}=in.${encodeURIComponent(valuesString)}`, {
+          method: 'DELETE',
+          headers: {
+            'apikey': this.supabaseAnonKey,
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          return { error };
+        }
+        
+        return { error: null };
+      } catch (error) {
+        return { error };
+      }
+    }
+  };
+  
+  return deleteBuilder;
+};
+
+interface SupabaseAuth {
+  signUp: Function;
+  signInWithPassword: Function;
+  signOut: Function;
+  getUser: Function;
+  getSession: Function;
+  onAuthStateChange: Function;
+  resetPasswordForEmail: Function;
+  updateUser: Function;
+}
+
+interface SupabaseStorage {
+  from: Function;
+}
+
+interface SupabaseClient {
+  auth: SupabaseAuth;
+  from: Function;
+  storage: SupabaseStorage;
+  channel: Function;
+  removeChannel: Function;
+}
+
+let supabaseClient: SupabaseClient;
 
 try {
   supabaseClient = createSupabaseClient();
@@ -565,34 +869,7 @@ try {
       resetPasswordForEmail: async () => ({ error: new Error('Supabase not configured') }),
       updateUser: async () => ({ data: { user: null }, error: new Error('Supabase not configured') }),
     },
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          single: async () => ({ data: null, error: new Error('Supabase not configured') }),
-          order: () => ({
-            range: () => ({
-              then: async (resolve) => resolve({ data: [], error: new Error('Supabase not configured') })
-            }),
-            then: async (resolve) => resolve({ data: [], error: new Error('Supabase not configured') })
-          }),
-          then: async (resolve) => resolve({ data: [], error: new Error('Supabase not configured') })
-        }),
-        order: () => ({
-          range: () => ({
-            then: async (resolve) => resolve({ data: [], error: new Error('Supabase not configured') })
-          }),
-          then: async (resolve) => resolve({ data: [], error: new Error('Supabase not configured') })
-        }),
-        then: async (resolve) => resolve({ data: [], error: new Error('Supabase not configured') })
-      }),
-      insert: async () => ({ data: null, error: new Error('Supabase not configured') }),
-      update: () => ({
-        eq: async () => ({ data: null, error: new Error('Supabase not configured') })
-      }),
-      delete: () => ({
-        eq: async () => ({ error: new Error('Supabase not configured') })
-      })
-    }),
+    from: () => new QueryBuilder('', '', ''),
     storage: {
       from: () => ({
         upload: async () => ({ data: null, error: new Error('Supabase not configured') }),
@@ -719,9 +996,7 @@ export const updatePet = async (petId: string, updates: any) => {
   const { data, error } = await supabaseClient
     .from('pets')
     .update(updates)
-    .eq('id', petId)
-    .select()
-    .single();
+    .eq('id', petId);
   
   if (error) throw error;
   return data;
@@ -793,9 +1068,7 @@ export const likePost = async (postId: string, userId: string) => {
   const { data, error } = await supabaseClient
     .from('posts')
     .update({ likes: newLikes })
-    .eq('id', postId)
-    .select()
-    .single();
+    .eq('id', postId);
   
   if (error) throw error;
   return data;

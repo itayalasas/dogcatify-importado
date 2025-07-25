@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions, Modal, TextInput, FlatList, ActivityIndicator, ScrollView, Share, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions, Modal, TextInput, FlatList, ActivityIndicator, ScrollView, Image, Share } from 'react-native';
 import { Heart, MessageCircle, Share2, MoveHorizontal as MoreHorizontal, ArrowLeft, Send } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { supabaseClient } from '../lib/supabase';
@@ -34,9 +34,6 @@ const PostCard: React.FC<PostCardProps> = ({
   const [doubleTapTimer, setDoubleTapTimer] = useState<NodeJS.Timeout | null>(null);
   const [showLikeAnimation, setShowLikeAnimation] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-
-  // Track if user has tapped the share button
-  const [hasShared, setHasShared] = useState(false);
 
   useEffect(() => {
     if (currentUser && post.likes) {
@@ -75,22 +72,134 @@ const PostCard: React.FC<PostCardProps> = ({
   const fetchComments = async () => {
     setLoadingComments(true);
     try {
-      const { data, error } = await supabaseClient
+      console.log('Fetching comments for post:', post.id);
+      const { data: commentsData, error } = await supabaseClient
         .from('comments')
-        .select(`
-          *,
-          profiles:user_id(display_name, photo_url)
-        `)
+        .select('*')
         .eq('post_id', post.id)
         .order('created_at', { ascending: true });
       
       if (error) throw error;
-      setComments(data || []);
+      
+      console.log('Raw comments data:', commentsData);
+      
+      // Fetch user profiles for each comment
+      const commentsWithProfiles = await Promise.all(
+        (commentsData || []).map(async (comment) => {
+          try {
+            const { data: profileData, error: profileError } = await supabaseClient
+              .from('profiles')
+              .select('display_name, photo_url')
+              .eq('id', comment.user_id)
+              .single();
+            
+            if (profileError) {
+              console.error('Error fetching profile for comment:', profileError);
+              return {
+                ...comment,
+                profiles: null
+              };
+            }
+            
+            return {
+              ...comment,
+              profiles: profileData
+            };
+          } catch (error) {
+            console.error('Error processing comment profile:', error);
+            return {
+              ...comment,
+              profiles: null
+            };
+          }
+        })
+      );
+      
+      console.log('Comments with profiles:', commentsWithProfiles);
+      
+      // Organize comments into threads (parent comments with their replies)
+      const organizedComments = organizeCommentsIntoThreads(commentsWithProfiles);
+      console.log('Organized comments:', organizedComments);
+      setComments(organizedComments);
+      setCommentsCount(commentsWithProfiles.length);
     } catch (error) {
       console.error('Error fetching comments:', error);
     } finally {
       setLoadingComments(false);
     }
+  };
+
+  const organizeCommentsIntoThreads = (comments: any[]) => {
+    console.log('Organizing comments into threads:', comments);
+    
+    if (!comments || comments.length === 0) {
+      console.log('No comments to organize');
+      return [];
+    }
+    
+    const parentComments = comments.filter(comment => !comment.parent_id);
+    const replies = comments.filter(comment => comment.parent_id);
+    
+    console.log('Parent comments:', parentComments.length);
+    console.log('Replies:', replies.length);
+    
+    // Add replies to their parent comments
+    const threaded = parentComments.map(parent => {
+      const parentReplies = replies.filter(reply => reply.parent_id === parent.id);
+      return {
+        ...parent,
+        replies: parentReplies
+      };
+    });
+    
+    console.log('Threaded comments result:', threaded);
+    return threaded;
+  };
+
+  const getCommentAuthorName = (comment: any) => {
+    // Verificar que comment existe
+    if (!comment) return 'Usuario';
+    
+    // Priorizar el display_name del perfil actual
+    if (comment.profiles && comment.profiles.display_name) {
+      return comment.profiles.display_name;
+    }
+    
+    // Si es el usuario actual, usar su información
+    if (comment.user_id === currentUser?.id && currentUser?.displayName) {
+      return currentUser.displayName;
+    }
+    
+    // Fallback al author guardado en el comentario
+    if (comment.author && comment.author.name) {
+      return comment.author.name;
+    }
+    
+    // Último recurso
+    return 'Usuario';
+  };
+
+  const getCommentAuthorAvatar = (comment: any) => {
+    // Verificar que comment existe
+    if (!comment) return 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100';
+    
+    // Priorizar la photo_url del perfil actual
+    if (comment.profiles && comment.profiles.photo_url) {
+      return comment.profiles.photo_url;
+    }
+    
+    // Si es el usuario actual, usar su información
+    if (comment.user_id === currentUser?.id && currentUser?.photoURL) {
+      return currentUser.photoURL;
+    }
+    
+    // Fallback al avatar guardado en el comentario
+    if (comment.author && comment.author.avatar) {
+      return comment.author.avatar;
+    }
+    
+    // Imagen por defecto
+    return 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100';
   };
 
   const handleAddComment = async () => {
@@ -166,43 +275,118 @@ const PostCard: React.FC<PostCardProps> = ({
 
   const handleReply = (comment: any) => {
     setReplyTo(comment);
-    setNewComment(`@${comment.profiles?.display_name || 'Usuario'} `);
+    setNewComment(`@${comment.profiles?.display_name || comment.author?.name || 'Usuario'} `);
   };
 
+  const renderCommentThread = ({ item }: { item: any }) => (
+    !item ? null : (
+    <View>
+      {/* Main Comment */}
+      <View style={styles.commentItem}>
+        <Image 
+          source={{ uri: getCommentAuthorAvatar(item) || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100' }}
+          style={styles.commentAvatar}
+        />
+        <View style={styles.commentContent}>
+          <Text style={styles.commentAuthor}>
+            {getCommentAuthorName(item) || 'Usuario'}
+          </Text>
+          <Text style={styles.commentText}>{item.content}</Text>
+          <View style={styles.commentActions}>
+            <Text style={styles.commentTime}>
+              {formatDate(item.created_at)}
+            </Text>
+            <TouchableOpacity 
+              style={styles.commentLike}
+              onPress={() => handleCommentLike(item.id)}
+            >
+              <Heart 
+                size={12} 
+                color={(item.likes || []).includes(currentUser?.id) ? "#ff3040" : "#9CA3AF"} 
+                fill={(item.likes || []).includes(currentUser?.id) ? "#ff3040" : "none"}
+              />
+              <Text style={[
+                styles.commentLikeText,
+                (item.likes || []).includes(currentUser?.id) && styles.commentLikedText
+              ]}>
+                {(item.likes || []).length}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.replyButton}
+              onPress={() => handleReply(item)}
+            >
+              <Text style={styles.replyButtonText}>Responder</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+
+      {/* Replies */}
+      {item.replies && item.replies.length > 0 && (
+        <View style={styles.repliesContainer}>
+          {item.replies.map((reply: any) => (
+            <View key={reply.id} style={[styles.commentItem, styles.replyItem]}>
+              <Image 
+                source={{ uri: getCommentAuthorAvatar(reply) || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100' }}
+                style={styles.replyAvatar}
+              />
+              <View style={styles.commentContent}>
+                <Text style={styles.commentAuthor}>
+                  {getCommentAuthorName(reply) || 'Usuario'}
+                </Text>
+                <Text style={styles.commentText}>{reply.content}</Text>
+                <View style={styles.commentActions}>
+                  <Text style={styles.commentTime}>
+                    {formatDate(reply.created_at)}
+                  </Text>
+                  <TouchableOpacity 
+                    style={styles.commentLike}
+                    onPress={() => handleCommentLike(reply.id)}
+                  >
+                    <Heart 
+                      size={12} 
+                      color={(reply.likes || []).includes(currentUser?.id) ? "#ff3040" : "#9CA3AF"} 
+                      fill={(reply.likes || []).includes(currentUser?.id) ? "#ff3040" : "none"}
+                    />
+                    <Text style={[
+                      styles.commentLikeText,
+                      (reply.likes || []).includes(currentUser?.id) && styles.commentLikedText
+                    ]}>
+                      {(reply.likes || []).length}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+    )
+  );
   const handleSharePost = async () => {
     try {
-      // Mark as shared in UI
-      setHasShared(true);
-      
       // Prepare content to share
       const shareMessage = `¡Mira esta publicación de ${post.author?.name} en DogCatiFy!`;
-      const shareUrl = post.imageURL || 'https://dogcatify.com';
       
-      // Use React Native's Share API
-      const result = await Share.share({
-        message: shareMessage,
-        url: shareUrl,
-      });
-      
-      if (result.action === Share.sharedAction) {
-        console.log('Shared successfully');
-      }
-      
-      if (result.action === Share.sharedAction) {
-        if (result.activityType) {
-          console.log(`Shared via ${result.activityType}`);
-        } else {
-          console.log('Shared successfully');
-        }
-      } else if (result.action === Share.dismissedAction) {
-        console.log('Share dismissed');
+      // Simple share implementation
+      if (Platform.OS === 'web') {
+        // For web, copy to clipboard or show alert
+        Alert.alert('Compartir', shareMessage);
+      } else {
+        // For mobile, use native share
+        await Share.share({
+          message: shareMessage,
+        });
       }
       
       // Call the onShare callback
       onShare(post.id);
     } catch (error) {
       console.error('Error sharing post:', error);
-      Alert.alert('Error', 'No se pudo compartir la publicación');
+      // Don't show error alert, just log it
+      console.log('Share was cancelled or failed');
     }
   };
 
@@ -392,7 +576,7 @@ const PostCard: React.FC<PostCardProps> = ({
           style={styles.actionButton} 
           onPress={handleSharePost}
         >
-          <Share2 size={24} color={hasShared ? "#3B82F6" : "#666"} />
+          <Share2 size={24} color="#666" />
         </TouchableOpacity>
       </View>
       
@@ -422,43 +606,7 @@ const PostCard: React.FC<PostCardProps> = ({
               <FlatList
                 data={comments}
                 keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <View style={styles.commentItem}>
-                    <Image 
-                      source={{ uri: item.profiles?.photo_url || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100' }}
-                      style={styles.commentAvatar}
-                    />
-                    <View style={styles.commentContent}>
-                      <Text style={styles.commentAuthor}>{item.profiles?.display_name || 'Usuario'}</Text>
-                      <Text style={styles.commentText}>{item.content}</Text>
-                      <View style={styles.commentActions}>
-                        <Text style={styles.commentTime}>{formatDate(item.created_at)}</Text>
-                        <TouchableOpacity 
-                          onPress={() => handleCommentLike(item.id)}
-                          style={styles.commentLike}
-                        >
-                          <Heart 
-                            size={14} 
-                            color={item.likes?.includes(currentUser?.id) ? "#ff3040" : "#6B7280"} 
-                            fill={item.likes?.includes(currentUser?.id) ? "#ff3040" : "none"}
-                          />
-                          <Text style={[
-                            styles.commentLikeText,
-                            item.likes?.includes(currentUser?.id) && styles.commentLikedText
-                          ]}>
-                            {item.likes?.length || 0}
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                          onPress={() => handleReply(item)}
-                          style={styles.replyButton}
-                        >
-                          <Text style={styles.replyButtonText}>Responder</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                )}
+                renderItem={({ item }) => renderCommentThread({ item })}
                 ListEmptyComponent={
                   <Text style={styles.noCommentsText}>No hay comentarios aún. ¡Sé el primero en comentar!</Text>
                 }
@@ -470,7 +618,7 @@ const PostCard: React.FC<PostCardProps> = ({
               {replyTo && (
                 <View style={styles.replyingToContainer}>
                   <Text style={styles.replyingToText}>
-                    Respondiendo a <Text style={styles.replyingToName}>{replyTo.profiles?.display_name}</Text>
+                    Respondiendo a <Text style={styles.replyingToName}>{getCommentAuthorName(replyTo)}</Text>
                   </Text>
                   <TouchableOpacity onPress={() => setReplyTo(null)}>
                     <Text style={styles.cancelReplyText}>✕</Text>
@@ -814,6 +962,22 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     padding: 20,
+  },
+  repliesContainer: {
+    marginLeft: 48,
+    borderLeftWidth: 2,
+    borderLeftColor: '#F3F4F6',
+    paddingLeft: 12,
+  },
+  replyItem: {
+    paddingLeft: 0,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  replyAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
   },
 });
 

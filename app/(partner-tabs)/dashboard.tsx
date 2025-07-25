@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Image, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Calendar, DollarSign, Users, Package, TrendingUp, Clock } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
@@ -245,13 +245,13 @@ export default function PartnerDashboard() {
   };
 
   const handleViewOrders = () => {
-    if (partnerProfile?.features?.products || partnerProfile?.businessType === 'shop') {
+    if (partnerProfile?.id) {
       router.push({
         pathname: '/partner/orders',
         params: { partnerId: partnerProfile.id }
       });
     } else {
-      Alert.alert('Funcionalidad no habilitada', 'Activa la gestión de productos para ver los pedidos');
+      Alert.alert('Error', 'No se pudo obtener la información del negocio');
     }
   };
 
@@ -389,11 +389,13 @@ export default function PartnerDashboard() {
             </TouchableOpacity>
             
             <TouchableOpacity 
-              style={styles.quickAction} 
+              style={styles.quickAction}
               onPress={handleViewOrders}
             >
-              <Users size={24} color="#F59E0B" />
-              <Text style={styles.quickActionText}>Ver Pedidos</Text>
+              <Package size={24} color="#8B5CF6" />
+              <Text style={styles.quickActionText}>
+                Ver Pedidos
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -453,6 +455,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+    paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
@@ -571,6 +574,10 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginTop: 8,
     textAlign: 'center',
+  },
+  disabledQuickAction: {
+    opacity: 0.5,
+    backgroundColor: '#F9FAFB',
   },
   bookingsCard: {
     marginHorizontal: 16,

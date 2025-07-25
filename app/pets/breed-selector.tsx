@@ -20,6 +20,7 @@ export default function BreedSelector() {
     if (searchQuery.trim()) {
       setFilteredBreeds(
         breeds.filter(breed => 
+          breed && typeof breed === 'string' && 
           breed.toLowerCase().includes(searchQuery.toLowerCase())
         )
       );
@@ -31,52 +32,61 @@ export default function BreedSelector() {
   const fetchBreeds = async () => {
     setLoading(true);
     try {
-      console.log(`Fetching all ${species} breeds...`);
+      console.log(`Fetching all ${species} breeds using optimized endpoint...`);
       
-      // API Ninjas requires at least one parameter, so we'll use all letters of the alphabet
-      const letters = 'abcdefghijklmnopqrstuvwxyz'.split('');
+      // Use the optimized endpoint that returns all breeds at once
+      const endpoint = species === 'dog'
+        ? 'https://api.api-ninjas.com/v1/alldogs'
+        : 'https://api.api-ninjas.com/v1/allcats';
       
-      let allBreeds: string[] = [];
+      console.log(`Using endpoint: ${endpoint}`);
       
-      // Function to fetch breeds for a specific letter
-      const fetchBreedsByLetter = async (letter: string) => {
-        const endpoint = species === 'dog'
-          ? `https://api.api-ninjas.com/v1/dogs?name=${letter}`
-          : `https://api.api-ninjas.com/v1/cats?name=${letter}`;
-        
-        console.log(`Fetching breeds with letter ${letter}...`);
-        
-        const response = await fetch(endpoint, {
-          headers: {
-            'X-Api-Key': API_KEY,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          return data.map((item: any) => item.name);
+      const response = await fetch(endpoint, {
+        headers: {
+          'X-Api-Key': API_KEY,
+          'Content-Type': 'application/json'
         }
-        return [];
-      };
+      });
       
-      // Fetch breeds for common letters to get a comprehensive list
-      // Using all letters to get a more complete list
-      const breedPromises = letters.map(letter => fetchBreedsByLetter(letter));
-      const breedResults = await Promise.all(breedPromises);
-      
-      // Combine all results and remove duplicates
-      const combinedBreeds = breedResults.flat();
-      allBreeds = Array.from(new Set(combinedBreeds)).sort();
-      
-      console.log(`Total unique breeds found: ${allBreeds.length}`);
-      
-      setBreeds(allBreeds);
-      setFilteredBreeds(allBreeds);
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`API returned ${data.length} breeds`);
+        console.log('Sample breed data:', data[0]); // Debug log to see structure
+        
+        // Handle different possible data structures
+        let breedNames: string[] = [];
+        
+        if (Array.isArray(data)) {
+          // Try different possible property names for breed names
+          breedNames = data
+            .map((item: any) => {
+              // Try common property names
+              return item.name || item.breed || item.breed_name || item;
+            })
+            .filter((name: any) => name && typeof name === 'string')
+            .sort();
+        }
+        
+        console.log(`Processed ${breedNames.length} unique breeds`);
+        console.log('First 5 breeds:', breedNames.slice(0, 5)); // Debug log
+        setBreeds(breedNames);
+        setFilteredBreeds(breedNames);
+      } else {
+        const errorText = await response.text();
+        console.error('API Error:', response.status, errorText);
+        throw new Error(`API Error: ${response.status}`);
+      }
       
     } catch (error) {
       console.error('Error fetching breeds:', error);
-      Alert.alert('Error', 'Ocurrió un error al cargar las razas. Por favor intenta de nuevo.');
+      Alert.alert(
+        'Error', 
+        'Ocurrió un error al cargar las razas. Por favor intenta de nuevo.',
+        [
+          { text: 'Reintentar', onPress: () => fetchBreeds() },
+          { text: 'Cancelar', style: 'cancel' }
+        ]
+      );
     } finally {
       setLoading(false);
     }

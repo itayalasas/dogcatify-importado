@@ -176,11 +176,40 @@ export default function BusinessSelector() {
 
   const handleToggleFeature = async (businessId: string, featureKey: string, currentValue: boolean, featureType: string) => {
     try {
+      // Show confirmation dialog
+      Alert.alert(
+        `${currentValue ? 'Desactivar' : 'Activar'} ${featureType}`,
+        `¿Estás seguro de que quieres ${currentValue ? 'desactivar' : 'activar'} esta funcionalidad?${currentValue ? ' Esto impedirá el acceso a esta sección.' : ''}`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: currentValue ? 'Desactivar' : 'Activar',
+            style: currentValue ? 'destructive' : 'default',
+            onPress: async () => {
+              await updateFeature(businessId, featureKey, currentValue, featureType);
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error in handleToggleFeature:', error);
+      Alert.alert('Error', 'No se pudo actualizar la funcionalidad');
+    }
+  };
+
+  const updateFeature = async (businessId: string, featureKey: string, currentValue: boolean, featureType: string) => {
+    try {
+      // Get current business features
+      const currentBusiness = businesses.find(b => b.id === businessId);
+      if (!currentBusiness) {
+        throw new Error('Negocio no encontrado');
+      }
+
       const { error } = await supabaseClient
         .from('partners')
         .update({
-          [`features`]: {
-            ...businesses.find(b => b.id === businessId)?.features,
+          features: {
+            ...currentBusiness.features,
             [featureKey]: !currentValue
           },
           updated_at: new Date().toISOString()
@@ -189,7 +218,25 @@ export default function BusinessSelector() {
       
       if (error) throw error;
       
-      // Navegar a la pantalla correspondiente si se activa una funcionalidad
+      // Update local state immediately
+      setBusinesses(prev => prev.map(business => 
+        business.id === businessId 
+          ? {
+              ...business,
+              features: {
+                ...business.features,
+                [featureKey]: !currentValue
+              }
+            }
+          : business
+      ));
+
+      Alert.alert(
+        'Funcionalidad actualizada',
+        `${featureType} ha sido ${!currentValue ? 'activada' : 'desactivada'} correctamente.`
+      );
+
+      // Navigate to configuration screen if activating a functionality
       if (!currentValue) {
         if (featureKey === 'agenda') {
           router.push(`/partner/configure-schedule-page?partnerId=${businessId}`);
@@ -307,7 +354,7 @@ export default function BusinessSelector() {
                         styles.featureToggle,
                         business.features[feature.key as keyof typeof business.features] && styles.featureToggleActive
                       ]}
-                      disabled={true}
+                      onPress={() => handleToggleFeature(business.id, feature.key, business.features[feature.key as keyof typeof business.features] || false, feature.name)}
                     >
                       <Text style={business.features[feature.key as keyof typeof business.features] ? styles.featureToggleTextActive : styles.featureToggleText}>
                         {business.features[feature.key as keyof typeof business.features] ? 'Activo' : 'Inactivo'}
@@ -478,7 +525,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E5E7EB',
-   opacity: 0.9,
+    opacity: 0.9,
   },
   featureToggleActive: {
     backgroundColor: '#10B981',

@@ -72,7 +72,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, onAd
           
           <TouchableOpacity onPress={onAddToCart} style={styles.addToCartButton}>
             <ShoppingCart size={16} color="#FFFFFF" />
-            <Text style={styles.addToCartText}>{t('addToCart')}</Text>
+            <Text style={styles.addToCartText}>Agregar</Text>
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
