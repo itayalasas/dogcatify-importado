@@ -323,14 +323,14 @@ export default function Pets() {
     return (
       <SafeAreaView style={styles.container}>        
         <View style={styles.headerContainer}>
-          <Text style={styles.headerTitle}>Mis Mascotas</Text>
+          <Text style={styles.headerTitle}>{t('myPets')}</Text>
           <TouchableOpacity style={styles.addButton} onPress={handleAddPet}>
             <Plus size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#10B981" />
-          <Text style={styles.loadingText}>Cargando mascotas...</Text>
+          <Text style={styles.loadingText}>{t('loadingPets')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -339,7 +339,7 @@ export default function Pets() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>Mis Mascotas</Text>
+        <Text style={styles.headerTitle}>{t('myPets')}</Text>
         <TouchableOpacity style={styles.addButton} onPress={handleAddPet}>
           <Plus size={20} color="#FFFFFF" />
         </TouchableOpacity>
@@ -348,13 +348,13 @@ export default function Pets() {
         <View style={styles.petsContainer}>
           {pets.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>¡Agrega tu primera mascota! 🐾</Text>
+              <Text style={styles.emptyTitle}>{t('addFirstPet')}</Text>
               <Text style={styles.emptySubtitle}>
-                Comienza creando el perfil de tu compañero peludo
+                {t('createPetProfile')}
               </Text>
               <TouchableOpacity style={styles.emptyButton} onPress={handleAddPet}>
                 <Plus size={20} color="#FFFFFF" />
-                <Text style={styles.emptyButtonText}>Agregar Mascota</Text>
+                <Text style={styles.emptyButtonText}>{t('addPet')}</Text>
               </TouchableOpacity>
             </View>
           ) : (

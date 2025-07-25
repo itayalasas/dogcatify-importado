@@ -95,7 +95,7 @@ export default function Shop() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>Tienda</Text>
+        <Text style={styles.headerTitle}>{t('shop')}</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity 
             style={styles.cartButton}
@@ -153,11 +153,11 @@ export default function Shop() {
         ) : filteredProducts.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Package size={64} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>No hay productos disponibles</Text> 
+            <Text style={styles.emptyTitle}>{t('noProductsAvailable')}</Text> 
             <Text style={styles.emptySubtitle}>
-              {selectedCategory === 'all' 
-                ? 'Aún no hay productos en la tienda'
-                : `No hay productos en la categoría "${categories.find(c => c.id === selectedCategory)?.name}"`
+              placeholder={t('search') + ' productos...'}
+                ? t('noProductsAvailable')
+                : t('noProductsInCategory')
               }
             </Text>
           </View>

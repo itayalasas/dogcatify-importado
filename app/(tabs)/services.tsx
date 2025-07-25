@@ -136,7 +136,7 @@ export default function Services() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>Servicios</Text>
+        <Text style={styles.headerTitle}>{t('services')}</Text>
       </View>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.categories}>
@@ -177,15 +177,15 @@ export default function Services() {
           
           {!loading && !error && !currentUser && (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>Inicia sesión</Text>
-              <Text style={styles.emptySubtitle}>Debes iniciar sesión para ver los servicios disponibles</Text>
+              <Text style={styles.emptyTitle}>{t('signIn')}</Text>
+              <Text style={styles.emptySubtitle}>{t('signInToViewServices')}</Text>
             </View>
           )}
           
           {!loading && !error && currentUser && filteredPartners.length === 0 && (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>No hay servicios disponibles</Text>
-              <Text style={styles.emptySubtitle}>No hay negocios disponibles en esta categoría</Text>
+              <Text style={styles.emptyTitle}>{t('noServicesAvailable')}</Text>
+              <Text style={styles.emptySubtitle}>{t('noBusinessInCategory')}</Text>
             </View>
           )}
           

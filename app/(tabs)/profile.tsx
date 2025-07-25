@@ -349,7 +349,7 @@ export default function Profile() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>Perfil</Text>
+        <Text style={styles.headerTitle}>{t('profile')}</Text>
         <TouchableOpacity style={styles.settingsButton} onPress={handleSettings}>
           <Settings size={22} color="#6B7280" />
         </TouchableOpacity>
@@ -388,11 +388,11 @@ export default function Profile() {
         <Card style={styles.modeCard}>
           <View style={styles.modeHeader}>
             <Text style={styles.modeTitle}>
-              {currentUser?.email === 'admin@dogcatify.com' ? 'Modo Administrador' : t('partnerMode')}
+              {currentUser?.email === 'admin@dogcatify.com' ? t('adminMode') : t('partnerMode')}
             </Text>
             {currentUser?.email === 'admin@dogcatify.com' ? (
               <Button
-                title="Ir a Admin"
+                title={t('goToAdmin')}
                 onPress={handlePartnerModeToggle}
                 size="small"
               />
@@ -406,20 +406,20 @@ export default function Profile() {
             ) : (
               <View style={styles.partnerStatusBadge}>
                 <Text style={styles.partnerStatusText}>
-                  {partnerStatus === 'pending' ? "Pendiente de verificación" : "Sin negocio registrado"}
+                  {partnerStatus === 'pending' ? t('pendingVerification') : t('noBusinessRegistered')}
                 </Text>
               </View>
             )}
           </View>
           <Text style={styles.modeDescription}>
             {currentUser?.email === 'admin@dogcatify.com'
-              ? 'Accede al panel de administración para gestionar la plataforma.'
+              ? t('adminModeDescription')
               : partnerStatus !== 'none'
                 ? (partnerStatus === 'verified'
                     ? (isPartnerMode ? t('partnerModeOn') : t('partnerModeOff'))
-                    : 'Tu solicitud está siendo revisada por un administrador.'
+                    : t('requestUnderReview')
                   )
-                : 'Puedes registrar uno o más negocios para ofrecer servicios a otros dueños de mascotas'
+                : t('canRegisterBusiness')
             }
           </Text>
           {partnerStatus === 'verified' && currentUser?.email !== 'admin@dogcatify.com' && (
