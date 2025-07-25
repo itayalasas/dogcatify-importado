@@ -10,6 +10,71 @@ import * as ImagePicker from 'expo-image-picker';
 import { supabaseClient } from '../../lib/supabase';
 import { NotificationService } from '@/utils/notifications';
 
+const replicateMercadoPagoConfig = async (userId: string) => {
+  try {
+    console.log('Checking for existing Mercado Pago configuration for user:', userId);
+    
+    // Find any existing business from this user with Mercado Pago configured
+    const { data: existingPartners, error } = await supabaseClient
+      .from('partners')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('mercadopago_connected', true)
+      .limit(1);
+    
+    if (error) {
+      console.error('Error checking existing partners:', error);
+      return;
+    }
+    
+    if (existingPartners && existingPartners.length > 0) {
+      const sourcePartner = existingPartners[0];
+      console.log('Found existing partner with MP config:', sourcePartner.business_name);
+      
+      if (sourcePartner.mercadopago_config) {
+        console.log('Replicating Mercado Pago configuration to new business...');
+        
+        // Get the newly created partner (last one created by this user)
+        const { data: newPartners, error: newPartnerError } = await supabaseClient
+          .from('partners')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        
+        if (newPartnerError || !newPartners || newPartners.length === 0) {
+          console.error('Error finding new partner:', newPartnerError);
+          return;
+        }
+        
+        const newPartner = newPartners[0];
+        
+        // Replicate the Mercado Pago configuration
+        const { error: updateError } = await supabaseClient
+          .from('partners')
+          .update({
+            mercadopago_connected: true,
+            mercadopago_config: sourcePartner.mercadopago_config,
+            commission_percentage: sourcePartner.commission_percentage || 5.0,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', newPartner.id);
+        
+        if (updateError) {
+          console.error('Error replicating MP config:', updateError);
+        } else {
+          console.log('Mercado Pago configuration replicated successfully to:', newPartner.business_name);
+        }
+      }
+    } else {
+      console.log('No existing Mercado Pago configuration found for user');
+    }
+  } catch (error) {
+    console.error('Error in replicateMercadoPagoConfig:', error);
+    // Don't throw error to avoid breaking the registration process
+  }
+};
+
 const businessTypes = [
   { id: 'veterinary', name: 'Veterinaria', icon: '🏥', description: 'Servicios médicos para mascotas' },
   { id: 'grooming', name: 'Peluquería', icon: '✂️', description: 'Servicios de estética y cuidado' },
@@ -241,6 +306,8 @@ export default function PartnerRegister() {
 
       if (error) throw error;
 
+      // Check if user has other businesses with Mercado Pago configured
+      await replicateMercadoPagoConfig(currentUser.id);
       // Update user profile to be a partner
       const { error: profileError } = await supabaseClient
         .from('profiles')

@@ -7,6 +7,58 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { NotificationService } from '../../utils/notifications';
 
+const replicateMercadoPagoConfigOnApproval = async (userId: string, newPartnerId: string) => {
+  try {
+    console.log('Checking for existing Mercado Pago configuration for user on approval:', userId);
+    
+    // Find any existing verified business from this user with Mercado Pago configured
+    const { data: existingPartners, error } = await supabaseClient
+      .from('partners')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_verified', true)
+      .eq('mercadopago_connected', true)
+      .neq('id', newPartnerId) // Exclude the newly approved partner
+      .limit(1);
+    
+    if (error) {
+      console.error('Error checking existing partners on approval:', error);
+      return;
+    }
+    
+    if (existingPartners && existingPartners.length > 0) {
+      const sourcePartner = existingPartners[0];
+      console.log('Found existing partner with MP config on approval:', sourcePartner.business_name);
+      
+      if (sourcePartner.mercadopago_config) {
+        console.log('Replicating Mercado Pago configuration to newly approved business...');
+        
+        // Replicate the Mercado Pago configuration to the newly approved partner
+        const { error: updateError } = await supabaseClient
+          .from('partners')
+          .update({
+            mercadopago_connected: true,
+            mercadopago_config: sourcePartner.mercadopago_config,
+            commission_percentage: sourcePartner.commission_percentage || 5.0,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', newPartnerId);
+        
+        if (updateError) {
+          console.error('Error replicating MP config on approval:', updateError);
+        } else {
+          console.log('Mercado Pago configuration replicated successfully on approval');
+        }
+      }
+    } else {
+      console.log('No existing Mercado Pago configuration found for user on approval');
+    }
+  } catch (error) {
+    console.error('Error in replicateMercadoPagoConfigOnApproval:', error);
+    // Don't throw error to avoid breaking the approval process
+  }
+};
+
 // Función para añadir logs detallados
 const logDebug = (message: string, data?: any) => {
   const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
@@ -124,6 +176,15 @@ export default function AdminRequests() {
   const handleApproveRequest = async (requestId: string) => {
     setApprovingId(requestId);
     try {
+      // Get the partner data before approval to check user_id
+      const { data: partnerData, error: fetchError } = await supabaseClient
+        .from('partners')
+        .select('user_id, business_name')
+        .eq('id', requestId)
+        .single();
+      
+      if (fetchError) throw fetchError;
+      
       const { error } = await supabaseClient
         .from('partners')
         .update({
@@ -134,21 +195,23 @@ export default function AdminRequests() {
 
       if (error) throw error;
 
+      // After approval, check if user has other businesses with MP config
+      await replicateMercadoPagoConfigOnApproval(partnerData.user_id, requestId);
       // Get partner details to send email
-      const { data: partnerData, error: fetchError } = await supabaseClient
+      const { data: emailPartnerData, error: emailFetchError } = await supabaseClient
         .from('partners')
         .select('email, business_name')
         .eq('id', requestId)
         .single();
 
-      if (fetchError) throw fetchError;
+      if (emailFetchError) throw emailFetchError;
 
       // Send verification email
-      if (partnerData) {
+      if (emailPartnerData) {
         try {
           await NotificationService.sendPartnerVerificationEmail(
-            partnerData.email,
-            partnerData.business_name
+            emailPartnerData.email,
+            emailPartnerData.business_name
           );
         } catch (emailError) {
           console.error('Error sending partner verification email:', emailError);
