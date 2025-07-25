@@ -270,18 +270,22 @@ export const createPaymentPreference = async (
   customerInfo: any,
   partnerConfig: any,
   commissionAmount: number,
-  partnerAmount: number
+  partnerAmount: number,
+  shippingCost: number = 500
 ) => {
   try {
     const marketplaceAccessToken = await getMarketplaceAccessToken();
 
-    // Calculate totals
-    const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    // Calculate totals including shipping
+    const itemsSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const totalAmount = itemsSubtotal + shippingCost;
     
     console.log('Creating payment preference with config:', {
       partner_user_id: partnerConfig.user_id,
       commission: commissionAmount,
       partner_amount: partnerAmount,
+      shipping_cost: shippingCost,
+      total_amount: totalAmount,
       is_oauth: partnerConfig.is_oauth
     });
 
@@ -292,7 +296,13 @@ export const createPaymentPreference = async (
         quantity: item.quantity,
         unit_price: item.price,
         currency_id: 'ARS'
-      })),
+      })).concat([{
+        id: 'shipping',
+        title: 'Envío',
+        quantity: 1,
+        unit_price: shippingCost,
+        currency_id: 'ARS'
+      }]),
       payer: {
         name: customerInfo.displayName || 'Cliente',
         email: customerInfo.email,
@@ -361,7 +371,8 @@ export const createPaymentPreference = async (
 export const createMultiPartnerOrder = async (
   cartItems: any[],
   customerInfo: any,
-  shippingAddress: string
+  shippingAddress: string,
+  shippingCost: number = 500
 ): Promise<{ orders: any[], paymentPreferences: any[] }> => {
   try {
     console.log('Creating multi-partner order with OAuth2 marketplace flow...');
@@ -409,12 +420,15 @@ export const createMultiPartnerOrder = async (
         }
 
         // Calculate totals
-        const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-        const commissionAmount = subtotal * (partnerConfig.commission_percentage / 100);
-        const partnerAmount = subtotal - commissionAmount;
+        const itemsSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const totalWithShipping = itemsSubtotal + shippingCost;
+        const commissionAmount = totalWithShipping * (partnerConfig.commission_percentage / 100);
+        const partnerAmount = totalWithShipping - commissionAmount;
 
         console.log(`Partner ${partnerId} totals:`, {
-          subtotal,
+          itemsSubtotal,
+          shippingCost,
+          totalWithShipping,
           commission: commissionAmount,
           partner_amount: partnerAmount
         });
@@ -424,7 +438,7 @@ export const createMultiPartnerOrder = async (
           partnerId,
           customerInfo,
           items,
-          subtotal,
+          totalWithShipping,
           commissionAmount,
           partnerAmount,
           shippingAddress
