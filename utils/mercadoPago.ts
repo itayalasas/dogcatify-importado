@@ -397,45 +397,14 @@ export const createMultiPartnerOrder = async (
       partner_amount: partnerAmount
     });
 
-    // Create a single unified order with all items
-    const unifiedOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-    
     // Use the first partner as the primary partner for the unified order
     const primaryPartnerId = cartItems[0].partnerId;
     
-    const unifiedOrder = {
-      id: unifiedOrderId,
-      partner_id: primaryPartnerId, // Primary partner
-      customer_id: customerInfo.id,
-      items: cartItems, // All items from all partners
-      total_amount: totalAmount,
-      commission_amount: commissionAmount,
-      partner_amount: partnerAmount,
-      shipping_address: shippingAddress,
-      payment_method: 'mercadopago',
-      status: 'pending',
-      created_at: new Date().toISOString(),
-      // Add metadata about multiple partners
-      partner_breakdown: cartItems.reduce((acc, item) => {
-        const partnerId = item.partnerId;
-        if (!acc[partnerId]) {
-          acc[partnerId] = {
-            partner_name: item.partnerName,
-            items: [],
-            subtotal: 0
-          };
-        }
-        acc[partnerId].items.push(item);
-        acc[partnerId].subtotal += item.price * item.quantity;
-        return acc;
-      }, {} as Record<string, any>)
-    };
 
-    // Insert the unified order into database
-    const { error } = await supabaseClient
+    // Insert the unified order into database and let PostgreSQL generate the UUID
+    const { data: insertedOrder, error } = await supabaseClient
       .from('orders')
-      .insert({
-        id: unifiedOrderId,
+      .insert([{
         partner_id: primaryPartnerId,
         customer_id: customerInfo.id,
         items: cartItems,
@@ -445,15 +414,48 @@ export const createMultiPartnerOrder = async (
         shipping_address: shippingAddress,
         payment_method: 'mercadopago',
         status: 'pending',
-        created_at: new Date().toISOString()
-      });
+        created_at: new Date().toISOString(),
+        // Add metadata about multiple partners
+        partner_breakdown: cartItems.reduce((acc, item) => {
+          const partnerId = item.partnerId;
+          if (!acc[partnerId]) {
+            acc[partnerId] = {
+              partner_name: item.partnerName,
+              items: [],
+              subtotal: 0
+            };
+          }
+          acc[partnerId].items.push(item);
+          acc[partnerId].subtotal += item.price * item.quantity;
+          return acc;
+        }, {} as Record<string, any>)
+      }])
+      .select()
+      .single();
 
     if (error) {
       console.error('Error creating unified order:', error);
       throw error;
     }
 
+    if (!insertedOrder) {
+      throw new Error('No order data returned after insert');
+    }
+
+    const unifiedOrderId = insertedOrder.id;
     console.log('Unified order created:', unifiedOrderId);
+
+    const unifiedOrder = {
+      ...insertedOrder,
+      partnerId: insertedOrder.partner_id,
+      customerId: insertedOrder.customer_id,
+      totalAmount: insertedOrder.total_amount,
+      commissionAmount: insertedOrder.commission_amount,
+      partnerAmount: insertedOrder.partner_amount,
+      shippingAddress: insertedOrder.shipping_address,
+      createdAt: new Date(insertedOrder.created_at),
+      updatedAt: insertedOrder.updated_at ? new Date(insertedOrder.updated_at) : null
+    };
 
     // Get primary partner's Mercado Pago configuration
     const primaryPartnerConfig = await getPartnerMercadoPagoConfig(primaryPartnerId);
