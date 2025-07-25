@@ -205,15 +205,12 @@ export default function AdminPartners() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Search Bar */}
         <View style={styles.searchContainer}>
-          <View style={styles.searchBar}>
-            <Search size={20} color="#9CA3AF" />
-            <Input
-              placeholder="Buscar aliados por nombre o tipo..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              style={styles.searchInput}
-            />
-          </View>
+          <Input
+            placeholder="Buscar aliados por nombre o tipo..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            leftIcon={<Search size={20} color="#9CA3AF" />}
+          />
         </View>
 
         {/* Partners Section */}
@@ -569,21 +566,7 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    paddingHorizontal: 0,
+    paddingVertical: 16,
+    marginBottom: 8,
   },
 });
