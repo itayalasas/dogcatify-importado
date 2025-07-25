@@ -551,9 +551,9 @@ const styles = StyleSheet.create({
     color: '#10B981',
   },
   orderActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
+    flexDirection: 'column',
+    gap: 12,
+    marginTop: 8,
   },
   quickActionsCard: {
     marginTop: 8,
