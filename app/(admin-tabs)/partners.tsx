@@ -60,7 +60,7 @@ export default function AdminPartners() {
       console.log('Fetching partners...');
       const { data, error } = await supabaseClient
         .from('partners')
-        .select('*')
+        .select('id, user_id, business_name, business_type, commission_percentage, is_verified, is_active, created_at, updated_at')
         .eq('is_verified', true)
         .order('created_at', { ascending: false });
 
@@ -75,6 +75,7 @@ export default function AdminPartners() {
         isVerified: partner.is_verified,
         businessName: partner.business_name,
         businessType: partner.business_type,
+        commissionPercentage: partner.commission_percentage || 5.0,
         createdAt: new Date(partner.created_at),
         updatedAt: partner.updated_at ? new Date(partner.updated_at) : null,
       })) || [];
@@ -318,13 +319,13 @@ export default function AdminPartners() {
                   style={styles.commissionButton}
                   onPress={() => {
                     setSelectedPartner(partner);
-                    setNewCommission(partner.commission_percentage?.toString() || '5.0');
+                    setNewCommission(partner.commissionPercentage?.toString() || '5.0');
                     setShowCommissionModal(true);
                   }}
                 >
                   <Percent size={16} color="#3B82F6" />
                   <Text style={styles.commissionButtonText}>
-                    {partner.commission_percentage || 5.0}%
+                    {partner.commissionPercentage || 5.0}%
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -428,10 +429,16 @@ export default function AdminPartners() {
         onRequestClose={() => setShowCommissionModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={styles.commissionModalContent}>
             <Text style={styles.modalTitle}>
               Actualizar Comisión - {selectedPartner?.businessName}
             </Text>
+            
+            <View style={styles.commissionInfo}>
+              <Text style={styles.commissionInfoText}>
+                Comisión actual: {selectedPartner?.commissionPercentage || 5.0}%
+              </Text>
+            </View>
             
             <Input
               label="Nueva comisión (%)"
@@ -442,18 +449,22 @@ export default function AdminPartners() {
               leftIcon={<Percent size={20} color="#6B7280" />}
             />
             
-            <View style={styles.modalActions}>
+            <View style={styles.commissionModalActions}>
               <Button
                 title="Cancelar"
-                onPress={() => setShowCommissionModal(false)}
+                onPress={() => {
+                  setShowCommissionModal(false);
+                  setNewCommission('');
+                  setSelectedPartner(null);
+                }}
                 variant="outline"
-                size="medium"
+                size="large"
               />
               <Button
                 title="Actualizar"
                 onPress={handleUpdateCommission}
                 loading={loading}
-                size="medium"
+                size="large"
               />
             </View>
           </View>
@@ -616,10 +627,9 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+    padding: 20,
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
@@ -627,8 +637,26 @@ const styles = StyleSheet.create({
     padding: 20,
     width: '100%',
     maxWidth: 400,
-    maxHeight: '60%',
-    marginBottom: 20,
+    maxHeight: '80%',
+  },
+  commissionModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 24,
+    width: '90%',
+    maxWidth: 400,
+  },
+  commissionInfo: {
+    backgroundColor: '#F3F4F6',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  commissionInfoText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    textAlign: 'center',
   },
   modalTitle: {
     fontSize: 18,
@@ -641,6 +669,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginTop: 20,
+  },
+  commissionModalActions: {
+    flexDirection: 'column',
+    gap: 12,
+    marginTop: 24,
   },
   accessDenied: {
     flex: 1,
