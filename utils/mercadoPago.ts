@@ -375,7 +375,7 @@ export const createMultiPartnerOrder = async (
   shippingCost: number = 500
 ): Promise<{ orders: any[], paymentPreferences: any[] }> => {
   try {
-    console.log('Creating multi-partner order with OAuth2 marketplace flow...');
+    console.log('Creating multi-partner order with marketplace split...');
     console.log('Cart items received:', cartItems.map(item => ({
       id: item.id,
       name: item.name,
@@ -405,6 +405,12 @@ export const createMultiPartnerOrder = async (
 
     const orders: any[] = [];
     const paymentPreferences: any[] = [];
+    
+    // Check if we have multiple partners
+    const partnerIds = Object.keys(itemsByPartner);
+    const isMultiPartner = partnerIds.length > 1;
+    
+    console.log(`Processing ${partnerIds.length} partner(s), multi-partner: ${isMultiPartner}`);
 
     // Process each partner's items
     for (const [partnerId, items] of Object.entries(itemsByPartner)) {
@@ -415,19 +421,19 @@ export const createMultiPartnerOrder = async (
         // Get partner's Mercado Pago configuration
         const partnerConfig = await getPartnerMercadoPagoConfig(partnerId);
         
-        if (!partnerConfig.user_id) {
-          throw new Error(`Partner ${partnerId} doesn't have Mercado Pago OAuth configured`);
+        if (!partnerConfig.access_token) {
+          throw new Error(`Partner ${partnerId} doesn't have Mercado Pago configured`);
         }
 
         // Calculate totals
         const itemsSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-        const totalWithShipping = itemsSubtotal + shippingCost;
+        const totalWithShipping = itemsSubtotal + (isMultiPartner ? 0 : shippingCost); // Only add shipping to single partner
         const commissionAmount = totalWithShipping * (partnerConfig.commission_percentage / 100);
         const partnerAmount = totalWithShipping - commissionAmount;
 
         console.log(`Partner ${partnerId} totals:`, {
           itemsSubtotal,
-          shippingCost,
+          shippingCost: isMultiPartner ? 0 : shippingCost,
           totalWithShipping,
           commission: commissionAmount,
           partner_amount: partnerAmount
@@ -446,25 +452,54 @@ export const createMultiPartnerOrder = async (
 
         console.log(`Order created for partner ${partnerId}:`, order.id);
 
-        // Create payment preference with marketplace split
-        const preference = await createPaymentPreference(
-          order.id,
-          items,
-          customerInfo,
-          partnerConfig,
-          commissionAmount,
-          partnerAmount
-        );
-
-        console.log(`Payment preference created for partner ${partnerId}:`, preference.id);
 
         orders.push(order);
-        paymentPreferences.push(preference);
 
       } catch (partnerError) {
         console.error(`Error processing partner ${partnerId}:`, partnerError);
         throw new Error(`Failed to process order for partner ${partnerId}: ${partnerError.message}`);
       }
+    }
+    
+    // Create a single payment preference for all partners (marketplace split)
+    if (isMultiPartner) {
+      console.log('Creating marketplace payment preference for multiple partners...');
+      
+      // Combine all items for the marketplace payment
+      const allItems = cartItems;
+      const totalAmount = allItems.reduce((sum, item) => sum + (item.price * item.quantity), 0) + shippingCost;
+      
+      // Use the first partner's config as the primary (marketplace will handle splits)
+      const primaryPartnerId = partnerIds[0];
+      const primaryPartnerConfig = await getPartnerMercadoPagoConfig(primaryPartnerId);
+      
+      const marketplacePreference = await createMarketplacePaymentPreference(
+        orders,
+        allItems,
+        customerInfo,
+        primaryPartnerConfig,
+        totalAmount,
+        shippingCost
+      );
+      
+      paymentPreferences.push(marketplacePreference);
+    } else {
+      // Single partner - create normal payment preference
+      const partnerId = partnerIds[0];
+      const partnerConfig = await getPartnerMercadoPagoConfig(partnerId);
+      const order = orders[0];
+      
+      const preference = await createPaymentPreference(
+        order.id,
+        cartItems,
+        customerInfo,
+        partnerConfig,
+        order.commission_amount,
+        order.partner_amount,
+        shippingCost
+      );
+      
+      paymentPreferences.push(preference);
     }
 
     console.log(`Successfully created ${orders.length} orders and ${paymentPreferences.length} payment preferences`);
