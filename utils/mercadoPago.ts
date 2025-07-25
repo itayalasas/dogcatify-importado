@@ -532,6 +532,12 @@ export const createMarketplacePaymentPreference = async (
     const combinedOrderIds = orders.map(o => o.id).join(',');
     
     console.log('Creating marketplace preference with split for orders:', combinedOrderIds);
+    console.log('Primary partner config:', {
+      user_id: primaryPartnerConfig.user_id,
+      account_id: primaryPartnerConfig.account_id,
+      is_oauth: primaryPartnerConfig.is_oauth,
+      business_name: primaryPartnerConfig.business_name
+    });
     
     const preferenceData = {
       items: allItems.map(item => ({
@@ -564,9 +570,41 @@ export const createMarketplacePaymentPreference = async (
       external_reference: combinedOrderIds,
       notification_url: `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/mercadopago-webhook`,
       marketplace: 'DogCatiFy',
-      statement_descriptor: 'DOGCATIFY',
+      statement_descriptor: 'DOGCATIFY'
+    };
+    
+    // Para configuraciones manuales (no OAuth), no usar marketplace split
+    // Solo usar marketplace split si tenemos configuración OAuth válida
+    const hasValidOAuthConfig = primaryPartnerConfig.is_oauth && 
+                               primaryPartnerConfig.user_id && 
+                               !isNaN(parseInt(primaryPartnerConfig.user_id));
+    
+    console.log('OAuth config validation:', {
+      is_oauth: primaryPartnerConfig.is_oauth,
+      has_user_id: !!primaryPartnerConfig.user_id,
+      user_id_is_number: !isNaN(parseInt(primaryPartnerConfig.user_id || '')),
+      hasValidOAuthConfig
+    });
+    
+    if (hasValidOAuthConfig) {
+      // Solo para configuraciones OAuth - usar marketplace split
+      const totalCommission = orders.reduce((sum, order) => sum + (order.commission_amount || 0), 0);
+      preferenceData.marketplace_fee = totalCommission;
+      preferenceData.collector_id = parseInt(primaryPartnerConfig.user_id);
+      
+      console.log('Using OAuth marketplace split:', {
+        collector_id: primaryPartnerConfig.user_id,
+        marketplace_fee: totalCommission
+      });
+    } else {
+      // Para configuraciones manuales - pago directo sin split automático
+      console.log('Using manual configuration - no automatic marketplace split');
+      // El split se manejará manualmente en el webhook
+    }
+    
+    // Agregar información adicional para el envío
+    preferenceData.additional_info = {
       // Marketplace configuration for automatic splits
-      additional_info: {
         items: allItems.map(item => ({
           id: item.id,
           title: item.name,
@@ -598,19 +636,16 @@ export const createMarketplacePaymentPreference = async (
             state_name: 'Provincia'
           }
         }
-      }
-    };
+        }
+      };
     
-    // Add marketplace fee calculation for multiple partners
-    if (orders.length > 1) {
-      const totalCommission = orders.reduce((sum, order) => sum + (order.commission_amount || 0), 0);
-      preferenceData.marketplace_fee = totalCommission;
-      
-      // Set the primary collector (first partner with OAuth)
-      if (primaryPartnerConfig.user_id && !isNaN(parseInt(primaryPartnerConfig.user_id))) {
-        preferenceData.collector_id = parseInt(primaryPartnerConfig.user_id);
-      }
-    }
+    console.log('Final preference data:', {
+      items_count: preferenceData.items.length,
+      total_amount: totalAmount,
+      has_marketplace_fee: !!preferenceData.marketplace_fee,
+      has_collector_id: !!preferenceData.collector_id,
+      external_reference: preferenceData.external_reference
+    });
 
     const response = await fetch(`${MP_BASE_URL}/checkout/preferences`, {
       method: 'POST',
