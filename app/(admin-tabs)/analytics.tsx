@@ -46,6 +46,7 @@ export default function AdminAnalytics() {
   const fetchAnalytics = async () => {
     try {
       console.log('Starting to fetch analytics data...');
+      
       // Fetch users count
       const { count: totalUsers } = await supabaseClient
         .from('profiles')
@@ -80,25 +81,49 @@ export default function AdminAnalytics() {
       console.log('Total revenue calculated:', totalRevenue);
 
       // Fetch orders data
-      const { data: orders, count: totalOrders } = await supabaseClient
+      console.log('Fetching orders data...');
+      const { data: ordersData, count: totalOrders, error: ordersError } = await supabaseClient
         .from('orders')
-        .select('*', { count: 'exact' });
+        .select('id, status, total_amount, commission_amount, partner_amount, created_at', { count: 'exact' });
 
+      if (ordersError) {
+        console.error('Error fetching orders:', ordersError);
+      } else {
+        console.log('Orders data fetched successfully:', ordersData?.length || 0, 'orders');
+        console.log('Sample order data:', ordersData?.[0]);
+      }
+      
       console.log('Total orders count:', totalOrders);
 
       // Calculate orders by status
-      const pendingOrders = orders?.filter(order => order.status === 'pending').length || 0;
-      const confirmedOrders = orders?.filter(order => order.status === 'confirmed').length || 0;
-      const shippedOrders = orders?.filter(order => order.status === 'shipped').length || 0;
-      const deliveredOrders = orders?.filter(order => order.status === 'delivered').length || 0;
-      const cancelledOrders = orders?.filter(order => order.status === 'cancelled').length || 0;
+      const pendingOrders = ordersData?.filter(order => order.status === 'pending').length || 0;
+      const confirmedOrders = ordersData?.filter(order => order.status === 'confirmed').length || 0;
+      const processingOrders = ordersData?.filter(order => order.status === 'processing').length || 0;
+      const shippedOrders = ordersData?.filter(order => order.status === 'shipped').length || 0;
+      const deliveredOrders = ordersData?.filter(order => order.status === 'delivered').length || 0;
+      const cancelledOrders = ordersData?.filter(order => order.status === 'cancelled').length || 0;
+      
+      console.log('Orders by status:', {
+        pending: pendingOrders,
+        confirmed: confirmedOrders,
+        processing: processingOrders,
+        shipped: shippedOrders,
+        delivered: deliveredOrders,
+        cancelled: cancelledOrders
+      });
 
       // Calculate total revenue from orders and commissions
-      const ordersRevenue = orders?.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0) || 0;
-      const totalCommissions = orders?.reduce((sum, order) => sum + (Number(order.commission_amount) || 0), 0) || 0;
+      const ordersRevenue = ordersData?.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0) || 0;
+      const totalCommissions = ordersData?.reduce((sum, order) => sum + (Number(order.commission_amount) || 0), 0) || 0;
+      const totalPartnerPayments = ordersData?.reduce((sum, order) => sum + (Number(order.partner_amount) || 0), 0) || 0;
 
       console.log('Orders revenue calculated:', ordersRevenue);
       console.log('Total commissions calculated:', totalCommissions);
+      console.log('Total partner payments calculated:', totalPartnerPayments);
+      
+      // Calculate combined revenue (bookings + orders)
+      const combinedRevenue = totalRevenue + ordersRevenue;
+      console.log('Combined revenue (bookings + orders):', combinedRevenue);
 
       setAnalytics(prev => ({
         ...prev,
@@ -109,12 +134,16 @@ export default function AdminAnalytics() {
         totalOrders: totalOrders || 0,
         pendingOrders,
         confirmedOrders,
+        processingOrders,
         shippedOrders,
         deliveredOrders,
         cancelledOrders,
-        totalRevenue: totalRevenue + ordersRevenue,
-        totalCommissions
+        totalRevenue: combinedRevenue,
+        totalCommissions,
+        totalPartnerPayments
       }));
+      
+      console.log('Analytics state updated successfully');
     } catch (error) {
       console.error('Error fetching analytics:', error);
     }
