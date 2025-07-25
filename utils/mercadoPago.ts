@@ -176,21 +176,31 @@ const getMarketplaceAccessToken = async (): Promise<string> => {
  */
 export const getPartnerMercadoPagoConfig = async (partnerId: string) => {
   try {
+    console.log('Getting MP config for partner:', partnerId);
+    
     const { data, error } = await supabaseClient
       .from('partners')
-      .select('mercadopago_config, commission_percentage, mercadopago_connected, business_name')
+      .select('*')
       .eq('id', partnerId)
       .single();
 
     if (error) throw error;
+    
+    console.log('Partner data found:', data);
 
     if (!data?.mercadopago_connected || !data?.mercadopago_config?.access_token) {
+      console.log('Partner MP status:', {
+        mercadopago_connected: data?.mercadopago_connected,
+        has_config: !!data?.mercadopago_config,
+        has_access_token: !!data?.mercadopago_config?.access_token
+      });
       throw new Error(`Partner "${data?.business_name || partnerId}" no tiene Mercado Pago configurado`);
     }
 
     return {
       ...data.mercadopago_config,
-      commission_percentage: data.commission_percentage || 5.0
+      commission_percentage: data.commission_percentage || 5.0,
+      business_name: data.business_name
     };
   } catch (error) {
     console.error('Error getting partner MP config:', error);
@@ -335,6 +345,12 @@ export const createMultiPartnerOrder = async (
 ): Promise<{ orders: any[], paymentPreferences: any[] }> => {
   try {
     console.log('Creating multi-partner order with OAuth2 marketplace flow...');
+    console.log('Cart items received:', cartItems.map(item => ({
+      id: item.id,
+      name: item.name,
+      partnerId: item.partnerId,
+      partnerName: item.partnerName
+    })));
     
     // Group cart items by partner
     const itemsByPartner = cartItems.reduce((acc, item) => {
@@ -350,6 +366,12 @@ export const createMultiPartnerOrder = async (
       return acc;
     }, {} as Record<string, any[]>);
 
+    console.log('Items grouped by partner:', Object.keys(itemsByPartner).map(partnerId => ({
+      partnerId,
+      itemCount: itemsByPartner[partnerId].length,
+      items: itemsByPartner[partnerId].map(item => item.name)
+    })));
+
     const orders: any[] = [];
     const paymentPreferences: any[] = [];
 
@@ -357,6 +379,7 @@ export const createMultiPartnerOrder = async (
     for (const [partnerId, items] of Object.entries(itemsByPartner)) {
       try {
         console.log(`Processing partner ${partnerId} with ${items.length} items`);
+        console.log(`Items for partner ${partnerId}:`, items.map(item => item.name));
 
         // Get partner's Mercado Pago configuration
         const partnerConfig = await getPartnerMercadoPagoConfig(partnerId);

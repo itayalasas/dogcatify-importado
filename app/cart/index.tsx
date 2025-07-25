@@ -26,6 +26,55 @@ export default function Cart() {
     }
   };
 
+  // Function to validate and fix cart items
+  const validateCartItems = async (cartItems: any[]) => {
+    const validatedItems = [];
+    
+    for (const item of cartItems) {
+      try {
+        // Get the actual product data to verify partner_id
+        const { data: productData, error } = await supabaseClient
+          .from('partner_products')
+          .select('partner_id, name, price')
+          .eq('id', item.id)
+          .single();
+        
+        if (error) {
+          console.error(`Error fetching product ${item.id}:`, error);
+          // Keep original item if we can't fetch data
+          validatedItems.push(item);
+        } else {
+          console.log(`Product ${item.id} actual partner_id: ${productData.partner_id}, cart partner_id: ${item.partnerId}`);
+          
+          // Update item with correct partner_id if different
+          if (productData.partner_id !== item.partnerId) {
+            console.log(`Correcting partner_id for product ${item.name}: ${item.partnerId} -> ${productData.partner_id}`);
+            
+            // Get correct partner name
+            const { data: partnerData } = await supabaseClient
+              .from('partners')
+              .select('business_name')
+              .eq('id', productData.partner_id)
+              .single();
+            
+            validatedItems.push({
+              ...item,
+              partnerId: productData.partner_id,
+              partnerName: partnerData?.business_name || item.partnerName
+            });
+          } else {
+            validatedItems.push(item);
+          }
+        }
+      } catch (error) {
+        console.error(`Error validating cart item ${item.id}:`, error);
+        validatedItems.push(item);
+      }
+    }
+    
+    return validatedItems;
+  };
+
   const handleRemoveItem = (itemId: string) => {
     Alert.alert(
       'Eliminar producto',
@@ -72,20 +121,112 @@ export default function Cart() {
     setLoading(true);
     try {
       console.log('Starting Mercado Pago checkout process...');
+      console.log('Cart items:', cart.map(item => ({
+        id: item.id,
+        name: item.name,
+        partnerId: item.partnerId,
+        partnerName: item.partnerName
+      })));
+      
+      // First, validate and fix cart items if needed
+      console.log('Validating cart items...');
+      const validatedCart = await validateCartItems(cart);
+      console.log('Validated cart items:', validatedCart.map(item => ({
+        id: item.id,
+        name: item.name,
+        partnerId: item.partnerId,
+        partnerName: item.partnerName
+      })));
       
       // Validate that all partners have Mercado Pago configured before proceeding
-      const partnerIds = [...new Set(cart.map(item => item.partnerId))];
+      const partnerIds = [...new Set(validatedCart.map(item => item.partnerId))];
+      console.log('Unique partner IDs in cart:', partnerIds);
+      
       const partnersWithoutMP: string[] = [];
+      const partnersWithMP: any[] = [];
       
       for (const partnerId of partnerIds) {
         try {
+          console.log(`Checking MP config for partner: ${partnerId}`);
           const { data: partnerData, error } = await supabaseClient
             .from('partners')
-            .select('business_name, mercadopago_connected, mercadopago_config')
+            .select('*')
             .eq('id', partnerId)
             .single();
           
-          if (error || !partnerData?.mercadopago_connected || !partnerData?.mercadopago_config?.access_token) {
+          if (error) {
+            console.error(`Error fetching partner ${partnerId}:`, error);
+            partnersWithoutMP.push(`Tienda desconocida (${partnerId})`);
+          } else {
+            console.log(`Partner ${partnerId} data:`, {
+              business_name: partnerData.business_name,
+              mercadopago_connected: partnerData.mercadopago_connected,
+              has_mp_config: !!partnerData.mercadopago_config,
+              has_access_token: !!partnerData.mercadopago_config?.access_token
+            });
+            
+            if (!partnerData?.mercadopago_connected || !partnerData?.mercadopago_config?.access_token) {
+              partnersWithoutMP.push(partnerData?.business_name || 'Tienda desconocida');
+            } else {
+              partnersWithMP.push(partnerData);
+            }
+          }
+        } catch (error) {
+          console.error(`Error checking MP config for partner ${partnerId}:`, error);
+          partnersWithoutMP.push('Tienda desconocida');
+        }
+      }
+      
+      console.log('Partners with MP:', partnersWithMP.length);
+      console.log('Partners without MP:', partnersWithoutMP.length);
+      
+      if (partnersWithoutMP.length > 0) {
+        Alert.alert(
+          'Pago no disponible',
+          `Los siguientes negocios no tienen Mercado Pago configurado y no pueden procesar pagos en línea:\n\n• ${partnersWithoutMP.join('\n• ')}\n\nPor favor contacta directamente con el negocio o selecciona productos de otros vendedores.`,
+          [{ text: 'Entendido' }]
+        );
+        setLoading(false);
+        return;
+      }
+      
+      // Check if user has multiple partners and is trying to buy from a different one
+      if (currentUser) {
+        console.log('Checking if user owns any of these partners...');
+        const { data: userPartners, error: userPartnersError } = await supabaseClient
+          .from('partners')
+          .select('id, business_name, mercadopago_connected')
+          .eq('user_id', currentUser.id);
+          
+        if (!userPartnersError && userPartners) {
+          console.log('User partners:', userPartners);
+          
+          // Check if any cart items belong to user's own partners
+          const ownPartnerIds = userPartners.map(p => p.id);
+          const cartFromOwnPartners = validatedCart.filter(item => ownPartnerIds.includes(item.partnerId));
+          
+          if (cartFromOwnPartners.length > 0) {
+            console.log('User is trying to buy from their own partner(s)');
+            Alert.alert(
+              'Compra no permitida',
+              'No puedes comprar productos de tu propio negocio. Por favor elimina estos productos del carrito.',
+              [{ text: 'Entendido' }]
+            );
+            setLoading(false);
+            return;
+          }
+        }
+      }
+      
+      // Proceed with checkout if all validations pass
+      console.log('All validations passed, proceeding with checkout...');
+      
+      // Create orders and payment preferences for each partner
+      const { orders, paymentPreferences } = await createMultiPartnerOrder(
+        validatedCart,
+        currentUser,
+        'Dirección de envío' // You might want to collect this from user
+      );
             partnersWithoutMP.push(partnerData?.business_name || 'Tienda desconocida');
           }
         } catch (error) {
