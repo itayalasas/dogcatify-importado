@@ -212,19 +212,30 @@ export default function Cart() {
             { 
               text: 'Proceder al Pago', 
               onPress: async () => {
+                console.log('User confirmed multi-partner payment, processing...');
                 // Use the first payment preference (marketplace handles the split)
                 const firstPreference = paymentPreferences[0];
+                console.log('First preference data:', {
+                  id: firstPreference?.id,
+                  init_point: firstPreference?.init_point,
+                  sandbox_init_point: firstPreference?.sandbox_init_point
+                });
+                
                 const checkoutUrl = firstPreference.init_point || firstPreference.sandbox_init_point;
+                console.log('Checkout URL:', checkoutUrl);
                 
                 if (checkoutUrl) {
+                  console.log('Clearing cart and opening browser...');
                   clearCart();
                   try {
                     await WebBrowser.openBrowserAsync(checkoutUrl);
+                    console.log('Browser opened successfully');
                   } catch (browserError) {
                     console.error('Error opening browser:', browserError);
                     Alert.alert('Error', 'No se pudo abrir la página de pago');
                   }
                 } else {
+                  console.error('No checkout URL available');
                   Alert.alert('Error', 'No se pudo generar la preferencia de pago');
                 }
               }
