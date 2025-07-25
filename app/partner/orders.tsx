@@ -682,10 +682,10 @@ const styles = StyleSheet.create({
   },
   orderActions: {
     flexDirection: 'column',
-    gap: 12,
-    marginTop: 12,
+    gap: 8,
+    marginTop: 8,
   },
-  actionButton: {
-    width: '100%',
+  orderActionButton: {
+    marginBottom: 4,
   },
 });
