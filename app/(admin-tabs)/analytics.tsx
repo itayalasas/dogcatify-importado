@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, SafeAreaView } from 'react-native';
-import { TrendingUp, Users, DollarSign, Package, Calendar, Eye } from 'lucide-react-native';
+import { TrendingUp, Users, DollarSign, Package, Calendar, Eye, Clock } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
