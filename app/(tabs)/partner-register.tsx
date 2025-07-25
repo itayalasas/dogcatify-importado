@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowLeft, Building, Camera, MapPin, Phone, Mail, FileText } from 'lucide-react-native';
+import { ArrowLeft, Building, Camera, MapPin, Phone, Mail, FileText, DollarSign } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -94,6 +94,8 @@ export default function PartnerRegister() {
   const [email, setEmail] = useState(currentUser?.email || '');
   const [logo, setLogo] = useState<string | null>(null);
   const [images, setImages] = useState<string[]>([]);
+  const [hasShipping, setHasShipping] = useState(false);
+  const [shippingCost, setShippingCost] = useState('');
   const [loading, setLoading] = useState(false);
 
   const pickDocument = async () => {
@@ -297,6 +299,8 @@ export default function PartnerRegister() {
           email: email.trim(),
           logo: logoUrl,
           images: imageUrls,
+          has_shipping: hasShipping,
+          shipping_cost: hasShipping ? parseFloat(shippingCost) || 0 : 0,
           is_active: true,
           is_verified: false,
           rating: 0,
@@ -457,6 +461,35 @@ export default function PartnerRegister() {
             )}
           </View>
 
+          {selectedType === 'shop' && (
+            <View style={styles.shippingSection}>
+              <View style={styles.shippingHeader}>
+                <Text style={styles.shippingTitle}>Configuración de Envío</Text>
+              </View>
+              
+              <TouchableOpacity 
+                style={styles.shippingCheckbox}
+                onPress={() => setHasShipping(!hasShipping)}
+              >
+                <View style={[styles.checkbox, hasShipping && styles.checkedCheckbox]}>
+                  {hasShipping && <Text style={styles.checkmark}>✓</Text>}
+                </View>
+                <Text style={styles.checkboxLabel}>Ofrece servicio de envío</Text>
+              </TouchableOpacity>
+              
+              {hasShipping && (
+                <Input
+                  label="Costo de envío"
+                  placeholder="Ej: 500"
+                  value={shippingCost}
+                  onChangeText={setShippingCost}
+                  keyboardType="numeric"
+                  leftIcon={<DollarSign size={20} color="#6B7280" />}
+                />
+              )}
+            </View>
+          )}
+
           <Button
             title="Enviar Solicitud"
             onPress={handleSubmit}
@@ -473,6 +506,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+    paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
@@ -619,5 +653,50 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 8,
     marginRight: 8,
+  },
+  shippingSection: {
+    marginBottom: 20,
+    padding: 16,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  shippingHeader: {
+    marginBottom: 16,
+  },
+  shippingTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  shippingCheckbox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
+    borderRadius: 4,
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkedCheckbox: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  checkmark: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  checkboxLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
   },
 });
