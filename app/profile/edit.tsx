@@ -137,10 +137,8 @@ export default function EditProfile() {
       const { error: postsError } = await supabaseClient
         .from('posts')
         .update({
-          author: {
-            avatar: newPhotoURL,
-            name: newDisplayName
-          }
+          // Posts table doesn't have author column, it uses user_id reference
+          // The author info is fetched via join with profiles table
         })
         .eq('user_id', currentUser!.id);
       
@@ -151,40 +149,14 @@ export default function EditProfile() {
       }
 
       console.log('Updating user comments with new data...');
-      // Update all comments by this user
-      const { error: commentsError } = await supabaseClient
-        .from('comments')
-        .update({
-          author: {
-            avatar: newPhotoURL,
-            name: newDisplayName
-          }
-        })
-        .eq('user_id', currentUser!.id);
-      
-      if (commentsError) {
-        console.error('Error updating comments:', commentsError);
-      } else {
-        console.log('Comments updated successfully');
-      }
+      // Comments table doesn't have author column, it uses user_id reference
+      // The author info is fetched via join with profiles table
+      console.log('Comments use user_id reference, no direct update needed');
 
       console.log('Updating user pet albums with new data...');
-      // Update all pet albums by this user
-      const { error: albumsError } = await supabaseClient
-        .from('pet_albums')
-        .update({
-          author: {
-            avatar: newPhotoURL,
-            name: newDisplayName
-          }
-        })
-        .eq('user_id', currentUser!.id);
-      
-      if (albumsError) {
-        console.error('Error updating pet albums:', albumsError);
-      } else {
-        console.log('Pet albums updated successfully');
-      }
+      // Pet albums table doesn't have author column, it uses user_id reference
+      // The author info is fetched via join with profiles table
+      console.log('Pet albums use user_id reference, no direct update needed');
 
       console.log('Successfully updated all user posts and comments');
     } catch (error) {
@@ -256,15 +228,9 @@ export default function EditProfile() {
         console.log('Auth user updated successfully');
       }
 
-      // Update all posts and comments with new photo and name
-      if (photoURL || displayName.trim() !== currentUser.displayName) {
-        console.log('Updating posts and comments...');
-        await updateUserPostsAndComments(
-          photoURL || currentUser.photoURL || '',
-          displayName.trim()
-        );
-        console.log('Posts and comments updated');
-      }
+      // Since posts, comments, and albums use user_id references,
+      // they will automatically show updated profile info via joins
+      console.log('Profile references will be updated automatically via joins');
 
       console.log('Profile save completed successfully');
       Alert.alert('Éxito', 'Perfil actualizado correctamente', [
