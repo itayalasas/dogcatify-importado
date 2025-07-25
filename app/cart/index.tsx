@@ -16,6 +16,8 @@ export default function Cart() {
   const { cart, updateQuantity, removeFromCart, clearCart, getCartTotal } = useCart();
   const [loading, setLoading] = useState(false);
   const [shippingAddress, setShippingAddress] = useState('');
+  const [partnerShippingInfo, setPartnerShippingInfo] = useState<{[key: string]: {hasShipping: boolean, cost: number, name: string}}>({});
+  const [loadingShipping, setLoadingShipping] = useState(true);
 
   useEffect(() => {
     if (!currentUser) {
@@ -27,8 +29,68 @@ export default function Cart() {
     if (currentUser.location) {
       setShippingAddress(currentUser.location);
     }
+    
+    // Load shipping info for all partners in cart
+    if (cart.length > 0) {
+      loadPartnerShippingInfo();
+    }
   }, [currentUser]);
 
+  useEffect(() => {
+    if (cart.length > 0) {
+      loadPartnerShippingInfo();
+    } else {
+      setPartnerShippingInfo({});
+      setLoadingShipping(false);
+    }
+  }, [cart]);
+
+  const loadPartnerShippingInfo = async () => {
+    setLoadingShipping(true);
+    try {
+      const uniquePartnerIds = [...new Set(cart.map(item => item.partnerId))];
+      const shippingInfo: {[key: string]: {hasShipping: boolean, cost: number, name: string}} = {};
+      
+      for (const partnerId of uniquePartnerIds) {
+        try {
+          const { data, error } = await supabaseClient
+            .from('partners')
+            .select('business_name, has_shipping, shipping_cost')
+            .eq('id', partnerId)
+            .single();
+          
+          if (error) {
+            console.error('Error fetching partner shipping info:', error);
+            // Default values if error
+            shippingInfo[partnerId] = {
+              hasShipping: false,
+              cost: 0,
+              name: cart.find(item => item.partnerId === partnerId)?.partnerName || 'Tienda'
+            };
+          } else {
+            shippingInfo[partnerId] = {
+              hasShipping: data.has_shipping || false,
+              cost: data.shipping_cost || 0,
+              name: data.business_name || 'Tienda'
+            };
+          }
+        } catch (error) {
+          console.error('Error loading shipping for partner:', partnerId, error);
+          shippingInfo[partnerId] = {
+            hasShipping: false,
+            cost: 0,
+            name: cart.find(item => item.partnerId === partnerId)?.partnerName || 'Tienda'
+          };
+        }
+      }
+      
+      setPartnerShippingInfo(shippingInfo);
+    } catch (error) {
+      console.error('Error loading partner shipping info:', error);
+    } finally {
+      setLoadingShipping(false);
+    }
+  };
   const validateCartItems = async () => {
     console.log('Validating cart items...');
     const validatedItems = [];
@@ -164,7 +226,7 @@ export default function Cart() {
         validatedItems,
         currentUser,
         shippingAddress.trim(),
-        calculateShipping()
+        calculateShipping() // Now uses dynamic shipping calculation
       );
 
       console.log('Orders created:', orders.length);
@@ -244,8 +306,19 @@ export default function Cart() {
   };
 
   const calculateShipping = () => {
-    // Simple shipping calculation - could be more sophisticated
-    return cart.length > 0 ? 500 : 0;
+    if (cart.length === 0) return 0;
+    
+    const uniquePartnerIds = [...new Set(cart.map(item => item.partnerId))];
+    let totalShipping = 0;
+    
+    uniquePartnerIds.forEach(partnerId => {
+      const shippingInfo = partnerShippingInfo[partnerId];
+      if (shippingInfo?.hasShipping) {
+        totalShipping += shippingInfo.cost;
+      }
+    });
+    
+    return totalShipping;
   };
 
   const calculateTotal = () => {
@@ -358,9 +431,26 @@ export default function Cart() {
               <Text style={styles.summaryValue}>{formatCurrency(getCartTotal())}</Text>
             </View>
             
+            {/* Shipping breakdown by store */}
+            {Object.keys(partnerShippingInfo).length > 0 && (
+              <View style={styles.shippingBreakdown}>
+                <Text style={styles.shippingBreakdownTitle}>Envío por tienda:</Text>
+                {Object.entries(partnerShippingInfo).map(([partnerId, info]) => (
+                  <View key={partnerId} style={styles.shippingRow}>
+                    <Text style={styles.shippingStoreLabel}>{info.name}</Text>
+                    <Text style={styles.shippingStoreValue}>
+                      {info.hasShipping ? formatCurrency(info.cost) : 'Sin envío'}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Envío</Text>
-              <Text style={styles.summaryValue}>{formatCurrency(calculateShipping())}</Text>
+              <Text style={styles.summaryValue}>
+                {loadingShipping ? 'Calculando...' : formatCurrency(calculateShipping())}
+              </Text>
             </View>
             
             <View style={styles.divider} />
@@ -378,7 +468,7 @@ export default function Cart() {
               onPress={handleMercadoPagoCheckout}
               loading={loading}
               size="large"
-              disabled={cart.length === 0 || !shippingAddress.trim()}
+              disabled={cart.length === 0 || !shippingAddress.trim() || loadingShipping}
             />
           </View>
         </ScrollView>
@@ -562,6 +652,35 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: 'Inter-Bold',
     color: '#10B981',
+  },
+  shippingBreakdown: {
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 8,
+  },
+  shippingBreakdownTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  shippingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  shippingStoreLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    flex: 1,
+  },
+  shippingStoreValue: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#111827',
   },
   checkoutContainer: {
     marginBottom: 24,

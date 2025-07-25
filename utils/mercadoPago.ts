@@ -372,7 +372,7 @@ export const createMultiPartnerOrder = async (
   cartItems: any[],
   customerInfo: any,
   shippingAddress: string,
-  shippingCost: number = 500
+  totalShippingCost: number
 ): Promise<{ orders: any[], paymentPreferences: any[] }> => {
   try {
     console.log('Creating multi-partner order with marketplace split...');
@@ -385,13 +385,13 @@ export const createMultiPartnerOrder = async (
     
     // Calculate totals for the unified order
     const itemsSubtotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const totalAmount = itemsSubtotal + shippingCost;
+    const totalAmount = itemsSubtotal + totalShippingCost;
     const commissionAmount = totalAmount * 0.05; // 5% commission
     const partnerAmount = totalAmount - commissionAmount;
 
     console.log('Unified order totals:', {
       itemsSubtotal,
-      shippingCost,
+      shippingCost: totalShippingCost,
       totalAmount,
       commission: commissionAmount,
       partner_amount: partnerAmount
@@ -437,7 +437,7 @@ export const createMultiPartnerOrder = async (
         }, {}),
         total_partners: [...new Set(cartItems.map(item => item.partnerId))].length,
         commission_split: commissionAmount,
-        shipping_cost: shippingCost
+        shipping_cost: totalShippingCost
       }
     };
 
@@ -480,7 +480,7 @@ export const createMultiPartnerOrder = async (
       customerInfo,
       primaryPartnerConfig,
       totalAmount,
-      shippingCost,
+      totalShippingCost,
       shippingAddress
     );
 
