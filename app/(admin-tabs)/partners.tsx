@@ -74,7 +74,17 @@ export default function AdminPartners() {
       console.log('Fetching partners...');
       const { data, error } = await supabaseClient
         .from('partners')
-        .select('id, user_id, business_name, business_type, commission_percentage, is_verified, is_active, created_at, updated_at')
+        .select(`
+          id, 
+          user_id, 
+          business_name, 
+          business_type, 
+          commission_percentage, 
+          is_verified, 
+          is_active, 
+          created_at, 
+          updated_at
+        `)
         .eq('is_verified', true)
         .order('created_at', { ascending: false });
 
@@ -84,15 +94,46 @@ export default function AdminPartners() {
       }
 
       console.log('Partners data:', data?.length || 0, 'records found');
-      const partnersData = data?.map(partner => ({
+      
+      // Fetch services count for each partner
+      const partnersWithServices = await Promise.all(
+        (data || []).map(async (partner) => {
+          try {
+            // Count services for this partner
+            const { count: servicesCount, error: servicesError } = await supabaseClient
+              .from('partner_services')
+              .select('*', { count: 'exact', head: true })
+              .eq('partner_id', partner.id)
+              .eq('is_active', true);
+            
+            if (servicesError) {
+              console.error(`Error counting services for partner ${partner.id}:`, servicesError);
+            }
+            
+            return {
+              ...partner,
+              servicesCount: servicesCount || 0
+            };
+          } catch (error) {
+            console.error(`Error processing partner ${partner.id}:`, error);
+            return {
+              ...partner,
+              servicesCount: 0
+            };
+          }
+        })
+      );
+      
+      const partnersData = partnersWithServices.map(partner => ({
         ...partner,
         isVerified: partner.is_verified,
         businessName: partner.business_name,
         businessType: partner.business_type,
         commissionPercentage: partner.commission_percentage || 5.0,
+        servicesCount: partner.servicesCount || 0,
         createdAt: new Date(partner.created_at),
         updatedAt: partner.updated_at ? new Date(partner.updated_at) : null,
-      })) || [];
+      }));
 
       setPartners(partnersData);
       setFilteredPartners(partnersData);
@@ -264,7 +305,7 @@ export default function AdminPartners() {
                 <View style={styles.partnerStat}>
                   <Package size={16} color="#6B7280" />
                   <Text style={styles.partnerStatText}>
-                    {partner.servicesCount || 0} servicios
+                    {partner.servicesCount || 0} servicio{partner.servicesCount !== 1 ? 's' : ''}
                   </Text>
                 </View>
                 <View style={styles.partnerStat}>
