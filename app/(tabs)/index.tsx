@@ -231,9 +231,9 @@ export default function Home() {
           onRefresh={() => fetchPosts(true)}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>¡Aún no hay publicaciones!</Text>
+              <Text style={styles.emptyTitle}>{t('noPostsYet')}</Text>
               <Text style={styles.emptySubtitle}>
-                Sé el primero en compartir algo sobre tu mascota
+                {t('beFirstToPost')}
               </Text>
             </View>
           }

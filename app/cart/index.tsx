@@ -231,19 +231,19 @@ export default function Cart() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.title}>Mi Carrito</Text>
+        <Text style={styles.title}>{t('myCart')}</Text>
         <View style={styles.placeholder} />
       </View>
 
       {cart.length === 0 ? (
         <View style={styles.emptyContainer}>
           <ShoppingCart size={64} color="#9CA3AF" />
-          <Text style={styles.emptyTitle}>Tu carrito está vacío</Text>
+          <Text style={styles.emptyTitle}>{t('cartEmpty')}</Text>
           <Text style={styles.emptySubtitle}>
-            Agrega productos de la tienda para comenzar tu compra
+            {t('cartEmptySubtitle')}
           </Text>
           <Button
-            title="Ir a la Tienda"
+            title={t('goToShop')}
             onPress={() => router.push('/(tabs)/shop')}
             size="large"
           />
@@ -301,9 +301,9 @@ export default function Cart() {
 
           {/* Shipping Address */}
           <Card style={styles.shippingCard}>
-            <Text style={styles.sectionTitle}>Dirección de Envío</Text>
+            <Text style={styles.sectionTitle}>{t('shippingAddress')}</Text>
             <Input
-              placeholder="Ingresa tu dirección completa"
+              placeholder={t('enterCompleteAddress')}
               value={shippingAddress}
               onChangeText={setShippingAddress}
               multiline
@@ -313,22 +313,22 @@ export default function Cart() {
 
           {/* Order Summary */}
           <Card style={styles.summaryCard}>
-            <Text style={styles.sectionTitle}>Resumen del Pedido</Text>
+            <Text style={styles.sectionTitle}>{t('orderSummary')}</Text>
             
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Subtotal ({cart.length} productos)</Text>
+              <Text style={styles.summaryLabel}>{t('subtotal')} ({cart.length} {t('products')})</Text>
               <Text style={styles.summaryValue}>{formatCurrency(getCartTotal())}</Text>
             </View>
             
             {/* Shipping breakdown by store */}
             {Object.keys(partnerShippingInfo).length > 0 && (
               <View style={styles.shippingBreakdown}>
-                <Text style={styles.shippingBreakdownTitle}>Envío por tienda:</Text>
+                <Text style={styles.shippingBreakdownTitle}>{t('shippingByStore')}:</Text>
                 {Object.entries(partnerShippingInfo).map(([partnerId, info]) => (
                   <View key={partnerId} style={styles.shippingRow}>
                     <Text style={styles.shippingStoreLabel}>{info.name}</Text>
                     <Text style={styles.shippingStoreValue}>
-                      {info.hasShipping ? formatCurrency(info.cost) : 'Sin envío'}
+                      {info.hasShipping ? formatCurrency(info.cost) : t('noShipping')}
                     </Text>
                   </View>
                 ))}
@@ -336,16 +336,16 @@ export default function Cart() {
             )}
             
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Envío</Text>
+              <Text style={styles.summaryLabel}>{t('shipping')}</Text>
               <Text style={styles.summaryValue}>
-                {loadingShipping ? 'Calculando...' : formatCurrency(calculateShipping())}
+                {loadingShipping ? t('calculating') + '...' : formatCurrency(calculateShipping())}
               </Text>
             </View>
             
             <View style={styles.divider} />
             
             <View style={styles.summaryRow}>
-              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalLabel}>{t('total')}</Text>
               <Text style={styles.totalValue}>{formatCurrency(calculateTotal())}</Text>
             </View>
           </Card>
@@ -353,7 +353,7 @@ export default function Cart() {
           {/* Checkout Button */}
           <View style={styles.checkoutContainer}>
             <Button
-              title="Pagar con Mercado Pago"
+              title={t('payWithMercadoPago')}
               onPress={handleMercadoPagoCheckout}
               loading={loading}
               size="large"
