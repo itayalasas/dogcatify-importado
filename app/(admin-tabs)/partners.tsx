@@ -20,7 +20,6 @@ interface Subscription {
 export default function AdminPartners() {
   const { currentUser } = useAuth();
   const [partners, setPartners] = useState<any[]>([]);
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showCommissionModal, setShowCommissionModal] = useState(false);
   const [selectedPartner, setSelectedPartner] = useState<any>(null);
@@ -52,7 +51,6 @@ export default function AdminPartners() {
 
     console.log('Fetching admin partners data...');
     fetchPartners();
-    fetchSubscriptions();
   }, [currentUser]);
 
   const fetchPartners = async () => {
@@ -99,84 +97,6 @@ export default function AdminPartners() {
       };
     } catch (error) {
       console.error('Error fetching partners:', error);
-    }
-  };
-
-  const fetchSubscriptions = async () => {
-    try {
-      const { data, error } = await supabaseClient
-        .from('subscriptions')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const subscriptionsData = data?.map(sub => ({
-        ...sub,
-        isActive: sub.is_active,
-        createdAt: new Date(sub.created_at),
-      })) as Subscription[] || [];
-
-      setSubscriptions(subscriptionsData);
-
-      // Set up real-time subscription
-      const channel = supabaseClient
-        .channel('subscriptions-changes')
-        .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'subscriptions' }, 
-          async () => {
-            // Re-fetch data when changes occur
-            fetchSubscriptions();
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabaseClient.removeChannel(channel);
-      };
-    } catch (error) {
-      console.error('Error fetching subscriptions:', error);
-    }
-  };
-
-  const handleCreateSubscription = async () => {
-    if (!subName || !subPrice || !subDuration || !subCommission) {
-      Alert.alert('Error', 'Por favor completa todos los campos');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const subscriptionData = {
-        name: subName.trim(),
-        price: parseFloat(subPrice),
-        duration: parseInt(subDuration),
-        features: subFeatures.split('\n').filter(f => f.trim()),
-        commission: parseFloat(subCommission),
-        is_active: true,
-        created_at: new Date().toISOString(),
-      };
-
-      const { error } = await supabaseClient
-        .from('subscriptions')
-        .insert([subscriptionData]);
-
-      if (error) throw error;
-      
-      // Reset form
-      setSubName('');
-      setSubPrice('');
-      setSubDuration('');
-      setSubFeatures('');
-      setSubCommission('');
-      setShowSubscriptionModal(false);
-      
-      Alert.alert('Éxito', 'Suscripción creada correctamente');
-    } catch (error) {
-      console.error('Error creating subscription:', error);
-      Alert.alert('Error', 'No se pudo crear la suscripción');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -253,49 +173,10 @@ export default function AdminPartners() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>👥 Gestión de Aliados</Text>
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={() => setShowSubscriptionModal(true)}
-        >
-          <Plus size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <View style={styles.placeholder} />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Subscriptions Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>💳 Planes de Suscripción</Text>
-          
-          {subscriptions.length === 0 ? (
-            <Card style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>No hay planes creados</Text>
-              <Text style={styles.emptySubtitle}>
-                Crea planes de suscripción para tus aliados
-              </Text>
-            </Card>
-          ) : (
-            subscriptions.map((subscription) => (
-              <Card key={subscription.id} style={styles.subscriptionCard}>
-                <View style={styles.subscriptionHeader}>
-                  <Text style={styles.subscriptionName}>{subscription.name}</Text>
-                  <Text style={styles.subscriptionPrice}>
-                    ${subscription.price.toLocaleString()}/{subscription.duration}d
-                  </Text>
-                </View>
-                
-                <View style={styles.subscriptionDetails}>
-                  <Text style={styles.subscriptionCommission}>
-                    Comisión: {subscription.commission}%
-                  </Text>
-                  <Text style={styles.subscriptionFeatures}>
-                    {subscription.features.length} características incluidas
-                  </Text>
-                </View>
-              </Card>
-            ))
-          )}
-        </View>
-
         {/* Partners Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>🤝 Aliados Activos ({partners.length})</Text>
@@ -349,78 +230,6 @@ export default function AdminPartners() {
         </View>
       </ScrollView>
 
-      {/* Subscription Modal */}
-      <Modal
-        visible={showSubscriptionModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowSubscriptionModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Crear Plan de Suscripción</Text>
-            
-            <Input
-              label="Nombre del plan"
-              placeholder="Ej: Plan Básico, Plan Premium"
-              value={subName}
-              onChangeText={setSubName}
-            />
-            
-            <Input
-              label="Precio"
-              placeholder="0.00"
-              value={subPrice}
-              onChangeText={setSubPrice}
-              keyboardType="numeric"
-              leftIcon={<DollarSign size={20} color="#6B7280" />}
-            />
-            
-            <Input
-              label="Duración (días)"
-              placeholder="30"
-              value={subDuration}
-              onChangeText={setSubDuration}
-              keyboardType="numeric"
-              leftIcon={<Calendar size={20} color="#6B7280" />}
-            />
-            
-            <Input
-              label="Comisión (%)"
-              placeholder="5.0"
-              value={subCommission}
-              onChangeText={setSubCommission}
-              keyboardType="numeric"
-              leftIcon={<Percent size={20} color="#6B7280" />}
-            />
-            
-            <Input
-              label="Características (una por línea)"
-              placeholder="Publicaciones ilimitadas&#10;Soporte prioritario&#10;Estadísticas avanzadas"
-              value={subFeatures}
-              onChangeText={setSubFeatures}
-              multiline
-              numberOfLines={4}
-            />
-            
-            <View style={styles.modalActions}>
-              <Button
-                title="Cancelar"
-                onPress={() => setShowSubscriptionModal(false)}
-                variant="outline"
-                size="medium"
-              />
-              <Button
-                title="Crear Plan"
-                onPress={handleCreateSubscription}
-                loading={loading}
-                size="medium"
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       {/* Commission Modal */}
       <Modal
         visible={showCommissionModal}
@@ -428,7 +237,7 @@ export default function AdminPartners() {
         animationType="slide"
         onRequestClose={() => setShowCommissionModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View style={styles.commissionModalOverlay}>
           <View style={styles.commissionModalContent}>
             <Text style={styles.modalTitle}>
               Actualizar Comisión - {selectedPartner?.businessName}
@@ -499,6 +308,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#DC2626',
     padding: 8,
     borderRadius: 20,
+  },
+  placeholder: {
+    width: 32,
   },
   content: {
     flex: 1,
@@ -631,6 +443,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  commissionModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 60,
+  },
   modalContent: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -642,9 +462,10 @@ const styles = StyleSheet.create({
   commissionModalContent: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    padding: 24,
-    width: '90%',
+    padding: 20,
+    width: '100%',
     maxWidth: 400,
+    maxHeight: '70%',
   },
   commissionInfo: {
     backgroundColor: '#F3F4F6',
@@ -673,7 +494,7 @@ const styles = StyleSheet.create({
   commissionModalActions: {
     flexDirection: 'column',
     gap: 12,
-    marginTop: 24,
+    marginTop: 20,
   },
   accessDenied: {
     flex: 1,
