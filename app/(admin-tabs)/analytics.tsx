@@ -159,6 +159,8 @@ export default function AdminAnalytics() {
           console.error('Admin override query exception:', adminError);
         }
       }
+      
+      if (ordersError) {
         console.error('Error fetching orders:', ordersError);
       } else {
         console.log('Orders data fetched successfully:', ordersData?.length || 0, 'orders');
