@@ -364,6 +364,7 @@ export default function Cart() {
       )}
     </SafeAreaView>
   );
+}
 
 const styles = StyleSheet.create({
   container: {
