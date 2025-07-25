@@ -130,6 +130,7 @@ const translations = {
     selectTime: 'Selecciona una hora',
     bookingNotes: 'Notas para el proveedor',
     confirmBooking: 'Confirmar reserva',
+    signInToViewServices: 'Debes iniciar sesión para ver los servicios disponibles',
     
     // Profile
     editProfile: 'Editar perfil',
@@ -159,6 +160,18 @@ const translations = {
     bioLabel: 'Biografía',
     saveChanges: 'Guardar cambios',
     profileUpdated: 'Perfil actualizado correctamente',
+    adminMode: 'Modo Administrador',
+    goToAdmin: 'Ir a Admin',
+    pendingVerification: 'Pendiente de verificación',
+    noBusinessRegistered: 'Sin negocio registrado',
+    adminModeDescription: 'Accede al panel de administración para gestionar la plataforma.',
+    requestUnderReview: 'Tu solicitud está siendo revisada por un administrador.',
+    canRegisterBusiness: 'Puedes registrar uno o más negocios para ofrecer servicios a otros dueños de mascotas',
+    enterCompleteAddress: 'Ingresa tu dirección completa',
+    products: 'productos',
+    shippingByStore: 'Envío por tienda',
+    noShipping: 'Sin envío',
+    calculating: 'Calculando',
     
     // Orders
     orders: 'Pedidos',
@@ -388,6 +401,7 @@ const translations = {
     selectTime: 'Select a time',
     bookingNotes: 'Notes for provider',
     confirmBooking: 'Confirm booking',
+    signInToViewServices: 'You must sign in to view available services',
     
     // Profile
     editProfile: 'Edit Profile',
@@ -417,6 +431,18 @@ const translations = {
     bioLabel: 'Biography',
     saveChanges: 'Save changes',
     profileUpdated: 'Profile updated successfully',
+    adminMode: 'Admin Mode',
+    goToAdmin: 'Go to Admin',
+    pendingVerification: 'Pending verification',
+    noBusinessRegistered: 'No business registered',
+    adminModeDescription: 'Access the admin panel to manage the platform.',
+    requestUnderReview: 'Your request is being reviewed by an administrator.',
+    canRegisterBusiness: 'You can register one or more businesses to offer services to other pet owners',
+    enterCompleteAddress: 'Enter your complete address',
+    products: 'products',
+    shippingByStore: 'Shipping by store',
+    noShipping: 'No shipping',
+    calculating: 'Calculating',
     
     // Orders
     orders: 'Orders',
