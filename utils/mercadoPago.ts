@@ -383,142 +383,112 @@ export const createMultiPartnerOrder = async (
       partnerName: item.partnerName
     })));
     
-    // Group cart items by partner
-    const itemsByPartner = cartItems.reduce((acc, item) => {
-      const partnerId = item.partnerId;
-      if (!partnerId) {
-        console.error('Cart item missing partnerId:', item);
-        throw new Error(`Cart item "${item.name}" is missing partner information`);
-      }
-      if (!acc[partnerId]) {
-        acc[partnerId] = [];
-      }
-      acc[partnerId].push(item);
-      return acc;
-    }, {} as Record<string, any[]>);
+    // Calculate totals for the unified order
+    const itemsSubtotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const totalAmount = itemsSubtotal + shippingCost;
+    const commissionAmount = totalAmount * 0.05; // 5% commission
+    const partnerAmount = totalAmount - commissionAmount;
 
-    console.log('Items grouped by partner:', Object.keys(itemsByPartner).map(partnerId => ({
-      partnerId,
-      itemCount: itemsByPartner[partnerId].length,
-      items: itemsByPartner[partnerId].map(item => item.name)
-    })));
+    console.log('Unified order totals:', {
+      itemsSubtotal,
+      shippingCost,
+      totalAmount,
+      commission: commissionAmount,
+      partner_amount: partnerAmount
+    });
 
-    const orders: any[] = [];
-    const paymentPreferences: any[] = [];
+    // Create a single unified order with all items
+    const unifiedOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     
-    // Check if we have multiple partners
-    const partnerIds = Object.keys(itemsByPartner);
-    const isMultiPartner = partnerIds.length > 1;
+    // Use the first partner as the primary partner for the unified order
+    const primaryPartnerId = cartItems[0].partnerId;
     
-    console.log(`Processing ${partnerIds.length} partner(s), multi-partner: ${isMultiPartner}`);
-
-    // Process each partner's items
-    for (const [partnerId, items] of Object.entries(itemsByPartner)) {
-      try {
-        console.log(`Processing partner ${partnerId} with ${items.length} items`);
-        console.log(`Items for partner ${partnerId}:`, items.map(item => item.name));
-
-        // Get partner's Mercado Pago configuration
-        const partnerConfig = await getPartnerMercadoPagoConfig(partnerId);
-        
-        if (!partnerConfig.access_token) {
-          throw new Error(`Partner ${partnerId} doesn't have Mercado Pago configured`);
+    const unifiedOrder = {
+      id: unifiedOrderId,
+      partner_id: primaryPartnerId, // Primary partner
+      customer_id: customerInfo.id,
+      items: cartItems, // All items from all partners
+      total_amount: totalAmount,
+      commission_amount: commissionAmount,
+      partner_amount: partnerAmount,
+      shipping_address: shippingAddress,
+      payment_method: 'mercadopago',
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      // Add metadata about multiple partners
+      partner_breakdown: cartItems.reduce((acc, item) => {
+        const partnerId = item.partnerId;
+        if (!acc[partnerId]) {
+          acc[partnerId] = {
+            partner_name: item.partnerName,
+            items: [],
+            subtotal: 0
+          };
         }
+        acc[partnerId].items.push(item);
+        acc[partnerId].subtotal += item.price * item.quantity;
+        return acc;
+      }, {} as Record<string, any>)
+    };
 
-        // Calculate totals
-        const itemsSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-        const totalWithShipping = itemsSubtotal + (isMultiPartner ? 0 : shippingCost); // Only add shipping to single partner
-        const commissionAmount = totalWithShipping * (partnerConfig.commission_percentage / 100);
-        const partnerAmount = totalWithShipping - commissionAmount;
+    // Insert the unified order into database
+    const { error } = await supabaseClient
+      .from('orders')
+      .insert({
+        id: unifiedOrderId,
+        partner_id: primaryPartnerId,
+        customer_id: customerInfo.id,
+        items: cartItems,
+        total_amount: totalAmount,
+        commission_amount: commissionAmount,
+        partner_amount: partnerAmount,
+        shipping_address: shippingAddress,
+        payment_method: 'mercadopago',
+        status: 'pending',
+        created_at: new Date().toISOString()
+      });
 
-        console.log(`Partner ${partnerId} totals:`, {
-          itemsSubtotal,
-          shippingCost: isMultiPartner ? 0 : shippingCost,
-          totalWithShipping,
-          commission: commissionAmount,
-          partner_amount: partnerAmount
-        });
-
-        // Create order in database
-        const order = await createOrder(
-          partnerId,
-          customerInfo,
-          items,
-          totalWithShipping,
-          commissionAmount,
-          partnerAmount,
-          shippingAddress
-        );
-
-        console.log(`Order created for partner ${partnerId}:`, order.id);
-
-        orders.push(order);
-
-      } catch (partnerError) {
-        console.error(`Error processing partner ${partnerId}:`, partnerError);
-        throw new Error(`Failed to process order for partner ${partnerId}: ${partnerError.message}`);
-      }
+    if (error) {
+      console.error('Error creating unified order:', error);
+      throw error;
     }
+
+    console.log('Unified order created:', unifiedOrderId);
+
+    // Get primary partner's Mercado Pago configuration
+    const primaryPartnerConfig = await getPartnerMercadoPagoConfig(primaryPartnerId);
     
-    // Create a single payment preference for all partners (marketplace split)
-    if (isMultiPartner) {
-      console.log('Creating marketplace payment preference for multiple partners...');
-      
-      // Combine all items for the marketplace payment
-      const allItems = cartItems;
-      const totalAmount = allItems.reduce((sum, item) => sum + (item.price * item.quantity), 0) + shippingCost;
-      
-      // Use the first partner's config as the primary (marketplace will handle splits)
-      const primaryPartnerId = partnerIds[0];
-      const primaryPartnerConfig = await getPartnerMercadoPagoConfig(primaryPartnerId);
-      
-      const marketplacePreference = await createMarketplacePaymentPreference(
-        orders,
-        allItems,
-        customerInfo,
-        primaryPartnerConfig,
-        totalAmount,
-        shippingCost,
-        shippingAddress
-      );
-      
-      paymentPreferences.push(marketplacePreference);
-    } else {
-      // Single partner - create normal payment preference
-      const partnerId = partnerIds[0];
-      const partnerConfig = await getPartnerMercadoPagoConfig(partnerId);
-      const order = orders[0];
-      
-      const preference = await createPaymentPreference(
-        order.id,
-        cartItems,
-        customerInfo,
-        partnerConfig,
-        order.commission_amount,
-        order.partner_amount,
-        shippingCost
-      );
-      
-      paymentPreferences.push(preference);
-    }
+    // Create a single payment preference for the unified order
+    const preference = await createUnifiedPaymentPreference(
+      unifiedOrderId,
+      cartItems,
+      customerInfo,
+      primaryPartnerConfig,
+      totalAmount,
+      shippingCost,
+      shippingAddress
+    );
 
-    console.log(`Successfully created ${orders.length} orders and ${paymentPreferences.length} payment preferences`);
+    console.log('Unified payment preference created:', preference.id);
+
+    const orders = [unifiedOrder];
+    const paymentPreferences = [preference];
 
     return { orders, paymentPreferences };
   } catch (error) {
-    console.error('Error creating multi-partner order:', error);
+    console.error('Error creating unified order:', error);
     throw error;
   }
 };
 
 /**
- * Create marketplace payment preference for multiple partners
+ * Create unified payment preference for all items (single invoice)
  */
-export const createMarketplacePaymentPreference = async (
-  orders: any[],
+export const createUnifiedPaymentPreference = async (
+  orderId: string,
   allItems: any[],
   customerInfo: any,
-  primaryPartnerConfig: any,
+  partnerConfig: any,
   totalAmount: number,
   shippingCost: number,
   shippingAddress: string
@@ -526,15 +496,12 @@ export const createMarketplacePaymentPreference = async (
   try {
     const marketplaceAccessToken = await getMarketplaceAccessToken();
     
-    // Create combined external reference
-    const combinedOrderIds = orders.map(o => o.id).join(',');
-    
-    console.log('Creating marketplace preference with split for orders:', combinedOrderIds);
-    console.log('Primary partner config:', {
-      user_id: primaryPartnerConfig.user_id,
-      account_id: primaryPartnerConfig.account_id,
-      is_oauth: primaryPartnerConfig.is_oauth,
-      business_name: primaryPartnerConfig.business_name
+    console.log('Creating unified payment preference for order:', orderId);
+    console.log('Partner config:', {
+      user_id: partnerConfig.user_id,
+      account_id: partnerConfig.account_id,
+      is_oauth: partnerConfig.is_oauth,
+      business_name: partnerConfig.business_name
     });
     
     const preferenceData = {
@@ -560,83 +527,79 @@ export const createMarketplacePaymentPreference = async (
         }
       },
       back_urls: {
-        success: `${process.env.EXPO_PUBLIC_APP_URL || 'https://dogcatify.com'}/payment/success?order_id=${combinedOrderIds}`,
-        failure: `${process.env.EXPO_PUBLIC_APP_URL || 'https://dogcatify.com'}/payment/failure?order_id=${combinedOrderIds}`,
-        pending: `${process.env.EXPO_PUBLIC_APP_URL || 'https://dogcatify.com'}/payment/pending?order_id=${combinedOrderIds}`
+        success: `${process.env.EXPO_PUBLIC_APP_URL || 'https://dogcatify.com'}/payment/success?order_id=${orderId}`,
+        failure: `${process.env.EXPO_PUBLIC_APP_URL || 'https://dogcatify.com'}/payment/failure?order_id=${orderId}`,
+        pending: `${process.env.EXPO_PUBLIC_APP_URL || 'https://dogcatify.com'}/payment/pending?order_id=${orderId}`
       },
       auto_return: 'approved',
-      external_reference: combinedOrderIds,
+      external_reference: orderId,
       notification_url: `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/mercadopago-webhook`,
       marketplace: 'DogCatiFy',
       statement_descriptor: 'DOGCATIFY'
     };
     
-    // Para configuraciones manuales (no OAuth), no usar marketplace split
-    // Solo usar marketplace split si tenemos configuración OAuth válida
-    const hasValidOAuthConfig = primaryPartnerConfig.is_oauth && 
-                               primaryPartnerConfig.user_id && 
-                               !isNaN(parseInt(primaryPartnerConfig.user_id));
+    // Para configuraciones manuales, no usar marketplace split automático
+    const hasValidOAuthConfig = partnerConfig.is_oauth && 
+                               partnerConfig.user_id && 
+                               !isNaN(parseInt(partnerConfig.user_id || ''));
     
     console.log('OAuth config validation:', {
-      is_oauth: primaryPartnerConfig.is_oauth,
-      has_user_id: !!primaryPartnerConfig.user_id,
-      user_id_is_number: !isNaN(parseInt(primaryPartnerConfig.user_id || '')),
+      is_oauth: partnerConfig.is_oauth,
+      has_user_id: !!partnerConfig.user_id,
+      user_id_is_number: !isNaN(parseInt(partnerConfig.user_id || '')),
       hasValidOAuthConfig
     });
     
     if (hasValidOAuthConfig) {
-      // Solo para configuraciones OAuth - usar marketplace split
-      const totalCommission = orders.reduce((sum, order) => sum + (order.commission_amount || 0), 0);
-      preferenceData.marketplace_fee = totalCommission;
-      preferenceData.collector_id = parseInt(primaryPartnerConfig.user_id);
+      // Solo para configuraciones OAuth - usar marketplace split automático
+      const commissionAmount = totalAmount * 0.05; // 5% commission
+      preferenceData.marketplace_fee = commissionAmount;
+      preferenceData.collector_id = parseInt(partnerConfig.user_id);
       
       console.log('Using OAuth marketplace split:', {
-        collector_id: primaryPartnerConfig.user_id,
-        marketplace_fee: totalCommission
+        collector_id: partnerConfig.user_id,
+        marketplace_fee: commissionAmount
       });
     } else {
-      // Para configuraciones manuales - pago directo sin split automático
-      console.log('Using manual configuration - no automatic marketplace split');
-      // El split se manejará manualmente en el webhook
+      console.log('Using manual configuration - unified payment without automatic split');
     }
     
-    // Agregar información adicional para el envío
+    // Información adicional del pedido
     preferenceData.additional_info = {
-      // Marketplace configuration for automatic splits
-        items: allItems.map(item => ({
-          id: item.id,
-          title: item.name,
-          description: `Producto de ${item.partnerName}`,
-          picture_url: item.image,
-          category_id: 'pets',
-          quantity: item.quantity,
-          unit_price: item.price
-        })),
-        payer: {
-          first_name: customerInfo.displayName?.split(' ')[0] || 'Cliente',
-          last_name: customerInfo.displayName?.split(' ').slice(1).join(' ') || '',
-          phone: {
-            area_code: '11',
-            number: customerInfo.phone || '1234567890'
-          },
-          address: {
-            street_name: shippingAddress || 'No especificada',
-            street_number: '',
-            zip_code: ''
-          }
+      items: allItems.map(item => ({
+        id: item.id,
+        title: item.name,
+        description: `Producto de ${item.partnerName}`,
+        picture_url: item.image,
+        category_id: 'pets',
+        quantity: item.quantity,
+        unit_price: item.price
+      })),
+      payer: {
+        first_name: customerInfo.displayName?.split(' ')[0] || 'Cliente',
+        last_name: customerInfo.displayName?.split(' ').slice(1).join(' ') || '',
+        phone: {
+          area_code: '11',
+          number: customerInfo.phone || '1234567890'
         },
-        shipments: {
-          receiver_address: {
-            street_name: shippingAddress,
-            street_number: '',
-            zip_code: '',
-            city_name: 'Ciudad',
-            state_name: 'Provincia'
-          }
+        address: {
+          street_name: shippingAddress || 'No especificada',
+          street_number: '',
+          zip_code: ''
         }
+      },
+      shipments: {
+        receiver_address: {
+          street_name: shippingAddress,
+          street_number: '',
+          zip_code: '',
+          city_name: 'Ciudad',
+          state_name: 'Provincia'
+        }
+      }
     };
     
-    console.log('Final preference data:', {
+    console.log('Final unified preference data:', {
       items_count: preferenceData.items.length,
       total_amount: totalAmount,
       has_marketplace_fee: !!preferenceData.marketplace_fee,
@@ -655,32 +618,30 @@ export const createMarketplacePaymentPreference = async (
 
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('Mercado Pago marketplace API error:', errorData);
-      throw new Error(`Failed to create marketplace payment preference: ${errorData.message || response.statusText}`);
+      console.error('Mercado Pago unified API error:', errorData);
+      throw new Error(`Failed to create unified payment preference: ${errorData.message || response.statusText}`);
     }
 
     const preference = await response.json();
     
-    console.log('Payment preference created successfully:', {
+    console.log('Unified payment preference created successfully:', {
       id: preference.id,
       init_point: preference.init_point,
       sandbox_init_point: preference.sandbox_init_point
     });
     
-    // Update all orders with the same payment preference ID
-    for (const order of orders) {
-      await supabaseClient
-        .from('orders')
-        .update({
-          payment_preference_id: preference.id,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', order.id);
-    }
+    // Update the unified order with payment preference ID
+    await supabaseClient
+      .from('orders')
+      .update({
+        payment_preference_id: preference.id,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', orderId);
 
     return preference;
   } catch (error) {
-    console.error('Error creating marketplace payment preference:', error);
+    console.error('Error creating unified payment preference:', error);
     throw error;
   }
 };

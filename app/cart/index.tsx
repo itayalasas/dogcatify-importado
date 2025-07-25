@@ -170,62 +170,33 @@ export default function Cart() {
       console.log('Orders created:', orders.length);
       console.log('Payment preferences created:', paymentPreferences.length);
 
-      // Group partners by their Mercado Pago configuration
-      const partnersByConfig = new Map();
+      // Get unique partner names for display
+      const uniquePartners = [...new Set(validatedItems.map(item => item.partnerName))];
       
-      for (const order of orders) {
-        const partnerId = order.partner_id;
-        if (!partnersByConfig.has(partnerId)) {
-          partnersByConfig.set(partnerId, []);
-        }
-        partnersByConfig.get(partnerId).push(order);
-      }
+      // Always create a single unified order and payment
+      const preference = paymentPreferences[0];
+      const checkoutUrl = preference.init_point || preference.sandbox_init_point;
       
-      if (partnersByConfig.size === 1) {
-        // Single partner - direct checkout
-        const preference = paymentPreferences[0];
-        const checkoutUrl = preference.init_point || preference.sandbox_init_point;
-        
-        if (checkoutUrl) {
-          clearCart();
-          try {
-            await WebBrowser.openBrowserAsync(checkoutUrl);
-          } catch (browserError) {
-            console.error('Error opening browser:', browserError);
-            Alert.alert('Error', 'No se pudo abrir la página de pago');
-          }
-        } else {
-          throw new Error('No se pudo obtener la URL de pago');
-        }
-      } else {
-        // Multiple partners - marketplace checkout with automatic split
-        const partnerNames = Array.from(partnersByConfig.keys()).map(partnerId => {
-          const order = orders.find(o => o.partner_id === partnerId);
-          return validatedItems.find(item => item.partnerId === partnerId)?.partnerName || 'Tienda';
-        });
-        
-        Alert.alert(
-          'Compra de múltiples tiendas',
-          `Tu carrito contiene productos de ${partnersByConfig.size} tiendas diferentes:\n\n${partnerNames.join('\n')}\n\nSe procesará como una sola compra con distribución automática de pagos.`,
-          [
-            { text: 'Cancelar', style: 'cancel' },
-            { 
-              text: 'Proceder al Pago', 
-              onPress: async () => {
-                console.log('User confirmed multi-partner payment, processing...');
-                // Use the first payment preference (marketplace handles the split)
-                const firstPreference = paymentPreferences[0];
-                console.log('First preference data:', {
-                  id: firstPreference?.id,
-                  init_point: firstPreference?.init_point,
-                  sandbox_init_point: firstPreference?.sandbox_init_point
-                });
-                
-                const checkoutUrl = firstPreference.init_point || firstPreference.sandbox_init_point;
-                console.log('Checkout URL:', checkoutUrl);
-                
-                if (checkoutUrl) {
-                  console.log('Clearing cart and opening browser...');
+      console.log('Unified preference data:', {
+        id: preference?.id,
+        init_point: preference?.init_point,
+        sandbox_init_point: preference?.sandbox_init_point
+      });
+      
+      if (checkoutUrl) {
+        // Show confirmation for multiple stores
+        if (uniquePartners.length > 1) {
+          Alert.alert(
+            'Compra de múltiples tiendas',
+            `Tu carrito contiene productos de ${uniquePartners.length} tiendas diferentes:\n\n${uniquePartners.join('\n')}\n\nSe procesará como una sola compra unificada.`,
+            [
+              { text: 'Cancelar', style: 'cancel' },
+              { 
+                text: 'Proceder al Pago', 
+                onPress: async () => {
+                  console.log('User confirmed unified payment, processing...');
+                  console.log('Checkout URL:', checkoutUrl);
+                  
                   clearCart();
                   try {
                     await WebBrowser.openBrowserAsync(checkoutUrl);
@@ -234,14 +205,25 @@ export default function Cart() {
                     console.error('Error opening browser:', browserError);
                     Alert.alert('Error', 'No se pudo abrir la página de pago');
                   }
-                } else {
-                  console.error('No checkout URL available');
-                  Alert.alert('Error', 'No se pudo generar la preferencia de pago');
                 }
               }
-            }
-          ]
-        );
+            ]
+          );
+        } else {
+          // Single store - direct checkout
+          console.log('Single store checkout, opening browser directly...');
+          clearCart();
+          try {
+            await WebBrowser.openBrowserAsync(checkoutUrl);
+            console.log('Browser opened successfully');
+          } catch (browserError) {
+            console.error('Error opening browser:', browserError);
+            Alert.alert('Error', 'No se pudo abrir la página de pago');
+          }
+        }
+      } else {
+        console.error('No checkout URL available');
+        Alert.alert('Error', 'No se pudo generar la preferencia de pago');
       }
     } catch (error) {
       console.error('Error in Mercado Pago checkout:', error);
