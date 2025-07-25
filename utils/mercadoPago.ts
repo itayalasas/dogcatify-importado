@@ -661,6 +661,12 @@ export const createMarketplacePaymentPreference = async (
 
     const preference = await response.json();
     
+    console.log('Payment preference created successfully:', {
+      id: preference.id,
+      init_point: preference.init_point,
+      sandbox_init_point: preference.sandbox_init_point
+    });
+    
     // Update all orders with the same payment preference ID
     for (const order of orders) {
       await supabaseClient
@@ -672,6 +678,7 @@ export const createMarketplacePaymentPreference = async (
         .eq('id', order.id);
     }
 
+    return preference;
   } catch (error) {
     console.error('Error creating marketplace payment preference:', error);
     throw error;
