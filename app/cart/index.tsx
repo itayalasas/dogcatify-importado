@@ -200,15 +200,6 @@ export default function Cart() {
     } finally {
       setLoading(false);
     }
-    } catch (error) {
-      console.error('Error in Mercado Pago checkout:', error);
-      Alert.alert(
-        'Error en el checkout',
-        error.message || 'No se pudo procesar el pago. Por favor intenta nuevamente.'
-      );
-    } finally {
-      setLoading(false);
-    }
   };
 
   const formatCurrency = (amount: number) => {
