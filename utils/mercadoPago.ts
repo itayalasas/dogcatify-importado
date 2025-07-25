@@ -400,12 +400,11 @@ export const createMultiPartnerOrder = async (
     // Use the first partner as the primary partner for the unified order
     const primaryPartnerId = cartItems[0].partnerId;
     
-    // Generate a unique order ID
-    const unifiedOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    // Generate a UUID for the order (let PostgreSQL generate it)
+    const unifiedOrderId = crypto.randomUUID();
 
     // Prepare order data
     const orderData = {
-      id: unifiedOrderId,
       partner_id: primaryPartnerId,
       customer_id: customerInfo.id,
       items: cartItems,
@@ -443,21 +442,24 @@ export const createMultiPartnerOrder = async (
     };
 
     // Insert the unified order into database
-    const { error } = await supabaseClient
+    const { data: insertedOrder, error } = await supabaseClient
       .from('orders')
-      .insert([orderData]);
+      .insert([orderData])
+      .select()
+      .single();
 
     if (error) {
       console.error('Error creating unified order:', error);
       throw error;
     }
 
-    console.log('Unified order created:', unifiedOrderId);
+    const actualOrderId = insertedOrder?.id || unifiedOrderId;
+    console.log('Unified order created:', actualOrderId);
 
     // Create the unified order object for return
     const unifiedOrder = {
       ...orderData,
-      partnerId: orderData.partner_id,
+      id: actualOrderId,
       customerId: orderData.customer_id,
       totalAmount: orderData.total_amount,
       commissionAmount: orderData.commission_amount,
@@ -472,7 +474,7 @@ export const createMultiPartnerOrder = async (
     
     // Create a single payment preference for the unified order
     const preference = await createUnifiedPaymentPreference(
-      unifiedOrderId,
+      actualOrderId,
       cartItems,
       customerInfo,
       primaryPartnerConfig,
@@ -649,7 +651,7 @@ export const createUnifiedPaymentPreference = async (
         payment_preference_id: preference.id,
         updated_at: new Date().toISOString()
       })
-      .eq('id', orderId);
+      .eq('id', actualOrderId);
 
     return preference;
   } catch (error) {
