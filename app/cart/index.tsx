@@ -135,6 +135,7 @@ export default function Cart() {
     setLoading(true);
     try {
       console.log('Starting Mercado Pago checkout process...');
+      console.log('Shipping address:', shippingAddress);
       console.log('Cart items:', cart.map(item => ({
         id: item.id,
         name: item.name,
