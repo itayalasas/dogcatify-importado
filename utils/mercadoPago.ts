@@ -512,6 +512,139 @@ export const createMultiPartnerOrder = async (
 };
 
 /**
+ * Create marketplace payment preference for multiple partners
+ */
+export const createMarketplacePaymentPreference = async (
+  orders: any[],
+  allItems: any[],
+  customerInfo: any,
+  primaryPartnerConfig: any,
+  totalAmount: number,
+  shippingCost: number
+): Promise<any> => {
+  try {
+    const marketplaceAccessToken = await getMarketplaceAccessToken();
+    
+    // Create combined external reference
+    const combinedOrderIds = orders.map(o => o.id).join(',');
+    
+    console.log('Creating marketplace preference with split for orders:', combinedOrderIds);
+    
+    const preferenceData = {
+      items: allItems.map(item => ({
+        id: item.id,
+        title: item.name,
+        quantity: item.quantity,
+        unit_price: item.price,
+        currency_id: 'ARS'
+      })).concat([{
+        id: 'shipping',
+        title: 'Envío',
+        quantity: 1,
+        unit_price: shippingCost,
+        currency_id: 'ARS'
+      }]),
+      payer: {
+        name: customerInfo.displayName || 'Cliente',
+        email: customerInfo.email,
+        phone: {
+          area_code: '11',
+          number: customerInfo.phone || '1234567890'
+        }
+      },
+      back_urls: {
+        success: `${process.env.EXPO_PUBLIC_APP_URL || 'https://dogcatify.com'}/payment/success?order_id=${combinedOrderIds}`,
+        failure: `${process.env.EXPO_PUBLIC_APP_URL || 'https://dogcatify.com'}/payment/failure?order_id=${combinedOrderIds}`,
+        pending: `${process.env.EXPO_PUBLIC_APP_URL || 'https://dogcatify.com'}/payment/pending?order_id=${combinedOrderIds}`
+      },
+      auto_return: 'approved',
+      external_reference: combinedOrderIds,
+      notification_url: `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/mercadopago-webhook`,
+      marketplace: 'DogCatiFy',
+      statement_descriptor: 'DOGCATIFY',
+      // Marketplace configuration for automatic splits
+      additional_info: {
+        items: allItems.map(item => ({
+          id: item.id,
+          title: item.name,
+          description: `Producto de ${item.partnerName}`,
+          picture_url: item.image,
+          category_id: 'pets',
+          quantity: item.quantity,
+          unit_price: item.price
+        })),
+        payer: {
+          first_name: customerInfo.displayName?.split(' ')[0] || 'Cliente',
+          last_name: customerInfo.displayName?.split(' ').slice(1).join(' ') || '',
+          phone: {
+            area_code: '11',
+            number: customerInfo.phone || '1234567890'
+          },
+          address: {
+            street_name: shippingAddress || 'No especificada',
+            street_number: '',
+            zip_code: ''
+          }
+        },
+        shipments: {
+          receiver_address: {
+            street_name: shippingAddress || 'No especificada',
+            street_number: '',
+            zip_code: '',
+            city_name: 'Ciudad',
+            state_name: 'Provincia'
+          }
+        }
+      }
+    };
+    
+    // Add marketplace fee calculation for multiple partners
+    if (orders.length > 1) {
+      const totalCommission = orders.reduce((sum, order) => sum + (order.commission_amount || 0), 0);
+      preferenceData.marketplace_fee = totalCommission;
+      
+      // Set the primary collector (first partner with OAuth)
+      if (primaryPartnerConfig.user_id && !isNaN(parseInt(primaryPartnerConfig.user_id))) {
+        preferenceData.collector_id = parseInt(primaryPartnerConfig.user_id);
+      }
+    }
+
+    const response = await fetch(`${MP_BASE_URL}/checkout/preferences`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${marketplaceAccessToken}`,
+      },
+      body: JSON.stringify(preferenceData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Mercado Pago marketplace API error:', errorData);
+      throw new Error(`Failed to create marketplace payment preference: ${errorData.message || response.statusText}`);
+    }
+
+    const preference = await response.json();
+    
+    // Update all orders with the same payment preference ID
+    for (const order of orders) {
+      await supabaseClient
+        .from('orders')
+        .update({
+          payment_preference_id: preference.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', order.id);
+    }
+
+    return preference;
+  } catch (error) {
+    console.error('Error creating marketplace payment preference:', error);
+    throw error;
+  }
+};
+
+/**
  * Refresh partner's access token using refresh token
  */
 export const refreshPartnerToken = async (partnerId: string): Promise<string> => {
