@@ -123,7 +123,7 @@ export default function ProductDetail() {
       price: product.price,
       quantity: quantity,
       image: product.images && product.images.length > 0 ? product.images[0] : null,
-      partnerId: product.partnerId,
+      partnerId: product.partner_id,
       partnerName: partnerInfo?.businessName || 'Tienda'
     });
     

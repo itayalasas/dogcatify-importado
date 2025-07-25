@@ -66,8 +66,8 @@ export default function Shop() {
       price: product.price,
       quantity: 1,
       image: product.images && product.images.length > 0 ? product.images[0] : null,
-      partnerId: product.partnerId,
-      partnerName: product.partnerName || 'Tienda'
+      partnerId: product.partner_id,
+      partnerName: product.partner_name || 'Tienda'
     });
     
     Alert.alert('Agregado al carrito', 'El producto se agregó correctamente al carrito');

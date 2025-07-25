@@ -6,11 +6,14 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
+import { createMultiPartnerOrder } from '../../utils/mercadoPago';
+import { Platform } from 'react-native';
 
 export default function Cart() {
   const { currentUser } = useAuth();
   const { cart, updateQuantity, removeFromCart, clearCart } = useCart();
   const [loading, setLoading] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'mercadopago' | 'cash'>('mercadopago');
 
   const handleUpdateQuantity = (itemId: string, delta: number) => {
     const item = cart.find(item => item.id === itemId);
@@ -52,14 +55,88 @@ export default function Cart() {
       return;
     }
     
+    if (!currentUser) {
+      Alert.alert('Iniciar sesión', 'Debes iniciar sesión para realizar la compra');
+      return;
+    }
+    
+    if (selectedPaymentMethod === 'mercadopago') {
+      handleMercadoPagoCheckout();
+    } else {
+      handleCashCheckout();
+    }
+  };
+  
+  const handleMercadoPagoCheckout = async () => {
+    setLoading(true);
+    try {
+      console.log('Starting Mercado Pago checkout process...');
+      
+      // Create orders and payment preferences for each partner
+      const { orders, paymentPreferences } = await createMultiPartnerOrder(
+        cart,
+        currentUser,
+        'Dirección de envío' // You might want to collect this from user
+      );
+      
+      console.log('Orders created:', orders.length);
+      console.log('Payment preferences created:', paymentPreferences.length);
+      
+      // For multiple partners, we'll redirect to the first payment
+      // In a real app, you might want to handle multiple payments differently
+      if (paymentPreferences.length > 0) {
+        const firstPreference = paymentPreferences[0];
+        const paymentUrl = firstPreference.sandbox_init_point || firstPreference.init_point;
+        
+        if (paymentUrl) {
+          // Clear cart before redirecting
+          clearCart();
+          
+          // Redirect to Mercado Pago
+          if (Platform.OS === 'web') {
+            window.open(paymentUrl, '_self');
+          } else {
+            // For mobile, you might want to use WebBrowser
+            Alert.alert(
+              'Redirigiendo a Mercado Pago',
+              'Serás redirigido para completar el pago',
+              [
+                {
+                  text: 'Continuar',
+                  onPress: () => {
+                    // Here you would open the payment URL in a WebView or browser
+                    console.log('Payment URL:', paymentUrl);
+                  }
+                }
+              ]
+            );
+          }
+        } else {
+          throw new Error('No se pudo generar la URL de pago');
+        }
+      } else {
+        throw new Error('No se pudieron crear las preferencias de pago');
+      }
+    } catch (error) {
+      console.error('Error in Mercado Pago checkout:', error);
+      Alert.alert(
+        'Error en el pago',
+        'No se pudo procesar el pago con Mercado Pago. Por favor intenta nuevamente.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleCashCheckout = () => {
     setLoading(true);
     
-    // Simular proceso de pago
+    // Simulate cash payment process
     setTimeout(() => {
       setLoading(false);
       Alert.alert(
         'Pedido realizado',
-        'Tu pedido ha sido procesado correctamente. Recibirás un correo con los detalles.',
+        'Tu pedido ha sido registrado para pago en efectivo. El vendedor se pondrá en contacto contigo.',
         [
           { 
             text: 'OK', 
@@ -196,13 +273,53 @@ export default function Cart() {
             <Card style={styles.paymentCard}>
               <Text style={styles.paymentTitle}>Métodos de Pago</Text>
               
-              <View style={styles.paymentMethod}>
-                <View style={styles.paymentRadio}>
-                  <View style={styles.paymentRadioInner} />
+              <TouchableOpacity 
+                style={[
+                  styles.paymentMethod,
+                  selectedPaymentMethod === 'mercadopago' && styles.selectedPaymentMethod
+                ]}
+                onPress={() => setSelectedPaymentMethod('mercadopago')}
+              >
+                <View style={[
+                  styles.paymentRadio,
+                  selectedPaymentMethod === 'mercadopago' && styles.selectedPaymentRadio
+                ]}>
+                  {selectedPaymentMethod === 'mercadopago' && (
+                    <View style={styles.paymentRadioInner} />
+                  )}
                 </View>
-                <CreditCard size={20} color="#3B82F6" />
-                <Text style={styles.paymentText}>Tarjeta de Crédito/Débito</Text>
-              </View>
+                <View style={styles.paymentMethodContent}>
+                  <CreditCard size={20} color="#00A650" />
+                  <View style={styles.paymentMethodText}>
+                    <Text style={styles.paymentText}>Mercado Pago</Text>
+                    <Text style={styles.paymentSubtext}>Tarjetas, transferencias y más</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[
+                  styles.paymentMethod,
+                  selectedPaymentMethod === 'cash' && styles.selectedPaymentMethod
+                ]}
+                onPress={() => setSelectedPaymentMethod('cash')}
+              >
+                <View style={[
+                  styles.paymentRadio,
+                  selectedPaymentMethod === 'cash' && styles.selectedPaymentRadio
+                ]}>
+                  {selectedPaymentMethod === 'cash' && (
+                    <View style={styles.paymentRadioInner} />
+                  )}
+                </View>
+                <View style={styles.paymentMethodContent}>
+                  <Text style={styles.cashIcon}>💵</Text>
+                  <View style={styles.paymentMethodText}>
+                    <Text style={styles.paymentText}>Efectivo</Text>
+                    <Text style={styles.paymentSubtext}>Pago al recibir el producto</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
             </Card>
             
             {/* Checkout Button */}
@@ -390,17 +507,29 @@ const styles = StyleSheet.create({
   paymentMethod: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    marginBottom: 12,
+  },
+  selectedPaymentMethod: {
+    borderColor: '#3B82F6',
+    backgroundColor: '#F0F9FF',
   },
   paymentRadio: {
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#3B82F6',
+    borderColor: '#D1D5DB',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
+  },
+  selectedPaymentRadio: {
+    borderColor: '#3B82F6',
   },
   paymentRadioInner: {
     width: 10,
@@ -408,11 +537,28 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: '#3B82F6',
   },
+  paymentMethodContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  paymentMethodText: {
+    marginLeft: 12,
+    flex: 1,
+  },
   paymentText: {
-    fontSize: 14,
+    fontSize: 16,
     fontFamily: 'Inter-Medium',
     color: '#111827',
-    marginLeft: 8,
+  },
+  paymentSubtext: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  cashIcon: {
+    fontSize: 20,
   },
   checkoutContainer: {
     marginBottom: 32,
