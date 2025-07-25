@@ -334,7 +334,7 @@ export default function AdminAnalytics() {
                 <View style={styles.commissionStat}>
                   <Text style={styles.commissionStatLabel}>Pagado a aliados</Text>
                   <Text style={styles.commissionStatValue}>
-                    {formatCurrency(analytics.totalRevenue - analytics.totalCommissions)}
+                    {formatCurrency(analytics.totalPartnerPayments)}
                   </Text>
                 </View>
               </View>
