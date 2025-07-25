@@ -190,7 +190,7 @@ export default function AdminPartners() {
       const { error } = await supabaseClient
         .from('partners')
         .update({
-        commission: parseFloat(newCommission),
+        commission_percentage: parseFloat(newCommission),
         updated_at: new Date().toISOString(),
       })
         .eq('id', selectedPartner.id);
@@ -318,13 +318,13 @@ export default function AdminPartners() {
                   style={styles.commissionButton}
                   onPress={() => {
                     setSelectedPartner(partner);
-                    setNewCommission(partner.commission?.toString() || '');
+                    setNewCommission(partner.commission_percentage?.toString() || '5.0');
                     setShowCommissionModal(true);
                   }}
                 >
                   <Percent size={16} color="#3B82F6" />
                   <Text style={styles.commissionButtonText}>
-                    {partner.commission || 0}%
+                    {partner.commission_percentage || 5.0}%
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -616,9 +616,10 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     paddingHorizontal: 20,
+    paddingBottom: 40,
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
@@ -626,7 +627,8 @@ const styles = StyleSheet.create({
     padding: 20,
     width: '100%',
     maxWidth: 400,
-    maxHeight: '80%',
+    maxHeight: '60%',
+    marginBottom: 20,
   },
   modalTitle: {
     fontSize: 18,
