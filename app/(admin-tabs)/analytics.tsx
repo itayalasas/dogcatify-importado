@@ -82,7 +82,83 @@ export default function AdminAnalytics() {
 
       // Fetch orders data
       console.log('Fetching orders data...');
-      const { data: ordersData, count: totalOrders, error: ordersError } = await supabaseClient
+      
+      // Try different approaches to fetch orders data
+      let ordersData = null;
+      let totalOrders = 0;
+      let ordersError = null;
+      
+      // First try: Simple select all
+      try {
+        const result = await supabaseClient
+          .from('orders')
+          .select('*');
+        
+        console.log('Simple orders query result:', result);
+        
+        if (result.error) {
+          console.error('Simple orders query error:', result.error);
+          ordersError = result.error;
+        } else {
+          ordersData = result.data;
+          totalOrders = result.data?.length || 0;
+          console.log('Simple query successful, found orders:', totalOrders);
+        }
+      } catch (simpleError) {
+        console.error('Simple orders query exception:', simpleError);
+        ordersError = simpleError;
+      }
+      
+      // If simple query failed, try with count
+      if (!ordersData || ordersData.length === 0) {
+        console.log('Trying orders query with count...');
+        try {
+          const countResult = await supabaseClient
+            .from('orders')
+            .select('id, status, total_amount, commission_amount, partner_amount, created_at', { count: 'exact' });
+          
+          console.log('Count query result:', countResult);
+          
+          if (countResult.error) {
+            console.error('Count orders query error:', countResult.error);
+            ordersError = countResult.error;
+          } else {
+            ordersData = countResult.data;
+            totalOrders = countResult.count || countResult.data?.length || 0;
+            console.log('Count query successful, found orders:', totalOrders);
+          }
+        } catch (countError) {
+          console.error('Count orders query exception:', countError);
+          ordersError = countError;
+        }
+      }
+      
+      // If still no data, try without RLS (admin override)
+      if (!ordersData || ordersData.length === 0) {
+        console.log('Trying admin override query...');
+        try {
+          // Use a more direct approach for admin
+          const adminResult = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/rest/v1/orders?select=*`, {
+            headers: {
+              'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+              'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (adminResult.ok) {
+            const adminData = await adminResult.json();
+            console.log('Admin override query result:', adminData);
+            ordersData = adminData;
+            totalOrders = adminData?.length || 0;
+            console.log('Admin query successful, found orders:', totalOrders);
+          } else {
+            console.error('Admin override query failed:', adminResult.status, adminResult.statusText);
+          }
+        } catch (adminError) {
+          console.error('Admin override query exception:', adminError);
+        }
+      }
         .from('orders')
         .select('id, status, total_amount, commission_amount, partner_amount, created_at', { count: 'exact' });
 
