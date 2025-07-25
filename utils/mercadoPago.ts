@@ -672,7 +672,6 @@ export const createMarketplacePaymentPreference = async (
         .eq('id', order.id);
     }
 
-    return preference;
   } catch (error) {
     console.error('Error creating marketplace payment preference:', error);
     throw error;
