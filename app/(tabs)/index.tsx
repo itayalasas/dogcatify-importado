@@ -408,22 +408,23 @@ export default function Home() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9FAFB' },
+  container: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
   header: {
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingHorizontal: 0,
-    paddingVertical: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: '#FFFFFF',
-    minHeight: 60,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
   logoWrapper: {
-    width: width,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
   },
   logo: {
     width: 40,
