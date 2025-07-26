@@ -306,6 +306,21 @@ export default function Home() {
     }
   };
 
+  const handlePromotionView = async (promotionId: string) => {
+    try {
+      // Increment views
+      const { error } = await supabaseClient
+        .from('promotions')
+        .rpc('increment_promotion_views', { promotion_id: promotionId });
+      
+      if (error) {
+        console.error('Error incrementing views:', error);
+      }
+    } catch (error) {
+      console.error('Error handling promotion view:', error);
+    }
+  };
+
   const handlePromotionClick = async (promotionId: string, url?: string) => {
     try {
       console.log('Promotion clicked:', promotionId);
@@ -327,35 +342,16 @@ export default function Home() {
     }
   };
 
-  const handlePromotionView = async (promotionId: string) => {
-    try {
-      // Increment views
-      const { error } = await supabaseClient
-        .from('promotions')
-        .rpc('increment_promotion_views', { promotion_id: promotionId });
-      
-      if (error) {
-        console.error('Error incrementing views:', error);
-    }
-  };
-
-  const handlePromotionClick = async (promotionId: string, url?: string) => {
-    try {
-      console.log('Promotion clicked:', promotionId);
-      // Increment clicks
-      const { error } = await supabaseClient
-        .from('promotions')
-        .rpc('increment_promotion_clicks', { promotion_id: promotionId });
-      
-            handlePromotionView(item.id);
+  const renderFeedItem = ({ item }: { item: any }) => {
+    if (item.type === 'promotion') {
       // Incrementar vistas cuando se renderiza la promoción
       React.useEffect(() => {
         handlePromotionView(item.id);
       }, []);
       
-    }
-            handlePromotionView(item.id);
-            handlePromotionClick(item.id, item.ctaUrl);
+      return (
+        <PromotionCard
+          promotion={item}
           onPress={() => {
             handlePromotionClick(item.id, item.ctaUrl);
           }}
@@ -380,7 +376,8 @@ export default function Home() {
         <ActivityIndicator size="small" color="#3B82F6" />
       </View>
     );
-    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -410,8 +407,7 @@ export default function Home() {
           onRefresh={() => {
             fetchPosts(true);
             fetchPromotions();
-            </View>
-          }
+          }}
           ListFooterComponent={renderFooter}
         />
       )}
