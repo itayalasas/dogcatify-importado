@@ -218,10 +218,7 @@ export default function AdminPromotions() {
       setPromoDescription('');
       setPromoImage(null);
       setPromoStartDate('');
-          .select(`
-            *,
-            partners:partner_id(business_name, business_type, logo)
-          `)
+      setPromoEndDate('');
       setPromoTargetAudience('all');
       setShowPromotionModal(false);
       
@@ -242,126 +239,9 @@ export default function AdminPromotions() {
           ? { ...promo, isActive: !isActive }
           : promo
       ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
       
-          partnerId: item.partner_id,
-          partnerInfo: item.partners ? {
-            businessName: item.partners.business_name,
-            businessType: item.partners.business_type,
-        partner_id: selectedPartnerId,
-            logo: item.partners.logo,
-          } : null,
       const { error } = await supabaseClient
-        // Revert local state if database update fails
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
+        .from('promotions')
         .update({
           is_active: !isActive
         })
@@ -376,6 +256,146 @@ export default function AdminPromotions() {
         ));
         throw error;
       }
+
+      console.log('Promotion status updated successfully');
+    } catch (error) {
+      console.error('Error updating promotion status:', error);
+      Alert.alert('Error', 'No se pudo actualizar el estado de la promoción');
+    }
+  };
+
+  const isPromotionActive = (startDate: Date, endDate: Date) => {
+    const now = new Date();
+    return now >= startDate && now <= endDate;
+  };
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('es-ES');
+  };
+
+  const getStatusColor = (isActive: boolean, startDate: Date, endDate: Date) => {
+    if (!isActive) return '#EF4444';
+    if (isPromotionActive(startDate, endDate)) return '#10B981';
+    return '#F59E0B';
+  };
+
+  const getStatusText = (isActive: boolean, startDate: Date, endDate: Date) => {
+    if (!isActive) return 'Inactiva';
+    if (isPromotionActive(startDate, endDate)) return 'Activa';
+    const now = new Date();
+    if (now < startDate) return 'Programada';
+    return 'Expirada';
+  };
+
+  // Check if user is admin
+  const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
+
+  if (!isAdmin) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.accessDenied}>
+          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
+          <Text style={styles.accessDeniedText}>
+            No tienes permisos para acceder a esta sección
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.title}>Promociones</Text>
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={() => setShowPromotionModal(true)}
+        >
+          <Plus size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Stats Card */}
+        <Card style={styles.statsCard}>
+          <Text style={styles.statsTitle}>Estadísticas Generales</Text>
+          <View style={styles.statsGrid}>
+            <View style={styles.stat}>
+              <Text style={styles.statNumber}>{promotions.length}</Text>
+              <Text style={styles.statLabel}>Total{'\n'}Promociones</Text>
+            </View>
+            <View style={styles.stat}>
+              <Text style={styles.statNumber}>
+                {promotions.filter(p => p.isActive && isPromotionActive(p.startDate, p.endDate)).length}
+              </Text>
+              <Text style={styles.statLabel}>Activas</Text>
+            </View>
+            <View style={styles.stat}>
+              <Text style={styles.statNumber}>
+                {promotions.reduce((sum, p) => sum + (p.views || 0), 0)}
+              </Text>
+              <Text style={styles.statLabel}>Total{'\n'}Vistas</Text>
+            </View>
+            <View style={styles.stat}>
+              <Text style={styles.statNumber}>
+                {promotions.reduce((sum, p) => sum + (p.clicks || 0), 0)}
+              </Text>
+              <Text style={styles.statLabel}>Total{'\n'}Clicks</Text>
+            </View>
+          </View>
+        </Card>
+
+        {/* Promotions List */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Todas las Promociones</Text>
+          
+          {promotions.length === 0 ? (
+            <Card style={styles.emptyCard}>
+              <Megaphone size={48} color="#DC2626" />
+              <Text style={styles.emptyTitle}>No hay promociones</Text>
+              <Text style={styles.emptySubtitle}>
+                Crea tu primera promoción para comenzar a llegar a más usuarios
+              </Text>
+            </Card>
+          ) : (
+            promotions.map((promotion) => (
+              <Card key={promotion.id} style={styles.promotionCard}>
+                <View style={styles.promotionHeader}>
+                  <View style={styles.promotionInfo}>
+                    <Text style={styles.promotionTitle}>{promotion.title}</Text>
+                    <Text style={styles.promotionAudience}>
+                      Audiencia: {promotion.targetAudience === 'all' ? 'Todos' : 
+                                 promotion.targetAudience === 'users' ? 'Usuarios' : 'Aliados'}
+                    </Text>
+                  </View>
+                  <View style={styles.promotionStatus}>
+                    <View style={[
+                      styles.statusBadge,
+                      { backgroundColor: getStatusColor(promotion.isActive, promotion.startDate, promotion.endDate) }
+                    ]}>
+                      <Text style={[styles.statusText, { color: '#FFFFFF' }]}>
+                        {getStatusText(promotion.isActive, promotion.startDate, promotion.endDate)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {promotion.imageURL && (
+                  <Image source={{ uri: promotion.imageURL }} style={styles.promotionImage} />
+                )}
+
+                <Text style={styles.promotionDescription} numberOfLines={3}>
+                  {promotion.description}
+                </Text>
+
+                <View style={styles.promotionDetails}>
+                  <View style={styles.promotionDetail}>
+                    <Calendar size={16} color="#6B7280" />
+                    <Text style={styles.promotionDetailText}>
+                      {formatDate(promotion.startDate)} - {formatDate(promotion.endDate)}
+                    </Text>
+                  </View>
 
                   <View style={styles.promotionStats}>
                     <View style={styles.promotionStat}>
@@ -416,99 +436,21 @@ export default function AdminPromotions() {
               <Text style={styles.modalTitle}>Crear Nueva Promoción</Text>
               
               <Input
-  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
                 label="Título de la promoción"
                 placeholder="Ej: ¡Descuento especial en servicios para mascotas!"
                 value={promoTitle}
+                onChangeText={setPromoTitle}
+              />
+              
+              <Input
+                label="Descripción"
+                placeholder="Describe los detalles de la promoción..."
                 value={promoDescription}
                 onChangeText={setPromoDescription}
                 multiline
                 numberOfLines={4}
               />
 
-              {/* Partner Selector */}
-      p.business_name.toLowerCase().includes(partnerSearchQuery.toLowerCase()) ||
-      p.business_type.toLowerCase().includes(partnerSearchQuery.toLowerCase())
-                <Text style={styles.partnerDescription}>
-                  Selecciona un aliado específico para esta promoción
-                </Text>
-                
-    switch (type) {
-      case 'shop': return '🛍️';
-      case 'veterinary': return '🏥';
-      case 'grooming': return '✂️';
-      case 'walking': return '🚶';
-      case 'boarding': return '🏠';
-      case 'shelter': return '🐾';
-      default: return '🏢';
-    }
-  }
-
-  function getBusinessTypeName(type: string) {
-    switch (type) {
-      case 'shop': return 'Tienda';
-      case 'veterinary': return 'Veterinaria';
-      case 'grooming': return 'Peluquería';
-      case 'walking': return 'Paseador';
-      case 'boarding': return 'Pensión';
-      case 'shelter': return 'Refugio';
-      default: return 'Negocio';
-    }
-                >
-                  {getSelectedPartner() ? (
-                    <View style={styles.selectedPartnerInfo}>
-                      <Text style={styles.selectedPartnerIcon}>
-                        {getBusinessTypeIcon(getSelectedPartner()!.businessType)}
-                      </Text>
-                      <View style={styles.selectedPartnerDetails}>
-    fetchPartners();
-                        <Text style={styles.selectedPartnerName}>
-                          {getSelectedPartner()!.businessName}
-  const fetchPartners = async () => {
-    try {
-      const { data, error } = await supabaseClient
-        .from('partners')
-        .select('*')
-        .eq('is_verified', true)
-        .eq('is_active', true)
-        .order('business_name', { ascending: true });
-      
-      if (error) {
-        console.error('Error fetching partners:', error);
-        return;
-      }
-      
-      setPartners(data || []);
-    } catch (error) {
-      console.error('Error fetching partners:', error);
-    }
-  };
-
-                        </Text>
-                        <Text style={styles.selectedPartnerType}>
-                          {getSelectedPartner()!.businessType}
-                        </Text>
-                      </View>
-                    </View>
-                  ) : (
-                    <Text style={styles.partnerSelectorPlaceholder}>
-                      Seleccionar aliado (opcional)
-                    </Text>
-                  )}
-                </TouchableOpacity>
-                
-                {getSelectedPartner() && (
-                  <TouchableOpacity 
-                    style={styles.clearPartnerButton}
-                    onPress={() => {
-                      setSelectedPartnerId(null);
-                      setPartnerSearchQuery('');
-                    }}
-                  >
-                    <Text style={styles.clearPartnerText}>Quitar aliado</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
               <View style={styles.imageSection}>
                 <Text style={styles.imageLabel}>Imagen promocional *</Text>
                 
@@ -526,24 +468,6 @@ export default function AdminPromotions() {
                   <View style={styles.imageActions}>
                     <TouchableOpacity style={styles.imageActionButton} onPress={handleTakePhoto}>
                       <Text style={styles.imageActionText}>📷 Tomar foto</Text>
-  const onStartDateChange = (event: any, selectedDate?: Date) => {
-    setShowStartDatePicker(false);
-    if (selectedDate) {
-      setPromoStartDate(selectedDate);
-    }
-  };
-
-  const onEndDateChange = (event: any, selectedDate?: Date) => {
-    setShowEndDatePicker(false);
-    if (selectedDate) {
-      setPromoEndDate(selectedDate);
-    }
-  };
-
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('es-ES');
-  };
-
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.imageActionButton} onPress={handleSelectImage}>
                       <Text style={styles.imageActionText}>🖼️ Galería</Text>
@@ -593,7 +517,7 @@ export default function AdminPromotions() {
                     >
                       <Text style={[
                         styles.audienceOptionText,
-    if (!promoTitle || !promoDescription || !promoImage) {
+                        promoTargetAudience === option.value && styles.selectedAudienceText
                       ]}>
                         {option.label}
                       </Text>
@@ -605,8 +529,8 @@ export default function AdminPromotions() {
               <View style={styles.modalActions}>
                 <View style={styles.modalButtonsContainer}>
                   <TouchableOpacity 
-        start_date: promoStartDate.toISOString(),
-        end_date: promoEndDate.toISOString(),
+                    style={styles.cancelModalButton}
+                    onPress={() => {
                       setShowPromotionModal(false);
                       // Reset form
                       setPromoTitle('');
@@ -615,13 +539,10 @@ export default function AdminPromotions() {
                       setPromoStartDate('');
                       setPromoEndDate('');
                       setPromoTargetAudience('all');
-                      setSelectedPartnerId(null);
-                      setPartnerSearchQuery('');
                     }}
                   >
                     <Text style={styles.cancelModalButtonText}>Cancelar</Text>
                   </TouchableOpacity>
-        .insert([promotionData]);
                   <TouchableOpacity 
                     style={[styles.createModalButton, loading && styles.disabledButton]}
                     onPress={handleCreatePromotion}
@@ -629,8 +550,8 @@ export default function AdminPromotions() {
                   >
                     <Text style={styles.createModalButtonText}>
                       {loading ? 'Creando...' : 'Crear Promoción'}
-      setPromoStartDate(new Date());
-      setPromoEndDate(new Date());
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             </View>
@@ -641,73 +562,6 @@ export default function AdminPromotions() {
   );
 }
 
-      {/* Partner Selector Modal */}
-      <Modal
-        visible={showPartnerSelector}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPartnerSelector(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.partnerModalContent}>
-            <View style={styles.partnerModalHeader}>
-              <Text style={styles.partnerModalTitle}>Seleccionar Aliado</Text>
-              <TouchableOpacity onPress={() => setShowPartnerSelector(false)}>
-                <Text style={styles.partnerModalClose}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <Input
-              placeholder="Buscar aliado por nombre o tipo..."
-              value={partnerSearchQuery}
-              onChangeText={setPartnerSearchQuery}
-              leftIcon={<Search size={20} color="#9CA3AF" />}
-            />
-            
-            <ScrollView style={styles.partnersList} showsVerticalScrollIndicator={false}>
-              {getFilteredPartners().length === 0 ? (
-                <View style={styles.noPartnersContainer}>
-                  <Text style={styles.noPartnersText}>
-                    {partnerSearchQuery ? 'No se encontraron aliados' : 'No hay aliados disponibles'}
-                  </Text>
-                </View>
-              ) : (
-                getFilteredPartners().map((partner) => (
-                  <TouchableOpacity
-                    key={partner.id}
-                    style={[
-                      styles.partnerItem,
-                      selectedPartnerId === partner.id && styles.selectedPartnerItem
-                    ]}
-                    onPress={() => {
-                      setSelectedPartnerId(partner.id);
-                      setShowPartnerSelector(false);
-                      setPartnerSearchQuery('');
-                    }}
-                  >
-                    <View style={styles.partnerItemInfo}>
-                      <Text style={styles.partnerItemIcon}>
-                        {getBusinessTypeIcon(partner.businessType)}
-                      </Text>
-                      <View style={styles.partnerItemDetails}>
-                        <Text style={styles.partnerItemName}>
-                          {partner.businessName}
-                        </Text>
-                        <Text style={styles.partnerItemType}>
-                          {partner.businessType}
-                        </Text>
-                      </View>
-                    </View>
-                    {selectedPartnerId === partner.id && (
-                      <Text style={styles.selectedIndicator}>✓</Text>
-                    )}
-                  </TouchableOpacity>
-                ))
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -751,11 +605,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
   },
-                        {getBusinessTypeIcon(getSelectedPartner()!.business_type)}
+  stat: {
     alignItems: 'center',
   },
   statNumber: {
-                          {getSelectedPartner()!.business_name}
+    fontSize: 24,
     fontFamily: 'Inter-Bold',
     color: '#DC2626',
   },
@@ -932,7 +786,7 @@ const styles = StyleSheet.create({
   },
   partnerSelector: {
     borderWidth: 1,
-                          {getBusinessTypeName(getSelectedPartner()!.business_type)}
+    borderColor: '#D1D5DB',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 14,
@@ -984,50 +838,20 @@ const styles = StyleSheet.create({
   },
   partnerModalHeader: {
     flexDirection: 'row',
-              {/* Date Pickers */}
-              <View style={styles.dateSection}>
-                <Text style={styles.dateLabel}>Fecha de inicio *</Text>
-                <TouchableOpacity 
-                  style={styles.dateInput}
-                  onPress={() => setShowStartDatePicker(true)}
-                >
-                  <Calendar size={20} color="#6B7280" />
-                  <Text style={styles.dateInputText}>
-                    {formatDate(promoStartDate)}
-                  </Text>
-                </TouchableOpacity>
-                {showStartDatePicker && (
-                  <DateTimePicker
-                    value={promoStartDate}
-                    mode="date"
-                    display="default"
-                    onChange={onStartDateChange}
-                    minimumDate={new Date()}
-                  />
-                )}
-              </View>
-
-              <View style={styles.dateSection}>
-                <Text style={styles.dateLabel}>Fecha de fin *</Text>
-                <TouchableOpacity 
-                  style={styles.dateInput}
-                  onPress={() => setShowEndDatePicker(true)}
-                >
-                  <Calendar size={20} color="#6B7280" />
-                  <Text style={styles.dateInputText}>
-                    {formatDate(promoEndDate)}
-                  </Text>
-                </TouchableOpacity>
-                {showEndDatePicker && (
-                  <DateTimePicker
-                    value={promoEndDate}
-                    mode="date"
-                    display="default"
-                    onChange={onEndDateChange}
-                    minimumDate={promoStartDate}
-                  />
-                )}
-              </View>
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  partnerModalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+  },
+  partnerModalClose: {
+    fontSize: 24,
+    color: '#6B7280',
+  },
+  partnersList: {
     flex: 1,
     marginTop: 16,
   },
@@ -1068,8 +892,8 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   partnerItemDetails: {
-                      setPromoStartDate(new Date());
-                      setPromoEndDate(new Date());
+    flex: 1,
+  },
   partnerItemName: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
@@ -1140,14 +964,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   imageHint: {
-                        {getBusinessTypeIcon(partner.business_type)}
+    fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#9CA3AF',
     marginTop: 8,
-                          {partner.business_name}
+    textAlign: 'center',
     fontStyle: 'italic',
   },
-                          {getBusinessTypeName(partner.business_type)}
+  audienceSection: {
     marginBottom: 20,
   },
   audienceLabel: {
@@ -1227,32 +1051,6 @@ const styles = StyleSheet.create({
   accessDenied: {
     flex: 1,
     justifyContent: 'center',
-  dateSection: {
-    marginBottom: 16,
-  },
-  dateLabel: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  dateInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    backgroundColor: '#FFFFFF',
-    minHeight: 50,
-  },
-  dateInputText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    marginLeft: 10,
-  },
     alignItems: 'center',
     paddingHorizontal: 24,
   },
