@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, SafeAreaView, Image, Dimensions, ActivityIndicator, Share, Alert } from 'react-native';
 import PostCard from '../../components/PostCard';
+import PromotionCard from '../../components/PromotionCard';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient, getPosts } from '../../lib/supabase';
@@ -9,6 +10,8 @@ const { width } = Dimensions.get('window');
 
 export default function Home() {
   const [posts, setPosts] = useState<any[]>([]);
+  const [promotions, setPromotions] = useState<any[]>([]);
+  const [feedItems, setFeedItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
@@ -18,7 +21,38 @@ export default function Home() {
 
   useEffect(() => {
     fetchPosts(true);
+    fetchPromotions();
   }, [currentUser]);
+
+  const fetchPromotions = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('promotions')
+        .select('*')
+        .eq('is_active', true)
+        .lte('start_date', new Date().toISOString())
+        .gte('end_date', new Date().toISOString())
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      const promotionsData = data?.map(promo => ({
+        id: promo.id,
+        type: 'promotion',
+        title: promo.title,
+        description: promo.description,
+        imageURL: promo.image_url,
+        ctaText: promo.cta_text || 'Más información',
+        ctaUrl: promo.cta_url,
+        partnerId: promo.partner_id,
+        createdAt: new Date(promo.created_at),
+      })) || [];
+      
+      setPromotions(promotionsData);
+    } catch (error) {
+      console.error('Error fetching promotions:', error);
+    }
+  };
 
   const fetchPosts = async (reset = false) => {
     if (reset) {
@@ -91,6 +125,9 @@ export default function Home() {
       if (!reset) {
         setPage(currentPage + 1);
       }
+      
+      // Combine posts with promotions for feed
+      combineFeedItems(reset ? postsData : [...posts, ...postsData]);
     } catch (error) {
       console.error('Error fetching posts:', error);
     } finally {
@@ -98,6 +135,29 @@ export default function Home() {
       setRefreshing(false);
     }
   };
+
+  const combineFeedItems = (postsData: any[]) => {
+    const combined = [...postsData];
+    
+    // Insert promotions every 3-4 posts
+    if (promotions.length > 0) {
+      let promotionIndex = 0;
+      for (let i = 3; i < combined.length; i += 4) {
+        if (promotionIndex < promotions.length) {
+          combined.splice(i, 0, promotions[promotionIndex]);
+          promotionIndex++;
+        }
+      }
+    }
+    
+    setFeedItems(combined);
+  };
+
+  useEffect(() => {
+    if (posts.length > 0 || promotions.length > 0) {
+      combineFeedItems(posts);
+    }
+  }, [posts, promotions]);
 
   const getTimeAgo = (date: Date): string => {
     const now = new Date();
@@ -185,6 +245,46 @@ export default function Home() {
     }
   };
 
+  const handlePromotionClick = async (promotionId: string, url?: string) => {
+    try {
+      // Increment views
+      await supabaseClient
+        .from('promotions')
+        .update({ 
+          clicks: supabaseClient.raw('clicks + 1')
+        })
+        .eq('id', promotionId);
+      
+      if (url) {
+        // Open URL or navigate
+        console.log('Opening promotion URL:', url);
+      }
+    } catch (error) {
+      console.error('Error tracking promotion click:', error);
+    }
+  };
+
+  const renderFeedItem = ({ item }: { item: any }) => {
+    if (item.type === 'promotion') {
+      return (
+        <PromotionCard
+          promotion={item}
+          onPress={() => handlePromotionClick(item.id, item.ctaUrl)}
+        />
+      );
+    }
+    
+    return (
+      <PostCard
+        post={item}
+        isMock={false}
+        onLike={(postId, doubleTap) => handleLike(postId, doubleTap)}
+        onComment={handleComment}
+        onShare={handleShare}
+      />
+    );
+  };
+
   const renderFooter = () => {
     if (!hasMore) return null;
     return (
@@ -213,22 +313,17 @@ export default function Home() {
         </View>
       ) : (
         <FlatList
-          data={posts}
+          data={feedItems}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <PostCard
-              post={item}
-              isMock={false}
-              onLike={(postId, doubleTap) => handleLike(postId, doubleTap)}
-              onComment={handleComment}
-              onShare={handleShare}
-            />
-          )}
+          renderItem={renderFeedItem}
           showsVerticalScrollIndicator={false}
           onEndReached={() => hasMore && fetchPosts(false)}
           onEndReachedThreshold={0.5}
           refreshing={refreshing}
-          onRefresh={() => fetchPosts(true)}
+          onRefresh={() => {
+            fetchPosts(true);
+            fetchPromotions();
+          }}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyTitle}>{t('noPostsYet')}</Text>
