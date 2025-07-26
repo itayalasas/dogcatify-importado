@@ -317,7 +317,6 @@ export default function Home() {
 
   const handlePromotionView = async (promotionId: string) => {
     try {
-      console.log('Promotion viewed:', promotionId);
       // Increment views
       const { error } = await supabaseClient
         .from('promotions')
@@ -338,36 +337,14 @@ export default function Home() {
   };
 
   const renderFeedItem = ({ item, index }: { item: any; index: number }) => {
-    if (item.type === 'promotion') {
-      return (
-        <PromotionCard
-          key={item.id}
-          promotion={item}
+          }}
+    if (!hasMore) return null;
+    return (
+      <View style={styles.loaderFooter}>
           onPress={() => {
             handlePromotionView(item.id);
             handlePromotionClick(item.id, item.ctaUrl);
           }}
-        />
-      );
-    }
-    
-    return (
-      <PostCard
-        key={item.id}
-        post={item}
-        onLike={(doubleTap) => handleLike(item.id, doubleTap)}
-        onComment={() => handleComment(item.id)}
-        onShare={() => handleShare(item.id)}
-        currentUserId={currentUser?.id}
-      />
-    );
-  };
-
-  const renderFooter = () => {
-    if (!hasMore) return null;
-    return (
-      <View style={styles.loaderFooter}>
-        <ActivityIndicator size="small" color="#3B82F6" />
       </View>
     );
   };
@@ -414,7 +391,25 @@ export default function Home() {
         />
       )}      
     </SafeAreaView>
-  );
+        onComment={() => handleComment(item.id)}
+        onShare={() => handleShare(item.id)}
+      />
+    );
+  };
+
+  const renderFooter = () => {
+    if (!hasMore) return null;
+    return (
+      <View style={styles.loaderFooter}>
+        <ActivityIndicator size="small" color="#3B82F6" />
+      </View>
+    );
+  };
+    );
+  };
+      console.log('Promotions fetched:', data?.length || 0, 'active promotions');
+      console.log('Current date for filtering:', now);
+      
 }
 
 const styles = StyleSheet.create({
@@ -423,7 +418,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   header: {
-    flexDirection: 'row',
+      console.log('Promotion viewed:', promotionId);
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     paddingHorizontal: 0,
