@@ -20,12 +20,35 @@ export default function Home() {
   const { currentUser } = useAuth();
 
   useEffect(() => {
-    fetchPosts(true);
-    fetchPromotions();
+    if (currentUser) {
+      fetchPosts(true);
+      fetchPromotions();
+      
+      // Set up real-time subscription for promotions
+      const promotionsSubscription = supabaseClient
+        .channel('promotions-changes')
+        .on('postgres_changes', 
+          { 
+            event: '*', 
+            schema: 'public', 
+            table: 'promotions'
+          }, 
+          (payload) => {
+            console.log('Promotion change detected:', payload);
+            fetchPromotions();
+          }
+        )
+        .subscribe();
+      
+      return () => {
+        promotionsSubscription.unsubscribe();
+      };
+    }
   }, [currentUser]);
 
   const fetchPromotions = async () => {
     try {
+      console.log('Fetching promotions...');
       const { data, error } = await supabaseClient
         .from('promotions')
         .select('*')
@@ -34,8 +57,12 @@ export default function Home() {
         .gte('end_date', new Date().toISOString())
         .order('created_at', { ascending: false });
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching promotions:', error);
+        return;
+      }
       
+      console.log('Promotions fetched:', data?.length || 0);
       const promotionsData = data?.map(promo => ({
         id: promo.id,
         type: 'promotion',
@@ -49,6 +76,12 @@ export default function Home() {
       })) || [];
       
       setPromotions(promotionsData);
+      console.log('Promotions state updated:', promotionsData.length);
+      
+      // Update feed items immediately after fetching promotions
+      if (posts.length > 0) {
+        combineFeedItems(posts, promotionsData);
+      }
     } catch (error) {
       console.error('Error fetching promotions:', error);
     }
@@ -127,7 +160,8 @@ export default function Home() {
       }
       
       // Combine posts with promotions for feed
-      combineFeedItems(reset ? postsData : [...posts, ...postsData]);
+      const allPosts = reset ? postsData : [...posts, ...postsData];
+      combineFeedItems(allPosts, promotions);
     } catch (error) {
       console.error('Error fetching posts:', error);
     } finally {
@@ -136,26 +170,32 @@ export default function Home() {
     }
   };
 
-  const combineFeedItems = (postsData: any[]) => {
+  const combineFeedItems = (postsData: any[], promotionsData: any[] = promotions) => {
+    console.log('Combining feed items:', {
+      posts: postsData.length,
+      promotions: promotionsData.length
+    });
+    
     const combined = [...postsData];
     
     // Insert promotions every 3-4 posts
-    if (promotions.length > 0) {
+    if (promotionsData.length > 0) {
       let promotionIndex = 0;
       for (let i = 3; i < combined.length; i += 4) {
-        if (promotionIndex < promotions.length) {
-          combined.splice(i, 0, promotions[promotionIndex]);
+        if (promotionIndex < promotionsData.length) {
+          combined.splice(i, 0, promotionsData[promotionIndex]);
           promotionIndex++;
         }
       }
     }
     
+    console.log('Final feed items:', combined.length);
     setFeedItems(combined);
   };
 
   useEffect(() => {
     if (posts.length > 0 || promotions.length > 0) {
-      combineFeedItems(posts);
+      combineFeedItems(posts, promotions);
     }
   }, [posts, promotions]);
 
@@ -247,12 +287,66 @@ export default function Home() {
 
   const handlePromotionClick = async (promotionId: string, url?: string) => {
     try {
+      console.log('Promotion clicked:', promotionId);
       // Increment views
-      await supabaseClient
+      const { error } = await supabaseClient
         .from('promotions')
-        .update({ 
-          clicks: supabaseClient.raw('clicks + 1')
-        })
+        .rpc('increment_promotion_clicks', { promotion_id: promotionId });
+      
+      if (error) {
+        console.error('Error incrementing clicks:', error);
+      }
+      
+      if (url) {
+        console.log('Opening promotion URL:', url);
+        // Here you could open the URL with Linking.openURL(url)
+      }
+    } catch (error) {
+      console.error('Error tracking promotion click:', error);
+    }
+  };
+
+  const handlePromotionView = async (promotionId: string) => {
+    try {
+      // Increment views
+      const { error } = await supabaseClient
+        .from('promotions')
+        .rpc('increment_promotion_views', { promotion_id: promotionId });
+      
+      if (error) {
+        console.error('Error incrementing views:', error);
+      }
+    } catch (error) {
+      console.error('Error tracking promotion view:', error);
+    }
+  };
+
+  const renderFeedItem = ({ item, index }: { item: any; index: number }) => {
+    // Track promotion views when they appear
+    useEffect(() => {
+      if (item.type === 'promotion') {
+        handlePromotionView(item.id);
+      }
+    }, []);
+    
+    if (item.type === 'promotion') {
+      return (
+        <PromotionCard
+          promotion={item}
+          onPress={() => handlePromotionClick(item.id, item.ctaUrl)}
+        />
+      );
+    }
+    
+    return (
+      <PostCard
+        post={item}
+        isMock={false}
+        onLike={(postId, doubleTap) => handleLike(postId, doubleTap)}
+        onComment={handleComment}
+        onShare={handleShare}
+      />
+    );
         .eq('id', promotionId);
       
       if (url) {

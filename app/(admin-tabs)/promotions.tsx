@@ -51,7 +51,7 @@ export default function AdminPromotions() {
 
         if (error) {
           console.error('Error fetching promotions:', error);
-          throw error;
+          return;
         }
 
         console.log('Promotions data:', data?.length || 0, 'records found');
@@ -71,6 +71,7 @@ export default function AdminPromotions() {
         })) || [];
 
         setPromotions(promotionsData);
+        console.log('Promotions state updated in admin panel');
       } catch (error) {
         console.error('Error fetching promotions:', error);
       }
@@ -83,7 +84,8 @@ export default function AdminPromotions() {
       .channel('promotions_channel')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'promotions' },
-        () => {
+        (payload) => {
+          console.log('Promotion change detected in admin:', payload);
           fetchData();
         }
       )
@@ -175,9 +177,12 @@ export default function AdminPromotions() {
 
     setLoading(true);
     try {
+      console.log('Creating promotion...');
       let imageUrl = null;
       if (promoImage) {
+        console.log('Uploading image...');
         imageUrl = await uploadImage(promoImage);
+        console.log('Image uploaded:', imageUrl);
       }
 
       const promotionData = {
@@ -196,12 +201,18 @@ export default function AdminPromotions() {
         created_by: currentUser?.id,
       };
 
+      console.log('Inserting promotion data:', promotionData);
       const { error } = await supabaseClient
         .from('promotions')
         .insert([promotionData]);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error creating promotion:', error);
+        Alert.alert('Error', `No se pudo crear la promoción: ${error.message}`);
+        return;
+      }
       
+      console.log('Promotion created successfully');
       // Reset form
       setPromoTitle('');
       setPromoDescription('');
