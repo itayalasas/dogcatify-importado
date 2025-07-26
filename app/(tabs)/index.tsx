@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, SafeAreaView, Image, Dimensions, ActivityIndicator, Share, Alert } from 'react-native';
 import PostCard from '../../components/PostCard';
-import PromotionCard from '../../components/PromotionCard';
+import PromotionCard from '@/components/PromotionCard';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient, getPosts } from '../../lib/supabase';
