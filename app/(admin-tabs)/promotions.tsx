@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image } from 'react-native';
 import { Plus, Megaphone, Calendar, Eye, Target, Search } from 'lucide-react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -12,7 +11,6 @@ import * as ImagePicker from 'expo-image-picker';
 export default function AdminPromotions() {
   const { currentUser } = useAuth();
   const [promotions, setPromotions] = useState<any[]>([]);
-  const [partners, setPartners] = useState<any[]>([]);
   const [showPromotionModal, setShowPromotionModal] = useState(false);
   const [showPartnerSelector, setShowPartnerSelector] = useState(false);
   const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
@@ -22,47 +20,16 @@ export default function AdminPromotions() {
   const [promoTitle, setPromoTitle] = useState('');
   const [promoDescription, setPromoDescription] = useState('');
   const [promoImage, setPromoImage] = useState<string | null>(null);
-  const [promoStartDate, setPromoStartDate] = useState(new Date());
-  const [promoEndDate, setPromoEndDate] = useState(new Date());
-  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
-  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  const [promoStartDate, setPromoStartDate] = useState('');
+  const [promoEndDate, setPromoEndDate] = useState('');
   const [promoTargetAudience, setPromoTargetAudience] = useState('all');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (!currentUser) return;
-    const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
-    if (!isAdmin) return;
-    fetchPromotions();
-    fetchPartners();
-  }, [currentUser]);
-
-  const fetchPartners = async () => {
-    try {
-      const { data, error } = await supabaseClient
-        .from('partners')
-        .select('id, business_name, business_type, logo')
-        .eq('is_verified', true)
-        .eq('is_active', true)
-        .order('business_name', { ascending: true });
-      
-      if (error) {
-        console.error('Error fetching partners:', error);
-        return;
-      }
-      
-      const partnersData = data?.map(partner => ({
-        id: partner.id,
-        businessName: partner.business_name,
-        businessType: partner.business_type,
-        logo: partner.logo
-      })) || [];
-      
-      setPartners(partnersData);
-    } catch (error) {
-      console.error('Error fetching partners:', error);
-    }
-  };
+  // Dummy partners for selector (replace with your fetch logic)
+  const partners = [
+    { id: '1', businessName: 'PetShop', businessType: 'Tienda', logo: '' },
+    { id: '2', businessName: 'VetClinic', businessType: 'Veterinaria', logo: '' },
+  ];
 
   function getSelectedPartner() {
     return partners.find(p => p.id === selectedPartnerId) || null;
@@ -76,58 +43,23 @@ export default function AdminPromotions() {
     );
   }
 
-  const getBusinessTypeIcon = (type: string) => {
-    switch (type) {
-      case 'veterinary': return '🏥';
-      case 'grooming': return '✂️';
-      case 'walking': return '🚶';
-      case 'boarding': return '🏠';
-      case 'shop': return '🛍️';
-      case 'shelter': return '🐾';
-      default: return '🏢';
-    }
-  };
-
-  const getBusinessTypeName = (type: string) => {
-    const types: Record<string, string> = {
-      veterinary: 'Veterinaria',
-      grooming: 'Peluquería',
-      walking: 'Paseador',
-      boarding: 'Pensión',
-      shop: 'Tienda',
-      shelter: 'Refugio'
-    };
-    return types[type] || type;
+  function getBusinessTypeIcon(type: string) {
+    if (type === 'Tienda') return '🏪';
+    if (type === 'Veterinaria') return '🐾';
+    return '🏢';
   }
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('es-ES');
-  };
+  function isPromotionActive(startDate: Date, endDate: Date) {
+    const now = new Date();
+    return now >= startDate && now <= endDate;
+  }
 
-  const onStartDateChange = (event: any, selectedDate?: Date) => {
-    setShowStartDatePicker(false);
-    if (selectedDate) {
-      setPromoStartDate(selectedDate);
-      // Si la fecha de fin es anterior a la nueva fecha de inicio, ajustarla
-      if (selectedDate > promoEndDate) {
-        const newEndDate = new Date(selectedDate);
-        newEndDate.setDate(newEndDate.getDate() + 7); // 7 días después por defecto
-        setPromoEndDate(newEndDate);
-      }
-    }
-  };
-
-  const onEndDateChange = (event: any, selectedDate?: Date) => {
-    setShowEndDatePicker(false);
-    if (selectedDate) {
-      // Validar que la fecha de fin no sea anterior a la de inicio
-      if (selectedDate >= promoStartDate) {
-        setPromoEndDate(selectedDate);
-      } else {
-        Alert.alert('Error', 'La fecha de fin no puede ser anterior a la fecha de inicio');
-      }
-    }
-  };
+  useEffect(() => {
+    if (!currentUser) return;
+    const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
+    if (!isAdmin) return;
+    fetchPromotions();
+  }, [currentUser]);
 
   const fetchPromotions = () => {
     const fetchData = async () => {
@@ -260,8 +192,8 @@ export default function AdminPromotions() {
       setPromoTitle('');
       setPromoDescription('');
       setPromoImage(null);
-      setPromoStartDate(new Date());
-      setPromoEndDate(new Date());
+      setPromoStartDate('');
+      setPromoEndDate('');
       setPromoTargetAudience('all');
       setSelectedPartnerId(null);
       setPartnerSearchQuery('');
@@ -300,11 +232,6 @@ export default function AdminPromotions() {
     }
   };
 
-  const isPromotionActive = (startDate: Date, endDate: Date) => {
-    const now = new Date();
-    return now >= startDate && now <= endDate;
-  };
-
   if (!currentUser || currentUser.email?.toLowerCase() !== 'admin@dogcatify.com') {
     return (
       <SafeAreaView style={styles.container}>
@@ -322,7 +249,7 @@ export default function AdminPromotions() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Promociones</Text>
-        <TouchableOpacity
+        <TouchableOpacity 
           style={styles.addButton}
           onPress={() => setShowPromotionModal(true)}
         >
@@ -340,7 +267,7 @@ export default function AdminPromotions() {
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
-                {promotions.filter(p => p.isActive).length}
+                {promotions.filter(p => p.isActive && isPromotionActive(p.startDate, p.endDate)).length}
               </Text>
               <Text style={styles.statLabel}>Activas</Text>
             </View>
@@ -360,8 +287,7 @@ export default function AdminPromotions() {
         </Card>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Promociones Activas</Text>
-          
+          <Text style={styles.sectionTitle}>Todas las Promociones</Text>
           {promotions.length === 0 ? (
             <View style={styles.emptyCard}>
               <Megaphone size={32} color="#DC2626" />
@@ -483,7 +409,7 @@ export default function AdminPromotions() {
                           {getSelectedPartner()!.businessName}
                         </Text>
                         <Text style={styles.selectedPartnerType}>
-                          {getBusinessTypeName(getSelectedPartner()!.businessType)}
+                          {getSelectedPartner()!.businessType}
                         </Text>
                       </View>
                     </View>
@@ -535,49 +461,21 @@ export default function AdminPromotions() {
                 </Text>
               </View>
               
-              <View style={styles.dateInputContainer}>
-                <Text style={styles.dateInputLabel}>Fecha de inicio *</Text>
-                <TouchableOpacity 
-                  style={styles.dateInput}
-                  onPress={() => setShowStartDatePicker(true)}
-                >
-                  <Calendar size={20} color="#6B7280" />
-                  <Text style={styles.dateInputText}>
-                    {formatDate(promoStartDate)}
-                  </Text>
-                </TouchableOpacity>
-                {showStartDatePicker && (
-                  <DateTimePicker
-                    value={promoStartDate}
-                    mode="date"
-                    display="default"
-                    onChange={onStartDateChange}
-                    minimumDate={new Date()}
-                  />
-                )}
-              </View>
+              <Input
+                label="Fecha de inicio"
+                placeholder="2025-01-01"
+                value={promoStartDate}
+                onChangeText={setPromoStartDate}
+                leftIcon={<Calendar size={20} color="#6B7280" />}
+              />
               
-              <View style={styles.dateInputContainer}>
-                <Text style={styles.dateInputLabel}>Fecha de fin *</Text>
-                <TouchableOpacity 
-                  style={styles.dateInput}
-                  onPress={() => setShowEndDatePicker(true)}
-                >
-                  <Calendar size={20} color="#6B7280" />
-                  <Text style={styles.dateInputText}>
-                    {formatDate(promoEndDate)}
-                  </Text>
-                </TouchableOpacity>
-                {showEndDatePicker && (
-                  <DateTimePicker
-                    value={promoEndDate}
-                    mode="date"
-                    display="default"
-                    onChange={onEndDateChange}
-                    minimumDate={promoStartDate}
-                  />
-                )}
-              </View>
+              <Input
+                label="Fecha de fin"
+                placeholder="2025-01-31"
+                value={promoEndDate}
+                onChangeText={setPromoEndDate}
+                leftIcon={<Calendar size={20} color="#6B7280" />}
+              />
 
               <View style={styles.audienceSection}>
                 <Text style={styles.audienceLabel}>Audiencia objetivo</Text>
@@ -618,8 +516,8 @@ export default function AdminPromotions() {
                       setPromoTitle('');
                       setPromoDescription('');
                       setPromoImage(null);
-                      setPromoStartDate(new Date());
-                      setPromoEndDate(new Date());
+                      setPromoStartDate('');
+                      setPromoEndDate('');
                       setPromoTargetAudience('all');
                       setSelectedPartnerId(null);
                       setPartnerSearchQuery('');
@@ -697,7 +595,7 @@ export default function AdminPromotions() {
                           {partner.businessName}
                         </Text>
                         <Text style={styles.partnerItemType}>
-                          {getBusinessTypeName(partner.businessType)}
+                          {partner.businessType}
                         </Text>
                       </View>
                     </View>
@@ -714,6 +612,7 @@ export default function AdminPromotions() {
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1200,32 +1099,6 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
-  },
-  dateInputContainer: {
-    marginBottom: 14,
-  },
-  dateInputLabel: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 6,
-  },
-  dateInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#FFFFFF',
-    minHeight: 44,
-  },
-  dateInputText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    marginLeft: 10,
   },
   accessDenied: {
     flex: 1,
