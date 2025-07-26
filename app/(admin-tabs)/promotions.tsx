@@ -236,12 +236,23 @@ export default function AdminPromotions() {
       const { error } = await supabaseClient
         .from('promotions')
         .update({
-          is_active: !isActive,
-          updated_at: new Date().toISOString(),
+          is_active: !isActive
         })
         .eq('id', promotionId);
 
       if (error) throw error;
+      
+      // Update local state immediately
+      setPromotions(prev => prev.map(promo => 
+        promo.id === promotionId 
+          ? { ...promo, isActive: !isActive }
+          : promo
+      ));
+      
+      Alert.alert(
+        'Promoción actualizada',
+        `La promoción ha sido ${!isActive ? 'activada' : 'desactivada'} correctamente.`
+      );
     } catch (error) {
       console.error('Error toggling promotion:', error);
       Alert.alert('Error', 'No se pudo actualizar la promoción');
@@ -395,9 +406,9 @@ export default function AdminPromotions() {
 
                 <View style={styles.promotionActions}>
                   <Button
-                    title={promotion.isActive ? 'Desactivar' : 'Activar'}
+                    title={promotion.isActive && isPromotionActive(promotion.startDate, promotion.endDate) ? 'Desactivar' : 'Activar'}
                     onPress={() => handleTogglePromotion(promotion.id, promotion.isActive)}
-                    variant={promotion.isActive ? 'outline' : 'primary'}
+                    variant={promotion.isActive && isPromotionActive(promotion.startDate, promotion.endDate) ? 'outline' : 'primary'}
                     size="medium"
                   />
                 </View>
