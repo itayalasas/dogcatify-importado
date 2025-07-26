@@ -96,8 +96,15 @@ export default function AdminPromotions() {
 
   const handleSelectImage = async () => {
     try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (permissionResult.granted === false) {
+        Alert.alert('Permisos requeridos', 'Se necesitan permisos para acceder a la galería');
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [16, 9],
         quality: 0.8,
@@ -107,7 +114,33 @@ export default function AdminPromotions() {
         setPromoImage(result.assets[0].uri);
       }
     } catch (error) {
+      console.error('Error selecting image:', error);
       Alert.alert('Error', 'No se pudo seleccionar la imagen');
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      
+      if (permissionResult.granted === false) {
+        Alert.alert('Permisos requeridos', 'Se necesitan permisos para usar la cámara');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setPromoImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'No se pudo tomar la foto');
     }
   };
 
@@ -393,16 +426,28 @@ export default function AdminPromotions() {
 
               <View style={styles.imageSection}>
                 <Text style={styles.imageLabel}>Imagen promocional *</Text>
-                <TouchableOpacity style={styles.imageSelector} onPress={handleSelectImage}>
-                  {promoImage ? (
+                
+                {promoImage ? (
+                  <View style={styles.imagePreviewContainer}>
                     <Image source={{ uri: promoImage }} style={styles.selectedImage} />
-                  ) : (
-                    <View style={styles.imagePlaceholder}>
-                      <Megaphone size={32} color="#9CA3AF" />
-                      <Text style={styles.imagePlaceholderText}>Seleccionar imagen (requerida)</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.changeImageButton}
+                      onPress={() => setPromoImage(null)}
+                    >
+                      <Text style={styles.changeImageText}>Cambiar imagen</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.imageActions}>
+                    <TouchableOpacity style={styles.imageActionButton} onPress={handleTakePhoto}>
+                      <Text style={styles.imageActionText}>📷 Tomar foto</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.imageActionButton} onPress={handleSelectImage}>
+                      <Text style={styles.imageActionText}>🖼️ Galería</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                
                 <Text style={styles.imageHint}>
                   Recomendado: 1080x1080px o 16:9 para mejor visualización
                 </Text>
@@ -455,18 +500,33 @@ export default function AdminPromotions() {
               </View>
               
               <View style={styles.modalActions}>
-                <Button
-                  title="Cancelar"
-                  onPress={() => setShowPromotionModal(false)}
-                  variant="outline"
-                  size="medium"
-                />
-                <Button
-                  title="Crear Promoción"
-                  onPress={handleCreatePromotion}
-                  loading={loading}
-                  size="medium"
-                />
+                <View style={styles.modalButtonsContainer}>
+                  <TouchableOpacity 
+                    style={styles.cancelModalButton}
+                    onPress={() => {
+                      setShowPromotionModal(false);
+                      // Reset form
+                      setPromoTitle('');
+                      setPromoDescription('');
+                      setPromoImage(null);
+                      setPromoStartDate('');
+                      setPromoEndDate('');
+                      setPromoTargetAudience('all');
+                    }}
+                  >
+                    <Text style={styles.cancelModalButtonText}>Cancelar</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.createModalButton, loading && styles.disabledButton]}
+                    onPress={handleCreatePromotion}
+                    disabled={loading}
+                  >
+                    <Text style={styles.createModalButtonText}>
+                      {loading ? 'Creando...' : 'Crear Promoción'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           </ScrollView>
@@ -678,19 +738,38 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginBottom: 8,
   },
-  imageSelector: {
-    alignItems: 'center',
+  imagePreviewContainer: {
     marginBottom: 12,
   },
   selectedImage: {
     width: '100%',
-    height: 120,
+    height: 200,
     borderRadius: 8,
+    marginBottom: 8,
   },
-  imagePlaceholder: {
-    width: '100%',
-    height: 120,
+  changeImageButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    alignSelf: 'center',
+  },
+  changeImageText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
+  },
+  imageActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    gap: 12,
+  },
+  imageActionButton: {
+    flex: 1,
     backgroundColor: '#F3F4F6',
+    paddingVertical: 40,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
@@ -698,11 +777,10 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     borderStyle: 'dashed',
   },
-  imagePlaceholderText: {
+  imageActionText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'Inter-Medium',
     color: '#6B7280',
-    marginTop: 8,
     textAlign: 'center',
   },
   imageHint: {
@@ -754,8 +832,41 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   modalActions: {
-    flexDirection: 'row',
+    marginTop: 20,
+  },
+  modalButtonsContainer: {
+    flexDirection: 'column',
     gap: 12,
+    width: '100%',
+  },
+  cancelModalButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#DC2626',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    width: '100%',
+  },
+  cancelModalButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#DC2626',
+  },
+  createModalButton: {
+    backgroundColor: '#DC2626',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    width: '100%',
+  },
+  createModalButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   accessDenied: {
     flex: 1,
