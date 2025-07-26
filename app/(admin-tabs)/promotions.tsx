@@ -218,7 +218,10 @@ export default function AdminPromotions() {
       setPromoDescription('');
       setPromoImage(null);
       setPromoStartDate('');
-      setPromoEndDate('');
+          .select(`
+            *,
+            partners:partner_id(business_name, business_type, logo)
+          `)
       setPromoTargetAudience('all');
       setShowPromotionModal(false);
       
@@ -233,41 +236,80 @@ export default function AdminPromotions() {
 
   const handleTogglePromotion = async (promotionId: string, isActive: boolean) => {
     try {
-      console.log('Toggling promotion:', promotionId, 'from', isActive, 'to', !isActive);
-      
-      const { error } = await supabaseClient
-        .from('promotions')
-        .update({
-          is_active: !isActive
-        })
-        .eq('id', promotionId);
-
-      if (error) {
-        console.error('Database error:', error);
-        throw error;
-      }
-      
-      console.log('Database update successful');
-      
-      // Update local state immediately
+      // Update local state FIRST for immediate UI feedback
+      setPromotions(prev => prev.map(promo => 
+        promo.id === promotionId 
+          ? { ...promo, isActive: !isActive }
+          : promo
+      ));
       setPromotions(prev => prev.map(promo => 
         promo.id === promotionId 
           ? { ...promo, isActive: !isActive }
           : promo
       ));
       
-      // Force refresh from database to ensure sync
-      setTimeout(() => {
-        fetchPromotions();
-      }, 500);
-      
-      Alert.alert(
-        'Promoción actualizada',
-        `La promoción ha sido ${!isActive ? 'activada' : 'desactivada'} correctamente.`
-      );
+          partnerId: item.partner_id,
+          partnerInfo: item.partners ? {
+            businessName: item.partners.business_name,
+            businessType: item.partners.business_type,
+        partner_id: selectedPartnerId,
+            logo: item.partners.logo,
+          } : null,
+      const { error } = await supabaseClient
+        // Revert local state if database update fails
+        setPromotions(prev => prev.map(promo => 
+          promo.id === promotionId 
+            ? { ...promo, isActive: isActive }
+            : promo
+        ));
+        .update({
+          is_active: !isActive
+        })
+        .eq('id', promotionId);
+
+      if (error) {
+        // Revert local state if database update fails
+        setPromotions(prev => prev.map(promo => 
+          promo.id === promotionId 
+            ? { ...promo, isActive: isActive }
+            : promo
+        ));
+        throw error;
+      }
+
+      partner.businessType.toLowerCase().includes(partnerSearchQuery.toLowerCase())
+    );
+  };
+
+  const getSelectedPartner = () => {
+    return partners.find(partner => partner.id === selectedPartnerId);
+  };
+
+  const getBusinessTypeIcon = (type: string) => {
+    switch (type) {
+      case 'veterinary': return '🏥';
+      case 'grooming': return '✂️';
+      case 'walking': return '🚶';
+      case 'boarding': return '🏠';
+      case 'shop': return '🛍️';
+      case 'shelter': return '🐾';
+      default: return '🏢';
+    }
+  };
+      }
+
+      const partnersData = data?.map(partner => ({
+        id: partner.id,
+        businessName: partner.business_name,
+        businessType: partner.business_type,
+        logo: partner.logo,
+        isVerified: partner.is_verified,
+        isActive: partner.is_active,
+      })) || [];
+
+      setPartners(partnersData);
     } catch (error) {
-      console.error('Error toggling promotion:', error);
-      Alert.alert('Error', `No se pudo actualizar la promoción: ${error.message || error}`);
+      console.error('Error fetching partners:', error);
     }
   };
 
@@ -357,9 +399,20 @@ export default function AdminPromotions() {
                 <View style={styles.promotionHeader}>
                   <View style={styles.promotionInfo}>
                     <Text style={styles.promotionTitle}>{promotion.title}</Text>
-                    <Text style={styles.promotionAudience}>
-                      {getTargetAudienceText(promotion.targetAudience)}
-                    </Text>
+                    {promotion.partnerInfo ? (
+                      <View style={styles.partnerInfo}>
+                        <Text style={styles.partnerIcon}>
+                          {getBusinessTypeIcon(promotion.partnerInfo.businessType)}
+                        </Text>
+                        <Text style={styles.partnerName}>
+                          {promotion.partnerInfo.businessName}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.promotionAudience}>
+                        Promoción general • {getTargetAudienceText(promotion.targetAudience)}
+                      </Text>
+                    )}
                   </View>
                   
                   <View style={styles.promotionStatus}>
@@ -458,6 +511,50 @@ export default function AdminPromotions() {
                 numberOfLines={4}
               />
 
+              {/* Partner Selector */}
+              <View style={styles.partnerSection}>
+                <Text style={styles.partnerLabel}>Aliado (opcional)</Text>
+                <Text style={styles.partnerDescription}>
+                  Selecciona un aliado específico para esta promoción
+                </Text>
+                
+                <TouchableOpacity 
+                  style={styles.partnerSelector}
+                  onPress={() => setShowPartnerSelector(true)}
+                >
+                  {getSelectedPartner() ? (
+                    <View style={styles.selectedPartnerInfo}>
+                      <Text style={styles.selectedPartnerIcon}>
+                        {getBusinessTypeIcon(getSelectedPartner()!.businessType)}
+                      </Text>
+                      <View style={styles.selectedPartnerDetails}>
+                        <Text style={styles.selectedPartnerName}>
+                          {getSelectedPartner()!.businessName}
+                        </Text>
+                        <Text style={styles.selectedPartnerType}>
+                          {getSelectedPartner()!.businessType}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <Text style={styles.partnerSelectorPlaceholder}>
+                      Seleccionar aliado (opcional)
+                    </Text>
+                  )}
+                </TouchableOpacity>
+                
+                {getSelectedPartner() && (
+                  <TouchableOpacity 
+                    style={styles.clearPartnerButton}
+                    onPress={() => {
+                      setSelectedPartnerId(null);
+                      setPartnerSearchQuery('');
+                    }}
+                  >
+                    <Text style={styles.clearPartnerText}>Quitar aliado</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
               <View style={styles.imageSection}>
                 <Text style={styles.imageLabel}>Imagen promocional *</Text>
                 
@@ -546,6 +643,8 @@ export default function AdminPromotions() {
                       setPromoStartDate('');
                       setPromoEndDate('');
                       setPromoTargetAudience('all');
+                      setSelectedPartnerId(null);
+                      setPartnerSearchQuery('');
                     }}
                   >
                     <Text style={styles.cancelModalButtonText}>Cancelar</Text>
@@ -570,6 +669,73 @@ export default function AdminPromotions() {
   );
 }
 
+      {/* Partner Selector Modal */}
+      <Modal
+        visible={showPartnerSelector}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPartnerSelector(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.partnerModalContent}>
+            <View style={styles.partnerModalHeader}>
+              <Text style={styles.partnerModalTitle}>Seleccionar Aliado</Text>
+              <TouchableOpacity onPress={() => setShowPartnerSelector(false)}>
+                <Text style={styles.partnerModalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <Input
+              placeholder="Buscar aliado por nombre o tipo..."
+              value={partnerSearchQuery}
+              onChangeText={setPartnerSearchQuery}
+              leftIcon={<Search size={20} color="#9CA3AF" />}
+            />
+            
+            <ScrollView style={styles.partnersList} showsVerticalScrollIndicator={false}>
+              {getFilteredPartners().length === 0 ? (
+                <View style={styles.noPartnersContainer}>
+                  <Text style={styles.noPartnersText}>
+                    {partnerSearchQuery ? 'No se encontraron aliados' : 'No hay aliados disponibles'}
+                  </Text>
+                </View>
+              ) : (
+                getFilteredPartners().map((partner) => (
+                  <TouchableOpacity
+                    key={partner.id}
+                    style={[
+                      styles.partnerItem,
+                      selectedPartnerId === partner.id && styles.selectedPartnerItem
+                    ]}
+                    onPress={() => {
+                      setSelectedPartnerId(partner.id);
+                      setShowPartnerSelector(false);
+                      setPartnerSearchQuery('');
+                    }}
+                  >
+                    <View style={styles.partnerItemInfo}>
+                      <Text style={styles.partnerItemIcon}>
+                        {getBusinessTypeIcon(partner.businessType)}
+                      </Text>
+                      <View style={styles.partnerItemDetails}>
+                        <Text style={styles.partnerItemName}>
+                          {partner.businessName}
+                        </Text>
+                        <Text style={styles.partnerItemType}>
+                          {partner.businessType}
+                        </Text>
+                      </View>
+                    </View>
+                    {selectedPartnerId === partner.id && (
+                      <Text style={styles.selectedIndicator}>✓</Text>
+                    )}
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -654,6 +820,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
+  },
+  partnerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  partnerIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  partnerName: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#3B82F6',
   },
   promotionAudience: {
     fontSize: 14,
@@ -762,6 +942,147 @@ const styles = StyleSheet.create({
     color: '#111827',
     textAlign: 'center',
     marginBottom: 20,
+  },
+  partnerSection: {
+    marginBottom: 16,
+  },
+  partnerLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  partnerDescription: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  partnerSelector: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
+    minHeight: 50,
+  },
+  selectedPartnerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  selectedPartnerIcon: {
+    fontSize: 20,
+    marginRight: 12,
+  },
+  selectedPartnerDetails: {
+    flex: 1,
+  },
+  selectedPartnerName: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  selectedPartnerType: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  partnerSelectorPlaceholder: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+  },
+  clearPartnerButton: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  clearPartnerText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#EF4444',
+  },
+  partnerModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    marginTop: 100,
+    flex: 1,
+  },
+  partnerModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  partnerModalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+  },
+  partnerModalClose: {
+    fontSize: 18,
+    color: '#6B7280',
+    padding: 4,
+  },
+  partnersList: {
+    flex: 1,
+    marginTop: 16,
+  },
+  noPartnersContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  noPartnersText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  partnerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  selectedPartnerItem: {
+    backgroundColor: '#EBF8FF',
+    borderColor: '#3B82F6',
+    borderWidth: 1,
+  },
+  partnerItemInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  partnerItemIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  partnerItemDetails: {
+    flex: 1,
+  },
+  partnerItemName: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  partnerItemType: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  selectedIndicator: {
+    fontSize: 18,
+    color: '#3B82F6',
+    fontWeight: 'bold',
   },
   imageSection: {
     marginBottom: 16,
