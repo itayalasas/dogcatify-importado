@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, SafeAreaView, Image, Dimensions, ActivityIndicator, Share, Alert } from 'react-native';
 import PostCard from '../../components/PostCard';
-import { PromotionCard } from '../../components/PromotionCard';
+import { PromotionCard } from '@/components/PromotionCard';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient, getPosts } from '../../lib/supabase';
@@ -288,7 +288,7 @@ export default function Home() {
   const handlePromotionClick = async (promotionId: string, url?: string) => {
     try {
       console.log('Promotion clicked:', promotionId);
-      // Increment clicks
+      // Increment views
       const { error } = await supabaseClient
         .from('promotions')
         .rpc('increment_promotion_clicks', { promotion_id: promotionId });
@@ -394,7 +394,7 @@ export default function Home() {
           }
           ListFooterComponent={renderFooter}
         />
-      )}      
+      )}
     </SafeAreaView>
   );
 }
