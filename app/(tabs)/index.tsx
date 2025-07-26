@@ -185,17 +185,29 @@ export default function Home() {
       promotions: promotionsData.length
     });
     
-    const combined = [...postsData];
+    const combined: any[] = [];
     
-    // Insert promotions every 3-4 posts
+    // Intercalar promociones cada 3 posts
     if (promotionsData.length > 0) {
-      let promotionIndex = 0;
-      for (let i = 2; i < combined.length; i += 4) {
-        if (promotionIndex < promotionsData.length) {
-          combined.splice(i, 0, promotionsData[promotionIndex]);
-          promotionIndex++;
+      let postIndex = 0;
+      let promoIndex = 0;
+      
+      while (postIndex < postsData.length || promoIndex < promotionsData.length) {
+        // Agregar 3 posts
+        for (let i = 0; i < 3 && postIndex < postsData.length; i++) {
+          combined.push(postsData[postIndex]);
+          postIndex++;
+        }
+        
+        // Agregar 1 promoción si hay disponible
+        if (promoIndex < promotionsData.length && combined.length > 0) {
+          combined.push(promotionsData[promoIndex]);
+          promoIndex++;
         }
       }
+    } else {
+      // Si no hay promociones, solo agregar posts
+      combined.push(...postsData);
     }
     
     console.log('Final feed items:', combined.length);
@@ -324,20 +336,27 @@ export default function Home() {
       
       if (error) {
         console.error('Error incrementing views:', error);
-      }
-    } catch (error) {
-      console.error('Error handling promotion view:', error);
     }
   };
 
-  // --- FUNCIÓN CORREGIDA ---
-  const renderFeedItem = ({ item }: { item: any }) => {
-    if (item.type === 'promotion') {
-      return (
-        <PromotionCard
-          promotion={item}
-          onPress={() => {
+  const handlePromotionClick = async (promotionId: string, url?: string) => {
+    try {
+      console.log('Promotion clicked:', promotionId);
+      // Increment clicks
+      const { error } = await supabaseClient
+        .from('promotions')
+        .rpc('increment_promotion_clicks', { promotion_id: promotionId });
+      
             handlePromotionView(item.id);
+      // Incrementar vistas cuando se renderiza la promoción
+      React.useEffect(() => {
+        handlePromotionView(item.id);
+      }, []);
+      
+    }
+            handlePromotionView(item.id);
+            handlePromotionClick(item.id, item.ctaUrl);
+          onPress={() => {
             handlePromotionClick(item.id, item.ctaUrl);
           }}
         />
@@ -353,7 +372,6 @@ export default function Home() {
       />
     );
   };
-  // --- FIN FUNCIÓN CORREGIDA ---
 
   const renderFooter = () => {
     if (!hasMore) return null;
@@ -362,8 +380,7 @@ export default function Home() {
         <ActivityIndicator size="small" color="#3B82F6" />
       </View>
     );
-  };
-
+    }
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -393,11 +410,6 @@ export default function Home() {
           onRefresh={() => {
             fetchPosts(true);
             fetchPromotions();
-          }}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>{t('noPostsYet')}</Text>
-              <Text style={styles.emptySubtitle}>{t('beFirstToPost')}</Text>
             </View>
           }
           ListFooterComponent={renderFooter}
