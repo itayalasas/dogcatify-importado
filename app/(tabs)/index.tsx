@@ -322,14 +322,18 @@ export default function Home() {
   };
 
   const renderFeedItem = ({ item, index }: { item: any; index: number }) => {
-          }}
-        />
-      );
-    }
+    if (item.type === 'promotion') {
+      return (
+        <PromotionCard
+          promotion={item}
           onPress={() => {
             handlePromotionView(item.id);
             handlePromotionClick(item.id, item.ctaUrl);
           }}
+        />
+      );
+    }
+    
     return (
       <PostCard
         post={item}
