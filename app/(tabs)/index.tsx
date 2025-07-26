@@ -327,15 +327,18 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error handling promotion view:', error);
+    }
+  };
+
+  const renderFeedItem = ({ item }: { item: any }) => {
+    if (item.type === 'promotion') {
+      return (
+        <PromotionCard
           promotion={item}
           onPress={() => {
             handlePromotionView(item.id);
             handlePromotionClick(item.id, item.ctaUrl);
-          onPress={() => {
-            handlePromotionView(item.id);
-    }
-      
-      if (error) throw error;
+          }}
         />
       );
     }
@@ -406,7 +409,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
-    paddingTop: 30,
     paddingTop: 30,
   },
   header: {
