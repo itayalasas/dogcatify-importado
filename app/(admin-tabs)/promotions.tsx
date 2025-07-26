@@ -51,10 +51,7 @@ export default function AdminPromotions() {
         console.log('Starting to fetch promotions...');
         const { data, error } = await supabaseClient
           .from('promotions')
-          .select(`
-            *,
-            partners:partner_id(business_name, business_type, logo)
-          `)
+          .select('*, partners:partner_id(business_name, business_type, logo)')
           .order('created_at', { ascending: false });
 
         if (error) {
@@ -138,13 +135,12 @@ export default function AdminPromotions() {
 
   const getBusinessTypeIcon = (businessType: string) => {
     const icons: { [key: string]: string } = {
-      'veterinaria': '🏥',
-      'tienda_mascotas': '🏪',
-      'guarderia': '🏠',
-      'peluqueria': '✂️',
-      'entrenamiento': '🎾',
-      'hotel': '🏨',
-      'otros': '🐾'
+      'veterinary': '🏥',
+      'grooming': '✂️',
+      'walking': '🚶',
+      'boarding': '🏠',
+      'shop': '🛍️',
+      'shelter': '🐾'
     };
     return icons[businessType] || '🐾';
   };
