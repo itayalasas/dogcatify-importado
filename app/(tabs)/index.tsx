@@ -314,10 +314,28 @@ export default function Home() {
       console.error('Error tracking promotion click:', error);
     }
   };
-            handlePromotionClick(item.id, item.ctaUrl);
-          onPress={() => {
-            handlePromotionView(item.id);
-            handlePromotionClick(item.id, item.ctaUrl);
+
+  const handlePromotionView = async (promotionId: string) => {
+    try {
+      console.log('Promotion viewed:', promotionId);
+      // Increment views
+      const { error } = await supabaseClient
+        .from('promotions')
+        .rpc('increment_promotion_views', { promotion_id: promotionId });
+      
+      if (error) {
+        console.error('Error incrementing views:', error);
+      }
+    } catch (error) {
+      console.error('Error tracking promotion view:', error);
+    }
+  };
+
+  const renderFeedItem = ({ item }: { item: any }) => {
+    if (item.type === 'promotion') {
+      return (
+        <PromotionCard
+          promotion={item}
           onPress={() => {
             handlePromotionView(item.id);
             handlePromotionClick(item.id, item.ctaUrl);
@@ -344,12 +362,6 @@ export default function Home() {
       </View>
     );
   };
-  };
-  const renderFooter = () => (!hasMore ? null : (
-    <View style={styles.loaderFooter}>
-      <ActivityIndicator size="small" color="#3B82F6" />
-    </View>
-  ));
 
   return (
     <SafeAreaView style={styles.container}>
