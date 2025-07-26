@@ -294,27 +294,6 @@ export default function Home() {
     }
   };
 
-  const handlePromotionClick = async (promotionId: string, url?: string) => {
-    try {
-      console.log('Promotion clicked:', promotionId);
-      // Increment clicks
-      const { error } = await supabaseClient
-        .from('promotions')
-        .rpc('increment_promotion_clicks', { promotion_id: promotionId });
-      
-      if (error) {
-        console.error('Error incrementing clicks:', error);
-      }
-      
-      if (url) {
-        console.log('Opening promotion URL:', url);
-        // Here you could open the URL with Linking.openURL(url)
-      }
-    } catch (error) {
-      console.error('Error handling promotion click:', error);
-    }
-  };
-
   const handlePromotionView = async (promotionId: string) => {
     try {
       // Increment views
@@ -324,6 +303,9 @@ export default function Home() {
       
       if (error) {
         console.error('Error incrementing views:', error);
+      }
+    } catch (error) {
+      console.error('Error handling promotion view:', error);
     }
   };
 
