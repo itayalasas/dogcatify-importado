@@ -337,14 +337,27 @@ export default function Home() {
   };
 
   const renderFeedItem = ({ item, index }: { item: any; index: number }) => {
-          }}
-        onLike={(postId, doubleTap) => handleLike(postId, doubleTap)}
-        onComment={handleComment}
-        onShare={handleShare}
+    if (item.type === 'promotion') {
+      return (
+        <PromotionCard
+          key={item.id}
+          promotion={item}
           onPress={() => {
             handlePromotionView(item.id);
             handlePromotionClick(item.id, item.ctaUrl);
           }}
+        />
+      );
+    }
+    
+    return (
+      <PostCard
+        key={item.id}
+        post={item}
+        onLike={(postId, doubleTap) => handleLike(postId, doubleTap)}
+        onComment={handleComment}
+        onShare={handleShare}
+      />
     );
   };
 
@@ -399,9 +412,7 @@ export default function Home() {
         />
       )}      
     </SafeAreaView>
-      console.log('Promotions fetched:', data?.length || 0, 'active promotions');
-      console.log('Current date for filtering:', now);
-      
+  );
 }
 
 const styles = StyleSheet.create({
@@ -410,7 +421,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   header: {
-      console.log('Promotion viewed:', promotionId);
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     paddingHorizontal: 0,
