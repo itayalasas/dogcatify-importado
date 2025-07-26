@@ -12,8 +12,8 @@ export default function AdminPromotions() {
   const { currentUser } = useAuth();
   const [promotions, setPromotions] = useState<any[]>([]);
   const [showPromotionModal, setShowPromotionModal] = useState(false);
-  const [partners, setPartners] = useState<any[]>([]);
   const [showPartnerSelector, setShowPartnerSelector] = useState(false);
+  const [partners, setPartners] = useState<any[]>([]);
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
   const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
   
@@ -114,9 +114,10 @@ export default function AdminPromotions() {
     try {
       const { data, error } = await supabaseClient
         .from('partners')
-        .select('id, business_name, business_type, logo, is_verified, is_active')
+        .select('*')
         .eq('is_active', true)
-        .order('business_name', { ascending: true });
+        .eq('is_verified', true)
+        .order('business_name');
 
       if (error) {
         console.error('Error fetching partners:', error);
@@ -139,7 +140,7 @@ export default function AdminPromotions() {
   };
 
   const getFilteredPartners = () => {
-    if (!partnerSearchQuery.trim()) return partners;
+    if (!partnerSearchQuery) return partners;
     
     return partners.filter(partner =>
       partner.businessName.toLowerCase().includes(partnerSearchQuery.toLowerCase()) ||
@@ -326,10 +327,9 @@ export default function AdminPromotions() {
         ));
         throw error;
       }
-
     } catch (error) {
       console.error('Error toggling promotion:', error);
-      Alert.alert('Error', `No se pudo actualizar la promoción: ${error.message || error}`);
+      Alert.alert('Error', 'No se pudo actualizar la promoción');
     }
   };
 
