@@ -320,16 +320,10 @@ export default function Home() {
       // Increment views
       const { error } = await supabaseClient
         .from('promotions')
-        .update({ 
-          views: supabaseClient.raw('views + 1'),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', promotionId);
+        .rpc('increment_promotion_views', { promotion_id: promotionId });
       
       if (error) {
         console.error('Error incrementing views:', error);
-      } else {
-        console.log('Views incremented successfully for promotion:', promotionId);
       }
     } catch (error) {
       console.error('Error tracking promotion view:', error);
@@ -340,7 +334,6 @@ export default function Home() {
     if (item.type === 'promotion') {
       return (
         <PromotionCard
-          key={item.id}
           promotion={item}
           onPress={() => {
             handlePromotionView(item.id);
@@ -352,8 +345,8 @@ export default function Home() {
     
     return (
       <PostCard
-        key={item.id}
         post={item}
+        isMock={false}
         onLike={(postId, doubleTap) => handleLike(postId, doubleTap)}
         onComment={handleComment}
         onShare={handleShare}
