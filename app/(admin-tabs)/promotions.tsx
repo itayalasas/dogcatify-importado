@@ -135,7 +135,7 @@ export default function AdminPromotions() {
   };
 
   const handleCreatePromotion = async () => {
-    if (!promoTitle || !promoDescription || !promoStartDate || !promoEndDate) {
+    if (!promoTitle || !promoDescription || !promoStartDate || !promoEndDate || !promoImage) {
       Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
       return;
     }
@@ -157,6 +157,8 @@ export default function AdminPromotions() {
         is_active: true,
         views: 0,
         clicks: 0,
+        promotion_type: 'feed',
+        cta_text: 'Más información',
         created_at: new Date().toISOString(),
         created_by: currentUser?.id,
       };
@@ -375,37 +377,40 @@ export default function AdminPromotions() {
               
               <Input
                 label="Título de la promoción"
-                placeholder="Ej: ¡Descuento especial en servicios!"
+                placeholder="Ej: ¡Descuento especial en servicios para mascotas!"
                 value={promoTitle}
                 onChangeText={setPromoTitle}
               />
               
               <Input
                 label="Descripción"
-                placeholder="Describe la promoción..."
+                placeholder="Describe la promoción detalladamente..."
                 value={promoDescription}
                 onChangeText={setPromoDescription}
                 multiline
-                numberOfLines={3}
+                numberOfLines={4}
               />
 
               <View style={styles.imageSection}>
-                <Text style={styles.imageLabel}>Imagen promocional</Text>
+                <Text style={styles.imageLabel}>Imagen promocional *</Text>
                 <TouchableOpacity style={styles.imageSelector} onPress={handleSelectImage}>
                   {promoImage ? (
                     <Image source={{ uri: promoImage }} style={styles.selectedImage} />
                   ) : (
                     <View style={styles.imagePlaceholder}>
                       <Megaphone size={32} color="#9CA3AF" />
-                      <Text style={styles.imagePlaceholderText}>Seleccionar imagen</Text>
+                      <Text style={styles.imagePlaceholderText}>Seleccionar imagen (requerida)</Text>
                     </View>
                   )}
                 </TouchableOpacity>
+                <Text style={styles.imageHint}>
+                  Recomendado: 1080x1080px o 16:9 para mejor visualización
+                </Text>
               </View>
               
               <Input
                 label="Fecha de inicio"
-                placeholder="YYYY-MM-DD"
+                placeholder="2025-01-01"
                 value={promoStartDate}
                 onChangeText={setPromoStartDate}
                 leftIcon={<Calendar size={20} color="#6B7280" />}
@@ -413,7 +418,7 @@ export default function AdminPromotions() {
               
               <Input
                 label="Fecha de fin"
-                placeholder="YYYY-MM-DD"
+                placeholder="2025-01-31"
                 value={promoEndDate}
                 onChangeText={setPromoEndDate}
                 leftIcon={<Calendar size={20} color="#6B7280" />}
@@ -421,6 +426,9 @@ export default function AdminPromotions() {
 
               <View style={styles.audienceSection}>
                 <Text style={styles.audienceLabel}>Audiencia objetivo</Text>
+                <Text style={styles.audienceDescription}>
+                  Selecciona quién verá esta promoción en su feed
+                </Text>
                 <View style={styles.audienceOptions}>
                   {[
                     { value: 'all', label: 'Todos los usuarios' },
@@ -695,6 +703,15 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     marginTop: 8,
+    textAlign: 'center',
+  },
+  imageHint: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    marginTop: 8,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   audienceSection: {
     marginBottom: 20,
@@ -704,6 +721,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#374151',
     marginBottom: 8,
+  },
+  audienceDescription: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 12,
+    lineHeight: 18,
   },
   audienceOptions: {
     gap: 8,
