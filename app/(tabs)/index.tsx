@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, SafeAreaView, ActivityIndicator, Share, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, SafeAreaView, Image, Dimensions, ActivityIndicator, Share, Alert } from 'react-native';
 import PostCard from '../../components/PostCard';
 import { PromotionCard } from '../../components/PromotionCard';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient, getPosts } from '../../lib/supabase';
+
+const { width } = Dimensions.get('window');
 
 export default function Home() {
   const [posts, setPosts] = useState<any[]>([]);
@@ -80,6 +82,11 @@ export default function Home() {
       setPromotions(promotionsData);
       console.log('Promotions state updated:', promotionsData.length);
       
+      // Log promotion details for debugging
+      promotionsData.forEach(promo => {
+        console.log(`Promotion: ${promo.title}, Start: ${promo.startDate}, End: ${promo.endDate}, Active: ${promo.startDate <= new Date() && promo.endDate >= new Date()}`);
+      });
+      
       // Update feed items immediately after fetching promotions
       if (posts.length > 0) {
         combineFeedItems(posts, promotionsData);
@@ -106,7 +113,7 @@ export default function Home() {
       const offset = (currentPage - 1) * pageSize;
       const data = await getPosts(pageSize, offset);
       
-      // Check if we have more posts to load
+      // Check if we have more posts to load (simplified check)
       setHasMore(data && data.length === pageSize);
       
       const postsData = data.map((post: any) => {
@@ -330,46 +337,14 @@ export default function Home() {
   };
 
   const renderFeedItem = ({ item, index }: { item: any; index: number }) => {
-    if (item.type === 'promotion') {
-      return (
-        <PromotionCard
-          promotion={item}
+          }}
+        </View>
+      ) : (
+        <FlatList
           onPress={() => {
             handlePromotionView(item.id);
             handlePromotionClick(item.id, item.ctaUrl);
           }}
-        />
-      );
-    }
-    
-    return (
-      <PostCard
-        post={item}
-        onLike={() => handleLike(item.id)}
-        onComment={() => handleComment(item.id)}
-        onShare={() => handleShare(item.id)}
-      />
-    );
-  };
-
-  const renderFooter = () => {
-    if (!hasMore) return null;
-    return (
-      <View style={styles.loaderFooter}>
-        <ActivityIndicator size="small" color="#3B82F6" />
-      </View>
-    );
-  };
-
-  return (
-    <SafeAreaView style={styles.container}>
-      {loading && posts.length === 0 ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3B82F6" />
-        </View>
-      ) : (
-        <FlatList
-          data={feedItems}
           keyExtractor={(item) => item.id}
           renderItem={renderFeedItem}
           showsVerticalScrollIndicator={false}
@@ -392,13 +367,130 @@ export default function Home() {
         />
       )}      
     </SafeAreaView>
-  );
+        onComment={() => handleComment(item.id)}
+        onShare={() => handleShare(item.id)}
+      />
+    );
+  };
+
+  const renderFooter = () => {
+          promotion={item}
+          onPress={() => {
+            handlePromotionView(item.id);
+            handlePromotionClick(item.id, item.ctaUrl);
+          onPress={() => {
+            handlePromotionView(item.id);
+            handlePromotionClick(item.id, item.ctaUrl);
+          }}
+        />
+      );
+        post={item}
+  header: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  logoWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logo: {
+    width: 40,
+    height: 40,
+    resizeMode: 'contain',
+    marginRight: 8,
+  },
+  appName: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#2D6A6F',
+  },
+        onLike={() => handleLike(item.id)}
+        onComment={() => handleComment(item.id)}
+        onShare={() => handleShare(item.id)}
+      />
+    );
+  };
+      />
+    );
+  };
+
+  const renderFooter = () => {
+    if (!hasMore) return null;
+    return (
+      <View style={styles.loaderFooter}>
+        <ActivityIndicator size="small" color="#3B82F6" />
+      </View>
+    );
+  };
+    }
+    
+    return (
+      <PostCard
+        post={item}
+        onLike={() => handleLike(item.id)}
+        onComment={() => handleComment(item.id)}
+        onShare={() => handleShare(item.id)}
+      />
+    );
+  };
+        onShare={() => handleShare(item.id)}
+      />
+    );
+  };
+
+  const renderFooter = () => {
+    if (!hasMore) return null;
+    return (
+      <View style={styles.loaderFooter}>
+        <ActivityIndicator size="small" color="#3B82F6" />
+      </View>
+    );
+  };
+    );
+  };
+      console.log('Promotions fetched:', data?.length || 0, 'active promotions');
+      console.log('Current date for filtering:', now);
+      
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+  },
+  header: {
+      console.log('Promotion viewed:', promotionId);
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 0,
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+    minHeight: 60,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  logoWrapper: {
+    width: width,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  logo: {
+    width: 40,
+    height: 40,
+    resizeMode: 'contain',
+    marginRight: 8,
+  },
+  appName: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#2D6A6F',
   },
   loaderFooter: {
     paddingVertical: 20,
@@ -409,6 +501,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 10,
   },
   emptyContainer: {
     flex: 1,
