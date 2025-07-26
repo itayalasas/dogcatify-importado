@@ -317,6 +317,7 @@ export default function Home() {
 
   const handlePromotionView = async (promotionId: string) => {
     try {
+      console.log('Promotion viewed:', promotionId);
       // Increment views
       const { error } = await supabaseClient
         .from('promotions')
@@ -337,14 +338,32 @@ export default function Home() {
   };
 
   const renderFeedItem = ({ item, index }: { item: any; index: number }) => {
-          }}
-    );
-  };
-
+    if (item.type === 'promotion') {
+      return (
+        <PromotionCard
+          key={item.id}
+          promotion={item}
           onPress={() => {
             handlePromotionView(item.id);
             handlePromotionClick(item.id, item.ctaUrl);
           }}
+        />
+      );
+    }
+    
+    return (
+      <PostCard
+        key={item.id}
+        post={item}
+        onLike={(doubleTap) => handleLike(item.id, doubleTap)}
+        onComment={() => handleComment(item.id)}
+        onShare={() => handleShare(item.id)}
+        currentUserId={currentUser?.id}
+      />
+    );
+  };
+
+  const renderFooter = () => {
     if (!hasMore) return null;
     return (
       <View style={styles.loaderFooter}>
@@ -395,11 +414,7 @@ export default function Home() {
         />
       )}      
     </SafeAreaView>
-    );
-  };
-      console.log('Promotions fetched:', data?.length || 0, 'active promotions');
-      console.log('Current date for filtering:', now);
-      
+  );
 }
 
 const styles = StyleSheet.create({
@@ -408,7 +423,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   header: {
-      console.log('Promotion viewed:', promotionId);
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     paddingHorizontal: 0,
