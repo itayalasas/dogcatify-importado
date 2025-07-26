@@ -321,22 +321,7 @@ export default function Home() {
       const { error } = await supabaseClient
         .from('promotions')
         .update({ 
-          views: supabaseClient.raw('views + 1'),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', promotionId);
-      
-      if (error) {
-        console.error('Error incrementing views:', error);
-      } else {
-        console.log('Views incremented successfully for promotion:', promotionId);
-      }
-    } catch (error) {
-      console.error('Error tracking promotion view:', error);
-    }
-  };
-
-  const renderFeedItem = ({ item, index }: { item: any; index: number }) => {
+  const renderFeedItem = ({ item }: { item: any }) => {
     if (item.type === 'promotion') {
       return (
         <PromotionCard
@@ -348,6 +333,7 @@ export default function Home() {
         />
       );
     }
+
     return (
       <PostCard
         post={item}
@@ -358,6 +344,15 @@ export default function Home() {
     );
   };
 
+  const renderFooter = () => {
+    if (!hasMore) return null;
+    return (
+      <View style={styles.loaderFooter}>
+        <ActivityIndicator size="small" color="#3B82F6" />
+      </View>
+    );
+  };
+  };
   const renderFooter = () => (!hasMore ? null : (
     <View style={styles.loaderFooter}>
       <ActivityIndicator size="small" color="#3B82F6" />
@@ -411,6 +406,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+    paddingTop: 30,
   },
   header: {
     justifyContent: 'center',
