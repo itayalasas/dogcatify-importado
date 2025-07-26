@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, SafeAreaView, Image, Dimensions, ActivityIndicator, Share, Alert } from 'react-native';
 import PostCard from '../../components/PostCard';
-import PromotionCard from '@/components/PromotionCard';
+import { PromotionCard } from '@/components/PromotionCard';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient, getPosts } from '../../lib/supabase';
@@ -181,7 +181,7 @@ export default function Home() {
     // Insert promotions every 3-4 posts
     if (promotionsData.length > 0) {
       let promotionIndex = 0;
-      for (let i = 3; i < combined.length; i += 4) {
+      for (let i = 2; i < combined.length; i += 4) {
         if (promotionIndex < promotionsData.length) {
           combined.splice(i, 0, promotionsData[promotionIndex]);
           promotionIndex++;
@@ -323,11 +323,11 @@ export default function Home() {
 
   const renderFeedItem = ({ item, index }: { item: any; index: number }) => {
     // Track promotion views when they appear
-    useEffect(() => {
+    React.useEffect(() => {
       if (item.type === 'promotion') {
         handlePromotionView(item.id);
       }
-    }, []);
+    }, [item.id, item.type]);
     
     if (item.type === 'promotion') {
       return (
