@@ -330,6 +330,7 @@ export default function Home() {
     }
   };
 
+  // --- FUNCIÓN CORREGIDA ---
   const renderFeedItem = ({ item }: { item: any }) => {
     if (item.type === 'promotion') {
       return (
@@ -352,6 +353,7 @@ export default function Home() {
       />
     );
   };
+  // --- FIN FUNCIÓN CORREGIDA ---
 
   const renderFooter = () => {
     if (!hasMore) return null;
