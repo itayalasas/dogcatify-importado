@@ -347,36 +347,6 @@ export default function Home() {
         onShare={handleShare}
       />
     );
-        .eq('id', promotionId);
-      
-      if (url) {
-        // Open URL or navigate
-        console.log('Opening promotion URL:', url);
-      }
-    } catch (error) {
-      console.error('Error tracking promotion click:', error);
-    }
-  };
-
-  const renderFeedItem = ({ item }: { item: any }) => {
-    if (item.type === 'promotion') {
-      return (
-        <PromotionCard
-          promotion={item}
-          onPress={() => handlePromotionClick(item.id, item.ctaUrl)}
-        />
-      );
-    }
-    
-    return (
-      <PostCard
-        post={item}
-        isMock={false}
-        onLike={(postId, doubleTap) => handleLike(postId, doubleTap)}
-        onComment={handleComment}
-        onShare={handleShare}
-      />
-    );
   };
 
   const renderFooter = () => {
