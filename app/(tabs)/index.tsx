@@ -320,7 +320,11 @@ export default function Home() {
       // Increment views
       const { error } = await supabaseClient
         .from('promotions')
-        .rpc('increment_promotion_views', { promotion_id: promotionId });
+        .update({
+          views: supabaseClient.raw('views + 1'),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', promotionId);
       
       if (error) {
         console.error('Error incrementing views:', error);
@@ -342,7 +346,7 @@ export default function Home() {
         />
       );
     }
-
+    
     return (
       <PostCard
         post={item}
@@ -409,6 +413,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+    paddingTop: 30,
     paddingTop: 30,
   },
   header: {
