@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, SafeAreaView, Image, Dimensions, ActivityIndicator, Share, Alert } from 'react-native';
 import PostCard from '../../components/PostCard';
-import { PromotionCard } from '@/components/PromotionCard';
+import { PromotionCard } from '../../components/PromotionCard';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient, getPosts } from '../../lib/supabase';
@@ -72,11 +72,20 @@ export default function Home() {
         ctaText: promo.cta_text || 'Más información',
         ctaUrl: promo.cta_url,
         partnerId: promo.partner_id,
+        startDate: new Date(promo.start_date),
+        endDate: new Date(promo.end_date),
+        views: promo.views || 0,
+        clicks: promo.clicks || 0,
         createdAt: new Date(promo.created_at),
       })) || [];
       
       setPromotions(promotionsData);
       console.log('Promotions state updated:', promotionsData.length);
+      
+      // Log promotion details for debugging
+      promotionsData.forEach(promo => {
+        console.log(`Promotion: ${promo.title}, Start: ${promo.startDate}, End: ${promo.endDate}, Active: ${promo.startDate <= new Date() && promo.endDate >= new Date()}`);
+      });
       
       // Update feed items immediately after fetching promotions
       if (posts.length > 0) {
@@ -288,7 +297,7 @@ export default function Home() {
   const handlePromotionClick = async (promotionId: string, url?: string) => {
     try {
       console.log('Promotion clicked:', promotionId);
-      // Increment views
+      // Increment clicks
       const { error } = await supabaseClient
         .from('promotions')
         .rpc('increment_promotion_clicks', { promotion_id: promotionId });
@@ -311,10 +320,16 @@ export default function Home() {
       // Increment views
       const { error } = await supabaseClient
         .from('promotions')
-        .rpc('increment_promotion_views', { promotion_id: promotionId });
+        .update({ 
+          views: supabaseClient.raw('views + 1'),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', promotionId);
       
       if (error) {
         console.error('Error incrementing views:', error);
+      } else {
+        console.log('Views incremented successfully for promotion:', promotionId);
       }
     } catch (error) {
       console.error('Error tracking promotion view:', error);
@@ -322,26 +337,14 @@ export default function Home() {
   };
 
   const renderFeedItem = ({ item, index }: { item: any; index: number }) => {
-    if (item.type === 'promotion') {
-      return (
-        <PromotionCard
-          promotion={item}
+          }}
+        onLike={(postId, doubleTap) => handleLike(postId, doubleTap)}
+        onComment={handleComment}
+        onShare={handleShare}
           onPress={() => {
             handlePromotionView(item.id);
             handlePromotionClick(item.id, item.ctaUrl);
           }}
-        />
-      );
-    }
-    
-    return (
-      <PostCard
-        post={item}
-        isMock={false}
-        onLike={(postId, doubleTap) => handleLike(postId, doubleTap)}
-        onComment={handleComment}
-        onShare={handleShare}
-      />
     );
   };
 
@@ -394,9 +397,11 @@ export default function Home() {
           }
           ListFooterComponent={renderFooter}
         />
-      )}
+      )}      
     </SafeAreaView>
-  );
+      console.log('Promotions fetched:', data?.length || 0, 'active promotions');
+      console.log('Current date for filtering:', now);
+      
 }
 
 const styles = StyleSheet.create({
@@ -405,7 +410,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   header: {
-    flexDirection: 'row',
+      console.log('Promotion viewed:', promotionId);
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     paddingHorizontal: 0,
