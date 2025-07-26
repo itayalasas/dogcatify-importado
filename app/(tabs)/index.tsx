@@ -320,11 +320,7 @@ export default function Home() {
       // Increment views
       const { error } = await supabaseClient
         .from('promotions')
-        .update({
-          views: supabaseClient.raw('views + 1'),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', promotionId);
+        .rpc('increment_promotion_views', { promotion_id: promotionId });
       
       if (error) {
         console.error('Error incrementing views:', error);
