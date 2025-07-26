@@ -319,29 +319,18 @@ export default function Home() {
     try {
       // Increment views
       const { error } = await supabaseClient
-        .from('promotions')
-        .rpc('increment_promotion_views', { promotion_id: promotionId });
+    }
       
-      if (error) {
-        console.error('Error incrementing views:', error);
+          onPress={() => {
+    }
+            handlePromotionView(item.id);
+            handlePromotionClick(item.id, item.ctaUrl);
+          }}
       }
     } catch (error) {
       console.error('Error handling promotion view:', error);
     }
   };
-
-  const renderFeedItem = ({ item }: { item: any }) => {
-    if (item.type === 'promotion') {
-      return (
-        <PromotionCard
-          promotion={item}
-          onPress={() => {
-            handlePromotionView(item.id);
-            handlePromotionClick(item.id, item.ctaUrl);
-          }}
-        />
-      );
-    }
 
     return (
       <PostCard
@@ -409,6 +398,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+    paddingTop: 30,
     paddingTop: 30,
   },
   header: {
