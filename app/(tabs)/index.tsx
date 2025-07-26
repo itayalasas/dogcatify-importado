@@ -327,10 +327,15 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error handling promotion view:', error);
+    }
+  };
+
+  const renderFeedItem = ({ item }: { item: any }) => {
+    if (item.type === 'promotion') {
+      return (
+        <PromotionCard
           promotion={item}
           onPress={() => {
-            handlePromotionView(item.id);
-    }
             handlePromotionView(item.id);
             handlePromotionClick(item.id, item.ctaUrl);
           }}
