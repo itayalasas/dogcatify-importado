@@ -322,18 +322,14 @@ export default function Home() {
   };
 
   const renderFeedItem = ({ item, index }: { item: any; index: number }) => {
-    // Track promotion views when they appear
-    React.useEffect(() => {
-      if (item.type === 'promotion') {
-        handlePromotionView(item.id);
-      }
-    }, [item.id, item.type]);
-    
     if (item.type === 'promotion') {
       return (
         <PromotionCard
           promotion={item}
-          onPress={() => handlePromotionClick(item.id, item.ctaUrl)}
+          onPress={() => {
+            handlePromotionView(item.id);
+            handlePromotionClick(item.id, item.ctaUrl);
+          }}
         />
       );
     }
