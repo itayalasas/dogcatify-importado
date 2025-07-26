@@ -317,6 +317,7 @@ export default function Home() {
 
   const handlePromotionView = async (promotionId: string) => {
     try {
+      console.log('Promotion viewed:', promotionId);
       // Increment views
       const { error } = await supabaseClient
         .from('promotions')
@@ -337,14 +338,57 @@ export default function Home() {
   };
 
   const renderFeedItem = ({ item, index }: { item: any; index: number }) => {
-          }}
-        </View>
-      ) : (
-        <FlatList
+    if (item.type === 'promotion') {
+      return (
+        <PromotionCard
+          promotion={item}
           onPress={() => {
             handlePromotionView(item.id);
             handlePromotionClick(item.id, item.ctaUrl);
           }}
+        />
+      );
+    }
+    
+    return (
+      <PostCard
+        post={item}
+        onLike={() => handleLike(item.id)}
+        onComment={() => handleComment(item.id)}
+        onShare={() => handleShare(item.id)}
+      />
+    );
+  };
+
+  const renderFooter = () => {
+    if (!hasMore) return null;
+    return (
+      <View style={styles.loaderFooter}>
+        <ActivityIndicator size="small" color="#3B82F6" />
+      </View>
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <View style={styles.logoWrapper}>
+          <Image
+            source={require('../../assets/images/logo.png')}
+            style={styles.logo}
+          />
+          <Text style={styles.appName}>DogCatiFy</Text>
+        </View>
+      </View>
+      
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Cargando publicaciones...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={feedItems}
           keyExtractor={(item) => item.id}
           renderItem={renderFeedItem}
           showsVerticalScrollIndicator={false}
@@ -367,96 +411,7 @@ export default function Home() {
         />
       )}      
     </SafeAreaView>
-        onComment={() => handleComment(item.id)}
-        onShare={() => handleShare(item.id)}
-      />
-    );
-  };
-
-  const renderFooter = () => {
-          promotion={item}
-          onPress={() => {
-            handlePromotionView(item.id);
-            handlePromotionClick(item.id, item.ctaUrl);
-          onPress={() => {
-            handlePromotionView(item.id);
-            handlePromotionClick(item.id, item.ctaUrl);
-          }}
-        />
-      );
-        post={item}
-  header: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  logoWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logo: {
-    width: 40,
-    height: 40,
-    resizeMode: 'contain',
-    marginRight: 8,
-  },
-  appName: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
-  },
-        onLike={() => handleLike(item.id)}
-        onComment={() => handleComment(item.id)}
-        onShare={() => handleShare(item.id)}
-      />
-    );
-  };
-      />
-    );
-  };
-
-  const renderFooter = () => {
-    if (!hasMore) return null;
-    return (
-      <View style={styles.loaderFooter}>
-        <ActivityIndicator size="small" color="#3B82F6" />
-      </View>
-    );
-  };
-    }
-    
-    return (
-      <PostCard
-        post={item}
-        onLike={() => handleLike(item.id)}
-        onComment={() => handleComment(item.id)}
-        onShare={() => handleShare(item.id)}
-      />
-    );
-  };
-        onShare={() => handleShare(item.id)}
-      />
-    );
-  };
-
-  const renderFooter = () => {
-    if (!hasMore) return null;
-    return (
-      <View style={styles.loaderFooter}>
-        <ActivityIndicator size="small" color="#3B82F6" />
-      </View>
-    );
-  };
-    );
-  };
-      console.log('Promotions fetched:', data?.length || 0, 'active promotions');
-      console.log('Current date for filtering:', now);
-      
+  );
 }
 
 const styles = StyleSheet.create({
@@ -465,7 +420,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   header: {
-      console.log('Promotion viewed:', promotionId);
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     paddingHorizontal: 0,
