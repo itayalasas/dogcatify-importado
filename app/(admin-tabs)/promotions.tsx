@@ -233,6 +233,8 @@ export default function AdminPromotions() {
 
   const handleTogglePromotion = async (promotionId: string, isActive: boolean) => {
     try {
+      console.log('Toggling promotion:', promotionId, 'from', isActive, 'to', !isActive);
+      
       const { error } = await supabaseClient
         .from('promotions')
         .update({
@@ -240,7 +242,12 @@ export default function AdminPromotions() {
         })
         .eq('id', promotionId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
+      
+      console.log('Database update successful');
       
       // Update local state immediately
       setPromotions(prev => prev.map(promo => 
@@ -249,13 +256,18 @@ export default function AdminPromotions() {
           : promo
       ));
       
+      // Force refresh from database to ensure sync
+      setTimeout(() => {
+        fetchPromotions();
+      }, 500);
+      
       Alert.alert(
         'Promoción actualizada',
         `La promoción ha sido ${!isActive ? 'activada' : 'desactivada'} correctamente.`
       );
     } catch (error) {
       console.error('Error toggling promotion:', error);
-      Alert.alert('Error', 'No se pudo actualizar la promoción');
+      Alert.alert('Error', `No se pudo actualizar la promoción: ${error.message || error}`);
     }
   };
 
