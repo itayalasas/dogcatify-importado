@@ -13,10 +13,9 @@ export default function AdminPromotions() {
   const [promotions, setPromotions] = useState<any[]>([]);
   const [showPromotionModal, setShowPromotionModal] = useState(false);
   const [showPartnerSelector, setShowPartnerSelector] = useState(false);
-  const [partners, setPartners] = useState<any[]>([]);
-  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
   const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
-  
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
+
   // Promotion form
   const [promoTitle, setPromoTitle] = useState('');
   const [promoDescription, setPromoDescription] = useState('');
@@ -24,103 +23,47 @@ export default function AdminPromotions() {
   const [promoStartDate, setPromoStartDate] = useState('');
   const [promoEndDate, setPromoEndDate] = useState('');
   const [promoTargetAudience, setPromoTargetAudience] = useState('all');
-  
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (!currentUser) {
-      console.log('No user logged in');
-      return;
-    }
+  // Dummy partners for selector (replace with your fetch logic)
+  const partners = [
+    { id: '1', businessName: 'PetShop', businessType: 'Tienda', logo: '' },
+    { id: '2', businessName: 'VetClinic', businessType: 'Veterinaria', logo: '' },
+  ];
 
-    console.log('Current user email:', currentUser.email);
-    const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
-    if (!isAdmin) {
-      console.log('User is not admin');
-      return;
-    }
+  function getSelectedPartner() {
+    return partners.find(p => p.id === selectedPartnerId) || null;
+  }
 
-    console.log('Fetching promotions data...');
-    fetchPromotions();
-    fetchPartners();
-  }, [currentUser]);
-
-  const fetchPartners = async () => {
-    try {
-      const { data, error } = await supabaseClient
-        .from('partners')
-        .select('id, business_name, business_type, logo')
-        .eq('is_active', true)
-        .order('business_name');
-
-      if (error) {
-        console.error('Error fetching partners:', error);
-        return;
-      }
-
-      const partnersData = data?.map(item => ({
-        id: item.id,
-        businessName: item.business_name,
-        businessType: item.business_type,
-        logo: item.logo,
-      })) || [];
-
-      setPartners(partnersData);
-    } catch (error) {
-      console.error('Error fetching partners:', error);
-    }
-  };
-
-  const getBusinessTypeIcon = (businessType: string) => {
-    const icons: { [key: string]: string } = {
-      'Veterinaria': '🏥',
-      'Tienda de mascotas': '🏪',
-      'Peluquería canina': '✂️',
-      'Guardería': '🏠',
-      'Entrenamiento': '🎾',
-      'Alimentación': '🍖',
-      'Accesorios': '🦴',
-      'Servicios': '🔧',
-    };
-    return icons[businessType] || '🏢';
-  };
-
-  const getSelectedPartner = () => {
-    return partners.find(p => p.id === selectedPartnerId);
-  };
-
-  const getFilteredPartners = () => {
-    if (!partnerSearchQuery.trim()) return partners;
-    
-    return partners.filter(partner =>
-      partner.businessName.toLowerCase().includes(partnerSearchQuery.toLowerCase()) ||
-      partner.businessType.toLowerCase().includes(partnerSearchQuery.toLowerCase())
+  function getFilteredPartners() {
+    if (!partnerSearchQuery) return partners;
+    return partners.filter(p =>
+      p.businessName.toLowerCase().includes(partnerSearchQuery.toLowerCase()) ||
+      p.businessType.toLowerCase().includes(partnerSearchQuery.toLowerCase())
     );
-  };
+  }
 
-  const isPromotionActive = (startDate: Date, endDate: Date) => {
-    const now = new Date();
-    return now >= startDate && now <= endDate;
-  };
+  function getBusinessTypeIcon(type: string) {
+    if (type === 'Tienda') return '🏪';
+    if (type === 'Veterinaria') return '🐾';
+    return '🏢';
+  }
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
+    if (!isAdmin) return;
+    fetchPromotions();
+  }, [currentUser]);
 
   const fetchPromotions = () => {
     const fetchData = async () => {
       try {
-        console.log('Starting to fetch promotions...');
         const { data, error } = await supabaseClient
           .from('promotions')
-          .select(`
-            *,
-            partners:partner_id(business_name, business_type, logo)
-          `)
+          .select('*')
           .order('created_at', { ascending: false });
-
-        if (error) {
-          console.error('Error fetching promotions:', error);
-          return;
-        }
-
-        console.log('Promotions data:', data?.length || 0, 'records found');
+        if (error) return;
         const promotionsData = data?.map(item => ({
           id: item.id,
           title: item.title,
@@ -141,104 +84,66 @@ export default function AdminPromotions() {
             logo: item.partners.logo,
           } : null,
         })) || [];
-
         setPromotions(promotionsData);
-        console.log('Promotions state updated in admin panel');
-      } catch (error) {
-        console.error('Error fetching promotions:', error);
-      }
+      } catch (error) {}
     };
-
     fetchData();
-
-    // Set up real-time subscription
     const subscription = supabaseClient
       .channel('promotions_channel')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'promotions' },
-        (payload) => {
-          console.log('Promotion change detected in admin:', payload);
-          fetchData();
-        }
+        () => fetchData()
       )
       .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   };
 
   const handleSelectImage = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (permissionResult.granted === false) {
-        Alert.alert('Permisos requeridos', 'Se necesitan permisos para acceder a la galería');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [16, 9],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        setPromoImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Error selecting image:', error);
-      Alert.alert('Error', 'No se pudo seleccionar la imagen');
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert('Permisos requeridos', 'Se necesitan permisos para acceder a la galería');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setPromoImage(result.assets[0].uri);
     }
   };
 
   const handleTakePhoto = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      
-      if (permissionResult.granted === false) {
-        Alert.alert('Permisos requeridos', 'Se necesitan permisos para usar la cámara');
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [16, 9],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        setPromoImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Error taking photo:', error);
-      Alert.alert('Error', 'No se pudo tomar la foto');
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert('Permisos requeridos', 'Se necesitan permisos para usar la cámara');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setPromoImage(result.assets[0].uri);
     }
   };
 
   const uploadImage = async (imageUri: string): Promise<string> => {
-    try {
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
-      const filename = `promotions/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-      
-      const { data, error } = await supabaseClient.storage
-        .from('dogcatify')
-        .upload(filename, blob);
-
-      if (error) throw error;
-
-      const { data: { publicUrl } } = supabaseClient.storage
-        .from('dogcatify')
-        .getPublicUrl(filename);
-      
-      return publicUrl;
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      throw error;
-    }
+    const response = await fetch(imageUri);
+    const blob = await response.blob();
+    const filename = `promotions/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+    const { error } = await supabaseClient.storage
+      .from('dogcatify')
+      .upload(filename, blob);
+    if (error) throw error;
+    const { data: { publicUrl } } = supabaseClient.storage
+      .from('dogcatify')
+      .getPublicUrl(filename);
+    return publicUrl;
   };
 
   const handleCreatePromotion = async () => {
@@ -246,18 +151,11 @@ export default function AdminPromotions() {
       Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
       return;
     }
-
     setLoading(true);
     try {
-      console.log('Creating promotion...');
       let imageUrl = null;
-      if (promoImage) {
-        console.log('Uploading image...');
-        imageUrl = await uploadImage(promoImage);
-        console.log('Image uploaded:', imageUrl);
-      }
-
-      const promotionData = {
+      if (promoImage) imageUrl = await uploadImage(promoImage);
+      const promotionData: any = {
         title: promoTitle.trim(),
         description: promoDescription.trim(),
         image_url: imageUrl,
@@ -271,22 +169,21 @@ export default function AdminPromotions() {
         cta_text: 'Más información',
         created_at: new Date().toISOString(),
         created_by: currentUser?.id,
-        partner_id: selectedPartnerId,
       };
-
-      console.log('Inserting promotion data:', promotionData);
+      if (selectedPartnerId) {
+        promotionData.partner_id = selectedPartnerId;
+      }
       const { error } = await supabaseClient
         .from('promotions')
-        .insert([promotionData]);
-
+        .insert([promotionData])
+        .select(`
+          *,
+          partners:partner_id(business_name, business_type, logo)
+        `);
       if (error) {
-        console.error('Error creating promotion:', error);
         Alert.alert('Error', `No se pudo crear la promoción: ${error.message}`);
         return;
       }
-      
-      console.log('Promotion created successfully');
-      // Reset form
       setPromoTitle('');
       setPromoDescription('');
       setPromoImage(null);
@@ -296,10 +193,8 @@ export default function AdminPromotions() {
       setSelectedPartnerId(null);
       setPartnerSearchQuery('');
       setShowPromotionModal(false);
-      
       Alert.alert('Éxito', 'Promoción creada correctamente');
     } catch (error) {
-      console.error('Error creating promotion:', error);
       Alert.alert('Error', 'No se pudo crear la promoción');
     } finally {
       setLoading(false);
@@ -308,22 +203,16 @@ export default function AdminPromotions() {
 
   const handleTogglePromotion = async (promotionId: string, isActive: boolean) => {
     try {
-      // Update local state FIRST for immediate UI feedback
       setPromotions(prev => prev.map(promo => 
         promo.id === promotionId 
           ? { ...promo, isActive: !isActive }
           : promo
       ));
-      
       const { error } = await supabaseClient
         .from('promotions')
-        .update({
-          is_active: !isActive
-        })
+        .update({ is_active: !isActive })
         .eq('id', promotionId);
-
       if (error) {
-        // Revert local state if database update fails
         setPromotions(prev => prev.map(promo => 
           promo.id === promotionId 
             ? { ...promo, isActive: isActive }
@@ -331,87 +220,31 @@ export default function AdminPromotions() {
         ));
         throw error;
       }
-
-      console.log('Promotion status updated successfully');
-    } catch (error) {
-      console.error('Error toggling promotion:', error);
-      Alert.alert('Error', 'No se pudo actualizar el estado de la promoción');
-    }
+    } catch (error) {}
   };
 
-  // Check if user is admin
-  const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
-
-  if (!currentUser || !isAdmin) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.accessDenied}>
-          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
-          <Text style={styles.accessDeniedText}>
-            No tienes permisos para acceder a esta sección
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
+  function isPromotionActive(startDate: Date, endDate: Date) {
+    const now = new Date();
+    return now >= startDate && now <= endDate;
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Promociones</Text>
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={() => setShowPromotionModal(true)}
-        >
-          <Plus size={24} color="#FFFFFF" />
+        <TouchableOpacity style={styles.addButton} onPress={() => setShowPromotionModal(true)}>
+          <Plus color="#fff" size={24} />
         </TouchableOpacity>
       </View>
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Stats Card */}
-        <Card style={styles.statsCard}>
-          <Text style={styles.statsTitle}>Estadísticas Generales</Text>
-          <View style={styles.statsGrid}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{promotions.length}</Text>
-              <Text style={styles.statLabel}>Total{'\n'}Promociones</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>
-                {promotions.filter(p => p.isActive && isPromotionActive(p.startDate, p.endDate)).length}
-              </Text>
-              <Text style={styles.statLabel}>Activas{'\n'}Ahora</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>
-                {promotions.reduce((sum, p) => sum + (p.views || 0), 0)}
-              </Text>
-              <Text style={styles.statLabel}>Total{'\n'}Vistas</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>
-                {promotions.reduce((sum, p) => sum + (p.clicks || 0), 0)}
-              </Text>
-              <Text style={styles.statLabel}>Total{'\n'}Clics</Text>
-            </View>
-          </View>
-        </Card>
-
-        {/* Promotions List */}
+      <ScrollView style={styles.content}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            <Megaphone size={20} color="#DC2626" /> Todas las Promociones
-          </Text>
-          
+          <Text style={styles.sectionTitle}>Promociones activas</Text>
           {promotions.length === 0 ? (
-            <Card style={styles.emptyCard}>
-              <Megaphone size={48} color="#D1D5DB" />
+            <View style={styles.emptyCard}>
+              <Megaphone size={32} color="#DC2626" />
               <Text style={styles.emptyTitle}>No hay promociones</Text>
-              <Text style={styles.emptySubtitle}>
-                Crea tu primera promoción para comenzar a llegar a más usuarios
-              </Text>
-            </Card>
+              <Text style={styles.emptySubtitle}>Crea una promoción para los usuarios</Text>
+            </View>
           ) : (
             promotions.map((promotion) => (
               <Card key={promotion.id} style={styles.promotionCard}>
@@ -423,41 +256,29 @@ export default function AdminPromotions() {
                         <Text style={styles.partnerIcon}>
                           {getBusinessTypeIcon(promotion.partnerInfo.businessType)}
                         </Text>
-                        <Text style={styles.partnerName}>
-                          {promotion.partnerInfo.businessName}
-                        </Text>
+                        <Text style={styles.partnerName}>{promotion.partnerInfo.businessName}</Text>
                       </View>
                     )}
                     <Text style={styles.promotionAudience}>
-                      Audiencia: {promotion.targetAudience === 'all' ? 'Todos' : 
-                                 promotion.targetAudience === 'users' ? 'Usuarios' : 'Aliados'}
+                      Audiencia: {promotion.targetAudience}
                     </Text>
                   </View>
-                  
                   <View style={styles.promotionStatus}>
                     <View style={[
                       styles.statusBadge,
-                      {
-                        backgroundColor: promotion.isActive && isPromotionActive(promotion.startDate, promotion.endDate) 
-                          ? '#10B981' : '#EF4444'
-                      }
+                      { backgroundColor: promotion.isActive ? '#DCFCE7' : '#F3F4F6' }
                     ]}>
-                      <Text style={[styles.statusText, { color: '#FFFFFF' }]}>
-                        {promotion.isActive && isPromotionActive(promotion.startDate, promotion.endDate) 
-                          ? 'Activa' : 'Inactiva'}
+                      <Text style={[
+                        styles.statusText,
+                        { color: promotion.isActive ? '#22C55E' : '#6B7280' }
+                      ]}>
+                        {promotion.isActive ? 'Activa' : 'Inactiva'}
                       </Text>
                     </View>
                   </View>
                 </View>
-
-                {promotion.imageURL && (
-                  <Image source={{ uri: promotion.imageURL }} style={styles.promotionImage} />
-                )}
-
-                <Text style={styles.promotionDescription} numberOfLines={2}>
-                  {promotion.description}
-                </Text>
-
+                <Image source={{ uri: promotion.imageURL }} style={styles.promotionImage} />
+                <Text style={styles.promotionDescription}>{promotion.description}</Text>
                 <View style={styles.promotionDetails}>
                   <View style={styles.promotionDetail}>
                     <Calendar size={16} color="#6B7280" />
@@ -465,19 +286,17 @@ export default function AdminPromotions() {
                       {promotion.startDate.toLocaleDateString()} - {promotion.endDate.toLocaleDateString()}
                     </Text>
                   </View>
-                  
-                  <View style={styles.promotionStats}>
-                    <View style={styles.promotionStat}>
-                      <Eye size={16} color="#6B7280" />
-                      <Text style={styles.promotionStatText}>{promotion.views || 0}</Text>
-                    </View>
-                    <View style={styles.promotionStat}>
-                      <Target size={16} color="#6B7280" />
-                      <Text style={styles.promotionStatText}>{promotion.clicks || 0}</Text>
-                    </View>
+                </View>
+                <View style={styles.promotionStats}>
+                  <View style={styles.promotionStat}>
+                    <Eye size={16} color="#6B7280" />
+                    <Text style={styles.promotionStatText}>{promotion.views || 0}</Text>
+                  </View>
+                  <View style={styles.promotionStat}>
+                    <Target size={16} color="#6B7280" />
+                    <Text style={styles.promotionStatText}>{promotion.clicks || 0}</Text>
                   </View>
                 </View>
-
                 <View style={styles.promotionActions}>
                   <Button
                     title={promotion.isActive && isPromotionActive(promotion.startDate, promotion.endDate) ? 'Desactivar' : 'Activar'}
@@ -564,7 +383,6 @@ export default function AdminPromotions() {
                   </TouchableOpacity>
                 )}
               </View>
-
               <View style={styles.imageSection}>
                 <Text style={styles.imageLabel}>Imagen promocional *</Text>
                 
@@ -646,7 +464,6 @@ export default function AdminPromotions() {
                     style={styles.cancelModalButton}
                     onPress={() => {
                       setShowPromotionModal(false);
-                      // Reset form
                       setPromoTitle('');
                       setPromoDescription('');
                       setPromoImage(null);
@@ -746,7 +563,6 @@ export default function AdminPromotions() {
     </SafeAreaView>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
