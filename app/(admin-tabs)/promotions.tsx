@@ -49,6 +49,11 @@ export default function AdminPromotions() {
     return '🏢';
   }
 
+  function isPromotionActive(startDate: Date, endDate: Date) {
+    const now = new Date();
+    return now >= startDate && now <= endDate;
+  }
+
   useEffect(() => {
     if (!currentUser) return;
     const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
@@ -209,19 +214,11 @@ export default function AdminPromotions() {
           ? { ...promo, isActive: !isActive }
           : promo
       ));
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
       const { error } = await supabaseClient
         .from('promotions')
         .update({ is_active: !isActive })
         .eq('id', promotionId);
       if (error) {
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
         // Revert local state if database update fails
         setPromotions(prev => prev.map(promo => 
           promo.id === promotionId 
@@ -230,7 +227,68 @@ export default function AdminPromotions() {
         ));
         throw error;
       }
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo actualizar la promoción');
+    }
+  };
 
+  if (!currentUser || currentUser.email?.toLowerCase() !== 'admin@dogcatify.com') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.accessDenied}>
+          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
+          <Text style={styles.accessDeniedText}>
+            Solo los administradores pueden acceder a esta sección
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Promociones</Text>
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={() => setShowPromotionModal(true)}
+        >
+          <Plus size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <Card style={styles.statsCard}>
+          <Text style={styles.statsTitle}>Estadísticas</Text>
+          <View style={styles.statsGrid}>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{promotions.length}</Text>
+              <Text style={styles.statLabel}>Total{'\n'}Promociones</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {promotions.filter(p => p.isActive && isPromotionActive(p.startDate, p.endDate)).length}
+              </Text>
+              <Text style={styles.statLabel}>Activas</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {promotions.reduce((sum, p) => sum + (p.views || 0), 0)}
+              </Text>
+              <Text style={styles.statLabel}>Total{'\n'}Vistas</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {promotions.reduce((sum, p) => sum + (p.clicks || 0), 0)}
+              </Text>
+              <Text style={styles.statLabel}>Total{'\n'}Clicks</Text>
+            </View>
+          </View>
+        </Card>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Todas las Promociones</Text>
+          
           {promotions.length === 0 ? (
             <View style={styles.emptyCard}>
               <Megaphone size={32} color="#DC2626" />
@@ -555,6 +613,7 @@ export default function AdminPromotions() {
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
