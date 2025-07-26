@@ -49,12 +49,14 @@ export default function Home() {
   const fetchPromotions = async () => {
     try {
       console.log('Fetching promotions...');
+      const now = new Date().toISOString();
+      
       const { data, error } = await supabaseClient
         .from('promotions')
         .select('*')
         .eq('is_active', true)
-        .lte('start_date', new Date().toISOString())
-        .gte('end_date', new Date().toISOString())
+        .lte('start_date', now)
+        .gte('end_date', now)
         .order('created_at', { ascending: false });
       
       if (error) {
@@ -82,11 +84,6 @@ export default function Home() {
       setPromotions(promotionsData);
       console.log('Promotions state updated:', promotionsData.length);
       
-      // Log promotion details for debugging
-      promotionsData.forEach(promo => {
-        console.log(`Promotion: ${promo.title}, Start: ${promo.startDate}, End: ${promo.endDate}, Active: ${promo.startDate <= new Date() && promo.endDate >= new Date()}`);
-      });
-      
       // Update feed items immediately after fetching promotions
       if (posts.length > 0) {
         combineFeedItems(posts, promotionsData);
@@ -113,7 +110,7 @@ export default function Home() {
       const offset = (currentPage - 1) * pageSize;
       const data = await getPosts(pageSize, offset);
       
-      // Check if we have more posts to load (simplified check)
+      // Check if we have more posts to load
       setHasMore(data && data.length === pageSize);
       
       const postsData = data.map((post: any) => {
@@ -300,7 +297,11 @@ export default function Home() {
       // Increment clicks
       const { error } = await supabaseClient
         .from('promotions')
-        .rpc('increment_promotion_clicks', { promotion_id: promotionId });
+        .update({ 
+          clicks: supabaseClient.raw('clicks + 1'),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', promotionId);
       
       if (error) {
         console.error('Error incrementing clicks:', error);
