@@ -324,26 +324,18 @@ export default function Home() {
       
       if (error) {
         console.error('Error incrementing views:', error);
+      }
+    } catch (error) {
+      console.error('Error handling promotion view:', error);
     }
   };
 
-  const handlePromotionClick = async (promotionId: string, url?: string) => {
-    try {
-      console.log('Promotion clicked:', promotionId);
-      // Increment clicks
-      const { error } = await supabaseClient
-        .from('promotions')
-        .rpc('increment_promotion_clicks', { promotion_id: promotionId });
-      
-      if (error) {
-        console.error('Error incrementing clicks:', error);
-      }
-      
-      if (url) {
-            handlePromotionView(item.id);
-    }
-            handlePromotionView(item.id);
-    }
+  const renderFeedItem = ({ item }: { item: any }) => {
+    if (item.type === 'promotion') {
+      return (
+        <PromotionCard
+          promotion={item}
+          onPress={() => {
             handlePromotionView(item.id);
             handlePromotionClick(item.id, item.ctaUrl);
           }}
