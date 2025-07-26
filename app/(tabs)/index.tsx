@@ -294,21 +294,6 @@ export default function Home() {
     }
   };
 
-  const handlePromotionView = async (promotionId: string) => {
-    try {
-      // Increment views
-      const { error } = await supabaseClient
-        .from('promotions')
-        .rpc('increment_promotion_views', { promotion_id: promotionId });
-      
-      if (error) {
-        console.error('Error incrementing views:', error);
-      }
-    } catch (error) {
-      console.error('Error handling promotion view:', error);
-    }
-  };
-
   const handlePromotionClick = async (promotionId: string, url?: string) => {
     try {
       console.log('Promotion clicked:', promotionId);
@@ -330,12 +315,40 @@ export default function Home() {
     }
   };
 
-  const renderFeedItem = ({ item }: { item: any }) => {
-    if (item.type === 'promotion') {
-      return (
-        <PromotionCard
+  const handlePromotionView = async (promotionId: string) => {
+    try {
+      // Increment views
+      const { error } = await supabaseClient
+        .from('promotions')
+        .rpc('increment_promotion_views', { promotion_id: promotionId });
+      
+      if (error) {
+        console.error('Error incrementing views:', error);
+    }
+  };
+
+  const handlePromotionClick = async (promotionId: string, url?: string) => {
+    try {
+      console.log('Promotion clicked:', promotionId);
+      // Increment clicks
+      const { error } = await supabaseClient
+        .from('promotions')
+        .rpc('increment_promotion_clicks', { promotion_id: promotionId });
+      
+      if (error) {
+        console.error('Error incrementing clicks:', error);
+      }
+      
+      if (url) {
+        console.log('Opening promotion URL:', url);
+        // Here you could open the URL with Linking.openURL(url)
+      }
+    } catch (error) {
+      console.error('Error handling promotion click:', error);
           promotion={item}
           onPress={() => {
+            handlePromotionView(item.id);
+    }
             handlePromotionView(item.id);
             handlePromotionClick(item.id, item.ctaUrl);
           }}
