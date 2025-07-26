@@ -310,17 +310,37 @@ export default function Home() {
         console.log('Opening promotion URL:', url);
         // Here you could open the URL with Linking.openURL(url)
       }
-            handlePromotionClick(item.id, item.ctaUrl);
-          onPress={() => {
-            handlePromotionView(item.id);
-            handlePromotionClick(item.id, item.ctaUrl);
+    } catch (error) {
+      console.error('Error handling promotion click:', error);
+    }
+  };
+
+  const handlePromotionView = async (promotionId: string) => {
+    try {
+      // Increment views
+      const { error } = await supabaseClient
+        .from('promotions')
+        .rpc('increment_promotion_views', { promotion_id: promotionId });
+      
+      if (error) {
+        console.error('Error incrementing views:', error);
+      }
+    } catch (error) {
+      console.error('Error handling promotion view:', error);
+    }
+  };
+
+  const renderFeedItem = ({ item }: { item: any }) => {
+    if (item.type === 'promotion') {
+      return (
+        <PromotionCard
+          promotion={item}
           onPress={() => {
             handlePromotionView(item.id);
             handlePromotionClick(item.id, item.ctaUrl);
           }}
         />
       );
-          }}
     }
 
     return (
@@ -341,12 +361,6 @@ export default function Home() {
       </View>
     );
   };
-  };
-  const renderFooter = () => (!hasMore ? null : (
-    <View style={styles.loaderFooter}>
-      <ActivityIndicator size="small" color="#3B82F6" />
-    </View>
-  ));
 
   return (
     <SafeAreaView style={styles.container}>
