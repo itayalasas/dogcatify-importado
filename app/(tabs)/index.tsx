@@ -317,6 +317,7 @@ export default function Home() {
 
   const handlePromotionView = async (promotionId: string) => {
     try {
+      console.log('Promotion viewed:', promotionId);
       // Increment views
       const { error } = await supabaseClient
         .from('promotions')
