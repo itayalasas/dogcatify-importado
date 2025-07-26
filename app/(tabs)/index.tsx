@@ -322,48 +322,11 @@ export default function Home() {
         .from('promotions')
         .rpc('increment_promotion_views', { promotion_id: promotionId });
       
-            handlePromotionView(item.id);
-    }
-            handlePromotionView(item.id);
-            handlePromotionClick(item.id, item.ctaUrl);
-          onPress={() => {
-            handlePromotionView(item.id);
-            handlePromotionClick(item.id, item.ctaUrl);
-          }}
-        />
-      );
-    }
-
-    return (
-      <PostCard
-        post={item}
-        onLike={() => handleLike(item.id)}
-        onComment={() => handleComment(item.id)}
-        onShare={() => handleShare(item.id)}
-      />
-    );
-    }
-  const renderFooter = () => {
-  };
-
-  const handlePromotionClick = async (promotionId: string, url?: string) => {
-    try {
-      console.log('Promotion clicked:', promotionId);
-      // Increment clicks
-      const { error } = await supabaseClient
-        .from('promotions')
-        .rpc('increment_promotion_clicks', { promotion_id: promotionId });
-      
       if (error) {
-        console.error('Error incrementing clicks:', error);
-      }
-      
-      if (url) {
-        console.log('Opening promotion URL:', url);
-        // Here you could open the URL with Linking.openURL(url)
+        console.error('Error incrementing views:', error);
       }
     } catch (error) {
-      console.error('Error handling promotion click:', error);
+      console.error('Error handling promotion view:', error);
     }
   };
 
