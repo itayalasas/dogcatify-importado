@@ -87,10 +87,8 @@ export default function Home() {
         console.log(`Promotion: ${promo.title}, Start: ${promo.startDate}, End: ${promo.endDate}, Active: ${promo.startDate <= new Date() && promo.endDate >= new Date()}`);
       });
       
-      // Update feed items immediately after fetching promotions
-      if (posts.length > 0) {
-        combineFeedItems(posts, promotionsData);
-      }
+      // Force update feed items with new promotions
+      combineFeedItems(posts, promotionsData);
     } catch (error) {
       console.error('Error fetching promotions:', error);
     }
@@ -187,8 +185,9 @@ export default function Home() {
     
     const combined: any[] = [];
     
-    // Intercalar promociones cada 3 posts
-    if (promotionsData.length > 0) {
+    // Always try to combine, even if one array is empty
+    if (promotionsData.length > 0 && postsData.length > 0) {
+      // Intercalar promociones cada 3 posts
       let postIndex = 0;
       let promoIndex = 0;
       
@@ -205,9 +204,15 @@ export default function Home() {
           promoIndex++;
         }
       }
-    } else {
-      // Si no hay promociones, solo agregar posts
+    } else if (promotionsData.length > 0) {
+      // Solo promociones disponibles
+      combined.push(...promotionsData);
+    } else if (postsData.length > 0) {
+      // Solo posts disponibles
       combined.push(...postsData);
+    } else {
+      // No hay contenido
+      console.log('No content available for feed');
     }
     
     console.log('Final feed items:', combined.length);
@@ -344,10 +349,14 @@ export default function Home() {
 
   const renderFeedItem = ({ item }: { item: any }) => {
     if (item.type === 'promotion') {
-      // Incrementar vistas cuando se renderiza la promoción
+      // Incrementar vistas cuando se renderiza la promoción (solo una vez)
       React.useEffect(() => {
-        handlePromotionView(item.id);
-      }, []);
+        const timer = setTimeout(() => {
+          handlePromotionView(item.id);
+        }, 1000); // Delay para evitar múltiples llamadas
+        
+        return () => clearTimeout(timer);
+      }, [item.id]);
       
       return (
         <PromotionCard
