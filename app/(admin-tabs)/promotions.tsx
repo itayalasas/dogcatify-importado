@@ -431,6 +431,26 @@ export default function AdminPromotions() {
       console.log('Selected promotion:', selectedPromotionForBilling.title);
       console.log('Clicks:', selectedPromotionForBilling.clicks);
       
+      // Get partner email from database
+      const { data: partnerData, error: partnerError } = await supabaseClient
+        .from('partners')
+        .select('email, business_name')
+        .eq('id', selectedPromotionForBilling.partnerId)
+        .single();
+      
+      if (partnerError || !partnerData) {
+        console.error('Error fetching partner data:', partnerError);
+        Alert.alert('Error', 'No se pudo obtener la información del aliado');
+        return;
+      }
+      
+      if (!partnerData.email) {
+        Alert.alert('Error', 'El aliado no tiene un correo electrónico registrado');
+        return;
+      }
+      
+      console.log('Partner email found:', partnerData.email);
+      
       // Calculate billing amount
       const totalClicks = selectedPromotionForBilling.clicks || 0;
       const costPerClickNum = parseFloat(costPerClick) || 100;
@@ -443,7 +463,7 @@ export default function AdminPromotions() {
       console.log('PDF content generated');
 
       // Send email with PDF attachment
-      const emailResult = await sendBillingEmail('billing@dogcatify.com', selectedPromotionForBilling, pdfContent, totalAmount);
+      const emailResult = await sendBillingEmail(partnerData.email, selectedPromotionForBilling, pdfContent, totalAmount, partnerData.business_name);
       
       if (emailResult.success) {
         // Save billing record to database
@@ -451,7 +471,7 @@ export default function AdminPromotions() {
         
         Alert.alert(
           'Factura enviada',
-          `Se ha enviado la factura por $${totalAmount.toLocaleString()} a billing@dogcatify.com`
+          `Se ha enviado la factura por $${totalAmount.toLocaleString()} a ${partnerData.email}`
         );
         
         setSelectedPromotionForBilling(null);
@@ -545,7 +565,7 @@ export default function AdminPromotions() {
     `;
   };
   
-  const sendBillingEmail = async (email: string, promotion: any, pdfContent: string, totalAmount: number) => {
+  const sendBillingEmail = async (email: string, promotion: any, pdfContent: string, totalAmount: number, businessName: string) => {
     try {
       console.log('Sending billing email to:', email);
       
@@ -563,7 +583,7 @@ export default function AdminPromotions() {
               <h1 style="color: white; margin: 0;">Factura de Promoción</h1>
             </div>
             <div style="padding: 20px; background-color: #f9f9f9;">
-              <p>Estimado cliente,</p>
+              <p>Estimado ${businessName},</p>
               <p>Adjunto encontrarás la factura correspondiente a la promoción <strong>"${promotion.title}"</strong>.</p>
               <div style="background-color: white; border-left: 4px solid #2D6A6F; padding: 15px; margin: 20px 0;">
                 <p><strong>Promoción:</strong> ${promotion.title}</p>
