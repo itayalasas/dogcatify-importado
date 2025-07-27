@@ -594,7 +594,7 @@ export default function AdminPromotions() {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Email API error:', errorText);
-        throw new Error(\`Error ${response.status}: ${errorText}`);
+        throw new Error("Error " + response.status + ": " + errorText);
       }
       
       const result = await response.json();
