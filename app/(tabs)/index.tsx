@@ -134,24 +134,46 @@ export default function Home() {
     const interleaveFeedItems = () => {
       const items = [];
       
-      // Crear una copia aleatoria de promociones para variar el orden
-      const shuffledPromotions = [...promotions].sort(() => Math.random() - 0.5);
-      let promoIndex = 0;
+      if (promotions.length > 0) {
+        // Crear una copia aleatoria de promociones para variar el orden
+        const shuffledPromotions = [...promotions].sort(() => Math.random() - 0.5);
+        let promoIndex = 0;
 
-      for (let i = 0; i < posts.length; i++) {
-        items.push({ type: 'post', data: posts[i] });
-        
-        // Insertar promoción cada 10 posts (como solicitaste)
-        if ((i + 1) % 10 === 0 && promoIndex < shuffledPromotions.length) {
-          items.push({ type: 'promotion', data: shuffledPromotions[promoIndex] });
-          promoIndex++;
+        // Determinar intervalo dinámico basado en cantidad de posts
+        let interval;
+        if (posts.length <= 5) {
+          interval = 2; // Con pocos posts, mostrar cada 2 posts
+        } else if (posts.length <= 10) {
+          interval = 3; // Con posts moderados, cada 3 posts
+        } else {
+          interval = 5; // Con muchos posts, cada 5 posts
+        }
+
+        for (let i = 0; i < posts.length; i++) {
+          items.push({ type: 'post', data: posts[i] });
           
-          // Si se acabaron las promociones, reiniciar con orden aleatorio
-          if (promoIndex >= shuffledPromotions.length) {
-            shuffledPromotions.sort(() => Math.random() - 0.5);
-            promoIndex = 0;
+          // Insertar promoción según el intervalo dinámico
+          if ((i + 1) % interval === 0 && promoIndex < shuffledPromotions.length) {
+            items.push({ type: 'promotion', data: shuffledPromotions[promoIndex] });
+            promoIndex++;
+            
+            // Si se acabaron las promociones, reiniciar con orden aleatorio
+            if (promoIndex >= shuffledPromotions.length) {
+              shuffledPromotions.sort(() => Math.random() - 0.5);
+              promoIndex = 0;
+            }
           }
         }
+        
+        // Si no se insertó ninguna promoción y hay posts, agregar una al final
+        if (posts.length > 0 && !items.some(item => item.type === 'promotion')) {
+          items.push({ type: 'promotion', data: shuffledPromotions[0] });
+        }
+      } else {
+        // Si no hay promociones, solo agregar posts
+        posts.forEach(post => {
+          items.push({ type: 'post', data: post });
+        });
       }
 
       setFeedItems(items);
