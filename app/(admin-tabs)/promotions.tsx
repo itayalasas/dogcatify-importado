@@ -381,28 +381,24 @@ export default function AdminPromotions() {
 
   const handleTogglePromotion = async (promotionId: string, isActive: boolean) => {
     try {
-      // Actualiza el estado local para feedback inmediato
+      const { error } = await supabaseClient
+        .from('promotions')
+        .update({ is_active: !isActive })
+        .eq('id', promotionId);
+      
+      if (error) {
+        throw error;
+      }
+      
+      // Actualiza el estado local después del éxito
       setPromotions(prev => prev.map(promo => 
         promo.id === promotionId 
           ? { ...promo, isActive: !isActive }
           : promo
       ));
-      const { error } = await supabaseClient
-        .from('promotions')
-        .update({ is_active: !isActive })
-        .eq('id', promotionId);
-      if (error) {
-        // Revierte el estado local si falla la actualización
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
-        throw error;
-      }
     } catch (error) {
-      // Puedes mostrar un alert si quieres
-      // Alert.alert('Error', 'No se pudo actualizar el estado de la promoción');
+      console.error('Error updating promotion status:', error);
+      Alert.alert('Error', 'No se pudo actualizar el estado de la promoción');
     }
   };
 
