@@ -640,3 +640,4 @@ export default function AdminPromotions() {
       throw error;
     }
   };
+}
