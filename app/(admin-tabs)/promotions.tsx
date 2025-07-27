@@ -240,10 +240,21 @@ export default function AdminPromotions() {
     }
   };
 
+  const handleTogglePromotion = async (promotionId: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabaseClient
+        .from('promotions')
+        .update({ is_active: !currentStatus })
+        .eq('id', promotionId);
 
-        ));
+      if (error) throw error;
+
+      setPromotions(prev => prev.map(p => 
+        p.id === promotionId ? { ...p, isActive: !currentStatus } : p
+      ));
       fetchPromotions();
     } catch (error) {
+      Alert.alert('Error', 'No se pudo actualizar la promoción');
     }
   };
 
