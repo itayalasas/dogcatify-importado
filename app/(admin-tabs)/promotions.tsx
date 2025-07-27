@@ -28,13 +28,6 @@ export default function AdminPromotions() {
 
 
   // Promotion form
-  const [promoTitle, setPromoTitle] = useState('');
-  const [promoDescription, setPromoDescription] = useState('');
-  const [promoImage, setPromoImage] = useState<string | null>(null);
-  const [promoStartDate, setPromoStartDate] = useState('');
-  const [promoEndDate, setPromoEndDate] = useState('');
-  const [promoTargetAudience, setPromoTargetAudience] = useState('all');
-  const [promoUrl, setPromoUrl] = useState('');
   const [promoLinkType, setPromoLinkType] = useState<'external' | 'internal' | 'none'>('none');
   const [internalLinkType, setInternalLinkType] = useState<'service' | 'product' | 'partner'>('partner');
   const [selectedInternalId, setSelectedInternalId] = useState<string | null>(null);
