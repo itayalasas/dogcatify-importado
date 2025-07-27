@@ -1197,11 +1197,12 @@ const styles = StyleSheet.create({
     marginVertical: 20,
   },
   billingModalActions: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: 12,
     marginTop: 20,
     paddingTop: 20,
     borderTopWidth: 1,
     borderTopColor: '#F3F4F6',
+    paddingBottom: 20,
   },
 });
