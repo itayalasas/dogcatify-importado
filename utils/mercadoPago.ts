@@ -214,83 +214,73 @@ export default function AdminPromotions() {
           ? { ...promo, isActive: !isActive }
           : promo
       ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
       const { error } = await supabaseClient
         .from('promotions')
         .update({ is_active: !isActive })
         .eq('id', promotionId);
       if (error) {
         // Revert local state if database update fails
-      statement_descriptor: 'DOGCATIFY',
-      // Always apply marketplace split
-      marketplace_fee: commissionAmount
+        setPromotions(prev => prev.map(promo => 
           promo.id === promotionId 
             ? { ...promo, isActive: isActive }
-    // Try to get collector_id from different sources
-    let collectorId = null;
-            ? { ...promo, isActive: isActive }
-    // First try user_id (OAuth), then account_id (manual), then extract from access_token
-    if (partnerConfig.user_id && !isNaN(parseInt(partnerConfig.user_id))) {
-      collectorId = parseInt(partnerConfig.user_id);
-    } else if (partnerConfig.account_id && !isNaN(parseInt(partnerConfig.account_id))) {
-      collectorId = parseInt(partnerConfig.account_id);
-    } else {
-      // Try to get user info from partner's access token
-      try {
-        const userResponse = await fetch(`${MP_BASE_URL}/users/me`, {
-          headers: {
-            'Authorization': `Bearer ${partnerConfig.access_token}`,
-          },
-        });
-        
-        if (userResponse.ok) {
-          const userData = await userResponse.json();
-          collectorId = userData.id;
-          
-          // Update partner config with user_id for future use
-          await supabaseClient
-            .from('partners')
-            .update({
-              mercadopago_config: {
-                ...partnerConfig,
-                user_id: userData.id.toString(),
-                account_id: userData.id.toString()
-              }
-            })
-            .eq('id', partnerConfig.partner_id);
-        }
-      } catch (error) {
-        console.error('Error getting user info from partner token:', error);
+            : promo
+        ));
       }
+    } catch (error) {
+      // Revert local state if database update fails
+      setPromotions(prev => prev.map(promo => 
+        promo.id === promotionId 
+          ? { ...promo, isActive: isActive }
+          : promo
+      ));
     }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-    if (collectorId) {
+        <Text style={styles.title}>Promociones</Text>
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={() => setShowPromotionModal(true)}
         >
           <Plus size={24} color="#FFFFFF" />
-      console.log('Using marketplace split with collector:', {
-        collector_id: collectorId,
+        </TouchableOpacity>
+      </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Card style={styles.statsCard}>
           <Text style={styles.statsTitle}>Estadísticas</Text>
-      console.warn('Could not determine collector_id - split may not work correctly');
+          <View style={styles.statsGrid}>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>{promotions.length}</Text>
+              <Text style={styles.statLabel}>Total</Text>
+            </View>
+          </View>
+        </Card>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Promociones Activas</Text>
+          {promotions.length === 0 ? (
+            <Card style={styles.emptyCard}>
+              <Megaphone size={48} color="#DC2626" />
+              <Text style={styles.emptyTitle}>No hay promociones</Text>
+              <Text style={styles.emptySubtitle}>
+                Crea tu primera promoción para comenzar
+              </Text>
+            </Card>
+          ) : (
+            promotions.map((promotion) => (
+              <Card key={promotion.id} style={styles.promotionCard}>
+                <View style={styles.promotionHeader}>
                   <View style={styles.promotionInfo}>
                     <Text style={styles.promotionTitle}>{promotion.title}</Text>
                     {promotion.partnerInfo && (
                       <View style={styles.partnerInfo}>
                         <Text style={styles.partnerIcon}>
-      commission_amount: commissionAmount,
-      commission_percentage: partnerConfig.commission_percentage || 5.0,
                           {getBusinessTypeIcon(promotion.partnerInfo.businessType)}
                         </Text>
                         <Text style={styles.partnerName}>{promotion.partnerInfo.businessName}</Text>
-    // Always use marketplace (admin) token to create preference with split
                       </View>
                     )}
                     <Text style={styles.promotionAudience}>
@@ -302,23 +292,26 @@ export default function AdminPromotions() {
                       styles.statusBadge,
                       { backgroundColor: promotion.isActive ? '#DCFCE7' : '#F3F4F6' }
                     ]}>
-      console.error('Mercado Pago API error:', errorData);
-      throw new Error(`Failed to create payment preference: ${errorData.message || response.statusText}`);
+                      <Text style={[
+                        styles.statusText,
                         { color: promotion.isActive ? '#22C55E' : '#6B7280' }
                       ]}>
                         {promotion.isActive ? 'Activa' : 'Inactiva'}
                       </Text>
-    console.log('Split payment preference created successfully:', {
+                    </View>
                   </View>
-      collector_id: collectorId,
-      marketplace_fee: commissionAmount,
-      commission_percentage: partnerConfig.commission_percentage || 5.0
+                </View>
+                {promotion.imageURL && (
+                  <Image source={{ uri: promotion.imageURL }} style={styles.promotionImage} />
+                )}
                 <Text style={styles.promotionDescription}>{promotion.description}</Text>
                 <View style={styles.promotionDetails}>
+                  <View style={styles.promotionDetail}>
+                    <Calendar size={16} color="#6B7280" />
                     <Text style={styles.promotionDetailText}>
                       {promotion.startDate.toLocaleDateString()} - {promotion.endDate.toLocaleDateString()}
                     </Text>
-    console.error('Error creating split payment preference:', error);
+                  </View>
                 </View>
                 <View style={styles.promotionStats}>
                   <View style={styles.promotionStat}>
