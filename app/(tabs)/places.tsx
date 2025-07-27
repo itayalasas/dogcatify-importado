@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image, TextInput } from 'react-native';
-import { Plus, Megaphone, Calendar, Eye, Target, Search, MapPin, Star, Clock, Navigation, Phone } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image } from 'react-native';
+import { Plus, Megaphone, Calendar, Eye, Target, Search } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -15,8 +15,6 @@ export default function AdminPromotions() {
   const [showPartnerSelector, setShowPartnerSelector] = useState(false);
   const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
 
   // Promotion form
   const [promoTitle, setPromoTitle] = useState('');
@@ -26,59 +24,6 @@ export default function AdminPromotions() {
   const [promoEndDate, setPromoEndDate] = useState('');
   const [promoTargetAudience, setPromoTargetAudience] = useState('all');
   const [loading, setLoading] = useState(false);
-
-  // Categories for places
-  const categories = [
-    { id: 'all', name: 'Todos', icon: '🏠' },
-    { id: 'restaurant', name: 'Restaurantes', icon: '🍽️' },
-    { id: 'park', name: 'Parques', icon: '🌳' },
-    { id: 'shopping', name: 'Shopping', icon: '🛍️' },
-    { id: 'hotel', name: 'Hoteles', icon: '🏨' },
-    { id: 'vet', name: 'Veterinarias', icon: '🏥' },
-  ];
-
-  // Dummy places data
-  const places = [
-    {
-      id: '1',
-      name: 'Parque Centenario',
-      category: 'park',
-      address: 'Caballito, Buenos Aires',
-      rating: 4.5,
-      reviews: 324,
-      distance: '0.8 km',
-      isOpen: true,
-      phone: '+54 11 1234-5678',
-      description: 'Amplio parque con área especial para perros y senderos para caminar.',
-      features: ['Área para perros', 'Senderos', 'Fuentes de agua', 'Estacionamiento']
-    },
-    {
-      id: '2',
-      name: 'Café Mascota',
-      category: 'restaurant',
-      address: 'Palermo, Buenos Aires',
-      rating: 4.8,
-      reviews: 89,
-      distance: '1.2 km',
-      isOpen: true,
-      phone: '+54 11 5678-9012',
-      description: 'Restaurante familiar con área especial para mascotas.',
-      features: ['Área pet-friendly', 'Menú para mascotas', 'Estacionamiento']
-    },
-    {
-      id: '3',
-      name: 'Shopping Pet Plaza',
-      category: 'shopping',
-      address: 'Recoleta, Buenos Aires',
-      rating: 4.3,
-      reviews: 256,
-      distance: '2.1 km',
-      isOpen: false,
-      phone: '+54 11 9012-3456',
-      description: 'Centro comercial con política pet-friendly en todas sus tiendas.',
-      features: ['Pet-friendly', 'Veterinaria', 'Tienda de mascotas', 'Área de descanso']
-    }
-  ];
 
   // Dummy partners for selector (replace with your fetch logic)
   const partners = [
@@ -108,13 +53,6 @@ export default function AdminPromotions() {
     const now = new Date();
     return now >= startDate && now <= endDate;
   }
-
-  const filteredPlaces = places.filter(place => {
-    const matchesCategory = selectedCategory === 'all' || place.category === selectedCategory;
-    const matchesSearch = place.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         place.address.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
 
   useEffect(() => {
     if (!currentUser) return;
@@ -276,6 +214,11 @@ export default function AdminPromotions() {
           ? { ...promo, isActive: !isActive }
           : promo
       ));
+      setPromotions(prev => prev.map(promo => 
+        promo.id === promotionId 
+          ? { ...promo, isActive: !isActive }
+          : promo
+      ));
       const { error } = await supabaseClient
         .from('promotions')
         .update({ is_active: !isActive })
@@ -286,18 +229,18 @@ export default function AdminPromotions() {
           promo.id === promotionId 
             ? { ...promo, isActive: isActive }
             : promo
+        // Revert local state if database update fails
+        setPromotions(prev => prev.map(promo => 
+          promo.id === promotionId 
+            ? { ...promo, isActive: isActive }
+            : promo
         ));
         throw error;
       }
-    } catch (error) {
-      Alert.alert('Error', 'No se pudo actualizar la promoción');
-    }
-  };
 
-  return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>🐾 Lugares Pet Friendly</Text>
+        <Text style={styles.title}>Promociones</Text>
         <TouchableOpacity 
           style={styles.addButton}
           onPress={() => setShowPromotionModal(true)}
@@ -307,131 +250,6 @@ export default function AdminPromotions() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Barra de búsqueda */}
-        <View style={styles.searchContainer}>
-          <View style={styles.searchBar}>
-            <Search size={20} color="#9CA3AF" />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Buscar lugares pet-friendly..."
-              placeholderTextColor="#9CA3AF"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-          </View>
-        </View>
-
-        {/* Categorías */}
-        <View style={styles.categoriesContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesContent}>
-            {categories.map((category) => (
-              <TouchableOpacity
-                key={category.id}
-                style={[
-                  styles.categoryButton,
-                  selectedCategory === category.id && styles.selectedCategoryButton
-                ]}
-                onPress={() => setSelectedCategory(category.id)}
-              >
-                <Text style={styles.categoryIcon}>{category.icon}</Text>
-                <Text style={[
-                  styles.categoryText,
-                  selectedCategory === category.id && styles.selectedCategoryText
-                ]}>
-                  {category.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Lista de lugares */}
-        <View style={styles.placesContainer}>
-          {filteredPlaces.length === 0 ? (
-            <Card style={styles.emptyCard}>
-              <MapPin size={48} color="#9CA3AF" />
-              <Text style={styles.emptyTitle}>No se encontraron lugares</Text>
-              <Text style={styles.emptySubtitle}>
-                {searchQuery ? 'Intenta con otros términos de búsqueda' : 'No hay lugares en esta categoría'}
-              </Text>
-            </Card>
-          ) : (
-            filteredPlaces.map((place) => (
-              <Card key={place.id} style={styles.placeCard}>
-                <View style={styles.placeHeader}>
-                  <View style={styles.placeInfo}>
-                    <Text style={styles.placeName}>{place.name}</Text>
-                    <View style={styles.placeRating}>
-                      <Star size={16} color="#F59E0B" fill="#F59E0B" />
-                      <Text style={styles.ratingText}>{place.rating}</Text>
-                      <Text style={styles.reviewsText}>({place.reviews} reseñas)</Text>
-                    </View>
-                  </View>
-                  <View style={[
-                    styles.statusBadge,
-                    { backgroundColor: place.isOpen ? '#D1FAE5' : '#FEE2E2' }
-                  ]}>
-                    <Clock size={12} color={place.isOpen ? '#065F46' : '#991B1B'} />
-                    <Text style={[
-                      styles.statusText,
-                      { color: place.isOpen ? '#065F46' : '#991B1B' }
-                    ]}>
-                      {place.isOpen ? 'Abierto' : 'Cerrado'}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.placeDetails}>
-                  <View style={styles.placeDetail}>
-                    <MapPin size={16} color="#6B7280" />
-                    <Text style={styles.placeDetailText}>{place.address}</Text>
-                  </View>
-                  <View style={styles.placeDetail}>
-                    <Navigation size={16} color="#6B7280" />
-                    <Text style={styles.placeDetailText}>{place.distance}</Text>
-                  </View>
-                  <View style={styles.placeDetail}>
-                    <Phone size={16} color="#6B7280" />
-                    <Text style={styles.placeDetailText}>{place.phone}</Text>
-                  </View>
-                </View>
-
-                <Text style={styles.placeDescription}>{place.description}</Text>
-
-                <View style={styles.featuresContainer}>
-                  {place.features.map((feature, index) => (
-                    <View key={index} style={styles.featureTag}>
-                      <Text style={styles.featureText}>{feature}</Text>
-                    </View>
-                  ))}
-                </View>
-
-                <View style={styles.placeActions}>
-                  <TouchableOpacity style={styles.actionButton}>
-                    <Navigation size={16} color="#3B82F6" />
-                    <Text style={styles.actionButtonText}>Cómo llegar</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionButton}>
-                    <Phone size={16} color="#10B981" />
-                    <Text style={styles.actionButtonText}>Llamar</Text>
-                  </TouchableOpacity>
-                </View>
-              </Card>
-            ))
-          )}
-        </View>
-
-        {/* Información adicional */}
-        <Card style={styles.infoCard}>
-          <Text style={styles.infoTitle}>💡 ¿Conoces un lugar pet-friendly?</Text>
-          <Text style={styles.infoText}>
-            Ayúdanos a crecer nuestra comunidad sugiriendo nuevos lugares que acepten mascotas.
-          </Text>
-          <TouchableOpacity style={styles.suggestButton}>
-            <Text style={styles.suggestButtonText}>Sugerir lugar</Text>
-          </TouchableOpacity>
-        </Card>
-
         <Card style={styles.statsCard}>
           <Text style={styles.statsTitle}>Estadísticas</Text>
           <View style={styles.statsGrid}>
@@ -790,18 +608,18 @@ export default function AdminPromotions() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingTop: 30,
+    backgroundColor: '#F9FAFB',
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: 50,
     paddingBottom: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    borderBottomColor: '#E5E7EB',
   },
   title: {
     fontSize: 20,
@@ -810,11 +628,8 @@ const styles = StyleSheet.create({
   },
   addButton: {
     backgroundColor: '#DC2626',
-    width: 40,
-    height: 40,
+    padding: 8,
     borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   content: {
     flex: 1,
@@ -901,8 +716,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   statusText: {
     fontSize: 12,
@@ -942,7 +755,6 @@ const styles = StyleSheet.create({
   promotionStats: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 12,
   },
   promotionStat: {
     flexDirection: 'row',
@@ -1023,7 +835,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     backgroundColor: '#FFFFFF',
     minHeight: 50,
-    justifyContent: 'center',
   },
   selectedPartnerInfo: {
     flexDirection: 'row',
@@ -1283,188 +1094,20 @@ const styles = StyleSheet.create({
   },
   accessDenied: {
     flex: 1,
-  },
-  searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-  },
-  categoriesContainer: {
-    paddingVertical: 8,
-  },
-  categoriesContent: {
-    paddingHorizontal: 16,
-  },
-  categoryButton: {
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 12,
-    borderRadius: 20,
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    minWidth: 80,
-  },
-  selectedCategoryButton: {
-    backgroundColor: '#2D6A6F',
-    borderColor: '#2D6A6F',
-  },
-  categoryIcon: {
-    fontSize: 20,
-    marginBottom: 4,
-  },
-  categoryText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-  },
-  selectedCategoryText: {
-    color: '#FFFFFF',
-  },
-  placesContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 20,
-  },
-  placeCard: {
-    marginBottom: 16,
-  },
-  placeHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  placeInfo: {
-    flex: 1,
-  },
-  placeName: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  placeRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  ratingText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginLeft: 4,
-  },
-  reviewsText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 4,
-  },
-  placeDetails: {
-    marginBottom: 12,
-  },
-  placeDetail: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  placeDetailText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 8,
-    flex: 1,
-  },
-  placeDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  featuresContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 16,
-  },
-  featureTag: {
-    backgroundColor: '#EBF8FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginRight: 8,
-    marginBottom: 4,
-  },
-  featureText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-  },
-  placeActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    flex: 1,
-    marginHorizontal: 4,
     justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
   },
-  actionButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginLeft: 6,
-  },
-  infoCard: {
-    marginHorizontal: 16,
-    marginBottom: 20,
-    backgroundColor: '#F0FDF4',
-    borderLeftWidth: 4,
-    borderLeftColor: '#10B981',
-  },
-  infoTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#065F46',
+  accessDeniedTitle: {
+    fontSize: 24,
+    fontFamily: 'Inter-Bold',
+    color: '#EF4444',
     marginBottom: 8,
   },
-  infoText: {
-    fontSize: 14,
+  accessDeniedText: {
+    fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#065F46',
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  suggestButton: {
-    backgroundColor: '#10B981',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-  },
-  suggestButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
+    color: '#6B7280',
+    textAlign: 'center',
   },
 });
