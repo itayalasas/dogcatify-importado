@@ -4,6 +4,7 @@ import { Eye, Clock, CircleCheck as CheckCircle, Circle as XCircle } from 'lucid
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { supabaseClient } from '../../lib/supabase';
 import { NotificationService } from '../../utils/notifications';
 
@@ -67,6 +68,7 @@ const logDebug = (message: string, data?: any) => {
 
 export default function AdminRequests() {
   const { currentUser } = useAuth();
+  const { sendNotificationToUser } = useNotifications();
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [processedRequests, setProcessedRequests] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'pending' | 'processed'>('pending');
@@ -179,7 +181,7 @@ export default function AdminRequests() {
       // Get the partner data before approval to check user_id
       const { data: partnerData, error: fetchError } = await supabaseClient
         .from('partners')
-        .select('user_id, business_name')
+        .select('user_id, business_name, business_type')
         .eq('id', requestId)
         .single();
       
@@ -197,6 +199,27 @@ export default function AdminRequests() {
 
       // After approval, check if user has other businesses with MP config
       await replicateMercadoPagoConfigOnApproval(partnerData.user_id, requestId);
+      
+      // Enviar notificación push al usuario
+      try {
+        const businessTypeName = getBusinessTypeName(partnerData.business_type);
+        await sendNotificationToUser(
+          partnerData.user_id,
+          '¡Negocio aprobado! 🎉',
+          `Tu ${businessTypeName} "${partnerData.business_name}" ha sido verificado y ya está activo`,
+          {
+            type: 'partner_approved',
+            businessName: partnerData.business_name,
+            businessType: partnerData.business_type,
+            partnerId: requestId
+          }
+        );
+        console.log('Approval notification sent to user');
+      } catch (notificationError) {
+        console.error('Error sending approval notification:', notificationError);
+        // No interrumpir el flujo si falla la notificación
+      }
+      
       // Get partner details to send email
       const { data: emailPartnerData, error: emailFetchError } = await supabaseClient
         .from('partners')

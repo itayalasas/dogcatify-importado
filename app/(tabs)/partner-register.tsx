@@ -6,6 +6,7 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 import * as ImagePicker from 'expo-image-picker';
 import { supabaseClient } from '../../lib/supabase';
 import { NotificationService } from '@/utils/notifications';
@@ -86,6 +87,7 @@ const businessTypes = [
 
 export default function PartnerRegister() {
   const { currentUser } = useAuth();
+  const { sendNotificationToAdmin } = useNotifications();
   const [selectedType, setSelectedType] = useState<string>('');
   const [businessName, setBusinessName] = useState('');
   const [description, setDescription] = useState('');
@@ -322,6 +324,24 @@ export default function PartnerRegister() {
         .eq('id', currentUser.id);
 
       if (profileError) throw profileError;
+
+      // Enviar notificación push al admin
+      try {
+        await sendNotificationToAdmin(
+          'Nueva solicitud de aliado',
+          `${businessName.trim()} ha solicitado unirse como ${businessTypes.find(t => t.id === selectedType)?.name}`,
+          {
+            type: 'partner_request',
+            businessName: businessName.trim(),
+            businessType: selectedType,
+            userId: currentUser.id
+          }
+        );
+        console.log('Push notification sent to admin');
+      } catch (notificationError) {
+        console.error('Error sending push notification:', notificationError);
+        // No interrumpir el flujo si falla la notificación
+      }
 
       // Send partner registration confirmation email
       try {
