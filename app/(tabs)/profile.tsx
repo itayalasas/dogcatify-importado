@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
 import { router } from 'expo-router';
-import { User, Settings, LogOut, MapPin, Plus, Heart, ShoppingBag, Calendar, Bell, Shield, Globe, HelpCircle, CreditCard } from 'lucide-react-native';
+import { User, Settings, LogOut, MapPin, Plus, Heart, ShoppingBag, Calendar, Bell, Shield, Globe, CircleHelp as HelpCircle, CreditCard } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
