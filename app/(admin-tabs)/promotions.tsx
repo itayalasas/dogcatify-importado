@@ -459,38 +459,6 @@ export default function AdminPromotions() {
       } else {
         throw new Error(emailResult.error || 'Error al enviar el email');
       }
-      console.log('=== BILLING EMAIL DEBUG ===');
-      console.log('Selected promotion:', selectedPromotionForBilling.title);
-      console.log('Clicks:', selectedPromotionForBilling.clicks);
-      
-      // Calculate billing amount
-      const totalClicks = selectedPromotionForBilling.clicks || 0;
-      const costPerClickNum = parseFloat(costPerClick) || 100;
-      const totalAmount = totalClicks * costPerClickNum;
-      
-      console.log('Total amount calculated:', totalAmount);
-      
-      // Generate PDF content (simple HTML that can be converted to PDF)
-      const pdfContent = generateInvoicePDF(selectedPromotionForBilling, totalClicks, costPerClickNum, totalAmount, 'billing@example.com');
-      console.log('PDF content generated');
-
-      // Send email with PDF attachment
-      const emailResult = await sendBillingEmail('billing@example.com', selectedPromotionForBilling, pdfContent, totalAmount);
-      
-      if (emailResult.success) {
-        // Save billing record to database
-        await saveBillingRecord(selectedPromotionForBilling, totalClicks, costPerClickNum, totalAmount, 'billing@example.com');
-        
-        Alert.alert(
-          'Factura enviada',
-          `Se ha enviado la factura por $${totalAmount.toLocaleString()} a billing@example.com`
-        );
-        
-        setSelectedPromotionForBilling(null);
-        setShowBillingModal(false);
-      } else {
-        throw new Error(emailResult.error || 'Error al enviar el email');
-      }
     } catch (error) {
       console.error('Error sending billing email:', error);
       Alert.alert('Error', 'No se pudo enviar la factura: ' + error.message);
