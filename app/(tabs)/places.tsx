@@ -229,7 +229,6 @@ export default function AdminPromotions() {
           promo.id === promotionId 
             ? { ...promo, isActive: isActive }
             : promo
-        ));
         // Revert local state if database update fails
         setPromotions(prev => prev.map(promo => 
           promo.id === promotionId 
@@ -238,12 +237,7 @@ export default function AdminPromotions() {
         ));
         throw error;
       }
-    } catch (error) {
-      Alert.alert('Error', 'No se pudo actualizar la promoción');
-    }
-  };
 
-  return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Promociones</Text>
