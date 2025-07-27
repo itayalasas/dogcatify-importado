@@ -133,15 +133,24 @@ export default function Home() {
   useEffect(() => {
     const interleaveFeedItems = () => {
       const items = [];
+      
+      // Crear una copia aleatoria de promociones para variar el orden
+      const shuffledPromotions = [...promotions].sort(() => Math.random() - 0.5);
       let promoIndex = 0;
 
       for (let i = 0; i < posts.length; i++) {
         items.push({ type: 'post', data: posts[i] });
         
-        // Insertar promoción cada 3 posts
-        if ((i + 1) % 3 === 0 && promoIndex < promotions.length) {
-          items.push({ type: 'promotion', data: promotions[promoIndex] });
+        // Insertar promoción cada 10 posts (como solicitaste)
+        if ((i + 1) % 10 === 0 && promoIndex < shuffledPromotions.length) {
+          items.push({ type: 'promotion', data: shuffledPromotions[promoIndex] });
           promoIndex++;
+          
+          // Si se acabaron las promociones, reiniciar con orden aleatorio
+          if (promoIndex >= shuffledPromotions.length) {
+            shuffledPromotions.sort(() => Math.random() - 0.5);
+            promoIndex = 0;
+          }
         }
       }
 
@@ -279,13 +288,54 @@ export default function Home() {
 
       if (error) throw error;
 
-      // Handle promotion action (navigate, open link, etc.)
+      // Handle promotion CTA URL
       if (promotion.ctaUrl) {
-        // Open URL if available
-        console.log('Open promotion URL:', promotion.ctaUrl);
+        console.log('Opening promotion URL:', promotion.ctaUrl);
+        
+        if (promotion.ctaUrl.startsWith('dogcatify://')) {
+          // Handle internal app links
+          const urlParts = promotion.ctaUrl.replace('dogcatify://', '').split('/');
+          const type = urlParts[0]; // 'services', 'products', 'partners'
+          const id = urlParts[1];
+          
+          switch (type) {
+            case 'services':
+              router.push(`/services/${id}`);
+              break;
+            case 'products':
+              router.push(`/products/${id}`);
+              break;
+            case 'partners':
+              router.push(`/services/partner/${id}`);
+              break;
+            default:
+              console.warn('Unknown internal link type:', type);
+          }
+        } else if (promotion.ctaUrl.startsWith('http')) {
+          // Handle external links
+          try {
+            if (Platform.OS === 'web') {
+              window.open(promotion.ctaUrl, '_blank');
+            } else {
+              const { Linking } = require('react-native');
+              const supported = await Linking.canOpenURL(promotion.ctaUrl);
+              if (supported) {
+                await Linking.openURL(promotion.ctaUrl);
+              } else {
+                Alert.alert('Error', 'No se puede abrir este enlace');
+              }
+            }
+          } catch (error) {
+            console.error('Error opening external link:', error);
+            Alert.alert('Error', 'No se pudo abrir el enlace');
+          }
+        }
       } else if (promotion.partnerId) {
-        // Navigate to partner profile
-        console.log('Navigate to partner:', promotion.partnerId);
+        // Fallback: Navigate to partner profile if no CTA URL
+        router.push(`/services/partner/${promotion.partnerId}`);
+      } else {
+        // No action defined
+        Alert.alert('Información', 'Esta promoción no tiene enlace configurado');
       }
     } catch (error) {
       console.error('Error handling promotion press:', error);
