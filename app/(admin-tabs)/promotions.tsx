@@ -214,22 +214,11 @@ export default function AdminPromotions() {
           ? { ...promo, isActive: !isActive }
           : promo
       ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
       const { error } = await supabaseClient
         .from('promotions')
         .update({ is_active: !isActive })
         .eq('id', promotionId);
       if (error) {
-        // Revert local state if database update fails
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
         // Revert local state if database update fails
         setPromotions(prev => prev.map(promo => 
           promo.id === promotionId 
@@ -242,6 +231,19 @@ export default function AdminPromotions() {
       Alert.alert('Error', 'No se pudo actualizar la promoción');
     }
   };
+
+  if (!currentUser || currentUser.email?.toLowerCase() !== 'admin@dogcatify.com') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.accessDenied}>
+          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
+          <Text style={styles.accessDeniedText}>
+            No tienes permisos para acceder a esta sección
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -261,7 +263,7 @@ export default function AdminPromotions() {
           <View style={styles.statsGrid}>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>{promotions.length}</Text>
-              <Text style={styles.statLabel}>Total{'\n'}Promociones</Text>
+              <Text style={styles.statLabel}>Total</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
