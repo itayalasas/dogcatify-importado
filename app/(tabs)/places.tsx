@@ -214,6 +214,11 @@ export default function AdminPromotions() {
           ? { ...promo, isActive: !isActive }
           : promo
       ));
+      setPromotions(prev => prev.map(promo => 
+        promo.id === promotionId 
+          ? { ...promo, isActive: !isActive }
+          : promo
+      ));
       const { error } = await supabaseClient
         .from('promotions')
         .update({ is_active: !isActive })
@@ -224,15 +229,15 @@ export default function AdminPromotions() {
           promo.id === promotionId 
             ? { ...promo, isActive: isActive }
             : promo
+        // Revert local state if database update fails
+        setPromotions(prev => prev.map(promo => 
+          promo.id === promotionId 
+            ? { ...promo, isActive: isActive }
+            : promo
         ));
         throw error;
       }
-    } catch (error) {
-      Alert.alert('Error', 'No se pudo actualizar la promoción');
-    }
-  };
 
-  return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Promociones</Text>
@@ -1104,10 +1109,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     textAlign: 'center',
-  },
-  searchContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
   },
 });
