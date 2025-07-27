@@ -21,7 +21,6 @@ config.resolver.nodeModulesPaths = [
 // Configure jsPDF to use browser version
 config.resolver.alias = {
   ...config.resolver.alias,
-  'jspdf': path.resolve(__dirname, 'node_modules/jspdf/dist/jspdf.min.js'),
   'html2canvas': path.resolve(__dirname, 'src/mocks/html2canvas.js'),
 };
 
