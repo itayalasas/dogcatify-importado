@@ -10,7 +10,8 @@ module.exports = function(api) {
           root: ['./'],
           alias: {
             '@': './',
-            'html2canvas': './src/mocks/html2canvas.js'
+            'html2canvas': './src/mocks/html2canvas.js',
+            'jspdf': 'jspdf/dist/jspdf.min.js'
           }
         }
       ]

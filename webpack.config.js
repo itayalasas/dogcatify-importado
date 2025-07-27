@@ -6,6 +6,8 @@ module.exports = async function (env, argv) {
   // Remove Supabase from webpack processing since we're using custom implementation
   config.resolve.alias = {
     ...config.resolve.alias,
+    'jspdf': 'jspdf/dist/jspdf.min.js',
+    'html2canvas': false,
     '@supabase/supabase-js': false,
     '@supabase/postgrest-js': false,
     '@supabase/realtime-js': false,
