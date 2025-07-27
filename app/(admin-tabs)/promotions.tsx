@@ -5,10 +5,13 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
+import { NotificationService } from '../../utils/notifications';
 
 export default function AdminPromotions() {
+  const { currentUser } = useAuth();
 
   // Promotion form
   const [promoTitle, setPromoTitle] = useState('');
@@ -52,9 +55,15 @@ export default function AdminPromotions() {
   }
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.log('No current user in promotions');
+      return;
+    }
     const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
-    if (!isAdmin) return;
+    if (!isAdmin) {
+      console.log('User is not admin in promotions');
+      return;
+    }
     fetchPromotions();
     fetchPartners();
   }, [currentUser]);
@@ -471,12 +480,14 @@ export default function AdminPromotions() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Promociones</Text>
-        <TouchableOpacity style={styles.addButton} onPress={() => setShowPromotionModal(true)}>
-          <Plus color="#fff" size={24} />
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.accessDenied}>
+          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
+          <Text style={styles.accessDeniedText}>
+            Solo los administradores pueden gestionar promociones
+          </Text>
+        </View>
+      </SafeAreaView>
       <ScrollView style={styles.content}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Promociones activas</Text>
