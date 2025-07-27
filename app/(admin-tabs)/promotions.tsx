@@ -248,11 +248,6 @@ export default function AdminPromotions() {
           ? { ...promo, isActive: !isActive }
           : promo
       ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
       
       const { error } = await supabaseClient
         .from('promotions')
@@ -262,18 +257,31 @@ export default function AdminPromotions() {
       if (error) {
         // Revert local state if database update fails
         setPromotions(prev => prev.map(promo => 
-        // Revert local state if database update fails
-        setPromotions(prev => prev.map(promo => 
           promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
             ? { ...promo, isActive: isActive }
             : promo
         ));
         throw error;
       }
+    } catch (error) {
+      console.error('Error toggling promotion:', error);
+      Alert.alert('Error', 'No se pudo actualizar la promoción');
+    }
+  };
 
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Promociones</Text>
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={() => setShowPromotionModal(true)}
+        >
+          <Plus size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Card style={styles.statsCard}>
           <Text style={styles.statsTitle}>📊 Estadísticas</Text>
           <View style={styles.statsGrid}>
