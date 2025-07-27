@@ -1,610 +1,589 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Switch, Modal, TextInput, Alert } from 'react-native';
-import { router } from 'expo-router';
-import { Settings, CreditCard as Edit3, LogOut, Bell, Shield, CircleHelp as HelpCircle, Globe, Fingerprint, Eye, Mail, Lock, Building, Package, CreditCard } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image } from 'react-native';
+import { Plus, Megaphone, Calendar, Eye, Target, Search } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
-import { useLanguage } from '../../contexts/LanguageContext';
-import { useBiometric } from '../../contexts/BiometricContext';
 import { supabaseClient } from '../../lib/supabase';
+import * as ImagePicker from 'expo-image-picker';
 
-export default function Profile() {
-  const { currentUser, logout } = useAuth();
-  const { language, setLanguage, t } = useLanguage();
-  const { 
-    isBiometricSupported, 
-    isBiometricEnabled, 
-    biometricType, 
-    disableBiometric,
-    enableBiometric
-  } = useBiometric();
-  const [isPartnerMode, setIsPartnerMode] = useState(false);
-  const [partnerStatus, setPartnerStatus] = useState<'none' | 'pending' | 'verified'>('none');
-  const [showLanguageModal, setShowLanguageModal] = useState(false);
-  const [showBiometricModal, setShowBiometricModal] = useState(false);
-  const [biometricEmail, setBiometricEmail] = useState('');
-  const [biometricPassword, setBiometricPassword] = useState('');
-  const [biometricLoading, setBiometricLoading] = useState(false);
-  const [partnerProfile, setPartnerProfile] = useState<any>(null);
-  const [userStats, setUserStats] = useState({
-    pets: 0,
-    posts: 0,
-    followers: 0,
-    following: 0
-  });
+export default function AdminPromotions() {
+  const { currentUser } = useAuth();
+  const [promotions, setPromotions] = useState<any[]>([]);
+  const [showPromotionModal, setShowPromotionModal] = useState(false);
+  const [showPartnerSelector, setShowPartnerSelector] = useState(false);
+  const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
 
-  // Define fetchUserStats function outside useEffect but inside component
-  const fetchUserStats = async () => {
-    if (!currentUser) return;
-    
-    try {
-      // Fetch pets count
-      const { count: petsCount, error: petsError } = await supabaseClient
-        .from('pets')
-        .select('*', { count: 'exact', head: true })
-        .eq('owner_id', currentUser.id);
-      
-      if (petsError) throw petsError;
-      
-      // Fetch posts count
-      const { count: postsCount, error: postsError } = await supabaseClient
-        .from('posts')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', currentUser.id);
-      
-      if (postsError) throw postsError;
-      
-      // Fetch user profile for followers/following
-      const { data: userData, error: userError } = await supabaseClient
-        .from('profiles')
-        .select('followers, following')
-        .eq('id', currentUser.id)
-        .single();
-      
-      if (userError) throw userError;
-      
-      setUserStats({
-        pets: petsCount || 0,
-        posts: postsCount || 0,
-        followers: userData.followers?.length || 0,
-        following: userData.following?.length || 0
-      });
-    } catch (error) {
-      console.error('Error fetching user stats:', error);
-    }
-  };
+  // Promotion form
+  const [promoTitle, setPromoTitle] = useState('');
+  const [promoDescription, setPromoDescription] = useState('');
+  const [promoImage, setPromoImage] = useState<string | null>(null);
+  const [promoStartDate, setPromoStartDate] = useState('');
+  const [promoEndDate, setPromoEndDate] = useState('');
+  const [promoTargetAudience, setPromoTargetAudience] = useState('all');
+  const [loading, setLoading] = useState(false);
 
-  const fetchPartnerProfile = async () => {
-    if (!currentUser) return;
+  // Dummy partners for selector (replace with your fetch logic)
+  const partners = [
+    { id: '1', businessName: 'PetShop', businessType: 'Tienda', logo: '' },
+    { id: '2', businessName: 'VetClinic', businessType: 'Veterinaria', logo: '' },
+  ];
 
-    try {
-      const { data, error } = await supabaseClient
-        .from('partners')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .single();
-      
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching partner profile:', error);
-        return;
-      }
-      
-      setPartnerProfile(data ? {
-        id: data.id,
-        userId: data.user_id,
-        businessName: data.business_name,
-        businessType: data.business_type,
-        isVerified: data.is_verified,
-        isActive: data.is_active,
-        ...data
-      } : null);
-    } catch (error) {
-      console.error('Error fetching partner profile:', error);
-    }
-  };
+  function getSelectedPartner() {
+    return partners.find(p => p.id === selectedPartnerId) || null;
+  }
+
+  function getFilteredPartners() {
+    if (!partnerSearchQuery) return partners;
+    return partners.filter(p =>
+      p.businessName.toLowerCase().includes(partnerSearchQuery.toLowerCase()) ||
+      p.businessType.toLowerCase().includes(partnerSearchQuery.toLowerCase())
+    );
+  }
+
+  function getBusinessTypeIcon(type: string) {
+    if (type === 'Tienda') return '🏪';
+    if (type === 'Veterinaria') return '🐾';
+    return '🏢';
+  }
+
+  function isPromotionActive(startDate: Date, endDate: Date) {
+    const now = new Date();
+    return now >= startDate && now <= endDate;
+  }
+
   useEffect(() => {
     if (!currentUser) return;
-
-    fetchUserStats();
-    fetchPartnerProfile();
-    checkPartnerStatus();
-
-    // Set up real-time subscriptions
-    const partnerSubscription = supabaseClient
-      .channel('partner-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'partners',
-          filter: `user_id=eq.${currentUser.id}`
-        },
-        (payload) => {
-          if (payload.eventType === 'DELETE') {
-            setPartnerProfile(null);
-          } else {
-            const data = payload.new;
-            setPartnerProfile(data ? {
-              id: data.id,
-              userId: data.user_id,
-              businessName: data.business_name,
-              businessType: data.business_type,
-              isVerified: data.is_verified,
-              isActive: data.is_active,
-              ...data
-            } : null);
-          }
-        }
-      )
-      .subscribe();
-
-    const profileSubscription = supabaseClient
-      .channel('profile-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'profiles',
-          filter: `id=eq.${currentUser.id}`
-        },
-        (payload) => {
-          const data = payload.new;
-          setUserStats(prev => ({
-            ...prev,
-            followers: data.followers?.length || 0,
-            following: data.following?.length || 0
-          }));
-        }
-      )
-      .subscribe();
-
-    return () => {
-      partnerSubscription.unsubscribe();
-      profileSubscription.unsubscribe();
-    };
+    const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
+    if (!isAdmin) return;
+    fetchPromotions();
   }, [currentUser]);
 
-  const checkPartnerStatus = async () => {
-    if (!currentUser) return;
-    
-    try {
-      console.log('Checking partner status for user:', currentUser.id);
-      const { data, error } = await supabaseClient
-        .from('partners')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .order('created_at', { ascending: false })
-        .limit(1);
-      
-      if (error) {
-        console.error('Error checking partner status:', error);
-        return;
-      }
-      
-      if (data && data.length > 0) {
-        console.log('Partner data found:', data[0]);
-        if (data[0].is_verified) {
-          setPartnerStatus('verified');
-        } else {
-          setPartnerStatus('pending');
-        }
-      } else {
-        setPartnerStatus('none');
-      }
-    } catch (error) {
-      console.error('Error in checkPartnerStatus:', error);
-    }
+  const fetchPromotions = () => {
+    const fetchData = async () => {
+      try {
+        const { data, error } = await supabaseClient
+          .from('promotions')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (error) return;
+        const promotionsData = data?.map(item => ({
+          id: item.id,
+          title: item.title,
+          description: item.description,
+          imageURL: item.image_url,
+          startDate: new Date(item.start_date),
+          endDate: new Date(item.end_date),
+          targetAudience: item.target_audience,
+          isActive: item.is_active,
+          views: item.views,
+          clicks: item.clicks,
+          createdAt: new Date(item.created_at),
+          createdBy: item.created_by,
+          partnerId: item.partner_id,
+          partnerInfo: item.partners ? {
+            businessName: item.partners.business_name,
+            businessType: item.partners.business_type,
+            logo: item.partners.logo,
+          } : null,
+        })) || [];
+        setPromotions(promotionsData);
+      } catch (error) {}
+    };
+    fetchData();
+    const subscription = supabaseClient
+      .channel('promotions_channel')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'promotions' },
+        () => fetchData()
+      )
+      .subscribe();
+    return () => subscription.unsubscribe();
   };
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Cerrar Sesión',
-      '¿Estás seguro de que quieres cerrar sesión?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Cerrar Sesión',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await logout();
-              router.replace('/auth/login');
-            } catch (error) {
-              console.error('Error logging out:', error);
-              Alert.alert('Error', 'No se pudo cerrar la sesión');
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const handleEditProfile = () => {
-    router.push('/profile/edit');
-  };
-
-  const handleSettings = () => {
-    console.log('Settings');
-  };
-
-  const handlePartnerModeToggle = () => {
-    if (isPartnerMode) {
-      // Switch back to user mode
-      setIsPartnerMode(false);
-    } else {
-      // Check if user is admin first
-      const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
-      if (isAdmin) {
-        // Switch to admin mode
-        setIsPartnerMode(true);
-        router.replace('/(admin-tabs)/requests');
-        return;
-      } else {
-        // Check if user has a verified partner status
-        if (partnerStatus === 'verified') {
-          console.log('Switching to partner mode, redirecting to business selector');
-          // Switch to partner mode
-          setIsPartnerMode(true);
-          router.replace('/(partner-tabs)/business-selector');
-        } else {
-          Alert.alert(
-            'Acceso no disponible',
-            partnerStatus === 'pending' 
-              ? 'Tu solicitud está siendo revisada por un administrador. Te notificaremos cuando sea aprobada.'
-              : 'Debes registrar un negocio y ser verificado por un administrador para acceder al modo aliado.'
-          );
-        }
-      }
-    }
-  };
-
-  const handleRegisterBusiness = () => {
-    router.push('/partner-register');
-  };
-
-  const handleLanguageChange = (lang: 'es' | 'en') => {
-    setLanguage(lang);
-    setShowLanguageModal(false);
-  };
-
-  const handleBiometricToggle = async () => {
-    if (isBiometricEnabled) {
-      Alert.alert(
-        `Deshabilitar ${biometricType || 'autenticación biométrica'}`,
-        `¿Estás seguro de que quieres deshabilitar el acceso con ${biometricType || 'biometría'}?`,
-        [
-          {
-            text: 'Cancelar',
-            style: 'cancel'
-          },
-          {
-            text: 'Deshabilitar',
-            style: 'destructive',
-            onPress: async () => {
-              await disableBiometric();
-              Alert.alert('Deshabilitado', 'La autenticación biométrica ha sido deshabilitada');
-            }
-          }
-        ]
-      );
-    } else {
-      // Show modal to enter credentials
-      setBiometricEmail(currentUser?.email || '');
-      setBiometricPassword('');
-      setShowBiometricModal(true);
-    }
-  };
-
-  const handleEnableBiometric = async () => {
-    if (!biometricEmail || !biometricPassword) {
-      Alert.alert('Error', 'Por favor completa todos los campos');
+  const handleSelectImage = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert('Permisos requeridos', 'Se necesitan permisos para acceder a la galería');
       return;
     }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setPromoImage(result.assets[0].uri);
+    }
+  };
 
-    setBiometricLoading(true);
+  const handleTakePhoto = async () => {
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert('Permisos requeridos', 'Se necesitan permisos para usar la cámara');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setPromoImage(result.assets[0].uri);
+    }
+  };
+
+  const uploadImage = async (imageUri: string): Promise<string> => {
+    const response = await fetch(imageUri);
+    const blob = await response.blob();
+    const filename = `promotions/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+    const { error } = await supabaseClient.storage
+      .from('dogcatify')
+      .upload(filename, blob);
+    if (error) throw error;
+    const { data: { publicUrl } } = supabaseClient.storage
+      .from('dogcatify')
+      .getPublicUrl(filename);
+    return publicUrl;
+  };
+
+  const handleCreatePromotion = async () => {
+    if (!promoTitle || !promoDescription || !promoStartDate || !promoEndDate || !promoImage) {
+      Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
+      return;
+    }
+    setLoading(true);
     try {
-      // Enable biometric authentication
-      const success = await enableBiometric(biometricEmail, biometricPassword);
-      
-      if (success) {
-        Alert.alert(
-          'Autenticación biométrica habilitada',
-          `Ahora puedes usar tu ${biometricType || 'biometría'} para iniciar sesión rápidamente.`
-        );
-        setShowBiometricModal(false);
-        setBiometricPassword('');
-      } else {
-        Alert.alert('Error', `No se pudo habilitar la autenticación con ${biometricType || 'biometría'}`);
+      let imageUrl = null;
+      if (promoImage) imageUrl = await uploadImage(promoImage);
+      const promotionData: any = {
+        title: promoTitle.trim(),
+        description: promoDescription.trim(),
+        image_url: imageUrl,
+        start_date: new Date(promoStartDate).toISOString(),
+        end_date: new Date(promoEndDate).toISOString(),
+        target_audience: promoTargetAudience,
+        is_active: true,
+        views: 0,
+        clicks: 0,
+        promotion_type: 'feed',
+        cta_text: 'Más información',
+        created_at: new Date().toISOString(),
+        created_by: currentUser?.id,
+      };
+      if (selectedPartnerId) {
+        promotionData.partner_id = selectedPartnerId;
       }
-    } catch (error: any) {
-      Alert.alert('Error', 'Credenciales incorrectas. Por favor verifica tu email y contraseña.');
+      const { error } = await supabaseClient
+        .from('promotions')
+        .insert([promotionData])
+        .select(`
+          *,
+          partners:partner_id(business_name, business_type, logo)
+        `);
+      if (error) {
+        Alert.alert('Error', `No se pudo crear la promoción: ${error.message}`);
+        return;
+      }
+      setPromoTitle('');
+      setPromoDescription('');
+      setPromoImage(null);
+      setPromoStartDate('');
+      setPromoEndDate('');
+      setPromoTargetAudience('all');
+      setSelectedPartnerId(null);
+      setPartnerSearchQuery('');
+      setShowPromotionModal(false);
+      Alert.alert('Éxito', 'Promoción creada correctamente');
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo crear la promoción');
     } finally {
-      setBiometricLoading(false);
+      setLoading(false);
     }
   };
 
-  const getBiometricIcon = () => {
-    if (biometricType?.includes('Face') || biometricType?.includes('facial')) {
-      return <Eye size={20} color="#6B7280" />;
-    }
-    return <Fingerprint size={20} color="#6B7280" />;
-  };
+  const handleTogglePromotion = async (promotionId: string, isActive: boolean) => {
+    try {
+      // Update local state FIRST for immediate UI feedback
+      setPromotions(prev => prev.map(promo => 
+        promo.id === promotionId 
+          ? { ...promo, isActive: !isActive }
+          : promo
+      ));
+      setPromotions(prev => prev.map(promo => 
+        promo.id === promotionId 
+          ? { ...promo, isActive: !isActive }
+          : promo
+      ));
+      const { error } = await supabaseClient
+        .from('promotions')
+        .update({ is_active: !isActive })
+        .eq('id', promotionId);
+      if (error) {
+        // Revert local state if database update fails
+        setPromotions(prev => prev.map(promo => 
+          promo.id === promotionId 
+            ? { ...promo, isActive: isActive }
+            : promo
+        // Revert local state if database update fails
+        setPromotions(prev => prev.map(promo => 
+          promo.id === promotionId 
+            ? { ...promo, isActive: isActive }
+            : promo
+        ));
+        throw error;
+      }
 
-  const getBusinessTypeName = (type: string) => {
-    const types: Record<string, string> = {
-      veterinary: 'Veterinaria',
-      grooming: 'Peluquería',
-      walking: 'Paseador',
-      boarding: 'Pensión',
-      shop: 'Tienda',
-      shelter: 'Refugio'
-    };
-    return types[type] || type;
-  };
-
-  return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>{t('profile')}</Text>
-        <TouchableOpacity style={styles.settingsButton} onPress={handleSettings}>
-          <Settings size={22} color="#6B7280" />
+      <View style={styles.header}>
+        <Text style={styles.title}>Promociones</Text>
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={() => setShowPromotionModal(true)}
+        >
+          <Plus size={24} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
-        {/* Mercado Pago Configuration - Only show if user has verified businesses */}
-        {partnerProfile && partnerProfile.isVerified && (
-          <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/profile/mercadopago-config')}>
-            <CreditCard size={20} color="#6B7280" />
-            <Text style={styles.menuText}>Configurar Mercado Pago</Text>
-            <View style={styles.mpStatusBadge}>
-              <Text style={styles.mpStatusText}>
-                {partnerProfile.mercadopago_connected ? '✅ Conectado' : '⚠️ Pendiente'}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        )}
-        
+
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Card style={styles.profileCard}>
-          <View style={styles.profileHeader}>
-            <Image
-              source={{ uri: currentUser?.photoURL || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=200' }}
-              style={styles.avatar}
-            />
-            <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>{currentUser?.displayName || 'Amante de las mascotas'}</Text>
-              <Text style={styles.profileEmail}>{currentUser?.email}</Text>
-              <TouchableOpacity style={styles.editButton} onPress={handleEditProfile}>
-                <Edit3 size={16} color="#3B82F6" />
-                <Text style={styles.editButtonText}>{t('editProfile')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Card>
-
-        <Card style={styles.modeCard}>
-          <View style={styles.modeHeader}>
-            <Text style={styles.modeTitle}>
-              {currentUser?.email === 'admin@dogcatify.com' ? t('adminMode') : t('partnerMode')}
-            </Text>
-            {currentUser?.email === 'admin@dogcatify.com' ? (
-              <Button
-                title={t('goToAdmin')}
-                onPress={handlePartnerModeToggle}
-                size="small"
-              />
-            ) : partnerStatus === 'verified' ? (
-              <Switch
-                value={isPartnerMode}
-                onValueChange={handlePartnerModeToggle}
-                trackColor={{ false: '#E5E7EB', true: '#FF6B35' }}
-                thumbColor={isPartnerMode ? '#FFFFFF' : '#FFFFFF'}
-              />
-            ) : (
-              <View style={styles.partnerStatusBadge}>
-                <Text style={styles.partnerStatusText}>
-                  {partnerStatus === 'pending' ? t('pendingVerification') : t('noBusinessRegistered')}
-                </Text>
-              </View>
-            )}
-          </View>
-          <Text style={styles.modeDescription}>
-            {currentUser?.email === 'admin@dogcatify.com'
-              ? t('adminModeDescription')
-              : partnerStatus !== 'none'
-                ? (partnerStatus === 'verified'
-                    ? (isPartnerMode ? t('partnerModeOn') : t('partnerModeOff'))
-                    : t('requestUnderReview')
-                  )
-                : t('canRegisterBusiness')
-            }
-          </Text>
-          {partnerStatus === 'verified' && currentUser?.email !== 'admin@dogcatify.com' && (
-            <View style={styles.partnerInfo}>
-              {/* Partner info content */}
-            </View>
-          )}
-        </Card>
-
         <Card style={styles.statsCard}>
-          <Text style={styles.sectionTitle}>{t('myStats')}</Text>
-          <View style={styles.statsRow}>
+          <Text style={styles.statsTitle}>Estadísticas</Text>
+          <View style={styles.statsGrid}>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{userStats.pets}</Text>
-              <Text style={styles.statLabel}>{t('pets')}</Text>
+              <Text style={styles.statNumber}>{promotions.length}</Text>
+              <Text style={styles.statLabel}>Total{'\n'}Promociones</Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{userStats.posts}</Text>
-              <Text style={styles.statLabel}>{t('posts')}</Text>
+              <Text style={styles.statNumber}>
+                {promotions.filter(p => p.isActive && isPromotionActive(p.startDate, p.endDate)).length}
+              </Text>
+              <Text style={styles.statLabel}>Activas</Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{userStats.followers}</Text>
-              <Text style={styles.statLabel}>Seguidores</Text>
+              <Text style={styles.statNumber}>
+                {promotions.reduce((sum, p) => sum + (p.views || 0), 0)}
+              </Text>
+              <Text style={styles.statLabel}>Total{'\n'}Vistas</Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{userStats.following}</Text>
-              <Text style={styles.statLabel}>Siguiendo</Text>
+              <Text style={styles.statNumber}>
+                {promotions.reduce((sum, p) => sum + (p.clicks || 0), 0)}
+              </Text>
+              <Text style={styles.statLabel}>Total{'\n'}Clicks</Text>
             </View>
           </View>
         </Card>
 
-        <View style={styles.menuSection}>
-          <TouchableOpacity style={styles.menuItem} onPress={handleRegisterBusiness}>
-            <Building size={20} color="#6B7280" />
-            <Text style={styles.menuText}>Registrar Negocio</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/orders')}>
-            <Package size={20} color="#6B7280" />
-            <Text style={styles.menuText}>Mis Pedidos</Text>
-          </TouchableOpacity>
-          
-          {isBiometricSupported && (
-            <TouchableOpacity style={styles.menuItem} onPress={handleBiometricToggle}>
-              {getBiometricIcon()}
-              <Text style={styles.menuText}>Autenticación biométrica</Text>
-              <Switch
-                value={isBiometricEnabled}
-                onValueChange={handleBiometricToggle}
-                trackColor={{ false: '#E5E7EB', true: '#3B82F6' }}
-                thumbColor={isBiometricEnabled ? '#FFFFFF' : '#FFFFFF'}
-              />
-            </TouchableOpacity>
-          )}
-          
-          <TouchableOpacity style={styles.menuItem}>
-            <Bell size={20} color="#6B7280" />
-            <Text style={styles.menuText}>{t('notifications')}</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.menuItem}>
-            <Shield size={20} color="#6B7280" />
-            <Text style={styles.menuText}>{t('privacySecurity')}</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.menuItem} onPress={() => setShowLanguageModal(true)}>
-            <Globe size={20} color="#6B7280" />
-            <Text style={styles.menuText}>{t('language')}</Text>
-            <Text style={styles.languageValue}>
-              {language === 'es' ? t('spanish') : t('english')}
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.menuItem}>
-            <HelpCircle size={20} color="#6B7280" />
-            <Text style={styles.menuText}>{t('helpSupport')}</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.logoutSection}>
-          <Button
-            title={t('signOut')}
-            onPress={handleLogout}
-            variant="outline"
-            size="large"
-          />
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Todas las Promociones</Text>
+          {promotions.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Megaphone size={32} color="#DC2626" />
+              <Text style={styles.emptyTitle}>No hay promociones</Text>
+              <Text style={styles.emptySubtitle}>Crea una promoción para los usuarios</Text>
+            </View>
+          ) : (
+            promotions.map((promotion) => (
+              <Card key={promotion.id} style={styles.promotionCard}>
+                <View style={styles.promotionHeader}>
+                  <View style={styles.promotionInfo}>
+                    <Text style={styles.promotionTitle}>{promotion.title}</Text>
+                    {promotion.partnerInfo && (
+                      <View style={styles.partnerInfo}>
+                        <Text style={styles.partnerIcon}>
+                          {getBusinessTypeIcon(promotion.partnerInfo.businessType)}
+                        </Text>
+                        <Text style={styles.partnerName}>{promotion.partnerInfo.businessName}</Text>
+                      </View>
+                    )}
+                    <Text style={styles.promotionAudience}>
+                      Audiencia: {promotion.targetAudience}
+                    </Text>
+                  </View>
+                  <View style={styles.promotionStatus}>
+                    <View style={[
+                      styles.statusBadge,
+                      { backgroundColor: promotion.isActive ? '#DCFCE7' : '#F3F4F6' }
+                    ]}>
+                      <Text style={[
+                        styles.statusText,
+                        { color: promotion.isActive ? '#22C55E' : '#6B7280' }
+                      ]}>
+                        {promotion.isActive ? 'Activa' : 'Inactiva'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <Image source={{ uri: promotion.imageURL }} style={styles.promotionImage} />
+                <Text style={styles.promotionDescription}>{promotion.description}</Text>
+                <View style={styles.promotionDetails}>
+                  <View style={styles.promotionDetail}>
+                    <Calendar size={16} color="#6B7280" />
+                    <Text style={styles.promotionDetailText}>
+                      {promotion.startDate.toLocaleDateString()} - {promotion.endDate.toLocaleDateString()}
+                    </Text>
+                  </View>
+                    <Text style={styles.promotionStatText}>{promotion.views || 0}</Text>
+                  </View>
+                  <View style={styles.promotionStat}>
+                    <Target size={16} color="#6B7280" />
+                    <Text style={styles.promotionStatText}>{promotion.clicks || 0}</Text>
+              : 'Ayuda a otros dueños de mascotas agregando lugares pet-friendly que conozcas'
+                    variant={promotion.isActive && isPromotionActive(promotion.startDate, promotion.endDate) ? 'outline' : 'primary'}
+                    size="medium"
         </View>
       </ScrollView>
 
+      {/* Promotion Modal */}
       <Modal
-        visible={showLanguageModal}
-        transparent={true}
+        visible={showPromotionModal}
+        transparent
         animationType="slide"
-        onRequestClose={() => setShowLanguageModal(false)}
+        onRequestClose={() => setShowPromotionModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.biometricModalContent}>
-            <Text style={styles.modalTitle}>{t('language')}</Text>
-            
-            <TouchableOpacity 
-              style={[styles.languageOption, language === 'es' && styles.selectedLanguage]}
-              onPress={() => handleLanguageChange('es')}
-            >
-              <Text style={[styles.languageOptionText, language === 'es' && styles.selectedLanguageText]}>
-                🇪🇸 {t('spanish')}
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.languageOption, language === 'en' && styles.selectedLanguage]}
-              onPress={() => handleLanguageChange('en')}
-            >
-              <Text style={[styles.languageOptionText, language === 'en' && styles.selectedLanguageText]}>
-                🇺🇸 {t('english')}
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.cancelButton}
-              onPress={() => setShowLanguageModal(false)}
-            >
-              <Text style={styles.cancelButtonText}>Cancelar / Cancel</Text>
-            </TouchableOpacity>
-          </View>
+          <ScrollView contentContainerStyle={styles.modalScrollContent}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Crear Nueva Promoción</Text>
+              
+              <Input
+                label="Título de la promoción"
+                placeholder="Ej: ¡Descuento especial en servicios para mascotas!"
+                value={promoTitle}
+                onChangeText={setPromoTitle}
+              />
+              
+              <Input
+                label="Descripción"
+                placeholder="Describe la promoción detalladamente..."
+                value={promoDescription}
+                onChangeText={setPromoDescription}
+                multiline
+                numberOfLines={4}
+              />
+
+              {/* Partner Selector */}
+              <View style={styles.partnerSection}>
+                <Text style={styles.partnerLabel}>Aliado (opcional)</Text>
+                <Text style={styles.partnerDescription}>
+                  Selecciona un aliado específico para esta promoción
+                </Text>
+                
+                <TouchableOpacity 
+                  style={styles.partnerSelector}
+                  onPress={() => setShowPartnerSelector(true)}
+                >
+                  {getSelectedPartner() ? (
+                    <View style={styles.selectedPartnerInfo}>
+                      <Text style={styles.selectedPartnerIcon}>
+                        {getBusinessTypeIcon(getSelectedPartner()!.businessType)}
+                      </Text>
+                      <View style={styles.selectedPartnerDetails}>
+                        <Text style={styles.selectedPartnerName}>
+                          {getSelectedPartner()!.businessName}
+                        </Text>
+                        <Text style={styles.selectedPartnerType}>
+                          {getSelectedPartner()!.businessType}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <Text style={styles.partnerSelectorPlaceholder}>
+                      Seleccionar aliado (opcional)
+                    </Text>
+                  )}
+                </TouchableOpacity>
+                
+                {getSelectedPartner() && (
+                  <TouchableOpacity 
+                    style={styles.clearPartnerButton}
+                    onPress={() => {
+                      setSelectedPartnerId(null);
+                      setPartnerSearchQuery('');
+                    }}
+                  >
+                    <Text style={styles.clearPartnerText}>Quitar aliado</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <View style={styles.imageSection}>
+                <Text style={styles.imageLabel}>Imagen promocional *</Text>
+                
+                {promoImage ? (
+                  <View style={styles.imagePreviewContainer}>
+                    <Image source={{ uri: promoImage }} style={styles.selectedImage} />
+                    <TouchableOpacity 
+                      style={styles.changeImageButton}
+                      onPress={() => setPromoImage(null)}
+                    >
+                      <Text style={styles.changeImageText}>Cambiar imagen</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.imageActions}>
+                    <TouchableOpacity style={styles.imageActionButton} onPress={handleTakePhoto}>
+                      <Text style={styles.imageActionText}>📷 Tomar foto</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.imageActionButton} onPress={handleSelectImage}>
+                      <Text style={styles.imageActionText}>🖼️ Galería</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                
+                <Text style={styles.imageHint}>
+                  Recomendado: 1080x1080px o 16:9 para mejor visualización
+                </Text>
+              </View>
+              
+              <Input
+                label="Fecha de inicio"
+                placeholder="2025-01-01"
+                value={promoStartDate}
+                onChangeText={setPromoStartDate}
+                leftIcon={<Calendar size={20} color="#6B7280" />}
+              />
+              
+              <Input
+                label="Fecha de fin"
+                placeholder="2025-01-31"
+                value={promoEndDate}
+                onChangeText={setPromoEndDate}
+                leftIcon={<Calendar size={20} color="#6B7280" />}
+              />
+
+              <View style={styles.audienceSection}>
+                <Text style={styles.audienceLabel}>Audiencia objetivo</Text>
+                <Text style={styles.audienceDescription}>
+                  Selecciona quién verá esta promoción en su feed
+                </Text>
+                <View style={styles.audienceOptions}>
+                  {[
+                    { value: 'all', label: 'Todos los usuarios' },
+                    { value: 'users', label: 'Solo usuarios' },
+                    { value: 'partners', label: 'Solo aliados' },
+                  ].map((option) => (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[
+                        styles.audienceOption,
+                        promoTargetAudience === option.value && styles.selectedAudience
+                      ]}
+                      onPress={() => setPromoTargetAudience(option.value)}
+                    >
+                      <Text style={[
+                        styles.audienceOptionText,
+                        promoTargetAudience === option.value && styles.selectedAudienceText
+                      ]}>
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+              
+              <View style={styles.modalActions}>
+                <View style={styles.modalButtonsContainer}>
+                  <TouchableOpacity 
+                    style={styles.cancelModalButton}
+                    onPress={() => {
+                      setShowPromotionModal(false);
+                      setPromoTitle('');
+                      setPromoDescription('');
+                      setPromoImage(null);
+                      setPromoStartDate('');
+                      setPromoEndDate('');
+                      setPromoTargetAudience('all');
+                      setSelectedPartnerId(null);
+                      setPartnerSearchQuery('');
+                    }}
+                  >
+                    <Text style={styles.cancelModalButtonText}>Cancelar</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.createModalButton, loading && styles.disabledButton]}
+                    onPress={handleCreatePromotion}
+                    disabled={loading}
+                  >
+                    <Text style={styles.createModalButtonText}>
+                      {loading ? 'Creando...' : 'Crear Promoción'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </ScrollView>
         </View>
       </Modal>
 
-      {/* Biometric Setup Modal */}
+      {/* Partner Selector Modal */}
       <Modal
-        visible={showBiometricModal}
-        transparent={true}
+        visible={showPartnerSelector}
+        transparent
         animationType="slide"
-        onRequestClose={() => setShowBiometricModal(false)}
+        onRequestClose={() => setShowPartnerSelector(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.biometricModalContent}>
-            <Text style={styles.biometricModalTitle}>
-              🔒 Habilitar autenticación biométrica
-            </Text>
-            <Text style={styles.biometricModalSubtitle}>
-              Para habilitar el acceso con {biometricType}, confirma tus credenciales
-            </Text>
-            
-            <View style={styles.biometricForm}>
-              <Input
-                label="Correo electrónico"
-                placeholder="tu@email.com"
-                value={biometricEmail}
-                onChangeText={setBiometricEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                leftIcon={<Mail size={20} color="#6B7280" />}
-              />
-
-              <Input
-                label="Contraseña"
-                placeholder="Tu contraseña"
-                value={biometricPassword}
-                onChangeText={setBiometricPassword}
-                secureTextEntry
-                leftIcon={<Lock size={20} color="#6B7280" />}
-              />
+          <View style={styles.partnerModalContent}>
+            <View style={styles.partnerModalHeader}>
+              <Text style={styles.partnerModalTitle}>Seleccionar Aliado</Text>
+              <TouchableOpacity onPress={() => setShowPartnerSelector(false)}>
+                <Text style={styles.partnerModalClose}>✕</Text>
+              </TouchableOpacity>
             </View>
             
-            <View style={styles.biometricModalButtons}>
-              <View style={styles.biometricButtonContainer}>
-                <Button
-                  title="Cancelar"
-                  onPress={() => {
-                    setShowBiometricModal(false);
-                    setBiometricPassword('');
-                  }}
-                  variant="outline"
-                  size="large"
-                />
-              </View>
-              <View style={styles.biometricButtonContainer}>
-                <Button
-                  title="Habilitar"
-                  onPress={handleEnableBiometric}
-                  loading={biometricLoading}
-                  size="large"
-                />
-              </View>
-            </View>
+            <Input
+              placeholder="Buscar aliado por nombre o tipo..."
+              value={partnerSearchQuery}
+              onChangeText={setPartnerSearchQuery}
+              leftIcon={<Search size={20} color="#9CA3AF" />}
+            />
+            
+            <ScrollView style={styles.partnersList} showsVerticalScrollIndicator={false}>
+              {getFilteredPartners().length === 0 ? (
+                <View style={styles.noPartnersContainer}>
+                  <Text style={styles.noPartnersText}>
+                    {partnerSearchQuery ? 'No se encontraron aliados' : 'No hay aliados disponibles'}
+                  </Text>
+                </View>
+              ) : (
+                getFilteredPartners().map((partner) => (
+                  <TouchableOpacity
+                    key={partner.id}
+                    style={[
+                      styles.partnerItem,
+                      selectedPartnerId === partner.id && styles.selectedPartnerItem
+                    ]}
+                    onPress={() => {
+                      setSelectedPartnerId(partner.id);
+                      setShowPartnerSelector(false);
+                      setPartnerSearchQuery('');
+                    }}
+                  >
+                    <View style={styles.partnerItemInfo}>
+                      <Text style={styles.partnerItemIcon}>
+                        {getBusinessTypeIcon(partner.businessType)}
+                      </Text>
+                      <View style={styles.partnerItemDetails}>
+                        <Text style={styles.partnerItemName}>
+                          {partner.businessName}
+                        </Text>
+                        <Text style={styles.partnerItemType}>
+                          {partner.businessType}
+                        </Text>
+                      </View>
+                    </View>
+                    {selectedPartnerId === partner.id && (
+                      <Text style={styles.selectedIndicator}>✓</Text>
+                    )}
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -615,276 +594,506 @@ export default function Profile() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingTop: 30, // Add padding at the top to show status bar
+    backgroundColor: '#F9FAFB',
   },
-  headerContainer: {
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 50,
+    paddingBottom: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  headerTitle: {
+  title: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
+    color: '#111827',
   },
-  settingsButton: {
-    padding: 6,
-    minWidth: 32,
-    minHeight: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
+  addButton: {
+    backgroundColor: '#DC2626',
+    padding: 8,
+    borderRadius: 20,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 10,
-  },
-  profileCard: {
-    marginHorizontal: 6,
-    marginTop: 12,
-    marginBottom: 12,
-  },
-  profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatar: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    marginRight: 12,
-  },
-  profileInfo: {
-    flex: 1,
-  },
-  profileName: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  profileEmail: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 6,
-    fontFamily: 'Inter-Regular',
-  },
-  editButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  editButtonText: {
-    fontSize: 13,
-    color: '#3B82F6',
-    marginLeft: 4,
-    fontFamily: 'Inter-Medium',
-  },
-  modeCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-  },
-  modeHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  modeTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    flex: 1,
-  },
-  modeDescription: {
-    fontSize: 13,
-    color: '#6B7280',
-    lineHeight: 18,
-    fontFamily: 'Inter-Regular',
   },
   statsCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
+    margin: 16,
+    marginBottom: 8,
   },
-  sectionTitle: {
+  statsTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  statsRow: {
+  statsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-around',
   },
   statItem: {
     alignItems: 'center',
-    flex: 1,
   },
   statNumber: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
+    color: '#DC2626',
   },
   statLabel: {
     fontSize: 12,
-    color: '#6B7280',
     fontFamily: 'Inter-Regular',
+    color: '#6B7280',
     textAlign: 'center',
   },
-  menuSection: {
-    marginHorizontal: 16,
-    marginBottom: 16,
+  section: {
+    marginBottom: 24,
   },
-  menuItem: {
+  sectionTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  promotionCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  promotionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  promotionInfo: {
+    flex: 1,
+  },
+  promotionTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  partnerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginBottom: 6,
-    minHeight: 50,
+    marginTop: 4,
   },
-  menuText: {
-    fontSize: 15,
-    color: '#111827',
-    marginLeft: 10,
-    flex: 1,
+  partnerIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  partnerName: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#3B82F6',
+  },
+  promotionAudience: {
+    fontSize: 14,
     fontFamily: 'Inter-Regular',
-  },
-  languageValue: {
-    fontSize: 13,
     color: '#6B7280',
+  },
+  promotionStatus: {
+    alignItems: 'flex-end',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 12,
     fontFamily: 'Inter-Medium',
   },
-  logoutSection: {
+  promotionImage: {
+    width: '100%',
+    height: 120,
+    borderRadius: 8,
+    marginBottom: 12,
+    resizeMode: 'cover',
+  },
+  promotionDescription: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  promotionDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  promotionDetail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  promotionDetailText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginLeft: 4,
+  },
+  promotionStats: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  promotionStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  promotionStatText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    marginLeft: 4,
+  },
+  promotionActions: {
+    alignItems: 'flex-end',
+  },
+  emptyCard: {
     marginHorizontal: 16,
-    marginBottom: 24,
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginTop: 16,
+    marginBottom: 4,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalScrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
-    alignItems: 'center',
     paddingHorizontal: 20,
+    paddingVertical: 40,
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 20,
     width: '100%',
-    maxWidth: 320,
+    maxWidth: 400,
+    alignSelf: 'center',
   },
   modalTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
     color: '#111827',
     textAlign: 'center',
+    marginBottom: 20,
+  },
+  partnerSection: {
     marginBottom: 16,
   },
-  biometricModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 24,
-    width: '90%',
-    maxWidth: 400,
-    alignSelf: 'center',
+  partnerLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 4,
   },
-  languageOption: {
-    paddingVertical: 12,
+  partnerDescription: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  partnerSelector: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
     paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 6,
-    backgroundColor: '#F9FAFB',
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  selectedLanguage: {
-    backgroundColor: '#FF6B35',
-  },
-  languageOptionText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#111827',
-    textAlign: 'center',
-  },
-  selectedLanguageText: {
-    color: '#FFFFFF',
-  },
-  cancelButton: {
-    paddingVertical: 10,
-    marginTop: 6,
-    minHeight: 40,
-    justifyContent: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#111827',
-    textAlign: 'center',
-  },
-  mpStatusBadge: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-    marginLeft: 'auto',
-  },
-  mpStatusText: {
-    fontSize: 11,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-  },
-  partnerStatusBadge: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  partnerStatusText: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontFamily: 'Inter-Medium',
-  },
-  biometricModalContent: {
+    paddingVertical: 14,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    width: '90%',
-    maxWidth: 400,
-    alignSelf: 'center',
+    minHeight: 50,
   },
-  biometricModalTitle: {
+  selectedPartnerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  selectedPartnerIcon: {
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    textAlign: 'center',
-    marginBottom: 8,
+    marginRight: 12,
   },
-  biometricModalSubtitle: {
+  selectedPartnerDetails: {
+    flex: 1,
+  },
+  selectedPartnerName: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  selectedPartnerType: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20,
   },
-  biometricForm: {
-    marginBottom: 24,
+  partnerSelectorPlaceholder: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
   },
-  biometricModalButtons: {
+  clearPartnerButton: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  clearPartnerText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#EF4444',
+  },
+  partnerModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    marginTop: 100,
+    flex: 1,
+  },
+  partnerModalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  partnerModalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+  },
+  partnerModalClose: {
+    fontSize: 18,
+    color: '#6B7280',
+    padding: 4,
+  },
+  partnersList: {
+    flex: 1,
+    marginTop: 16,
+  },
+  noPartnersContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  noPartnersText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  partnerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  selectedPartnerItem: {
+    backgroundColor: '#EBF8FF',
+    borderColor: '#3B82F6',
+    borderWidth: 1,
+  },
+  partnerItemInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  partnerItemIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  partnerItemDetails: {
+    flex: 1,
+  },
+  partnerItemName: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  partnerItemType: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  selectedIndicator: {
+    fontSize: 18,
+    color: '#3B82F6',
+    fontWeight: 'bold',
+  },
+  imageSection: {
+    marginBottom: 16,
+  },
+  imageLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  imagePreviewContainer: {
+    marginBottom: 12,
+  },
+  selectedImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  changeImageButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    alignSelf: 'center',
+  },
+  changeImageText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
+  },
+  imageActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
     gap: 12,
+  },
+  imageActionButton: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 40,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
+  },
+  imageActionText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  imageHint: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    marginTop: 8,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  audienceSection: {
+    marginBottom: 20,
+  },
+  audienceLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  audienceDescription: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  audienceOptions: {
+    gap: 8,
+  },
+  audienceOption: {
+    backgroundColor: '#F9FAFB',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  selectedAudience: {
+    backgroundColor: '#DC2626',
+    borderColor: '#DC2626',
+  },
+  audienceOptionText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  selectedAudienceText: {
+    color: '#FFFFFF',
+  },
+  modalActions: {
     marginTop: 20,
   },
-  biometricButtonContainer: {
+  modalButtonsContainer: {
+    flexDirection: 'column',
+    gap: 12,
+    width: '100%',
+  },
+  cancelModalButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#DC2626',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    width: '100%',
+  },
+  cancelModalButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#DC2626',
+  },
+  createModalButton: {
+    backgroundColor: '#DC2626',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    width: '100%',
+  },
+  createModalButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  accessDenied: {
     flex: 1,
-    maxWidth: '48%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  accessDeniedTitle: {
+    fontSize: 24,
+    fontFamily: 'Inter-Bold',
+    color: '#EF4444',
+    marginBottom: 8,
+  },
+  accessDeniedText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
   },
 });
