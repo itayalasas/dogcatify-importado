@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image } from 'react-native';
-import { Plus, Megaphone, Calendar, Eye, Target, Search, ExternalLink } from 'lucide-react-native';
+import { Plus, Megaphone, Calendar, Eye, Target, Search } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -11,7 +11,6 @@ import * as ImagePicker from 'expo-image-picker';
 export default function AdminPromotions() {
   const { currentUser } = useAuth();
   const [promotions, setPromotions] = useState<any[]>([]);
-  const [partners, setPartners] = useState<any[]>([]);
   const [showPromotionModal, setShowPromotionModal] = useState(false);
   const [showPartnerSelector, setShowPartnerSelector] = useState(false);
   const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
@@ -21,11 +20,16 @@ export default function AdminPromotions() {
   const [promoTitle, setPromoTitle] = useState('');
   const [promoDescription, setPromoDescription] = useState('');
   const [promoImage, setPromoImage] = useState<string | null>(null);
-  const [promoUrl, setPromoUrl] = useState('');
   const [promoStartDate, setPromoStartDate] = useState('');
   const [promoEndDate, setPromoEndDate] = useState('');
   const [promoTargetAudience, setPromoTargetAudience] = useState('all');
   const [loading, setLoading] = useState(false);
+
+  // Dummy partners for selector (replace with your fetch logic)
+  const partners = [
+    { id: '1', businessName: 'PetShop', businessType: 'Tienda', logo: '' },
+    { id: '2', businessName: 'VetClinic', businessType: 'Veterinaria', logo: '' },
+  ];
 
   function getSelectedPartner() {
     return partners.find(p => p.id === selectedPartnerId) || null;
@@ -40,20 +44,9 @@ export default function AdminPromotions() {
   }
 
   function getBusinessTypeIcon(type: string) {
-    switch (type) {
-      case 'veterinary': return '🏥';
-      case 'grooming': return '✂️';
-      case 'walking': return '🚶';
-      case 'boarding': return '🏠';
-      case 'shop': return '🛍️';
-      case 'shelter': return '🐾';
-      default: return '🏢';
-    }
-  }
-
-  function isPromotionActive(startDate: Date, endDate: Date) {
-    const now = new Date();
-    return now >= startDate && now <= endDate;
+    if (type === 'Tienda') return '🏪';
+    if (type === 'Veterinaria') return '🐾';
+    return '🏢';
   }
 
   useEffect(() => {
@@ -61,71 +54,48 @@ export default function AdminPromotions() {
     const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
     if (!isAdmin) return;
     fetchPromotions();
-    fetchPartners();
   }, [currentUser]);
 
-  const fetchPartners = async () => {
-    try {
-      const { data, error } = await supabaseClient
-        .from('partners')
-        .select('*')
-        .eq('is_verified', true)
-        .eq('is_active', true)
-        .order('business_name', { ascending: true });
-
-      if (error) throw error;
-
-      const partnersData = data?.map(partner => ({
-        id: partner.id,
-        businessName: partner.business_name,
-        businessType: partner.business_type,
-        logo: partner.logo,
-      })) || [];
-
-      setPartners(partnersData);
-    } catch (error) {
-      console.error('Error fetching partners:', error);
-    }
-  };
-
-  const fetchPromotions = async () => {
-    try {
-      const { data, error } = await supabaseClient
-        .from('promotions')
-        .select(`
-          *,
-          partners:partner_id(business_name, business_type, logo)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const promotionsData = data?.map(item => ({
-        id: item.id,
-        title: item.title,
-        description: item.description,
-        imageURL: item.image_url,
-        ctaUrl: item.cta_url,
-        startDate: new Date(item.start_date),
-        endDate: new Date(item.end_date),
-        targetAudience: item.target_audience,
-        isActive: item.is_active,
-        views: item.views,
-        clicks: item.clicks,
-        createdAt: new Date(item.created_at),
-        createdBy: item.created_by,
-        partnerId: item.partner_id,
-        partnerInfo: item.partners ? {
-          businessName: item.partners.business_name,
-          businessType: item.partners.business_type,
-          logo: item.partners.logo,
-        } : null,
-      })) || [];
-
-      setPromotions(promotionsData);
-    } catch (error) {
-      console.error('Error fetching promotions:', error);
-    }
+  const fetchPromotions = () => {
+    const fetchData = async () => {
+      try {
+        const { data, error } = await supabaseClient
+          .from('promotions')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (error) return;
+        const promotionsData = data?.map(item => ({
+          id: item.id,
+          title: item.title,
+          description: item.description,
+          imageURL: item.image_url,
+          startDate: new Date(item.start_date),
+          endDate: new Date(item.end_date),
+          targetAudience: item.target_audience,
+          isActive: item.is_active,
+          views: item.views,
+          clicks: item.clicks,
+          createdAt: new Date(item.created_at),
+          createdBy: item.created_by,
+          partnerId: item.partner_id,
+          partnerInfo: item.partners ? {
+            businessName: item.partners.business_name,
+            businessType: item.partners.business_type,
+            logo: item.partners.logo,
+          } : null,
+        })) || [];
+        setPromotions(promotionsData);
+      } catch (error) {}
+    };
+    fetchData();
+    const subscription = supabaseClient
+      .channel('promotions_channel')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'promotions' },
+        () => fetchData()
+      )
+      .subscribe();
+    return () => subscription.unsubscribe();
   };
 
   const handleSelectImage = async () => {
@@ -176,18 +146,6 @@ export default function AdminPromotions() {
     return publicUrl;
   };
 
-  const resetForm = () => {
-    setPromoTitle('');
-    setPromoDescription('');
-    setPromoImage(null);
-    setPromoUrl('');
-    setPromoStartDate('');
-    setPromoEndDate('');
-    setPromoTargetAudience('all');
-    setSelectedPartnerId(null);
-    setPartnerSearchQuery('');
-  };
-
   const handleCreatePromotion = async () => {
     if (!promoTitle || !promoDescription || !promoStartDate || !promoEndDate || !promoImage) {
       Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
@@ -197,41 +155,44 @@ export default function AdminPromotions() {
     try {
       let imageUrl = null;
       if (promoImage) imageUrl = await uploadImage(promoImage);
-      
       const promotionData: any = {
         title: promoTitle.trim(),
         description: promoDescription.trim(),
         image_url: imageUrl,
-        cta_url: promoUrl.trim() || null,
         start_date: new Date(promoStartDate).toISOString(),
         end_date: new Date(promoEndDate).toISOString(),
         target_audience: promoTargetAudience,
         is_active: true,
         views: 0,
         clicks: 0,
-        likes: [],
         promotion_type: 'feed',
         cta_text: 'Más información',
         created_at: new Date().toISOString(),
         created_by: currentUser?.id,
       };
-      
       if (selectedPartnerId) {
         promotionData.partner_id = selectedPartnerId;
       }
-      
       const { error } = await supabaseClient
         .from('promotions')
-        .insert([promotionData]);
-      
+        .insert([promotionData])
+        .select(`
+          *,
+          partners:partner_id(business_name, business_type, logo)
+        `);
       if (error) {
         Alert.alert('Error', `No se pudo crear la promoción: ${error.message}`);
         return;
       }
-      
-      resetForm();
+      setPromoTitle('');
+      setPromoDescription('');
+      setPromoImage(null);
+      setPromoStartDate('');
+      setPromoEndDate('');
+      setPromoTargetAudience('all');
+      setSelectedPartnerId(null);
+      setPartnerSearchQuery('');
       setShowPromotionModal(false);
-      fetchPromotions();
       Alert.alert('Éxito', 'Promoción creada correctamente');
     } catch (error) {
       Alert.alert('Error', 'No se pudo crear la promoción');
@@ -242,20 +203,18 @@ export default function AdminPromotions() {
 
   const handleTogglePromotion = async (promotionId: string, isActive: boolean) => {
     try {
-      // Update local state FIRST for immediate UI feedback
+      // Actualiza el estado local para feedback inmediato
       setPromotions(prev => prev.map(promo => 
         promo.id === promotionId 
           ? { ...promo, isActive: !isActive }
           : promo
       ));
-      
       const { error } = await supabaseClient
         .from('promotions')
         .update({ is_active: !isActive })
         .eq('id', promotionId);
-      
       if (error) {
-        // Revert local state if database update fails
+        // Revierte el estado local si falla la actualización
         setPromotions(prev => prev.map(promo => 
           promo.id === promotionId 
             ? { ...promo, isActive: isActive }
@@ -264,60 +223,33 @@ export default function AdminPromotions() {
         throw error;
       }
     } catch (error) {
-      console.error('Error toggling promotion:', error);
-      Alert.alert('Error', 'No se pudo actualizar la promoción');
+      // Puedes mostrar un alert si quieres
+      // Alert.alert('Error', 'No se pudo actualizar el estado de la promoción');
     }
   };
+
+  function isPromotionActive(startDate: Date, endDate: Date) {
+    const now = new Date();
+    return now >= startDate && now <= endDate;
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Promociones</Text>
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={() => setShowPromotionModal(true)}
-        >
-          <Plus size={24} color="#FFFFFF" />
+        <TouchableOpacity style={styles.addButton} onPress={() => setShowPromotionModal(true)}>
+          <Plus color="#fff" size={24} />
         </TouchableOpacity>
       </View>
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Card style={styles.statsCard}>
-          <Text style={styles.statsTitle}>📊 Estadísticas</Text>
-          <View style={styles.statsGrid}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{promotions.length}</Text>
-              <Text style={styles.statLabel}>Total</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>
-                {promotions.filter(p => p.isActive && isPromotionActive(p.startDate, p.endDate)).length}
-              </Text>
-              <Text style={styles.statLabel}>Activas</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>
-                {promotions.reduce((sum, p) => sum + (p.views || 0), 0)}
-              </Text>
-              <Text style={styles.statLabel}>Total{'\n'}Vistas</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>
-                {promotions.reduce((sum, p) => sum + (p.clicks || 0), 0)}
-              </Text>
-              <Text style={styles.statLabel}>Total{'\n'}Clicks</Text>
-            </View>
-          </View>
-        </Card>
-
+      <ScrollView style={styles.content}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Todas las Promociones</Text>
+          <Text style={styles.sectionTitle}>Promociones activas</Text>
           {promotions.length === 0 ? (
-            <Card style={styles.emptyCard}>
+            <View style={styles.emptyCard}>
               <Megaphone size={32} color="#DC2626" />
               <Text style={styles.emptyTitle}>No hay promociones</Text>
               <Text style={styles.emptySubtitle}>Crea una promoción para los usuarios</Text>
-            </Card>
+            </View>
           ) : (
             promotions.map((promotion) => (
               <Card key={promotion.id} style={styles.promotionCard}>
@@ -335,14 +267,6 @@ export default function AdminPromotions() {
                     <Text style={styles.promotionAudience}>
                       Audiencia: {promotion.targetAudience}
                     </Text>
-                    {promotion.ctaUrl && (
-                      <View style={styles.urlInfo}>
-                        <ExternalLink size={14} color="#3B82F6" />
-                        <Text style={styles.urlText} numberOfLines={1}>
-                          {promotion.ctaUrl}
-                        </Text>
-                      </View>
-                    )}
                   </View>
                   <View style={styles.promotionStatus}>
                     <View style={[
@@ -405,27 +329,19 @@ export default function AdminPromotions() {
               <Text style={styles.modalTitle}>Crear Nueva Promoción</Text>
               
               <Input
-                label="Título de la promoción *"
+                label="Título de la promoción"
                 placeholder="Ej: ¡Descuento especial en servicios para mascotas!"
                 value={promoTitle}
                 onChangeText={setPromoTitle}
               />
               
               <Input
-                label="Descripción *"
+                label="Descripción"
                 placeholder="Describe la promoción detalladamente..."
                 value={promoDescription}
                 onChangeText={setPromoDescription}
                 multiline
                 numberOfLines={4}
-              />
-
-              <Input
-                label="URL de destino (opcional)"
-                placeholder="Ej: https://ejemplo.com o dogcatify://partner/123"
-                value={promoUrl}
-                onChangeText={setPromoUrl}
-                leftIcon={<ExternalLink size={20} color="#6B7280" />}
               />
 
               {/* Partner Selector */}
@@ -472,7 +388,6 @@ export default function AdminPromotions() {
                   </TouchableOpacity>
                 )}
               </View>
-
               <View style={styles.imageSection}>
                 <Text style={styles.imageLabel}>Imagen promocional *</Text>
                 
@@ -503,7 +418,7 @@ export default function AdminPromotions() {
               </View>
               
               <Input
-                label="Fecha de inicio *"
+                label="Fecha de inicio"
                 placeholder="2025-01-01"
                 value={promoStartDate}
                 onChangeText={setPromoStartDate}
@@ -511,7 +426,7 @@ export default function AdminPromotions() {
               />
               
               <Input
-                label="Fecha de fin *"
+                label="Fecha de fin"
                 placeholder="2025-01-31"
                 value={promoEndDate}
                 onChangeText={setPromoEndDate}
@@ -554,7 +469,14 @@ export default function AdminPromotions() {
                     style={styles.cancelModalButton}
                     onPress={() => {
                       setShowPromotionModal(false);
-                      resetForm();
+                      setPromoTitle('');
+                      setPromoDescription('');
+                      setPromoImage(null);
+                      setPromoStartDate('');
+                      setPromoEndDate('');
+                      setPromoTargetAudience('all');
+                      setSelectedPartnerId(null);
+                      setPartnerSearchQuery('');
                     }}
                   >
                     <Text style={styles.cancelModalButtonText}>Cancelar</Text>
@@ -646,7 +568,6 @@ export default function AdminPromotions() {
     </SafeAreaView>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -721,7 +642,7 @@ const styles = StyleSheet.create({
   promotionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 12,
   },
   promotionInfo: {
@@ -750,19 +671,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
-    marginTop: 2,
-  },
-  urlInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  urlText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#3B82F6',
-    marginLeft: 4,
-    flex: 1,
   },
   promotionStatus: {
     alignItems: 'flex-end',
@@ -810,7 +718,6 @@ const styles = StyleSheet.create({
   promotionStats: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 12,
   },
   promotionStat: {
     flexDirection: 'row',
