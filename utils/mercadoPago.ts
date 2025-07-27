@@ -214,32 +214,98 @@ export default function AdminPromotions() {
           ? { ...promo, isActive: !isActive }
           : promo
       ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
       const { error } = await supabaseClient
+        .from('promotions')
         .update({ is_active: !isActive })
-      // Application fee - comisión que va para DogCatiFy (marketplace)
-      application_fee: commissionAmount
+        .eq('id', promotionId);
+      if (error) {
         // Revert local state if database update fails
         setPromotions(prev => prev.map(promo => 
+          promo.id === promotionId 
+            ? { ...promo, isActive: isActive }
+            : promo
+        ));
+        Alert.alert('Error', 'No se pudo actualizar la promoción');
+      }
+    } catch (error) {
+      // Revert local state if request fails
+      setPromotions(prev => prev.map(promo => 
+        promo.id === promotionId 
+          ? { ...promo, isActive: isActive }
+          : promo
+      ));
+      Alert.alert('Error', 'No se pudo actualizar la promoción');
+    }
+  };
+
+  if (!currentUser || currentUser.email?.toLowerCase() !== 'admin@dogcatify.com') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.accessDenied}>
+          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
+          <Text style={styles.accessDeniedText}>
+            Solo los administradores pueden acceder a esta sección
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Promociones</Text>
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={() => setShowPromotionModal(true)}
+        >
+          <Plus size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <Card style={styles.statsCard}>
+          <Text style={styles.statsTitle}>Estadísticas</Text>
+          <View style={styles.statsGrid}>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{promotions.length}</Text>
+              <Text style={styles.statLabel}>Total{'\n'}Promociones</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {promotions.filter(p => p.isActive && isPromotionActive(p.startDate, p.endDate)).length}
+              </Text>
+              <Text style={styles.statLabel}>Activas</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {promotions.reduce((sum, p) => sum + (p.views || 0), 0)}
+              </Text>
+              <Text style={styles.statLabel}>Total{'\n'}Vistas</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {promotions.reduce((sum, p) => sum + (p.clicks || 0), 0)}
+              </Text>
+              <Text style={styles.statLabel}>Total{'\n'}Clicks</Text>
+            </View>
+          </View>
         </Card>
 
         <View style={styles.section}>
-      application_fee: commissionAmount,
+          <Text style={styles.sectionTitle}>Promociones Activas</Text>
+          {promotions.length === 0 ? (
+            <Card style={styles.emptyCard}>
               <Megaphone size={32} color="#DC2626" />
-      partner_receives: totalAmount - commissionAmount,
               <Text style={styles.emptyTitle}>No hay promociones</Text>
               <Text style={styles.emptySubtitle}>Crea una promoción para los usuarios</Text>
             </View>
-    // Use partner's token to create preference (partner receives payment minus application_fee)
+          ) : (
             promotions.map((promotion) => (
               <Card key={promotion.id} style={styles.promotionCard}>
                 <View style={styles.promotionHeader}>
                   <View style={styles.promotionInfo}>
-        'Authorization': `Bearer ${partnerConfig.access_token}`,
+                    <Text style={styles.promotionTitle}>{promotion.title}</Text>
                     {promotion.partnerInfo && (
                       <View style={styles.partnerInfo}>
                         <Text style={styles.partnerIcon}>
@@ -254,8 +320,8 @@ export default function AdminPromotions() {
                   </View>
                   <View style={styles.promotionStatus}>
                     <View style={[
-      application_fee: commissionAmount,
-      partner_receives: totalAmount - commissionAmount,
+                      styles.statusBadge,
+                      { backgroundColor: promotion.isActive ? '#DCFCE7' : '#F3F4F6' }
                     ]}>
                       <Text style={[
                         styles.statusText,
