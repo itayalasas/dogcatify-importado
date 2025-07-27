@@ -1,10 +1,113 @@
-        ```javascript
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image } from 'react-native';
+import { Plus, MapPin, Search, Star, Phone, Calendar, Eye, Edit, Trash2 } from 'lucide-react-native';
+import { Card } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabaseClient } from '../../lib/supabase';
+import * as ImagePicker from 'expo-image-picker';
+
+interface Place {
+  id: string;
+  name: string;
+  category: string;
+  address: string;
+  phone?: string;
+  rating: number;
+  description: string;
+  petAmenities: string[];
+  imageUrl?: string;
+  coordinates: {
+    latitude: number;
+    longitude: number;
+  };
+  isActive: boolean;
+  createdAt: Date;
+}
+
+const CATEGORIES = [
+  { id: 'parques', name: 'Parques', icon: '🌳' },
+  { id: 'restaurantes', name: 'Restaurantes', icon: '🍽️' },
+  { id: 'hoteles', name: 'Hoteles', icon: '🏨' },
+  { id: 'tiendas', name: 'Tiendas', icon: '🏪' },
+  { id: 'playas', name: 'Playas', icon: '🏖️' },
+  { id: 'cafeterias', name: 'Cafeterías', icon: '☕' },
+  { id: 'veterinarias', name: 'Veterinarias', icon: '🏥' },
+];
+
+const DEFAULT_AMENITIES = [
+  'Área para perros',
+  'Agua para mascotas',
+  'Correas disponibles',
+  'Menú pet-friendly',
+  'Camas para mascotas',
+  'Juguetes disponibles',
+  'Servicio de baño',
+  'Área de juegos',
+  'Veterinario en sitio',
+  'Guardería de mascotas',
+];
+
+export default function AdminPlaces() {
+  const { currentUser } = useAuth();
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [filteredPlaces, setFilteredPlaces] = useState<Place[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showPlaceModal, setShowPlaceModal] = useState(false);
+  const [editingPlace, setEditingPlace] = useState<Place | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Form state
+  const [placeName, setPlaceName] = useState('');
+  const [placeCategory, setPlaceCategory] = useState('');
+  const [placeAddress, setPlaceAddress] = useState('');
+  const [placePhone, setPlacePhone] = useState('');
+  const [placeRating, setPlaceRating] = useState(5);
+  const [placeDescription, setPlaceDescription] = useState('');
+  const [placeImage, setPlaceImage] = useState<string | null>(null);
+  const [placeAmenities, setPlaceAmenities] = useState<string[]>([]);
+  const [placeLatitude, setPlaceLatitude] = useState('');
+  const [placeLongitude, setPlaceLongitude] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
+    if (!isAdmin) return;
+    fetchPlaces();
+  }, [currentUser]);
+
+  useEffect(() => {
+    filterPlaces();
+  }, [places, searchQuery]);
+
+  const fetchPlaces = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabaseClient
+        .from('places')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const placesData = data?.map(place => ({
+        id: place.id,
+        name: place.name,
+        category: place.category,
+        address: place.address,
+        phone: place.phone,
+        rating: place.rating,
+        description: place.description,
+        petAmenities: place.pet_amenities || [],
+        imageUrl: place.image_url,
         coordinates: {
           latitude: place.coordinates?.latitude || 0,
-          longitude: place.coordinates?.longitude || 0
+          longitude: place.coordinates?.longitude || 0,
         },
         isActive: place.is_active,
-        createdAt: new Date(place.created_at)
+        createdAt: new Date(place.created_at),
       })) || [];
       
       setPlaces(placesData);
@@ -16,342 +119,389 @@
     }
   };
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image } from 'react-native';
-import { Plus, Megaphone, Calendar, Eye, Target, Search } from 'lucide-react-native';
-import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
-import { useAuth } from '../../contexts/AuthContext';
-import { supabaseClient } from '../../lib/supabase';
-import * as ImagePicker from 'expo-image-picker';
+  const filterPlaces = () => {
+    if (!searchQuery.trim()) {
+      setFilteredPlaces(places);
+      return;
+    }
 
-export default function AdminPromotions() {
-  const { currentUser } = useAuth();
-  const [promotions, setPromotions] = useState<any[]>([]);
-  const [showPromotionModal, setShowPromotionModal] = useState(false);
-  const [showPartnerSelector, setShowPartnerSelector] = useState(false);
-  const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
-  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
-
-  // Promotion form
-  const [promoTitle, setPromoTitle] = useState('');
-  const [promoDescription, setPromoDescription] = useState('');
-  const [promoImage, setPromoImage] = useState<string | null>(null);
-  const [promoStartDate, setPromoStartDate] = useState('');
-  const [promoEndDate, setPromoEndDate] = useState('');
-  const [promoTargetAudience, setPromoTargetAudience] = useState('all');
-  const [loading, setLoading] = useState(false);
-
-  // Dummy partners for selector (replace with your fetch logic)
-  const partners = [
-    { id: '1', businessName: 'PetShop', businessType: 'Tienda', logo: '' },
-    { id: '2', businessName: 'VetClinic', businessType: 'Veterinaria', logo: '' },
-  ];
-
-  function getSelectedPartner() {
-    return partners.find(p => p.id === selectedPartnerId) || null;
-  }
-
-  function getFilteredPartners() {
-    if (!partnerSearchQuery) return partners;
-    return partners.filter(p =>
-      p.businessName.toLowerCase().includes(partnerSearchQuery.toLowerCase()) ||
-      p.businessType.toLowerCase().includes(partnerSearchQuery.toLowerCase())
+    const filtered = places.filter(place =>
+      place.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      place.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      place.address.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }
+    setFilteredPlaces(filtered);
+  };
 
-  function getBusinessTypeIcon(type: string) {
-    if (type === 'Tienda') return '🏪';
-    if (type === 'Veterinaria') return '🐾';
-    return '🏢';
-  }
+  const resetForm = () => {
+    setPlaceName('');
+    setPlaceCategory('');
+    setPlaceAddress('');
+    setPlacePhone('');
+    setPlaceRating(5);
+    setPlaceDescription('');
+    setPlaceImage(null);
+    setPlaceAmenities([]);
+    setPlaceLatitude('');
+    setPlaceLongitude('');
+    setEditingPlace(null);
+  };
 
-  function isPromotionActive(startDate: Date, endDate: Date) {
-    const now = new Date();
-    return now >= startDate && now <= endDate;
-  }
-
-  useEffect(() => {
-    if (!currentUser) return;
-    const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
-    if (!isAdmin) return;
-    fetchPromotions();
-  }, [currentUser]);
-
-  const fetchPromotions = () => {
-    const fetchData = async () => {
-      try {
-        const { data, error } = await supabaseClient
-          .from('promotions')
-          .select('*')
-          .order('created_at', { ascending: false });
-        if (error) return;
-        const promotionsData = data?.map(item => ({
-          id: item.id,
-          title: item.title,
-          description: item.description,
-          imageURL: item.image_url,
-          startDate: new Date(item.start_date),
-          endDate: new Date(item.end_date),
-          targetAudience: item.target_audience,
-          isActive: item.is_active,
-          views: item.views,
-          clicks: item.clicks,
-          createdAt: new Date(item.created_at),
-          createdBy: item.created_by,
-          partnerId: item.partner_id,
-          partnerInfo: item.partners ? {
-            businessName: item.partners.business_name,
-            businessType: item.partners.business_type,
-            logo: item.partners.logo,
-          } : null,
-        })) || [];
-        setPromotions(promotionsData);
-      } catch (error) {}
-    };
-    fetchData();
-    const subscription = supabaseClient
-      .channel('promotions_channel')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'promotions' },
-        () => fetchData()
-      )
-      .subscribe();
-    return () => subscription.unsubscribe();
+  const openEditModal = (place: Place) => {
+    setEditingPlace(place);
+    setPlaceName(place.name);
+    setPlaceCategory(place.category);
+    setPlaceAddress(place.address);
+    setPlacePhone(place.phone || '');
+    setPlaceRating(place.rating);
+    setPlaceDescription(place.description);
+    setPlaceImage(place.imageUrl || null);
+    setPlaceAmenities(place.petAmenities);
+    setPlaceLatitude(place.coordinates.latitude.toString());
+    setPlaceLongitude(place.coordinates.longitude.toString());
+    setShowPlaceModal(true);
   };
 
   const handleSelectImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      Alert.alert('Permisos requeridos', 'Necesitamos acceso a tu galería para seleccionar una imagen');
+      Alert.alert('Permisos requeridos', 'Se necesitan permisos para acceder a la galería');
       return;
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
-      aspect: [1, 1],
+      aspect: [16, 9],
       quality: 0.8,
     });
 
-    if (!result.canceled) {
-      setPromoImage(result.assets[0].uri);
+    if (!result.canceled && result.assets[0]) {
+      setPlaceImage(result.assets[0].uri);
     }
   };
 
   const uploadImage = async (imageUri: string): Promise<string> => {
     const response = await fetch(imageUri);
     const blob = await response.blob();
-    const filename = `promotions/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+    const filename = `places/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+    
     const { error } = await supabaseClient.storage
       .from('dogcatify')
       .upload(filename, blob);
+    
     if (error) throw error;
+    
     const { data: { publicUrl } } = supabaseClient.storage
       .from('dogcatify')
       .getPublicUrl(filename);
+    
     return publicUrl;
   };
 
-  const handleCreatePromotion = async () => {
-    if (!promoTitle || !promoDescription || !promoStartDate || !promoEndDate || !promoImage) {
+  const handleSubmitPlace = async () => {
+    if (!placeName || !placeCategory || !placeAddress || !placeDescription) {
       Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
       return;
     }
 
-    setLoading(true);
+    setSubmitting(true);
     try {
-      const imageUrl = await uploadImage(promoImage);
-      
-      const promotionData = {
-        title: promoTitle.trim(),
-        description: promoDescription.trim(),
+      let imageUrl = placeImage;
+      if (placeImage && placeImage.startsWith('file://')) {
+        imageUrl = await uploadImage(placeImage);
+      }
+
+      const placeData = {
+        name: placeName.trim(),
+        category: placeCategory,
+        address: placeAddress.trim(),
+        phone: placePhone.trim() || null,
+        rating: placeRating,
+        description: placeDescription.trim(),
+        pet_amenities: placeAmenities,
         image_url: imageUrl,
-        start_date: new Date(promoStartDate).toISOString(),
-        end_date: new Date(promoEndDate).toISOString(),
-        target_audience: promoTargetAudience,
+        coordinates: {
+          latitude: parseFloat(placeLatitude) || 0,
+          longitude: parseFloat(placeLongitude) || 0,
+        },
         is_active: true,
-        views: 0,
-        clicks: 0,
-        promotion_type: 'feed',
-        cta_text: 'Más información',
-        created_at: new Date().toISOString(),
         created_by: currentUser?.id,
-        partner_id: selectedPartnerId,
       };
 
-      const { error } = await supabaseClient
-        .from('promotions')
-        .insert([promotionData])
-        .select(`
-          *,
-          partners:partner_id(business_name, business_type, logo)
-        `);
-      if (error) {
-        Alert.alert('Error', `No se pudo crear la promoción: ${error.message}`);
-        return;
+      if (editingPlace) {
+        const { error } = await supabaseClient
+          .from('places')
+          .update(placeData)
+          .eq('id', editingPlace.id);
+        
+        if (error) throw error;
+        Alert.alert('Éxito', 'Lugar actualizado correctamente');
+      } else {
+        const { error } = await supabaseClient
+          .from('places')
+          .insert([placeData]);
+        
+        if (error) throw error;
+        Alert.alert('Éxito', 'Lugar creado correctamente');
       }
-      setPromoTitle('');
-      setPromoDescription('');
-      setPromoImage(null);
-      setPromoStartDate('');
-      setPromoEndDate('');
-      setPromoTargetAudience('all');
-      setSelectedPartnerId(null);
-      setPartnerSearchQuery('');
-      setShowPromotionModal(false);
-      Alert.alert('Éxito', 'Promoción creada correctamente');
+
+      resetForm();
+      setShowPlaceModal(false);
+      fetchPlaces();
     } catch (error) {
-      Alert.alert('Error', 'No se pudo crear la promoción');
+      console.error('Error saving place:', error);
+      Alert.alert('Error', 'No se pudo guardar el lugar');
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
-  const handleTogglePromotion = async (promotionId: string, isActive: boolean) => {
+  const handleTogglePlace = async (placeId: string, isActive: boolean) => {
     try {
-      // Update local state FIRST for immediate UI feedback
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
-      
       const { error } = await supabaseClient
-        .from('promotions')
+        .from('places')
         .update({ is_active: !isActive })
-        .eq('id', promotionId);
-      if (error) {
-        // Revert local state if database update fails
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
-        throw error;
-      }
+        .eq('id', placeId);
+      
+      if (error) throw error;
+      fetchPlaces();
     } catch (error) {
-      console.error('Error toggling promotion:', error);
-      Alert.alert('Error', 'No se pudo actualizar la promoción');
+      console.error('Error toggling place:', error);
+      Alert.alert('Error', 'No se pudo actualizar el lugar');
     }
   };
+
+  const handleDeletePlace = async (placeId: string) => {
+    Alert.alert(
+      'Confirmar eliminación',
+      '¿Estás seguro de que quieres eliminar este lugar?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabaseClient
+                .from('places')
+                .delete()
+                .eq('id', placeId);
+              
+              if (error) throw error;
+              fetchPlaces();
+              Alert.alert('Éxito', 'Lugar eliminado correctamente');
+            } catch (error) {
+              console.error('Error deleting place:', error);
+              Alert.alert('Error', 'No se pudo eliminar el lugar');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const toggleAmenity = (amenity: string) => {
+    setPlaceAmenities(prev =>
+      prev.includes(amenity)
+        ? prev.filter(a => a !== amenity)
+        : [...prev, amenity]
+    );
+  };
+
+  const getCategoryIcon = (category: string) => {
+    const cat = CATEGORIES.find(c => c.id === category);
+    return cat?.icon || '📍';
+  };
+
+  const getCategoryName = (category: string) => {
+    const cat = CATEGORIES.find(c => c.id === category);
+    return cat?.name || category;
+  };
+
+  if (!currentUser || currentUser.email?.toLowerCase() !== 'admin@dogcatify.com') {
+    return (
+      <SafeAreaView style={styles.accessDenied}>
+        <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
+        <Text style={styles.accessDeniedText}>
+          Solo los administradores pueden acceder a esta sección
+        </Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Promociones</Text>
+        <Text style={styles.title}>Gestión de Lugares</Text>
       </View>
-      
-      <ScrollView style={styles.content}>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Stats Card */}
         <Card style={styles.statsCard}>
           <Text style={styles.statsTitle}>Estadísticas</Text>
           <View style={styles.statsGrid}>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{promotions.length}</Text>
-              <Text style={styles.statLabel}>Total{'\n'}Promociones</Text>
+              <Text style={styles.statNumber}>{places.length}</Text>
+              <Text style={styles.statLabel}>Total{'\n'}Lugares</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
-                {promotions.filter(p => p.isActive && isPromotionActive(p.startDate, p.endDate)).length}
+                {places.filter(p => p.isActive).length}
               </Text>
-              <Text style={styles.statLabel}>Activas</Text>
+              <Text style={styles.statLabel}>Activos</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
-                {promotions.reduce((sum, p) => sum + (p.views || 0), 0)}
+                {new Set(places.map(p => p.category)).size}
               </Text>
-              <Text style={styles.statLabel}>Total{'\n'}Vistas</Text>
+              <Text style={styles.statLabel}>Categorías</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
-                {promotions.reduce((sum, p) => sum + (p.clicks || 0), 0)}
+                {places.length > 0 ? (places.reduce((sum, p) => sum + p.rating, 0) / places.length).toFixed(1) : '0'}
               </Text>
-              <Text style={styles.statLabel}>Total{'\n'}Clicks</Text>
+              <Text style={styles.statLabel}>Rating{'\n'}Promedio</Text>
             </View>
           </View>
         </Card>
 
-        {/* Add Button */}
-        <View style={styles.addButtonContainer}>
+        {/* Search and Add Button */}
+        <View style={styles.searchSection}>
+          <Input
+            placeholder="Buscar por nombre, categoría o dirección..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            leftIcon={<Search size={20} color="#9CA3AF" />}
+          />
+          
           <TouchableOpacity 
             style={styles.addButton}
             onPress={() => {
-              setShowPromotionModal(true);
+              resetForm();
+              setShowPlaceModal(true);
             }}
           >
             <Plus size={20} color="#FFFFFF" />
-            <Text style={styles.addButtonText}>Crear Promoción</Text>
+            <Text style={styles.addButtonText}>Agregar Lugar</Text>
           </TouchableOpacity>
         </View>
 
+        {/* Places List */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Todas las Promociones</Text>
-          {promotions.length === 0 ? (
+          <Text style={styles.sectionTitle}>Lugares Pet-Friendly</Text>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Cargando lugares...</Text>
+            </View>
+          ) : filteredPlaces.length === 0 ? (
             <View style={styles.emptyCard}>
-              <Megaphone size={32} color="#DC2626" />
-              <Text style={styles.emptyTitle}>No hay promociones</Text>
-              <Text style={styles.emptySubtitle}>Crea una promoción para los usuarios</Text>
+              <MapPin size={32} color="#DC2626" />
+              <Text style={styles.emptyTitle}>
+                {searchQuery ? 'No se encontraron lugares' : 'No hay lugares registrados'}
+              </Text>
+              <Text style={styles.emptySubtitle}>
+                {searchQuery ? 'Intenta con otros términos de búsqueda' : 'Agrega el primer lugar pet-friendly'}
+              </Text>
             </View>
           ) : (
-            promotions.map((promotion) => (
-              <Card key={promotion.id} style={styles.promotionCard}>
-                <View style={styles.promotionHeader}>
-                  <View style={styles.promotionInfo}>
-                    <Text style={styles.promotionTitle}>{promotion.title}</Text>
-                    {promotion.partnerInfo && (
-                      <View style={styles.partnerInfo}>
-                        <Text style={styles.partnerIcon}>
-                          {getBusinessTypeIcon(promotion.partnerInfo.businessType)}
-                        </Text>
-                        <Text style={styles.partnerName}>{promotion.partnerInfo.businessName}</Text>
-                      </View>
-                    )}
-                    <Text style={styles.promotionAudience}>
-                      Audiencia: {promotion.targetAudience}
+            filteredPlaces.map((place) => (
+              <Card key={place.id} style={styles.placeCard}>
+                <View style={styles.placeHeader}>
+                  <View style={styles.placeInfo}>
+                    <View style={styles.placeTitleRow}>
+                      <Text style={styles.categoryIcon}>
+                        {getCategoryIcon(place.category)}
+                      </Text>
+                      <Text style={styles.placeName}>{place.name}</Text>
+                    </View>
+                    <Text style={styles.placeCategory}>
+                      {getCategoryName(place.category)}
                     </Text>
+                    <Text style={styles.placeAddress}>{place.address}</Text>
                   </View>
-                  <View style={styles.promotionStatus}>
+                  <View style={styles.placeStatus}>
                     <View style={[
                       styles.statusBadge,
-                      { backgroundColor: promotion.isActive ? '#DCFCE7' : '#F3F4F6' }
+                      { backgroundColor: place.isActive ? '#DCFCE7' : '#F3F4F6' }
                     ]}>
                       <Text style={[
                         styles.statusText,
-                        { color: promotion.isActive ? '#22C55E' : '#6B7280' }
+                        { color: place.isActive ? '#22C55E' : '#6B7280' }
                       ]}>
-                        {promotion.isActive ? 'Activa' : 'Inactiva'}
+                        {place.isActive ? 'Activo' : 'Inactivo'}
                       </Text>
                     </View>
                   </View>
                 </View>
-                <Image source={{ uri: promotion.imageURL }} style={styles.promotionImage} />
-                <Text style={styles.promotionDescription}>{promotion.description}</Text>
-                <View style={styles.promotionDetails}>
-                  <View style={styles.promotionDetail}>
-                    <Calendar size={16} color="#6B7280" />
-                    <Text style={styles.promotionDetailText}>
-                      {promotion.startDate.toLocaleDateString()} - {promotion.endDate.toLocaleDateString()}
+
+                {place.imageUrl && (
+                  <Image source={{ uri: place.imageUrl }} style={styles.placeImage} />
+                )}
+
+                <Text style={styles.placeDescription}>{place.description}</Text>
+
+                <View style={styles.placeDetails}>
+                  <View style={styles.ratingContainer}>
+                    <Star size={16} color="#FCD34D" fill="#FCD34D" />
+                    <Text style={styles.ratingText}>{place.rating}</Text>
+                  </View>
+                  {place.phone && (
+                    <View style={styles.phoneContainer}>
+                      <Phone size={16} color="#6B7280" />
+                      <Text style={styles.phoneText}>{place.phone}</Text>
+                    </View>
+                  )}
+                </View>
+
+                {place.petAmenities.length > 0 && (
+                  <View style={styles.amenitiesContainer}>
+                    <Text style={styles.amenitiesTitle}>Servicios para mascotas:</Text>
+                    <View style={styles.amenitiesList}>
+                      {place.petAmenities.slice(0, 3).map((amenity, index) => (
+                        <View key={index} style={styles.amenityTag}>
+                          <Text style={styles.amenityText}>{amenity}</Text>
+                        </View>
+                      ))}
+                      {place.petAmenities.length > 3 && (
+                        <Text style={styles.moreAmenities}>
+                          +{place.petAmenities.length - 3} más
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                )}
+
+                <View style={styles.placeActions}>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => openEditModal(place)}
+                  >
+                    <Edit size={16} color="#3B82F6" />
+                    <Text style={styles.actionButtonText}>Editar</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => handleTogglePlace(place.id, place.isActive)}
+                  >
+                    <Eye size={16} color={place.isActive ? "#EF4444" : "#22C55E"} />
+                    <Text style={[styles.actionButtonText, { 
+                      color: place.isActive ? "#EF4444" : "#22C55E" 
+                    }]}>
+                      {place.isActive ? 'Desactivar' : 'Activar'}
                     </Text>
-                  </View>
-                </View>
-                <View style={styles.promotionStats}>
-                  <View style={styles.promotionStat}>
-                    <Eye size={16} color="#6B7280" />
-                    <Text style={styles.promotionStatText}>{promotion.views || 0}</Text>
-                  </View>
-                  <View style={styles.promotionStat}>
-                    <Target size={16} color="#6B7280" />
-                    <Text style={styles.promotionStatText}>{promotion.clicks || 0}</Text>
-                  </View>
-                </View>
-                <View style={styles.promotionActions}>
-                  <Button
-                    title={promotion.isActive && isPromotionActive(promotion.startDate, promotion.endDate) ? 'Desactivar' : 'Activar'}
-                    onPress={() => handleTogglePromotion(promotion.id, promotion.isActive)}
-                    variant={promotion.isActive && isPromotionActive(promotion.startDate, promotion.endDate) ? 'outline' : 'primary'}
-                    size="medium"
-                  />
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => handleDeletePlace(place.id)}
+                  >
+                    <Trash2 size={16} color="#EF4444" />
+                    <Text style={[styles.actionButtonText, { color: "#EF4444" }]}>
+                      Eliminar
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </Card>
             ))
@@ -359,144 +509,154 @@ export default function AdminPromotions() {
         </View>
       </ScrollView>
 
-      {/* Promotion Modal */}
+      {/* Place Modal */}
       <Modal
-        visible={showPromotionModal}
+        visible={showPlaceModal}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowPromotionModal(false)}
+        onRequestClose={() => setShowPlaceModal(false)}
       >
         <View style={styles.modalOverlay}>
           <ScrollView contentContainerStyle={styles.modalScrollContent}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Crear Nueva Promoción</Text>
+              <Text style={styles.modalTitle}>
+                {editingPlace ? 'Editar Lugar' : 'Agregar Nuevo Lugar'}
+              </Text>
               
               <Input
-                label="Título de la promoción"
-                placeholder="Ej: ¡Descuento especial en servicios para mascotas!"
-                value={promoTitle}
-                onChangeText={setPromoTitle}
+                label="Nombre del lugar *"
+                placeholder="Ej: Parque Central para Mascotas"
+                value={placeName}
+                onChangeText={setPlaceName}
+              />
+
+              <View style={styles.categorySection}>
+                <Text style={styles.categoryLabel}>Categoría *</Text>
+                <View style={styles.categoryGrid}>
+                  {CATEGORIES.map((category) => (
+                    <TouchableOpacity
+                      key={category.id}
+                      style={[
+                        styles.categoryOption,
+                        placeCategory === category.id && styles.selectedCategory
+                      ]}
+                      onPress={() => setPlaceCategory(category.id)}
+                    >
+                      <Text style={styles.categoryOptionIcon}>{category.icon}</Text>
+                      <Text style={[
+                        styles.categoryOptionText,
+                        placeCategory === category.id && styles.selectedCategoryText
+                      ]}>
+                        {category.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+              
+              <Input
+                label="Dirección *"
+                placeholder="Ej: Calle 123 #45-67, Bogotá"
+                value={placeAddress}
+                onChangeText={setPlaceAddress}
               />
               
               <Input
-                label="Descripción"
-                placeholder="Describe la promoción detalladamente..."
-                value={promoDescription}
-                onChangeText={setPromoDescription}
+                label="Teléfono"
+                placeholder="Ej: +57 300 123 4567"
+                value={placePhone}
+                onChangeText={setPlacePhone}
+              />
+
+              <View style={styles.coordinatesSection}>
+                <Text style={styles.coordinatesLabel}>Coordenadas GPS</Text>
+                <View style={styles.coordinatesRow}>
+                  <Input
+                    label="Latitud"
+                    placeholder="4.6097"
+                    value={placeLatitude}
+                    onChangeText={setPlaceLatitude}
+                    keyboardType="numeric"
+                    style={styles.coordinateInput}
+                  />
+                  <Input
+                    label="Longitud"
+                    placeholder="-74.0817"
+                    value={placeLongitude}
+                    onChangeText={setPlaceLongitude}
+                    keyboardType="numeric"
+                    style={styles.coordinateInput}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.ratingSection}>
+                <Text style={styles.ratingLabel}>Calificación</Text>
+                <View style={styles.ratingStars}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <TouchableOpacity
+                      key={star}
+                      onPress={() => setPlaceRating(star)}
+                    >
+                      <Star
+                        size={32}
+                        color={star <= placeRating ? "#FCD34D" : "#E5E7EB"}
+                        fill={star <= placeRating ? "#FCD34D" : "transparent"}
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+              
+              <Input
+                label="Descripción *"
+                placeholder="Describe el lugar y por qué es pet-friendly..."
+                value={placeDescription}
+                onChangeText={setPlaceDescription}
                 multiline
                 numberOfLines={4}
               />
 
-              {/* Partner Selector */}
-              <View style={styles.partnerSection}>
-                <Text style={styles.partnerLabel}>Aliado (opcional)</Text>
-                <Text style={styles.partnerDescription}>
-                  Selecciona un aliado específico para esta promoción
-                </Text>
-                
-                <TouchableOpacity 
-                  style={styles.partnerSelector}
-                  onPress={() => setShowPartnerSelector(true)}
-                >
-                  {getSelectedPartner() ? (
-                    <View style={styles.selectedPartnerInfo}>
-                      <Text style={styles.selectedPartnerIcon}>
-                        {getBusinessTypeIcon(getSelectedPartner()!.businessType)}
-                      </Text>
-                      <View style={styles.selectedPartnerDetails}>
-                        <Text style={styles.selectedPartnerName}>
-                          {getSelectedPartner()!.businessName}
-                        </Text>
-                        <Text style={styles.selectedPartnerType}>
-                          {getSelectedPartner()!.businessType}
-                        </Text>
-                      </View>
-                    </View>
-                  ) : (
-                    <Text style={styles.partnerSelectorPlaceholder}>
-                      Seleccionar aliado (opcional)
-                    </Text>
-                  )}
-                </TouchableOpacity>
-                
-                {getSelectedPartner() && (
-                  <TouchableOpacity 
-                    style={styles.clearPartnerButton}
-                    onPress={() => {
-                      setSelectedPartnerId(null);
-                      setPartnerSearchQuery('');
-                    }}
-                  >
-                    <Text style={styles.clearPartnerText}>Quitar aliado</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
               <View style={styles.imageSection}>
-                <Text style={styles.imageLabel}>Imagen promocional *</Text>
+                <Text style={styles.imageLabel}>Imagen del lugar</Text>
                 
-                {promoImage ? (
+                {placeImage ? (
                   <View style={styles.imagePreviewContainer}>
-                    <Image source={{ uri: promoImage }} style={styles.selectedImage} />
+                    <Image source={{ uri: placeImage }} style={styles.selectedImage} />
                     <TouchableOpacity 
                       style={styles.changeImageButton}
-                      onPress={() => setPromoImage(null)}
+                      onPress={() => setPlaceImage(null)}
                     >
                       <Text style={styles.changeImageText}>Cambiar imagen</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
-                  <View style={styles.imageActions}>
-                    <TouchableOpacity style={styles.imageActionButton} onPress={handleSelectImage}>
-                      <Text style={styles.imageActionText}>🖼️ Galería</Text>
-                    </TouchableOpacity>
-                  </View>
+                  <TouchableOpacity style={styles.imageActionButton} onPress={handleSelectImage}>
+                    <Text style={styles.imageActionText}>📷 Seleccionar imagen</Text>
+                  </TouchableOpacity>
                 )}
-                
-                <Text style={styles.imageHint}>
-                  Recomendado: 1080x1080px o 16:9 para mejor visualización
-                </Text>
               </View>
-              
-              <Input
-                label="Fecha de inicio"
-                placeholder="2025-01-01"
-                value={promoStartDate}
-                onChangeText={setPromoStartDate}
-                leftIcon={<Calendar size={20} color="#6B7280" />}
-              />
-              
-              <Input
-                label="Fecha de fin"
-                placeholder="2025-01-31"
-                value={promoEndDate}
-                onChangeText={setPromoEndDate}
-                leftIcon={<Calendar size={20} color="#6B7280" />}
-              />
 
-              <View style={styles.audienceSection}>
-                <Text style={styles.audienceLabel}>Audiencia objetivo</Text>
-                <Text style={styles.audienceDescription}>
-                  Selecciona quién verá esta promoción en su feed
+              <View style={styles.amenitiesSection}>
+                <Text style={styles.amenitiesLabel}>Servicios para mascotas</Text>
+                <Text style={styles.amenitiesDescription}>
+                  Selecciona los servicios disponibles para mascotas
                 </Text>
-                <View style={styles.audienceOptions}>
-                  {[
-                    { value: 'all', label: 'Todos los usuarios' },
-                    { value: 'users', label: 'Solo usuarios' },
-                    { value: 'partners', label: 'Solo aliados' },
-                  ].map((option) => (
+                <View style={styles.amenitiesGrid}>
+                  {DEFAULT_AMENITIES.map((amenity) => (
                     <TouchableOpacity
-                      key={option.value}
+                      key={amenity}
                       style={[
-                        styles.audienceOption,
-                        promoTargetAudience === option.value && styles.selectedAudience
+                        styles.amenityOption,
+                        placeAmenities.includes(amenity) && styles.selectedAmenity
                       ]}
-                      onPress={() => setPromoTargetAudience(option.value)}
+                      onPress={() => toggleAmenity(amenity)}
                     >
                       <Text style={[
-                        styles.audienceOptionText,
-                        promoTargetAudience === option.value && styles.selectedAudienceText
+                        styles.amenityOptionText,
+                        placeAmenities.includes(amenity) && styles.selectedAmenityText
                       ]}>
-                        {option.label}
+                        {amenity}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -504,105 +664,28 @@ export default function AdminPromotions() {
               </View>
               
               <View style={styles.modalActions}>
-                <View style={styles.modalButtonsContainer}>
-                  <TouchableOpacity 
-                    style={styles.cancelModalButton}
-                    onPress={() => {
-                      setShowPromotionModal(false);
-                      setPromoTitle('');
-                      setPromoDescription('');
-                      setPromoImage(null);
-                      setPromoStartDate('');
-                      setPromoEndDate('');
-                      setPromoTargetAudience('all');
-                      setSelectedPartnerId(null);
-                      setPartnerSearchQuery('');
-                    }}
-                  >
-                    <Text style={styles.cancelModalButtonText}>Cancelar</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity 
-                    style={[styles.createModalButton, loading && styles.disabledButton]}
-                    onPress={handleCreatePromotion}
-                    disabled={loading}
-                  >
-                    <Text style={styles.createModalButtonText}>
-                      {loading ? 'Creando...' : 'Crear Promoción'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+                <TouchableOpacity 
+                  style={styles.cancelModalButton}
+                  onPress={() => {
+                    setShowPlaceModal(false);
+                    resetForm();
+                  }}
+                >
+                  <Text style={styles.cancelModalButtonText}>Cancelar</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.saveModalButton, submitting && styles.disabledButton]}
+                  onPress={handleSubmitPlace}
+                  disabled={submitting}
+                >
+                  <Text style={styles.saveModalButtonText}>
+                    {submitting ? 'Guardando...' : editingPlace ? 'Actualizar' : 'Crear Lugar'}
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
           </ScrollView>
-        </View>
-      </Modal>
-
-      {/* Partner Selector Modal */}
-      <Modal
-        visible={showPartnerSelector}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPartnerSelector(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.partnerModalContent}>
-            <View style={styles.partnerModalHeader}>
-              <Text style={styles.partnerModalTitle}>Seleccionar Aliado</Text>
-              <TouchableOpacity onPress={() => setShowPartnerSelector(false)}>
-                <Text style={styles.partnerModalClose}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <Input
-              placeholder="Buscar aliado por nombre o tipo..."
-              value={partnerSearchQuery}
-              onChangeText={setPartnerSearchQuery}
-              leftIcon={<Search size={20} color="#9CA3AF" />}
-            />
-            
-            <ScrollView style={styles.partnersList} showsVerticalScrollIndicator={false}>
-              {getFilteredPartners().length === 0 ? (
-                <View style={styles.noPartnersContainer}>
-                  <Text style={styles.noPartnersText}>
-                    {partnerSearchQuery ? 'No se encontraron aliados' : 'No hay aliados disponibles'}
-                  </Text>
-                </View>
-              ) : (
-                getFilteredPartners().map((partner) => (
-                  <TouchableOpacity
-                    key={partner.id}
-                    style={[
-                      styles.partnerItem,
-                      selectedPartnerId === partner.id && styles.selectedPartnerItem
-                    ]}
-                    onPress={() => {
-                      setSelectedPartnerId(partner.id);
-                      setShowPartnerSelector(false);
-                      setPartnerSearchQuery('');
-                    }}
-                  >
-                    <View style={styles.partnerItemInfo}>
-                      <Text style={styles.partnerItemIcon}>
-                        {getBusinessTypeIcon(partner.businessType)}
-                      </Text>
-                      <View style={styles.partnerItemDetails}>
-                        <Text style={styles.partnerItemName}>
-                          {partner.businessName}
-                        </Text>
-                        <Text style={styles.partnerItemType}>
-                          {partner.businessType}
-                        </Text>
-                      </View>
-                    </View>
-                    {selectedPartnerId === partner.id && (
-                      <Text style={styles.selectedIndicator}>✓</Text>
-                    )}
-                  </TouchableOpacity>
-                ))
-              )}
-            </ScrollView>
-          </View>
         </View>
       </Modal>
     </SafeAreaView>
@@ -635,33 +718,6 @@ const styles = StyleSheet.create({
     margin: 16,
     marginBottom: 8,
   },
-  addButtonContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2D6A6F',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  addButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
-    marginLeft: 8,
-  },
   statsTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
@@ -686,6 +742,34 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
   },
+  searchSection: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 12,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2D6A6F',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  addButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    marginLeft: 8,
+  },
   section: {
     marginBottom: 24,
   },
@@ -696,102 +780,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 12,
   },
-  promotionCard: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-  },
-  promotionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  loadingContainer: {
+    padding: 40,
     alignItems: 'center',
-    marginBottom: 12,
   },
-  promotionInfo: {
-    flex: 1,
-  },
-  promotionTitle: {
+  loadingText: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  partnerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  partnerIcon: {
-    fontSize: 14,
-    marginRight: 6,
-  },
-  partnerName: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-  },
-  promotionAudience: {
-    fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
-  },
-  promotionStatus: {
-    alignItems: 'flex-end',
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-  },
-  promotionImage: {
-    width: '100%',
-    height: 120,
-    borderRadius: 8,
-    marginBottom: 12,
-    resizeMode: 'cover',
-  },
-  promotionDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  promotionDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  promotionDetail: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  promotionDetailText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 4,
-  },
-  promotionStats: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  promotionStat: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  promotionStatText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginLeft: 4,
-  },
-  promotionActions: {
-    alignItems: 'flex-end',
   },
   emptyCard: {
     marginHorizontal: 16,
@@ -810,6 +806,147 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     textAlign: 'center',
+  },
+  placeCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  placeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  placeInfo: {
+    flex: 1,
+  },
+  placeTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  categoryIcon: {
+    fontSize: 18,
+    marginRight: 8,
+  },
+  placeName: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    flex: 1,
+  },
+  placeCategory: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#3B82F6',
+    marginBottom: 2,
+  },
+  placeAddress: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  placeStatus: {
+    alignItems: 'flex-end',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  placeImage: {
+    width: '100%',
+    height: 120,
+    borderRadius: 8,
+    marginBottom: 12,
+    resizeMode: 'cover',
+  },
+  placeDescription: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  placeDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 12,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ratingText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginLeft: 4,
+  },
+  phoneContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  phoneText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginLeft: 4,
+  },
+  amenitiesContainer: {
+    marginBottom: 12,
+  },
+  amenitiesTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  amenitiesList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  amenityTag: {
+    backgroundColor: '#EBF8FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  amenityText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#3B82F6',
+  },
+  moreAmenities: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    alignSelf: 'center',
+  },
+  placeActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  actionButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#3B82F6',
+    marginLeft: 4,
   },
   modalOverlay: {
     flex: 1,
@@ -836,146 +973,75 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
   },
-  partnerSection: {
+  categorySection: {
     marginBottom: 16,
   },
-  partnerLabel: {
+  categoryLabel: {
     fontSize: 15,
     fontFamily: 'Inter-Medium',
     color: '#374151',
-    marginBottom: 4,
-  },
-  partnerDescription: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
     marginBottom: 12,
   },
-  partnerSelector: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  categoryOption: {
+    backgroundColor: '#F9FAFB',
     paddingHorizontal: 12,
-    paddingVertical: 14,
-    backgroundColor: '#FFFFFF',
-    minHeight: 50,
-  },
-  selectedPartnerInfo: {
-    flexDirection: 'row',
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     alignItems: 'center',
+    minWidth: 80,
   },
-  selectedPartnerIcon: {
+  selectedCategory: {
+    backgroundColor: '#2D6A6F',
+    borderColor: '#2D6A6F',
+  },
+  categoryOptionIcon: {
     fontSize: 20,
-    marginRight: 12,
+    marginBottom: 4,
   },
-  selectedPartnerDetails: {
-    flex: 1,
-  },
-  selectedPartnerName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  selectedPartnerType: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  partnerSelectorPlaceholder: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-  },
-  clearPartnerButton: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-  },
-  clearPartnerText: {
-    fontSize: 14,
+  categoryOptionText: {
+    fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#EF4444',
-  },
-  partnerModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    marginTop: 100,
-    flex: 1,
-  },
-  partnerModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  partnerModalTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-  },
-  partnerModalClose: {
-    fontSize: 18,
-    color: '#6B7280',
-    padding: 4,
-  },
-  partnersList: {
-    flex: 1,
-    marginTop: 16,
-  },
-  noPartnersContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  noPartnersText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
     color: '#6B7280',
     textAlign: 'center',
   },
-  partnerItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+  selectedCategoryText: {
+    color: '#FFFFFF',
+  },
+  coordinatesSection: {
+    marginBottom: 16,
+  },
+  coordinatesLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
     marginBottom: 8,
   },
-  selectedPartnerItem: {
-    backgroundColor: '#EBF8FF',
-    borderColor: '#3B82F6',
-    borderWidth: 1,
-  },
-  partnerItemInfo: {
+  coordinatesRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    gap: 12,
+  },
+  coordinateInput: {
     flex: 1,
   },
-  partnerItemIcon: {
-    fontSize: 24,
-    marginRight: 12,
+  ratingSection: {
+    marginBottom: 16,
   },
-  partnerItemDetails: {
-    flex: 1,
+  ratingLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 8,
   },
-  partnerItemName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  partnerItemType: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  selectedIndicator: {
-    fontSize: 18,
-    color: '#3B82F6',
-    fontWeight: 'bold',
+  ratingStars: {
+    flexDirection: 'row',
+    gap: 4,
   },
   imageSection: {
     marginBottom: 16,
@@ -1008,14 +1074,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#FFFFFF',
   },
-  imageActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-    gap: 12,
-  },
   imageActionButton: {
-    flex: 1,
     backgroundColor: '#F3F4F6',
     paddingVertical: 40,
     borderRadius: 8,
@@ -1031,65 +1090,54 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
   },
-  imageHint: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    marginTop: 8,
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  audienceSection: {
+  amenitiesSection: {
     marginBottom: 20,
   },
-  audienceLabel: {
+  amenitiesLabel: {
     fontSize: 15,
     fontFamily: 'Inter-Medium',
     color: '#374151',
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  audienceDescription: {
+  amenitiesDescription: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     marginBottom: 12,
-    lineHeight: 18,
   },
-  audienceOptions: {
+  amenitiesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
-  audienceOption: {
+  amenityOption: {
     backgroundColor: '#F9FAFB',
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
-  selectedAudience: {
-    backgroundColor: '#DC2626',
-    borderColor: '#DC2626',
+  selectedAmenity: {
+    backgroundColor: '#2D6A6F',
+    borderColor: '#2D6A6F',
   },
-  audienceOptionText: {
-    fontSize: 14,
+  amenityOptionText: {
+    fontSize: 12,
     fontFamily: 'Inter-Medium',
     color: '#6B7280',
-    textAlign: 'center',
   },
-  selectedAudienceText: {
+  selectedAmenityText: {
     color: '#FFFFFF',
   },
   modalActions: {
-    marginTop: 20,
-  },
-  modalButtonsContainer: {
-    flexDirection: 'column',
+    flexDirection: 'row',
     gap: 12,
   },
   cancelModalButton: {
+    flex: 1,
     backgroundColor: '#F3F4F6',
     paddingVertical: 12,
-    paddingHorizontal: 20,
     borderRadius: 8,
     alignItems: 'center',
   },
@@ -1098,14 +1146,14 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#6B7280',
   },
-  createModalButton: {
-    backgroundColor: '#DC2626',
+  saveModalButton: {
+    flex: 1,
+    backgroundColor: '#2D6A6F',
     paddingVertical: 12,
-    paddingHorizontal: 20,
     borderRadius: 8,
     alignItems: 'center',
   },
-  createModalButtonText: {
+  saveModalButtonText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
@@ -1113,5 +1161,22 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.6,
   },
+  accessDenied: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  accessDeniedTitle: {
+    fontSize: 24,
+    fontFamily: 'Inter-Bold',
+    color: '#EF4444',
+    marginBottom: 8,
+  },
+  accessDeniedText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
 });
-```
