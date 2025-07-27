@@ -1,3 +1,4 @@
+        ```javascript
         coordinates: {
           latitude: place.coordinates?.latitude || 0,
           longitude: place.coordinates?.longitude || 0
@@ -8,6 +9,13 @@
       
       setPlaces(placesData);
       setFilteredPlaces(placesData);
+    } catch (error) {
+      console.error('Error fetching places:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image } from 'react-native';
 import { Plus, Megaphone, Calendar, Eye, Target, Search } from 'lucide-react-native';
@@ -116,31 +124,18 @@ export default function AdminPromotions() {
   const handleSelectImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      if (editingPlace) {
-        // Update existing place
-        const { error } = await supabaseClient
-          .from('places')
-          .update(placeData)
-          .eq('id', editingPlace.id);
-        
-        if (error) throw error;
-        Alert.alert('Éxito', 'Lugar actualizado correctamente');
-      } else {
-        // Create new place
-        const { error } = await supabaseClient
-          .from('places')
-          .insert([placeData]);
-        
-        if (error) throw error;
-        Alert.alert('Éxito', 'Lugar agregado correctamente');
-      }
+      Alert.alert('Permisos requeridos', 'Necesitamos acceso a tu galería para seleccionar una imagen');
+      return;
     }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
-      fetchPlaces(); // Refresh the list
+      aspect: [1, 1],
       quality: 0.8,
-      console.error('Error saving place:', error);
-      Alert.alert('Error', 'No se pudo guardar el lugar');
+    });
+
+    if (!result.canceled) {
       setPromoImage(result.assets[0].uri);
     }
   };
@@ -163,21 +158,14 @@ export default function AdminPromotions() {
     if (!promoTitle || !promoDescription || !promoStartDate || !promoEndDate || !promoImage) {
       Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
       return;
-      const { error } = await supabaseClient
-        .from('places')
-        .update({ is_active: !isActive })
-        .eq('id', placeId);
+    }
+
+    setLoading(true);
+    try {
+      const imageUrl = await uploadImage(promoImage);
       
-      if (error) throw error;
-      
-      // Update local state
-      setPlaces(prev => prev.map(place => 
-        place.id === placeId 
-          ? { ...place, isActive: !isActive }
-          : place
-      ));
+      const promotionData = {
         title: promoTitle.trim(),
-      console.error('Error toggling place:', error);
         description: promoDescription.trim(),
         image_url: imageUrl,
         start_date: new Date(promoStartDate).toISOString(),
@@ -190,22 +178,9 @@ export default function AdminPromotions() {
         cta_text: 'Más información',
         created_at: new Date().toISOString(),
         created_by: currentUser?.id,
+        partner_id: selectedPartnerId,
       };
-          onPress: async () => {
-            try {
-              const { error } = await supabaseClient
-                .from('places')
-                .delete()
-                .eq('id', placeId);
-              
-              if (error) throw error;
-              
-              setPlaces(prev => prev.filter(place => place.id !== placeId));
-              Alert.alert('Éxito', 'Lugar eliminado correctamente');
-            } catch (error) {
-              console.error('Error deleting place:', error);
-              Alert.alert('Error', 'No se pudo eliminar el lugar');
-            }
+
       const { error } = await supabaseClient
         .from('promotions')
         .insert([promotionData])
@@ -242,11 +217,7 @@ export default function AdminPromotions() {
           ? { ...promo, isActive: !isActive }
           : promo
       ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
+      
       const { error } = await supabaseClient
         .from('promotions')
         .update({ is_active: !isActive })
@@ -257,18 +228,22 @@ export default function AdminPromotions() {
           promo.id === promotionId 
             ? { ...promo, isActive: isActive }
             : promo
-        // Revert local state if database update fails
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
         ));
         throw error;
       }
+    } catch (error) {
+      console.error('Error toggling promotion:', error);
+      Alert.alert('Error', 'No se pudo actualizar la promoción');
+    }
+  };
 
+  return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Promociones</Text>
+      </View>
+      
+      <ScrollView style={styles.content}>
         <Card style={styles.statsCard}>
           <Text style={styles.statsTitle}>Estadísticas</Text>
           <View style={styles.statsGrid}>
@@ -282,20 +257,6 @@ export default function AdminPromotions() {
               </Text>
               <Text style={styles.statLabel}>Activas</Text>
             </View>
-        {/* Add Button */}
-        <View style={styles.addButtonContainer}>
-          <TouchableOpacity 
-            style={styles.addButton}
-            onPress={() => {
-              resetForm();
-              setShowPlaceModal(true);
-            }}
-          >
-            <Plus size={20} color="#FFFFFF" />
-            <Text style={styles.addButtonText}>Agregar Lugar</Text>
-          </TouchableOpacity>
-        </View>
-
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
                 {promotions.reduce((sum, p) => sum + (p.views || 0), 0)}
@@ -310,6 +271,19 @@ export default function AdminPromotions() {
             </View>
           </View>
         </Card>
+
+        {/* Add Button */}
+        <View style={styles.addButtonContainer}>
+          <TouchableOpacity 
+            style={styles.addButton}
+            onPress={() => {
+              setShowPromotionModal(true);
+            }}
+          >
+            <Plus size={20} color="#FFFFFF" />
+            <Text style={styles.addButtonText}>Crear Promoción</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Todas las Promociones</Text>
@@ -472,9 +446,6 @@ export default function AdminPromotions() {
                   </View>
                 ) : (
                   <View style={styles.imageActions}>
-                    <TouchableOpacity style={styles.imageActionButton} onPress={handleTakePhoto}>
-                      <Text style={styles.imageActionText}>📷 Tomar foto</Text>
-                    </TouchableOpacity>
                     <TouchableOpacity style={styles.imageActionButton} onPress={handleSelectImage}>
                       <Text style={styles.imageActionText}>🖼️ Galería</Text>
                     </TouchableOpacity>
@@ -1113,42 +1084,34 @@ const styles = StyleSheet.create({
   },
   modalButtonsContainer: {
     flexDirection: 'column',
-      console.log('Fetching places from database...');
     gap: 12,
-      const { data, error } = await supabaseClient
   },
-        .from('places')
-  accessDenied: {
-        .select('*')
-    flex: 1,
-        .order('created_at', { ascending: false });
-      if (error) {
-    justifyContent: 'center',
-        console.error('Error fetching places:', error);
+  cancelModalButton: {
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
   },
-        return;
-  accessDeniedTitle: {
-      }
-    fontSize: 24,
-      
-    fontFamily: 'Inter-Bold',
-      const placesData = data?.map(place => ({
-    color: '#EF4444',
-        id: place.id,
-    marginBottom: 8,
-        name: place.name,
-  },
-        category: place.category,
-  accessDeniedText: {
-        address: place.address,
+  cancelModalButtonText: {
     fontSize: 16,
-        phone: place.phone || '',
-    fontFamily: 'Inter-Regular',
-        rating: place.rating,
+    fontFamily: 'Inter-SemiBold',
     color: '#6B7280',
-        description: place.description,
-    textAlign: 'center',
-        petAmenities: place.pet_amenities || [],
   },
-        imageUrl: place.image_url,
+  createModalButton: {
+    backgroundColor: '#DC2626',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  createModalButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
 });
+```
