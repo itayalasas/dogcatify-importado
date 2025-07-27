@@ -458,12 +458,12 @@ export default function AdminPromotions() {
       
       console.log('Total amount calculated:', totalAmount);
       
-      // Generate PDF content (simple HTML that can be converted to PDF)
-      const pdfContent = generateInvoicePDF(selectedPromotionForBilling, totalClicks, costPerClickNum, totalAmount);
-      console.log('PDF content generated');
+      // Generate invoice HTML content for email
+      const invoiceHTML = generateInvoiceHTML(selectedPromotionForBilling, totalClicks, costPerClickNum, totalAmount, partnerData.business_name);
+      console.log('Invoice HTML generated');
 
-      // Send email with PDF attachment
-      const emailResult = await sendBillingEmail(partnerData.email, selectedPromotionForBilling, pdfContent, totalAmount, partnerData.business_name);
+      // Send email with invoice content
+      const emailResult = await sendBillingEmail(partnerData.email, selectedPromotionForBilling, invoiceHTML, totalAmount, partnerData.business_name);
       
       if (emailResult.success) {
         // Save billing record to database
@@ -487,85 +487,65 @@ export default function AdminPromotions() {
     }
   };
   
-  const generateInvoicePDF = (promotion: any, clicks: number, costPerClick: number, totalAmount: number) => {
+  const generateInvoiceHTML = (promotion: any, clicks: number, costPerClick: number, totalAmount: number, businessName: string) => {
     const invoiceNumber = `INV-${Date.now()}`;
     const currentDate = new Date().toLocaleDateString('es-ES');
     
     return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Factura - DogCatiFy</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
-          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #2D6A6F; padding-bottom: 20px; }
-          .company-name { font-size: 24px; font-weight: bold; color: #2D6A6F; margin-bottom: 5px; }
-          .invoice-title { font-size: 20px; margin-top: 15px; }
-          .invoice-info { display: flex; justify-content: space-between; margin: 20px 0; }
-          .client-info, .invoice-details { width: 45%; }
-          .section-title { font-weight: bold; margin-bottom: 10px; color: #2D6A6F; }
-          .table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-          .table th, .table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-          .table th { background-color: #f8f9fa; font-weight: bold; }
-          .total-row { background-color: #f0f9ff; font-weight: bold; }
-          .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #666; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div class="company-name">DogCatiFy</div>
-          <div>Plataforma de Servicios para Mascotas</div>
-          <div class="invoice-title">FACTURA DE PROMOCIÓN</div>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: white; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #2D6A6F; padding-bottom: 20px;">
+          <h1 style="color: #2D6A6F; margin: 0; font-size: 24px;">DogCatiFy</h1>
+          <p style="margin: 5px 0; color: #666;">Plataforma de Servicios para Mascotas</p>
+          <h2 style="color: #2D6A6F; margin: 15px 0 0 0; font-size: 20px;">FACTURA DE PROMOCIÓN</h2>
         </div>
         
-        <div class="invoice-info">
-          <div class="client-info">
-            <div class="section-title">Facturar a:</div>
-            <div>Aliado: ${promotion.partnerInfo?.businessName || 'Cliente'}</div>
-            <div>Promoción: ${promotion.title}</div>
+        <div style="display: flex; justify-content: space-between; margin: 20px 0; flex-wrap: wrap;">
+          <div style="width: 45%; min-width: 200px;">
+            <h3 style="color: #2D6A6F; margin-bottom: 10px;">Facturar a:</h3>
+            <p style="margin: 5px 0;"><strong>Aliado:</strong> ${businessName}</p>
+            <p style="margin: 5px 0;"><strong>Promoción:</strong> ${promotion.title}</p>
           </div>
-          <div class="invoice-details">
-            <div class="section-title">Detalles de Factura:</div>
-            <div>Número: ${invoiceNumber}</div>
-            <div>Fecha: ${currentDate}</div>
-            <div>Período: ${promotion.startDate.toLocaleDateString()} - ${promotion.endDate.toLocaleDateString()}</div>
+          <div style="width: 45%; min-width: 200px;">
+            <h3 style="color: #2D6A6F; margin-bottom: 10px;">Detalles de Factura:</h3>
+            <p style="margin: 5px 0;"><strong>Número:</strong> ${invoiceNumber}</p>
+            <p style="margin: 5px 0;"><strong>Fecha:</strong> ${currentDate}</p>
+            <p style="margin: 5px 0;"><strong>Período:</strong> ${promotion.startDate.toLocaleDateString()} - ${promotion.endDate.toLocaleDateString()}</p>
           </div>
         </div>
         
-        <table class="table">
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0; border: 1px solid #ddd;">
           <thead>
-            <tr>
-              <th>Descripción</th>
-              <th>Cantidad</th>
-              <th>Precio Unitario</th>
-              <th>Total</th>
+            <tr style="background-color: #f8f9fa;">
+              <th style="border: 1px solid #ddd; padding: 12px; text-align: left; font-weight: bold;">Descripción</th>
+              <th style="border: 1px solid #ddd; padding: 12px; text-align: center; font-weight: bold;">Cantidad</th>
+              <th style="border: 1px solid #ddd; padding: 12px; text-align: right; font-weight: bold;">Precio Unitario</th>
+              <th style="border: 1px solid #ddd; padding: 12px; text-align: right; font-weight: bold;">Total</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td>Clicks en promoción "${promotion.title}"</td>
-              <td>${clicks}</td>
-              <td>$${costPerClick.toLocaleString()}</td>
-              <td>$${totalAmount.toLocaleString()}</td>
+              <td style="border: 1px solid #ddd; padding: 12px;">Clicks en promoción "${promotion.title}"</td>
+              <td style="border: 1px solid #ddd; padding: 12px; text-align: center;">${clicks}</td>
+              <td style="border: 1px solid #ddd; padding: 12px; text-align: right;">$${costPerClick.toLocaleString()}</td>
+              <td style="border: 1px solid #ddd; padding: 12px; text-align: right;">$${totalAmount.toLocaleString()}</td>
             </tr>
-            <tr class="total-row">
-              <td colspan="3"><strong>TOTAL A PAGAR</strong></td>
-              <td><strong>$${totalAmount.toLocaleString()}</strong></td>
+            <tr style="background-color: #f0f9ff; font-weight: bold;">
+              <td style="border: 1px solid #ddd; padding: 12px;" colspan="3"><strong>TOTAL A PAGAR</strong></td>
+              <td style="border: 1px solid #ddd; padding: 12px; text-align: right;"><strong>$${totalAmount.toLocaleString()}</strong></td>
             </tr>
           </tbody>
         </table>
         
-        <div class="footer">
-          <p>DogCatiFy - Plataforma de Servicios para Mascotas</p>
-          <p>Esta factura fue generada automáticamente el ${currentDate}</p>
+        <div style="margin-top: 30px; text-align: center; font-size: 12px; color: #666; border-top: 1px solid #eee; padding-top: 20px;">
+          <p style="margin: 5px 0;">DogCatiFy - Plataforma de Servicios para Mascotas</p>
+          <p style="margin: 5px 0;">Esta factura fue generada automáticamente el ${currentDate}</p>
+          <p style="margin: 5px 0;">Número de factura: ${invoiceNumber}</p>
         </div>
-      </body>
-      </html>
+      </div>
     `;
   };
   
-  const sendBillingEmail = async (email: string, promotion: any, pdfContent: string, totalAmount: number, businessName: string) => {
+  const sendBillingEmail = async (email: string, promotion: any, invoiceHTML: string, totalAmount: number, businessName: string) => {
     try {
       console.log('Sending billing email to:', email);
       
@@ -576,8 +556,38 @@ export default function AdminPromotions() {
       const emailData = {
         to: email,
         subject: `Factura de Promoción - ${promotion.title}`,
-        text: `Adjunto encontrarás la factura por la promoción "${promotion.title}" por un total de $${totalAmount.toLocaleString()}.`,
-        html: `
+        text: `Estimado ${businessName}, adjunto encontrarás la factura por la promoción "${promotion.title}" por un total de $${totalAmount.toLocaleString()}.`,
+        html: invoiceHTML
+      };
+      
+      console.log('Making API call to:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+        },
+        body: JSON.stringify(emailData),
+      });
+      
+      console.log('Email API response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Email API error:', errorText);
+        throw new Error(`Error ${response.status}: ${errorText}`);
+      }
+      
+      const result = await response.json();
+      console.log('Email sent successfully:', result);
+      
+      return { success: true, result };
+    } catch (error) {
+      console.error('Error in sendBillingEmail:', error);
+      return { success: false, error: error.message };
+    }
+  };
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background-color: #2D6A6F; padding: 20px; text-align: center;">
               <h1 style="color: white; margin: 0;">Factura de Promoción</h1>
