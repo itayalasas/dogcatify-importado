@@ -767,8 +767,12 @@ export default function AdminPromotions() {
         animationType="slide"
         onRequestClose={() => setShowBillingModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <View style={styles.billingModalOverlay}>
+          <ScrollView 
+            contentContainerStyle={styles.billingModalScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.billingModalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
                 Generar Factura - {selectedPromotionForBilling?.title}
@@ -837,7 +841,7 @@ export default function AdminPromotions() {
               </View>
             )}
             
-            <View style={styles.modalActions}>
+            <View style={styles.billingModalActions}>
               <Button
                 title="Cancelar"
                 onPress={() => {
@@ -856,7 +860,8 @@ export default function AdminPromotions() {
                 size="medium"
               />
             </View>
-          </View>
+            </View>
+          </ScrollView>
         </View>
       </Modal>
     </SafeAreaView>
@@ -1169,5 +1174,34 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: 'row',
     gap: 12,
+  },
+  billingModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingTop: 60,
+    paddingBottom: 40,
+    paddingHorizontal: 20,
+  },
+  billingModalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    minHeight: '100%',
+  },
+  billingModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    width: '100%',
+    maxWidth: 500,
+    alignSelf: 'center',
+    marginVertical: 20,
+  },
+  billingModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
   },
 });
