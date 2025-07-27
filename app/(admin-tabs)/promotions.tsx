@@ -479,6 +479,34 @@ export default function AdminPromotions() {
     }
   };
 
+  // Check if user is admin
+  const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
+  
+  if (!currentUser) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.accessDenied}>
+          <Text style={styles.accessDeniedTitle}>Cargando...</Text>
+          <Text style={styles.accessDeniedText}>
+            Verificando permisos de usuario
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.accessDenied}>
+          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
+          <Text style={styles.accessDeniedText}>
+            Solo los administradores pueden gestionar promociones
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
   function isPromotionActive(startDate: Date, endDate: Date) {
     const now = new Date();
     return now >= startDate && now <= endDate;
@@ -867,7 +895,8 @@ export default function AdminPromotions() {
                   {[
                     { value: 'all', label: 'Todos los usuarios' },
                     { value: 'users', label: 'Solo usuarios' },
-                    { value: 'partners', label: 'Solo aliados' },
+          <ScrollView contentContainerStyle={styles.billingModalScrollContent}>
+            <View style={styles.billingModalContent}>
                   ].map((option) => (
                     <TouchableOpacity
                       key={option.value}
@@ -888,7 +917,7 @@ export default function AdminPromotions() {
                 </View>
               </View>
               
-              <View style={styles.modalActions}>
+              <View style={styles.billingModalActions}>
                 <View style={styles.modalButtonsContainer}>
                   <TouchableOpacity 
                     style={styles.cancelModalButton}
@@ -1007,10 +1036,10 @@ export default function AdminPromotions() {
               </TouchableOpacity>
             </View>
 
-            {selectedPromotionForBilling && (
+                  style={styles.billingCancelButton}
               <View style={styles.billingInfo}>
                 <Text style={styles.billingInfoTitle}>
-                  {selectedPromotionForBilling.title}
+                  <Text style={styles.billingCancelButtonText}>Cancelar</Text>
                 </Text>
                 
                 <View style={styles.billingStats}>
@@ -1036,11 +1065,11 @@ export default function AdminPromotions() {
                   onChangeText={setCostPerClick}
                   keyboardType="numeric"
                   leftIcon={<DollarSign size={20} color="#6B7280" />}
-                />
+                  style={[styles.billingCreateButton, billingLoading && styles.disabledButton]}
 
                 <View style={styles.totalCalculation}>
                   <Text style={styles.totalLabel}>Total a facturar:</Text>
-                  <Text style={styles.totalAmount}>
+                  <Text style={styles.billingCreateButtonText}>
                     ${((selectedPromotionForBilling.clicks || 0) * parseFloat(costPerClick || '0')).toLocaleString()}
                   </Text>
                 </View>
@@ -1070,6 +1099,7 @@ export default function AdminPromotions() {
                 </View>
               </View>
             )}
+          </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1275,6 +1305,21 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 400,
     alignSelf: 'center',
+  },
+  billingModalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'flex-start',
+    paddingHorizontal: 20,
+    paddingVertical: 60,
+  },
+  billingModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
+    marginBottom: 40,
   },
   modalTitle: {
     fontSize: 18,
@@ -1562,6 +1607,82 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  // Billing modal specific styles
+  promotionSummary: {
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  promotionSummaryTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  promotionSummaryStats: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  billingCalculation: {
+    backgroundColor: '#F0FDF4',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#10B981',
+  },
+  billingCalculationTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#166534',
+    marginBottom: 8,
+  },
+  billingCalculationText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#166534',
+    marginBottom: 4,
+  },
+  billingCalculationTotal: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#166534',
+    marginTop: 8,
+  },
+  billingModalActions: {
+    flexDirection: 'column',
+    gap: 12,
+    marginTop: 20,
+    paddingBottom: 20,
+  },
+  billingCancelButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#6B7280',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    width: '100%',
+  },
+  billingCancelButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+  },
+  billingCreateButton: {
+    backgroundColor: '#10B981',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    width: '100%',
+  },
+  billingCreateButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
   },
   billingButton: {
     marginTop: 8,
