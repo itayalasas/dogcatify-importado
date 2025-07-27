@@ -309,30 +309,40 @@ export default function Home() {
       
       // Increment clicks
       console.log('Attempting to increment clicks...');
-      const { error } = await supabaseClient
+      const { data, error } = await supabaseClient
         .from('promotions')
         .update({ 
           clicks: (promotion.clicks || 0) + 1 
         })
-        .eq('id', promotion.id);
+        .eq('id', promotion.id)
+        .select('clicks');
 
       if (error) {
         console.error('Error incrementing clicks:', error);
         throw error;
       }
       
-      console.log('Clicks incremented successfully');
+      console.log('Clicks incremented successfully. New count:', data?.[0]?.clicks);
       
       // Update local state to reflect the click increment
       setPromotions(prevPromotions => 
         prevPromotions.map(promo => 
           promo.id === promotion.id 
-            ? { ...promo, clicks: (promo.clicks || 0) + 1 }
+            ? { ...promo, clicks: data?.[0]?.clicks || (promo.clicks || 0) + 1 }
             : promo
         )
       );
       
-      console.log('Local state updated');
+      // Also update feedItems state
+      setFeedItems(prevItems => 
+        prevItems.map(item => 
+          item.type === 'promotion' && item.data.id === promotion.id
+            ? { ...item, data: { ...item.data, clicks: data?.[0]?.clicks || (item.data.clicks || 0) + 1 } }
+            : item
+        )
+      );
+      
+      console.log('Local state updated. New clicks:', data?.[0]?.clicks);
 
       // Handle promotion CTA URL
       if (promotion.ctaUrl) {
