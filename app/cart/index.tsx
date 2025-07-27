@@ -203,6 +203,22 @@ export default function AdminPromotions() {
       Alert.alert('Error', 'No se pudo crear la promoción');
     } finally {
       setLoading(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <Text>Admin Promotions</Text>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  cancelModalButton: {
     backgroundColor: '#FFFFFF',
     borderWidth: 2,
     borderColor: '#DC2626',
