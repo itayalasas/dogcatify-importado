@@ -318,8 +318,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         body,
         data: data || {},
         // Agregar logo de DogCatiFy
-        icon: 'https://zkgiwamycbjcogcgqhff.supabase.co/storage/v1/object/public/dogcatify/system/logo-notification.png',
-        image: 'https://zkgiwamycbjcogcgqhff.supabase.co/storage/v1/object/public/dogcatify/system/logo-notification.png',
+        icon: 'https://zkgiwamycbjcogcgqhff.supabase.co/storage/v1/object/public/dogcatify/system/logo-notification.jpg',
+        image: 'https://zkgiwamycbjcogcgqhff.supabase.co/storage/v1/object/public/dogcatify/system/logo-notification.jpg,
       };
 
       await fetch('https://exp.host/--/api/v2/push/send', {
