@@ -203,18 +203,12 @@ export default function AdminPromotions() {
       Alert.alert('Error', 'No se pudo crear la promoción');
     } finally {
       setLoading(false);
-                      <Text style={styles.itemPartner}>{item.partnerName}</Text>
     }
   };
 
   const handleTogglePromotion = async (promotionId: string, isActive: boolean) => {
     try {
       // Update local state FIRST for immediate UI feedback
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
       setPromotions(prev => prev.map(promo => 
         promo.id === promotionId 
           ? { ...promo, isActive: !isActive }
@@ -230,15 +224,15 @@ export default function AdminPromotions() {
           promo.id === promotionId 
             ? { ...promo, isActive: isActive }
             : promo
-        // Revert local state if database update fails
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
         ));
         throw error;
       }
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo actualizar la promoción');
+    }
+  };
 
+  return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Promociones</Text>
