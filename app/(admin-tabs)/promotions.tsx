@@ -614,4 +614,29 @@ export default function AdminPromotions() {
   const saveBillingRecord = async (promotion: any, clicks: number, costPerClick: number, totalAmount: number, email: string) => {
     try {
       const billingData = {
-        promotion_
+        promotion_id: promotion.id,
+        partner_id: promotion.partnerId,
+        total_clicks: clicks,
+        cost_per_click: costPerClick,
+        total_amount: totalAmount,
+        billing_period_start: promotion.startDate.toISOString(),
+        billing_period_end: promotion.endDate.toISOString(),
+        status: 'pending',
+        invoice_number: `INV-${Date.now()}`,
+        notes: billingNotes.trim() || null,
+        created_at: new Date().toISOString(),
+        created_by: currentUser?.id
+      };
+      
+      const { error } = await supabaseClient
+        .from('promotion_billing')
+        .insert([billingData]);
+      
+      if (error) throw error;
+      
+      console.log('Billing record saved successfully');
+    } catch (error) {
+      console.error('Error saving billing record:', error);
+      throw error;
+    }
+  };
