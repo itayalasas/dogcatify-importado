@@ -12,6 +12,20 @@ import { NotificationService } from '../../utils/notifications';
 export default function AdminPromotions() {
   const { currentUser } = useAuth();
   const [promotions, setPromotions] = useState<any[]>([]);
+  const [showPromotionModal, setShowPromotionModal] = useState(false);
+  const [showPartnerSelector, setShowPartnerSelector] = useState(false);
+  const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
+
+  // Promotion form state
+  const [promoTitle, setPromoTitle] = useState('');
+  const [promoDescription, setPromoDescription] = useState('');
+  const [promoImage, setPromoImage] = useState<string | null>(null);
+  const [promoStartDate, setPromoStartDate] = useState('');
+  const [promoEndDate, setPromoEndDate] = useState('');
+  const [promoTargetAudience, setPromoTargetAudience] = useState('all');
+  const [loading, setLoading] = useState(false);
+
 
   // Promotion form
   const [promoTitle, setPromoTitle] = useState('');
