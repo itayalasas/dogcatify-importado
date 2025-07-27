@@ -6,6 +6,7 @@ import PostCard from '../../components/PostCard';
 import PromotionCard from '../../components/PromotionCard';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { NotificationPermissionPrompt } from '../../components/NotificationPermissionPrompt';
 import { supabaseClient } from '../../lib/supabase';
 
 // Componente wrapper para manejar las vistas de promociones
@@ -495,6 +496,7 @@ export default function Home() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <NotificationPermissionPrompt />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>DogCatiFy</Text>
       </View>
