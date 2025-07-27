@@ -228,8 +228,33 @@ export default function AdminPromotions() {
   };
 
   const handleCreatePromotion = async () => {
+    console.log('Starting promotion creation...');
+    console.log('Form data:', {
+      promoTitle,
+      promoDescription,
+      promoStartDate,
+      promoEndDate,
+      promoImage: !!promoImage,
+      promoLinkType,
+      selectedPartnerId
+    });
+    
     if (!promoTitle || !promoDescription || !promoStartDate || !promoEndDate) {
-      Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
+      Alert.alert('Error', 'Por favor completa todos los campos obligatorios: título, descripción, fecha de inicio y fecha de fin');
+      return;
+    }
+    
+    // Validate dates
+    const startDate = new Date(promoStartDate);
+    const endDate = new Date(promoEndDate);
+    
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      Alert.alert('Error', 'Las fechas ingresadas no son válidas. Usa el formato YYYY-MM-DD');
+      return;
+    }
+    
+    if (endDate <= startDate) {
+      Alert.alert('Error', 'La fecha de fin debe ser posterior a la fecha de inicio');
       return;
     }
     
@@ -247,10 +272,22 @@ export default function AdminPromotions() {
     
     setLoading(true);
     try {
+      console.log('Uploading image...');
       let imageUrl = null;
-      if (promoImage) imageUrl = await uploadImage(promoImage);
+      if (promoImage) {
+        try {
+          imageUrl = await uploadImage(promoImage);
+          console.log('Image uploaded successfully:', imageUrl);
+        } catch (imageError) {
+          console.error('Error uploading image:', imageError);
+          Alert.alert('Error', 'No se pudo subir la imagen. Intenta con otra imagen.');
+          setLoading(false);
+          return;
+        }
+      }
       
       // Generate CTA URL based on link type
+      console.log('Generating CTA URL...');
       let ctaUrl = null;
       if (promoLinkType === 'external') {
         ctaUrl = promoUrl.trim();
@@ -264,36 +301,43 @@ export default function AdminPromotions() {
         }
       }
       
+      console.log('Creating promotion data...');
       const promotionData: any = {
         title: promoTitle.trim(),
         description: promoDescription.trim(),
         image_url: imageUrl,
         cta_url: ctaUrl,
-        start_date: new Date(promoStartDate).toISOString(),
-        end_date: new Date(promoEndDate).toISOString(),
+        start_date: startDate.toISOString(),
+        end_date: endDate.toISOString(),
         target_audience: promoTargetAudience,
         is_active: true,
         views: 0,
         clicks: 0,
+        likes: [],
         promotion_type: 'feed',
         cta_text: 'Más información',
         created_at: new Date().toISOString(),
         created_by: currentUser?.id,
       };
+      
       if (selectedPartnerId) {
         promotionData.partner_id = selectedPartnerId;
       }
-      const { error } = await supabaseClient
+      
+      console.log('Inserting promotion into database...', promotionData);
+      const { data, error } = await supabaseClient
         .from('promotions')
-        .insert([promotionData])
-        .select(`
-          *,
-          partners:partner_id(business_name, business_type, logo)
-        `);
+        .insert([promotionData]);
+      
       if (error) {
-        Alert.alert('Error', `No se pudo crear la promoción: ${error.message}`);
+        console.error('Database error:', error);
+        Alert.alert('Error', `Error de base de datos: ${error.message || 'Error desconocido'}`);
         return;
       }
+      
+      console.log('Promotion created successfully:', data);
+      
+      // Reset form
       setPromoTitle('');
       setPromoDescription('');
       setPromoImage(null);
@@ -306,9 +350,14 @@ export default function AdminPromotions() {
       setSelectedPartnerId(null);
       setPartnerSearchQuery('');
       setShowPromotionModal(false);
+      
+      // Refresh promotions list
+      fetchPromotions();
+      
       Alert.alert('Éxito', 'Promoción creada correctamente');
     } catch (error) {
-      Alert.alert('Error', 'No se pudo crear la promoción');
+      console.error('Unexpected error creating promotion:', error);
+      Alert.alert('Error', `Error inesperado: ${error.message || 'No se pudo crear la promoción'}`);
     } finally {
       setLoading(false);
     }
