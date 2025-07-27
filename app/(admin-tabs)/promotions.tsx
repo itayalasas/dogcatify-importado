@@ -584,7 +584,7 @@ export default function AdminPromotions() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': \`Bearer ${supabaseAnonKey}`,
+          'Authorization': `Bearer ${supabaseAnonKey}`,
         },
         body: JSON.stringify(emailData),
       });
