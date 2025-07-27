@@ -225,44 +225,87 @@ export default function AdminPromotions() {
         .eq('id', promotionId);
       if (error) {
         // Revert local state if database update fails
-      statement_descriptor: 'DOGCATIFY',
-      // Configure automatic split payment
-      collector_id: parseInt(partnerConfig.user_id),
-      marketplace_fee: totalAmount * ((partnerConfig.commission_percentage || 5.0) / 100)
+        setPromotions(prev => prev.map(promo => 
           promo.id === promotionId 
             ? { ...promo, isActive: isActive }
-    console.log('Split payment configuration:', {
-      collector_id: parseInt(partnerConfig.user_id),
-      marketplace_fee: totalAmount * ((partnerConfig.commission_percentage || 5.0) / 100),
-      commission_percentage: partnerConfig.commission_percentage || 5.0,
-      partner_amount: totalAmount - (totalAmount * ((partnerConfig.commission_percentage || 5.0) / 100))
+            : promo
+        ));
+      }
+    } catch (error) {
+      // Revert local state if database update fails
+      setPromotions(prev => prev.map(promo => 
+        promo.id === promotionId 
+          ? { ...promo, isActive: isActive }
+          : promo
+      ));
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Promociones</Text>
+        <TouchableOpacity
+          style={styles.addButton}
           onPress={() => setShowPromotionModal(true)}
         >
+          <Plus size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <Card style={styles.statsCard}>
+          <Text style={styles.statsTitle}>Estadísticas Generales</Text>
+          <View style={styles.statsGrid}>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{promotions.length}</Text>
+              <Text style={styles.statLabel}>Total{'\n'}Promociones</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {promotions.filter(p => p.isActive && isPromotionActive(p.startDate, p.endDate)).length}
+              </Text>
+              <Text style={styles.statLabel}>Activas{'\n'}Ahora</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {promotions.reduce((sum, p) => sum + (p.views || 0), 0)}
+              </Text>
+              <Text style={styles.statLabel}>Total{'\n'}Vistas</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {promotions.reduce((sum, p) => sum + (p.clicks || 0), 0)}
+              </Text>
+              <Text style={styles.statLabel}>Total{'\n'}Clicks</Text>
+            </View>
+          </View>
+        </Card>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Todas las Promociones</Text>
+          {promotions.length === 0 ? (
+            <Card style={styles.emptyCard}>
+              <Megaphone size={48} color="#DC2626" />
+              <Text style={styles.emptyTitle}>No hay promociones</Text>
+              <Text style={styles.emptySubtitle}>
+                Crea tu primera promoción para comenzar a llegar a más usuarios
+              </Text>
+            </Card>
+          ) : (
+            promotions.map((promotion) => (
+              <Card key={promotion.id} style={styles.promotionCard}>
+                <View style={styles.promotionHeader}>
+                  <View style={styles.promotionInfo}>
+                    <Text style={styles.promotionTitle}>{promotion.title}</Text>
+                    {promotion.partnerInfo && (
                       <View style={styles.partnerInfo}>
-    // Always use marketplace token with automatic split
-    const response = await fetch(`${MP_BASE_URL}/checkout/preferences`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${marketplaceAccessToken}`,
-      },
-      body: JSON.stringify(preferenceData),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Mercado Pago API error:', errorData);
-      throw new Error(`Failed to create payment preference: ${errorData.message || response.statusText}`);
-    }
-
-    const preference = await response.json();
-    console.log('Split payment preference created successfully:', {
-      id: preference.id,
-      collector_id: parseInt(partnerConfig.user_id),
-      marketplace_fee: totalAmount * ((partnerConfig.commission_percentage || 5.0) / 100)
-    });
-    
-    return preference;
+                        <Text style={styles.partnerIcon}>
+                          {getBusinessTypeIcon(promotion.partnerInfo.businessType)}
+                        </Text>
+                        <Text style={styles.partnerName}>
+                          {promotion.partnerInfo.businessName}
+                        </Text>
                       </View>
                     )}
                     <Text style={styles.promotionAudience}>
