@@ -218,12 +218,7 @@ export default function AdminPromotions() {
       
       if (selectedPartnerId) {
         promotionData.partner_id = selectedPartnerId;
-      // Update local state FIRST for immediate UI feedback
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
+      }
       
       const { error } = await supabaseClient
         .from('promotions')
@@ -245,6 +240,14 @@ export default function AdminPromotions() {
     }
   };
 
+  const handleTogglePromotion = async (promotionId: string, isActive: boolean) => {
+    try {
+      // Update local state FIRST for immediate UI feedback
+      setPromotions(prev => prev.map(promo => 
+        promo.id === promotionId 
+          ? { ...promo, isActive: !isActive }
+          : promo
+      ));
     } catch (error) {
       Alert.alert('Error', 'No se pudo actualizar la promoción');
     }
