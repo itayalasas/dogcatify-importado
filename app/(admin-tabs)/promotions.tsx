@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image } from 'react-native';
-import { Plus, Megaphone, Calendar, Eye, Target, Search } from 'lucide-react-native';
+import { Plus, Megaphone, Calendar, Eye, Target, Search, DollarSign, FileText } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -29,6 +29,13 @@ export default function AdminPromotions() {
   const [selectedInternalId, setSelectedInternalId] = useState<string | null>(null);
   const [internalItems, setInternalItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Billing state
+  const [showBillingModal, setShowBillingModal] = useState(false);
+  const [selectedPromotionForBilling, setSelectedPromotionForBilling] = useState<any>(null);
+  const [costPerClick, setCostPerClick] = useState('100');
+  const [billingNotes, setBillingNotes] = useState('');
+  const [billingLoading, setBillingLoading] = useState(false);
 
   const [partners, setPartners] = useState<any[]>([]);
 
@@ -390,6 +397,79 @@ export default function AdminPromotions() {
     }
   };
 
+  const handleGenerateBilling = async (promotion: any) => {
+    if (!promotion.partnerId) {
+      Alert.alert('Error', 'Esta promoción no tiene un aliado asociado');
+      return;
+    }
+
+    if (!promotion.clicks || promotion.clicks === 0) {
+      Alert.alert('Sin clicks', 'Esta promoción no tiene clicks registrados para facturar');
+      return;
+    }
+
+    setSelectedPromotionForBilling(promotion);
+    setCostPerClick('100'); // Default cost per click
+    setBillingNotes('');
+    setShowBillingModal(true);
+  };
+
+  const handleCreateBilling = async () => {
+    if (!selectedPromotionForBilling || !costPerClick) {
+      Alert.alert('Error', 'Por favor completa todos los campos');
+      return;
+    }
+
+    setBillingLoading(true);
+    try {
+      const totalClicks = selectedPromotionForBilling.clicks || 0;
+      const costPerClickNum = parseFloat(costPerClick);
+      const totalAmount = totalClicks * costPerClickNum;
+
+      // Generate invoice number
+      const invoiceNumber = `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+
+      const billingData = {
+        promotion_id: selectedPromotionForBilling.id,
+        partner_id: selectedPromotionForBilling.partnerId,
+        total_clicks: totalClicks,
+        cost_per_click: costPerClickNum,
+        total_amount: totalAmount,
+        billing_period_start: selectedPromotionForBilling.startDate.toISOString(),
+        billing_period_end: selectedPromotionForBilling.endDate.toISOString(),
+        status: 'pending',
+        invoice_number: invoiceNumber,
+        notes: billingNotes.trim() || null,
+        created_by: currentUser?.id,
+        created_at: new Date().toISOString()
+      };
+
+      const { error } = await supabaseClient
+        .from('promotion_billing')
+        .insert([billingData]);
+
+      if (error) {
+        console.error('Billing creation error:', error);
+        Alert.alert('Error', `No se pudo crear la factura: ${error.message}`);
+        return;
+      }
+
+      Alert.alert(
+        'Factura creada',
+        `Factura ${invoiceNumber} creada exitosamente.\nTotal: $${totalAmount.toLocaleString()} (${totalClicks} clicks × $${costPerClickNum})`,
+        [{ text: 'OK' }]
+      );
+
+      setShowBillingModal(false);
+      setSelectedPromotionForBilling(null);
+    } catch (error) {
+      console.error('Error creating billing:', error);
+      Alert.alert('Error', 'No se pudo crear la factura');
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
   function isPromotionActive(startDate: Date, endDate: Date) {
     const now = new Date();
     return now >= startDate && now <= endDate;
@@ -471,6 +551,19 @@ export default function AdminPromotions() {
                     variant={promotion.isActive && isPromotionActive(promotion.startDate, promotion.endDate) ? 'outline' : 'primary'}
                     size="medium"
                   />
+                  
+                  {/* Billing button for promotions with partner */}
+                  {promotion.partnerId && (
+                    <TouchableOpacity
+                      style={styles.billingButton}
+                      onPress={() => handleGenerateBilling(promotion)}
+                    >
+                      <DollarSign size={16} color="#10B981" />
+                      <Text style={styles.billingButtonText}>
+                        Facturar ({promotion.clicks || 0} clicks)
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </Card>
             ))
@@ -883,6 +976,89 @@ export default function AdminPromotions() {
                 ))
               )}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Billing Modal */}
+      <Modal
+        visible={showBillingModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowBillingModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.billingModalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Generar Factura</Text>
+              <TouchableOpacity onPress={() => setShowBillingModal(false)}>
+                <Text style={styles.partnerModalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {selectedPromotionForBilling && (
+              <View style={styles.billingInfo}>
+                <Text style={styles.billingInfoTitle}>
+                  {selectedPromotionForBilling.title}
+                </Text>
+                
+                <View style={styles.billingStats}>
+                  <View style={styles.billingStat}>
+                    <Text style={styles.billingStatLabel}>Total de clicks:</Text>
+                    <Text style={styles.billingStatValue}>
+                      {selectedPromotionForBilling.clicks || 0}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.billingStat}>
+                    <Text style={styles.billingStatLabel}>Período:</Text>
+                    <Text style={styles.billingStatValue}>
+                      {selectedPromotionForBilling.startDate.toLocaleDateString()} - {selectedPromotionForBilling.endDate.toLocaleDateString()}
+                    </Text>
+                  </View>
+                </View>
+
+                <Input
+                  label="Costo por click ($)"
+                  placeholder="100"
+                  value={costPerClick}
+                  onChangeText={setCostPerClick}
+                  keyboardType="numeric"
+                  leftIcon={<DollarSign size={20} color="#6B7280" />}
+                />
+
+                <View style={styles.totalCalculation}>
+                  <Text style={styles.totalLabel}>Total a facturar:</Text>
+                  <Text style={styles.totalAmount}>
+                    ${((selectedPromotionForBilling.clicks || 0) * parseFloat(costPerClick || '0')).toLocaleString()}
+                  </Text>
+                </View>
+
+                <Input
+                  label="Notas (opcional)"
+                  placeholder="Observaciones sobre la facturación..."
+                  value={billingNotes}
+                  onChangeText={setBillingNotes}
+                  multiline
+                  numberOfLines={3}
+                />
+
+                <View style={styles.billingActions}>
+                  <Button
+                    title="Cancelar"
+                    onPress={() => setShowBillingModal(false)}
+                    variant="outline"
+                    size="medium"
+                  />
+                  <Button
+                    title="Crear Factura"
+                    onPress={handleCreateBilling}
+                    loading={billingLoading}
+                    size="medium"
+                  />
+                </View>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
@@ -1518,5 +1694,83 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     textAlign: 'center',
+  },
+  billingButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  billingButtonText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#10B981',
+    marginLeft: 4,
+  },
+  billingModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    margin: 20,
+    maxHeight: '80%',
+  },
+  billingInfo: {
+    marginBottom: 20,
+  },
+  billingInfoTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  billingStats: {
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  billingStat: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  billingStatLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  billingStatValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  totalCalculation: {
+    backgroundColor: '#F0FDF4',
+    padding: 16,
+    borderRadius: 12,
+    marginVertical: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#166534',
+  },
+  totalAmount: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#166534',
+  },
+  billingActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
   },
 });

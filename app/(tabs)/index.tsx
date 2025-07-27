@@ -303,6 +303,7 @@ export default function Home() {
   const handlePromotionPress = async (promotion: any) => {
     try {
       // Increment clicks
+      console.log('Incrementing clicks for promotion:', promotion.id);
       const { error } = await supabaseClient
         .from('promotions')
         .update({ 
@@ -311,6 +312,15 @@ export default function Home() {
         .eq('id', promotion.id);
 
       if (error) throw error;
+      
+      // Update local state to reflect the click increment
+      setPromotions(prevPromotions => 
+        prevPromotions.map(promo => 
+          promo.id === promotion.id 
+            ? { ...promo, clicks: (promo.clicks || 0) + 1 }
+            : promo
+        )
+      );
 
       // Handle promotion CTA URL
       if (promotion.ctaUrl) {
