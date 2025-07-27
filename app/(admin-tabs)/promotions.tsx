@@ -241,15 +241,32 @@ export default function AdminPromotions() {
   };
 
   const handleTogglePromotion = async (promotionId: string, isActive: boolean) => {
-        // Revert local state if database update fails
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
+    try {
+      // Revert local state if database update fails
+      setPromotions(prev => prev.map(promo => 
+        promo.id === promotionId 
+          ? { ...promo, isActive: isActive }
+          : promo
+      ));
       // Update local state FIRST for immediate UI feedback
       setPromotions(prev => prev.map(promo => 
+        promo.id === promotionId 
+          ? { ...promo, isActive: !isActive }
+          : promo
+      ));
+    } catch (error) {
+      console.error('Error toggling promotion:', error);
+    }
+  };
 
+  // Check if user is admin
+  const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
+  
+  if (!isAdmin) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.accessDenied}>
+          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
           <Text style={styles.accessDeniedText}>
             No tienes permisos para acceder a esta sección
           </Text>
