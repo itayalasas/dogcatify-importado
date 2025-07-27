@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image, Linking } from 'react-native';
-import { Plus, Megaphone, Calendar, Eye, Target, Search, Phone, MapPin } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image } from 'react-native';
+import { Plus, Megaphone, Calendar, Eye, Target, Search } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -53,56 +53,6 @@ export default function AdminPromotions() {
     const now = new Date();
     return now >= startDate && now <= endDate;
   }
-
-  const handleCallPlace = async (phone: string) => {
-    if (!phone) {
-      Alert.alert('Sin teléfono', 'Este lugar no tiene número de teléfono disponible');
-      return;
-    }
-    
-    try {
-      const phoneUrl = `tel:${phone}`;
-      const canOpen = await Linking.canOpenURL(phoneUrl);
-      
-      if (canOpen) {
-        await Linking.openURL(phoneUrl);
-      } else {
-        Alert.alert('Error', 'No se puede abrir la aplicación de llamadas');
-      }
-    } catch (error) {
-      console.error('Error opening phone app:', error);
-      Alert.alert('Error', 'No se pudo realizar la llamada');
-    }
-  };
-
-  const handleOpenLocation = async (address: string, coordinates?: any) => {
-    try {
-      let mapUrl = '';
-      
-      if (coordinates && coordinates.latitude && coordinates.longitude) {
-        // Si tenemos coordenadas exactas, usarlas
-        mapUrl = `https://maps.google.com/?q=${coordinates.latitude},${coordinates.longitude}`;
-      } else if (address) {
-        // Si solo tenemos dirección, buscar por dirección
-        const encodedAddress = encodeURIComponent(address);
-        mapUrl = `https://maps.google.com/?q=${encodedAddress}`;
-      } else {
-        Alert.alert('Sin ubicación', 'Este lugar no tiene ubicación disponible');
-        return;
-      }
-      
-      const canOpen = await Linking.canOpenURL(mapUrl);
-      
-      if (canOpen) {
-        await Linking.openURL(mapUrl);
-      } else {
-        Alert.alert('Error', 'No se puede abrir la aplicación de mapas');
-      }
-    } catch (error) {
-      console.error('Error opening maps app:', error);
-      Alert.alert('Error', 'No se pudo abrir la ubicación');
-    }
-  };
 
   useEffect(() => {
     if (!currentUser) return;
@@ -264,6 +214,11 @@ export default function AdminPromotions() {
           ? { ...promo, isActive: !isActive }
           : promo
       ));
+      setPromotions(prev => prev.map(promo => 
+        promo.id === promotionId 
+          ? { ...promo, isActive: !isActive }
+          : promo
+      ));
       const { error } = await supabaseClient
         .from('promotions')
         .update({ is_active: !isActive })
@@ -274,28 +229,15 @@ export default function AdminPromotions() {
           promo.id === promotionId 
             ? { ...promo, isActive: isActive }
             : promo
+        // Revert local state if database update fails
+        setPromotions(prev => prev.map(promo => 
+          promo.id === promotionId 
+            ? { ...promo, isActive: isActive }
+            : promo
         ));
         throw error;
       }
-    } catch (error) {
-      Alert.alert('Error', 'No se pudo actualizar la promoción');
-    }
-  };
 
-  if (!currentUser || currentUser.email?.toLowerCase() !== 'admin@dogcatify.com') {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.accessDenied}>
-          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
-          <Text style={styles.accessDeniedText}>
-            No tienes permisos para acceder a esta sección
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Promociones</Text>
@@ -396,29 +338,6 @@ export default function AdminPromotions() {
                     <Text style={styles.promotionStatText}>{promotion.clicks || 0}</Text>
                   </View>
                 </View>
-
-                <View style={styles.placeActions}>
-                  {promotion.partnerInfo && promotion.partnerInfo.phone && (
-                    <TouchableOpacity 
-                      style={styles.actionButton}
-                      onPress={() => handleCallPlace(promotion.partnerInfo.phone)}
-                    >
-                      <Phone size={16} color="#FFFFFF" />
-                      <Text style={styles.actionButtonText}>Contactar</Text>
-                    </TouchableOpacity>
-                  )}
-                  
-                  {promotion.partnerInfo && (promotion.partnerInfo.address || (promotion.partnerInfo.coordinates && promotion.partnerInfo.coordinates.latitude)) && (
-                    <TouchableOpacity 
-                      style={[styles.actionButton, styles.locationButton]}
-                      onPress={() => handleOpenLocation(promotion.partnerInfo.address, promotion.partnerInfo.coordinates)}
-                    >
-                      <MapPin size={16} color="#FFFFFF" />
-                      <Text style={styles.actionButtonText}>Ver Ubicación</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-
                 <View style={styles.promotionActions}>
                   <Button
                     title={promotion.isActive && isPromotionActive(promotion.startDate, promotion.endDate) ? 'Desactivar' : 'Activar'}
@@ -1190,32 +1109,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     textAlign: 'center',
-  },
-  placeActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2D6A6F',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    gap: 6,
-  },
-  locationButton: {
-    backgroundColor: '#3B82F6',
-  },
-  actionButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
   },
 });
