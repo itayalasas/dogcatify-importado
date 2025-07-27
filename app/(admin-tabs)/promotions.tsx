@@ -1017,6 +1017,7 @@ export default function AdminPromotions() {
               )}
             </ScrollView>
           </View>
+        </ScrollView>
         </View>
       </Modal>
 
