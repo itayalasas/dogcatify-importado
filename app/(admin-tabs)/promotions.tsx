@@ -557,37 +557,7 @@ export default function AdminPromotions() {
         to: email,
         subject: `Factura de Promoción - ${promotion.title}`,
         text: `Estimado ${businessName}, adjunto encontrarás la factura por la promoción "${promotion.title}" por un total de $${totalAmount.toLocaleString()}.`,
-        html: invoiceHTML
-      };
-      
-      console.log('Making API call to:', apiUrl);
-      
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseAnonKey}`,
-        },
-        body: JSON.stringify(emailData),
-      });
-      
-      console.log('Email API response status:', response.status);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Email API error:', errorText);
-        throw new Error(`Error ${response.status}: ${errorText}`);
-      }
-      
-      const result = await response.json();
-      console.log('Email sent successfully:', result);
-      
-      return { success: true, result };
-    } catch (error) {
-      console.error('Error in sendBillingEmail:', error);
-      return { success: false, error: error.message };
-    }
-  };
+        html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background-color: #2D6A6F; padding: 20px; text-align: center;">
               <h1 style="color: white; margin: 0;">Factura de Promoción</h1>
@@ -605,7 +575,7 @@ export default function AdminPromotions() {
             </div>
           </div>
         `,
-        attachment: pdfContent // Send HTML content as attachment
+        attachment: invoiceHTML // Send HTML content as attachment
       };
       
       console.log('Making API call to:', apiUrl);
@@ -614,7 +584,7 @@ export default function AdminPromotions() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'Authorization': \`Bearer ${supabaseAnonKey}`,
         },
         body: JSON.stringify(emailData),
       });
@@ -624,7 +594,7 @@ export default function AdminPromotions() {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Email API error:', errorText);
-        throw new Error(`Error ${response.status}: ${errorText}`);
+        throw new Error(\`Error ${response.status}: ${errorText}`);
       }
       
       const result = await response.json();
@@ -648,7 +618,7 @@ export default function AdminPromotions() {
         billing_period_start: promotion.startDate.toISOString(),
         billing_period_end: promotion.endDate.toISOString(),
         status: 'pending',
-        invoice_number: `INV-${Date.now()}`,
+        invoice_number: \`INV-${Date.now()}`,
         notes: billingNotes.trim() || null,
         created_at: new Date().toISOString(),
         created_by: currentUser?.id
