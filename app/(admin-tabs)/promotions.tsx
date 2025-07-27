@@ -463,12 +463,8 @@ export default function AdminPromotions() {
       const invoiceHTML = generateInvoiceHTML(selectedPromotionForBilling, totalClicks, costPerClickNum, totalAmount, partnerData.business_name);
       console.log('Invoice HTML generated');
       
-      // Generate PDF
-      const pdfBase64 = generateInvoicePDF(selectedPromotionForBilling, totalClicks, costPerClickNum, totalAmount, partnerData.business_name);
-      console.log('PDF generated');
-
       // Send email with invoice content
-      const emailResult = await sendBillingEmail(partnerData.email, selectedPromotionForBilling, invoiceHTML, totalAmount, partnerData.business_name, pdfBase64);
+      const emailResult = await sendBillingEmail(partnerData.email, selectedPromotionForBilling, invoiceHTML, totalAmount, partnerData.business_name);
       
       if (emailResult.success) {
         // Save billing record to database
@@ -550,82 +546,7 @@ export default function AdminPromotions() {
     `;
   };
   
-  const generateInvoicePDF = (promotion: any, clicks: number, costPerClick: number, totalAmount: number, businessName: string) => {
-    const doc = new jsPDF();
-    const invoiceNumber = `INV-${Date.now()}`;
-    const currentDate = new Date().toLocaleDateString('es-ES');
-    
-    // Header
-    doc.setFontSize(20);
-    doc.setTextColor(45, 106, 111); // #2D6A6F
-    doc.text('DogCatiFy', 105, 20, { align: 'center' });
-    
-    doc.setFontSize(12);
-    doc.setTextColor(102, 102, 102);
-    doc.text('Plataforma de Servicios para Mascotas', 105, 30, { align: 'center' });
-    
-    doc.setFontSize(16);
-    doc.setTextColor(45, 106, 111);
-    doc.text('FACTURA DE PROMOCIÓN', 105, 45, { align: 'center' });
-    
-    // Line separator
-    doc.setDrawColor(45, 106, 111);
-    doc.line(20, 50, 190, 50);
-    
-    // Business info
-    doc.setFontSize(12);
-    doc.setTextColor(0, 0, 0);
-    doc.text('Facturar a:', 20, 65);
-    doc.text(`Aliado: ${businessName}`, 20, 75);
-    doc.text(`Promoción: ${promotion.title}`, 20, 85);
-    
-    // Invoice details
-    doc.text('Detalles de Factura:', 120, 65);
-    doc.text(`Número: ${invoiceNumber}`, 120, 75);
-    doc.text(`Fecha: ${currentDate}`, 120, 85);
-    doc.text(`Período: ${promotion.startDate.toLocaleDateString()} - ${promotion.endDate.toLocaleDateString()}`, 120, 95);
-    
-    // Table header
-    doc.setFillColor(248, 249, 250);
-    doc.rect(20, 110, 170, 10, 'F');
-    doc.setDrawColor(221, 221, 221);
-    doc.rect(20, 110, 170, 10);
-    
-    doc.setFontSize(10);
-    doc.setTextColor(0, 0, 0);
-    doc.text('Descripción', 25, 117);
-    doc.text('Cantidad', 100, 117, { align: 'center' });
-    doc.text('Precio Unit.', 130, 117, { align: 'center' });
-    doc.text('Total', 170, 117, { align: 'center' });
-    
-    // Table content
-    doc.rect(20, 120, 170, 10);
-    doc.text(`Clicks en promoción "${promotion.title}"`, 25, 127);
-    doc.text(clicks.toString(), 100, 127, { align: 'center' });
-    doc.text(`$${costPerClick.toLocaleString()}`, 130, 127, { align: 'center' });
-    doc.text(`$${totalAmount.toLocaleString()}`, 170, 127, { align: 'center' });
-    
-    // Total row
-    doc.setFillColor(240, 249, 255);
-    doc.rect(20, 130, 170, 10, 'F');
-    doc.rect(20, 130, 170, 10);
-    doc.setFont(undefined, 'bold');
-    doc.text('TOTAL A PAGAR', 25, 137);
-    doc.text(`$${totalAmount.toLocaleString()}`, 170, 137, { align: 'center' });
-    
-    // Footer
-    doc.setFont(undefined, 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(102, 102, 102);
-    doc.text('DogCatiFy - Plataforma de Servicios para Mascotas', 105, 260, { align: 'center' });
-    doc.text(`Esta factura fue generada automáticamente el ${currentDate}`, 105, 270, { align: 'center' });
-    doc.text(`Número de factura: ${invoiceNumber}`, 105, 280, { align: 'center' });
-    
-    // Convert to base64
-    return doc.output('datauristring').split(',')[1]; // Remove data:application/pdf;base64, prefix
-  };
-  
-  const sendBillingEmail = async (email: string, promotion: any, invoiceHTML: string, totalAmount: number, businessName: string, pdfBase64: string) => {
+  const sendBillingEmail = async (email: string, promotion: any, invoiceHTML: string, totalAmount: number, businessName: string) => {
     try {
       console.log('Sending billing email to:', email);
       
@@ -654,8 +575,7 @@ export default function AdminPromotions() {
               <p>Gracias por utilizar DogCatiFy para promocionar tu negocio.</p>
               <p>Saludos cordiales,<br>El equipo de DogCatiFy</p>
             </div>
-        `,
-        attachment: pdfBase64 // Send PDF as base64 attachment
+        `
       };
       
       console.log('Making API call to:', apiUrl);
