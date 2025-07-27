@@ -103,13 +103,24 @@ serve(async (req: Request) => {
     // Send email
     let info;
     try {
-      info = await transporter.sendMail({
+      const mailOptions: any = {
         from: `"DogCatiFy" <${user}>`,
         to: body.to,
         subject: body.subject,
         text: body.text || "",
         html: body.html || "",
-      });
+      };
+
+      // Add PDF attachment if provided
+      if (body.attachment) {
+        mailOptions.attachments = [{
+          filename: 'factura.pdf',
+          content: body.attachment,
+          contentType: 'application/pdf'
+        }];
+      }
+
+      info = await transporter.sendMail(mailOptions);
     } catch (e) {
       console.error("Error sending email:", e);
       return new Response(

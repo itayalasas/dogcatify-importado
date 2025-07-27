@@ -43,6 +43,7 @@ export const NotificationService = {
           subject,
           text,
           html,
+          attachment,
         }),
       });
       
