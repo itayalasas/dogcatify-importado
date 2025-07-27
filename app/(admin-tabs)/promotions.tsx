@@ -431,1527 +431,187 @@ export default function AdminPromotions() {
 
     setBillingLoading(true);
     try {
+      console.log('=== BILLING EMAIL DEBUG ===');
+      console.log('Selected promotion:', selectedPromotionForBilling.title);
+      console.log('Clicks:', selectedPromotionForBilling.clicks);
+      
+      // Calculate billing amount
       const totalClicks = selectedPromotionForBilling.clicks || 0;
-      const costPerClickNum = parseFloat(costPerClick);
+      const costPerClickNum = parseFloat(costPerClick) || 100;
       const totalAmount = totalClicks * costPerClickNum;
+      
+      console.log('Total amount calculated:', totalAmount);
+      
+      // Generate PDF content (simple HTML that can be converted to PDF)
+      const pdfContent = generateInvoicePDF(selectedPromotionForBilling, totalClicks, costPerClickNum, totalAmount, 'billing@example.com');
+      console.log('PDF content generated');
 
-      // Generate invoice number
-      const invoiceNumber = `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
-
-      const billingData = {
-        promotion_id: selectedPromotionForBilling.id,
-        partner_id: selectedPromotionForBilling.partnerId,
-        total_clicks: totalClicks,
-        cost_per_click: costPerClickNum,
-        total_amount: totalAmount,
-        billing_period_start: selectedPromotionForBilling.startDate.toISOString(),
-        billing_period_end: selectedPromotionForBilling.endDate.toISOString(),
-        status: 'pending',
-        invoice_number: invoiceNumber,
-        notes: billingNotes.trim() || null,
-        created_by: currentUser?.id,
-        created_at: new Date().toISOString()
-      };
-
-      const { error } = await supabaseClient
-        .from('promotion_billing')
-        .insert([billingData]);
-
-      if (error) {
-        console.error('Billing creation error:', error);
-        Alert.alert('Error', `No se pudo crear la factura: ${error.message}`);
-        return;
+      // Send email with PDF attachment
+      const emailResult = await sendBillingEmail('billing@example.com', selectedPromotionForBilling, pdfContent, totalAmount);
+      
+      if (emailResult.success) {
+        // Save billing record to database
+        await saveBillingRecord(selectedPromotionForBilling, totalClicks, costPerClickNum, totalAmount, 'billing@example.com');
+        
+        Alert.alert(
+          'Factura enviada',
+          `Se ha enviado la factura por $${totalAmount.toLocaleString()} a billing@example.com`
+        );
+        
+        setSelectedPromotionForBilling(null);
+        setShowBillingModal(false);
+      } else {
+        throw new Error(emailResult.error || 'Error al enviar el email');
       }
-
-      Alert.alert(
-        'Factura creada',
-        `Factura ${invoiceNumber} creada exitosamente.\nTotal: $${totalAmount.toLocaleString()} (${totalClicks} clicks × $${costPerClickNum})`,
-        [{ text: 'OK' }]
-      );
-
-      setShowBillingModal(false);
-      setSelectedPromotionForBilling(null);
     } catch (error) {
-      console.error('Error creating billing:', error);
-      Alert.alert('Error', 'No se pudo crear la factura');
+      console.error('Error sending billing email:', error);
+      Alert.alert('Error', 'No se pudo enviar la factura: ' + error.message);
     } finally {
       setBillingLoading(false);
     }
   };
-
-  // Check if user is admin
-  const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
   
-  if (!currentUser) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.accessDenied}>
-          <Text style={styles.accessDeniedTitle}>Cargando...</Text>
-          <Text style={styles.accessDeniedText}>
-            Verificando permisos de usuario
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!isAdmin) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.accessDenied}>
-          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
-          <Text style={styles.accessDeniedText}>
-            Solo los administradores pueden gestionar promociones
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-  function isPromotionActive(startDate: Date, endDate: Date) {
-    const now = new Date();
-    return now >= startDate && now <= endDate;
-  }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Promociones</Text>
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={() => setShowPromotionModal(true)}
-        >
-          <Plus size={20} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
-      <ScrollView style={styles.content}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Promociones activas</Text>
-          {promotions.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Megaphone size={32} color="#DC2626" />
-              <Text style={styles.emptyTitle}>No hay promociones</Text>
-              <Text style={styles.emptySubtitle}>Crea una promoción para los usuarios</Text>
-            </View>
-          ) : (
-            promotions.map((promotion) => (
-              <Card key={promotion.id} style={styles.promotionCard}>
-                <View style={styles.promotionHeader}>
-                  <View style={styles.promotionInfo}>
-                    <Text style={styles.promotionTitle}>{promotion.title}</Text>
-                    {promotion.partnerInfo && (
-                      <View style={styles.partnerInfo}>
-                        <Text style={styles.partnerIcon}>
-                          {getBusinessTypeIcon(promotion.partnerInfo.businessType)}
-                        </Text>
-                        <Text style={styles.partnerName}>{promotion.partnerInfo.businessName}</Text>
-                      </View>
-                    )}
-                    <Text style={styles.promotionAudience}>
-                      Audiencia: {promotion.targetAudience}
-                    </Text>
-                  </View>
-                  <View style={styles.promotionStatus}>
-                    <View style={[
-                      styles.statusBadge,
-                      { backgroundColor: promotion.isActive ? '#DCFCE7' : '#F3F4F6' }
-                    ]}>
-                      <Text style={[
-                        styles.statusText,
-                        { color: promotion.isActive ? '#22C55E' : '#6B7280' }
-                      ]}>
-                        {promotion.isActive ? 'Activa' : 'Inactiva'}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-                <Image source={{ uri: promotion.imageURL }} style={styles.promotionImage} />
-                <Text style={styles.promotionDescription}>{promotion.description}</Text>
-                <View style={styles.promotionDetails}>
-                  <View style={styles.promotionDetail}>
-                    <Calendar size={16} color="#6B7280" />
-                    <Text style={styles.promotionDetailText}>
-                      {promotion.startDate.toLocaleDateString()} - {promotion.endDate.toLocaleDateString()}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.promotionStats}>
-                  <View style={styles.promotionStat}>
-                    <Eye size={16} color="#6B7280" />
-                    <Text style={styles.promotionStatText}>{promotion.views || 0}</Text>
-                  </View>
-                  <View style={styles.promotionStat}>
-                    <Target size={16} color="#6B7280" />
-                    <Text style={styles.promotionStatText}>{promotion.clicks || 0}</Text>
-                  </View>
-                </View>
-                <View style={styles.promotionActions}>
-                  <Button
-                    title={promotion.isActive && isPromotionActive(promotion.startDate, promotion.endDate) ? 'Desactivar' : 'Activar'}
-                    onPress={() => handleTogglePromotion(promotion.id, promotion.isActive)}
-                    variant={promotion.isActive && isPromotionActive(promotion.startDate, promotion.endDate) ? 'outline' : 'primary'}
-                    size="medium"
-                  />
-                  
-                  {/* Billing button for promotions with partner */}
-                  {promotion.partnerId && (
-                    <TouchableOpacity
-                      style={styles.billingButton}
-                      onPress={() => handleGenerateBilling(promotion)}
-                    >
-                      <DollarSign size={16} color="#10B981" />
-                      <Text style={styles.billingButtonText}>
-                        Facturar ({promotion.clicks || 0} clicks)
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </Card>
-            ))
-          )}
-        </View>
-      </ScrollView>
-
-      {/* Promotion Modal */}
-      <Modal
-        visible={showPromotionModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPromotionModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <ScrollView contentContainerStyle={styles.modalScrollContent}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Crear Nueva Promoción</Text>
-              
-              <Input
-                label="Título de la promoción"
-                placeholder="Ej: ¡Descuento especial en servicios para mascotas!"
-                value={promoTitle}
-                onChangeText={setPromoTitle}
-              />
-              
-              <Input
-                label="Descripción"
-                placeholder="Describe la promoción detalladamente..."
-                value={promoDescription}
-                onChangeText={setPromoDescription}
-                multiline
-                numberOfLines={4}
-              />
-
-              {/* Partner Selector */}
-              <View style={styles.partnerSection}>
-                <Text style={styles.partnerLabel}>Aliado (opcional)</Text>
-                <Text style={styles.partnerDescription}>
-                  Selecciona un aliado específico para esta promoción
-                </Text>
-                
-                <TouchableOpacity 
-                  style={styles.partnerSelector}
-                  onPress={() => setShowPartnerSelector(true)}
-                >
-                  {getSelectedPartner() ? (
-                    <View style={styles.selectedPartnerInfo}>
-                      <Text style={styles.selectedPartnerIcon}>
-                        {getBusinessTypeIcon(getSelectedPartner()!.businessType)}
-                      </Text>
-                      <View style={styles.selectedPartnerDetails}>
-                        <Text style={styles.selectedPartnerName}>
-                          {getSelectedPartner()!.businessName}
-                        </Text>
-                        <Text style={styles.selectedPartnerType}>
-                          {getSelectedPartner()!.businessType}
-                        </Text>
-                      </View>
-                    </View>
-                  ) : (
-                    <Text style={styles.partnerSelectorPlaceholder}>
-                      Seleccionar aliado (opcional)
-                    </Text>
-                  )}
-                </TouchableOpacity>
-                
-                {getSelectedPartner() && (
-                  <TouchableOpacity 
-                    style={styles.clearPartnerButton}
-                    onPress={() => {
-                      setSelectedPartnerId(null);
-                      setPartnerSearchQuery('');
-                    }}
-                  >
-                    <Text style={styles.clearPartnerText}>Quitar aliado</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              
-              {/* Link Configuration */}
-              <View style={styles.linkSection}>
-                <Text style={styles.linkLabel}>Enlace de la promoción</Text>
-                <Text style={styles.linkDescription}>
-                  Configura hacia dónde dirigir a los usuarios cuando toquen la promoción
-                </Text>
-                
-                <View style={styles.linkTypeSelector}>
-                  <TouchableOpacity
-                    style={[
-                      styles.linkTypeOption,
-                      promoLinkType === 'none' && styles.selectedLinkType
-                    ]}
-                    onPress={() => setPromoLinkType('none')}
-                  >
-                    <Text style={[
-                      styles.linkTypeText,
-                      promoLinkType === 'none' && styles.selectedLinkTypeText
-                    ]}>
-                      Sin enlace
-                    </Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    style={[
-                      styles.linkTypeOption,
-                      promoLinkType === 'external' && styles.selectedLinkType
-                    ]}
-                    onPress={() => setPromoLinkType('external')}
-                  >
-                    <Text style={[
-                      styles.linkTypeText,
-                      promoLinkType === 'external' && styles.selectedLinkTypeText
-                    ]}>
-                      Sitio web
-                    </Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    style={[
-                      styles.linkTypeOption,
-                      promoLinkType === 'internal' && styles.selectedLinkType
-                    ]}
-                    onPress={() => setPromoLinkType('internal')}
-                  >
-                    <Text style={[
-                      styles.linkTypeText,
-                      promoLinkType === 'internal' && styles.selectedLinkTypeText
-                    ]}>
-                      Dentro de la app
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                
-                {promoLinkType === 'external' && (
-                  <Input
-                    label="URL del sitio web"
-                    placeholder="https://ejemplo.com"
-                    value={promoUrl}
-                    onChangeText={setPromoUrl}
-                    keyboardType="url"
-                    autoCapitalize="none"
-                  />
-                )}
-                
-                {promoLinkType === 'internal' && (
-                  <View style={styles.internalLinkSection}>
-                    <Text style={styles.internalLinkLabel}>Tipo de contenido</Text>
-                    <View style={styles.internalTypeSelector}>
-                      <TouchableOpacity
-                        style={[
-                          styles.internalTypeOption,
-                          internalLinkType === 'partner' && styles.selectedInternalType
-                        ]}
-                        onPress={() => setInternalLinkType('partner')}
-                      >
-                        <Text style={[
-                          styles.internalTypeText,
-                          internalLinkType === 'partner' && styles.selectedInternalTypeText
-                        ]}>
-                          Aliado
-                        </Text>
-                      </TouchableOpacity>
-                      
-                      <TouchableOpacity
-                        style={[
-                          styles.internalTypeOption,
-                          internalLinkType === 'service' && styles.selectedInternalType
-                        ]}
-                        onPress={() => setInternalLinkType('service')}
-                      >
-                        <Text style={[
-                          styles.internalTypeText,
-                          internalLinkType === 'service' && styles.selectedInternalTypeText
-                        ]}>
-                          Servicio
-                        </Text>
-                      </TouchableOpacity>
-                      
-                      <TouchableOpacity
-                        style={[
-                          styles.internalTypeOption,
-                          internalLinkType === 'product' && styles.selectedInternalType
-                        ]}
-                        onPress={() => setInternalLinkType('product')}
-                      >
-                        <Text style={[
-                          styles.internalTypeText,
-                          internalLinkType === 'product' && styles.selectedInternalTypeText
-                        ]}>
-                          Producto
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                    
-                    {internalItems.length > 0 && (
-                      <View style={styles.internalItemsContainer}>
-                        <Text style={styles.internalItemsLabel}>
-                          Seleccionar {internalLinkType === 'partner' ? 'aliado' : 
-                                     internalLinkType === 'service' ? 'servicio' : 'producto'}
-                        </Text>
-                        <ScrollView style={styles.internalItemsList} showsVerticalScrollIndicator={false}>
-                          {internalItems.map((item) => (
-                            <TouchableOpacity
-                              key={item.id}
-                              style={[
-                                styles.internalItem,
-                                selectedInternalId === item.id && styles.selectedInternalItem
-                              ]}
-                              onPress={() => setSelectedInternalId(item.id)}
-                            >
-                              <View style={styles.internalItemInfo}>
-                                <Text style={styles.internalItemName}>
-                                  {item.name || item.business_name}
-                                </Text>
-                                {item.partners && (
-                                  <Text style={styles.internalItemPartner}>
-                                    {item.partners.business_name}
-                                  </Text>
-                                )}
-                                {item.price && (
-                                  <Text style={styles.internalItemPrice}>
-                                    ${item.price.toLocaleString()}
-                                  </Text>
-                                )}
-                              </View>
-                              {selectedInternalId === item.id && (
-                                <Text style={styles.selectedIndicator}>✓</Text>
-                              )}
-                            </TouchableOpacity>
-                          ))}
-                        </ScrollView>
-                      </View>
-                    )}
-                  </View>
-                )}
-              </View>
-              
-              <View style={styles.imageSection}>
-                <Text style={styles.imageLabel}>Imagen promocional *</Text>
-                
-                {promoImage ? (
-                  <View style={styles.imagePreviewContainer}>
-                    <Image source={{ uri: promoImage }} style={styles.selectedImage} />
-                    <TouchableOpacity 
-                      style={styles.changeImageButton}
-                      onPress={() => setPromoImage(null)}
-                    >
-                      <Text style={styles.changeImageText}>Cambiar imagen</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <View style={styles.imageActions}>
-                    <TouchableOpacity style={styles.imageActionButton} onPress={handleTakePhoto}>
-                      <Text style={styles.imageActionText}>📷 Tomar foto</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.imageActionButton} onPress={handleSelectImage}>
-                      <Text style={styles.imageActionText}>🖼️ Galería</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-                
-                <Text style={styles.imageHint}>
-                  Recomendado: 1080x1080px o 16:9 para mejor visualización
-                </Text>
-              </View>
-              
-              <Input
-                label="Fecha de inicio"
-                placeholder="2025-01-01"
-                value={promoStartDate}
-                onChangeText={setPromoStartDate}
-                leftIcon={<Calendar size={20} color="#6B7280" />}
-              />
-              
-              <Input
-                label="Fecha de fin"
-                placeholder="2025-01-31"
-                value={promoEndDate}
-                onChangeText={setPromoEndDate}
-                leftIcon={<Calendar size={20} color="#6B7280" />}
-              />
-
-              <View style={styles.audienceSection}>
-                <Text style={styles.audienceLabel}>Audiencia objetivo</Text>
-                <Text style={styles.audienceDescription}>
-                  Selecciona quién verá esta promoción en su feed
-                </Text>
-                <View style={styles.audienceOptions}>
-                  {[
-                    { value: 'all', label: 'Todos los usuarios' },
-                    { value: 'users', label: 'Solo usuarios' },
-                    { value: 'partners', label: 'Solo aliados' }
-                  ].map((option) => (
-                    <TouchableOpacity
-                      key={option.value}
-                      style={[
-                        styles.audienceOption,
-                        promoTargetAudience === option.value && styles.selectedAudience
-                      ]}
-                      onPress={() => setPromoTargetAudience(option.value)}
-                    >
-                      <Text style={[
-                        styles.audienceOptionText,
-                        promoTargetAudience === option.value && styles.selectedAudienceText
-                      ]}>
-                        {option.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-              
-              <View style={styles.modalActions}>
-                <View style={styles.modalButtonsContainer}>
-                  <TouchableOpacity 
-                    style={styles.cancelModalButton}
-                    onPress={() => {
-                      setShowPromotionModal(false);
-                      setPromoTitle('');
-                      setPromoDescription('');
-                      setPromoImage(null);
-                      setPromoStartDate('');
-                      setPromoEndDate('');
-                      setPromoTargetAudience('all');
-                      setSelectedPartnerId(null);
-                      setPartnerSearchQuery('');
-                    }}
-                  >
-                    <Text style={styles.cancelModalButtonText}>Cancelar</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity 
-                    style={[styles.createModalButton, loading && styles.disabledButton]}
-                    onPress={handleCreatePromotion}
-                    disabled={loading}
-                  >
-                    <Text style={styles.createModalButtonText}>
-                      {loading ? 'Creando...' : 'Crear Promoción'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </ScrollView>
-        </View>
-      </Modal>
-
-      {/* Partner Selector Modal */}
-      <Modal
-        visible={showPartnerSelector}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPartnerSelector(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.partnerModalContent}>
-            <View style={styles.partnerModalHeader}>
-              <Text style={styles.partnerModalTitle}>Seleccionar Aliado</Text>
-              <TouchableOpacity onPress={() => setShowPartnerSelector(false)}>
-                <Text style={styles.partnerModalClose}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <Input
-              placeholder="Buscar aliado por nombre o tipo..."
-              value={partnerSearchQuery}
-              onChangeText={setPartnerSearchQuery}
-              leftIcon={<Search size={20} color="#9CA3AF" />}
-            />
-            
-            <ScrollView style={styles.partnersList} showsVerticalScrollIndicator={false}>
-              {getFilteredPartners().length === 0 ? (
-                <View style={styles.noPartnersContainer}>
-                  <Text style={styles.noPartnersText}>
-                    {partnerSearchQuery ? 'No se encontraron aliados' : 'No hay aliados disponibles'}
-                  </Text>
-                </View>
-              ) : (
-                getFilteredPartners().map((partner) => (
-                  <TouchableOpacity
-                    key={partner.id}
-                    style={[
-                      styles.partnerItem,
-                      selectedPartnerId === partner.id && styles.selectedPartnerItem
-                    ]}
-                    onPress={() => {
-                      setSelectedPartnerId(partner.id);
-                      setShowPartnerSelector(false);
-                      setPartnerSearchQuery('');
-                    }}
-                  >
-                    <View style={styles.partnerItemInfo}>
-                      <Text style={styles.partnerItemIcon}>
-                        {getBusinessTypeIcon(partner.businessType)}
-                      </Text>
-                      <View style={styles.partnerItemDetails}>
-                        <Text style={styles.partnerItemName}>
-                          {partner.businessName}
-                        </Text>
-                        <Text style={styles.partnerItemType}>
-                          {partner.businessType}
-                        </Text>
-                      </View>
-                    </View>
-                    {selectedPartnerId === partner.id && (
-                      <Text style={styles.selectedIndicator}>✓</Text>
-                    )}
-                  </TouchableOpacity>
-                ))
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Billing Modal */}
-      <Modal
-        visible={showBillingModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowBillingModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <ScrollView contentContainerStyle={styles.billingModalScrollContent}>
-            <View style={styles.billingModalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Generar Factura</Text>
-                <TouchableOpacity onPress={() => setShowBillingModal(false)}>
-                  <Text style={styles.partnerModalClose}>✕</Text>
-                </TouchableOpacity>
-              </View>
-
-              {selectedPromotionForBilling && (
-                <View style={styles.billingInfo}>
-                  <Text style={styles.billingInfoTitle}>
-                    {selectedPromotionForBilling.title}
-                  </Text>
-                  
-                  <View style={styles.billingStats}>
-                    <View style={styles.billingStat}>
-                      <Text style={styles.billingStatLabel}>Total de clicks:</Text>
-                      <Text style={styles.billingStatValue}>
-                        {selectedPromotionForBilling.clicks || 0}
-                      </Text>
-                    </View>
-                    
-                    <View style={styles.billingStat}>
-                      <Text style={styles.billingStatLabel}>Período:</Text>
-                      <Text style={styles.billingStatValue}>
-                        {selectedPromotionForBilling.startDate.toLocaleDateString()} - {selectedPromotionForBilling.endDate.toLocaleDateString()}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Input
-                    label="Costo por click ($)"
-                    placeholder="100"
-                    value={costPerClick}
-                    onChangeText={setCostPerClick}
-                    keyboardType="numeric"
-                    leftIcon={<DollarSign size={20} color="#6B7280" />}
-                  />
-
-                  <View style={styles.totalCalculation}>
-                    <Text style={styles.totalLabel}>Total a facturar:</Text>
-                    <Text style={styles.totalAmount}>
-                      ${((selectedPromotionForBilling.clicks || 0) * parseFloat(costPerClick || '0')).toLocaleString()}
-                    </Text>
-                  </View>
-
-                  <Input
-                    label="Notas (opcional)"
-                    placeholder="Observaciones sobre la facturación..."
-                    value={billingNotes}
-                    onChangeText={setBillingNotes}
-                    multiline
-                    numberOfLines={3}
-                  />
-
-                  <View style={styles.billingModalActions}>
-                    <TouchableOpacity
-                      style={styles.billingCancelButton}
-                      onPress={() => setShowBillingModal(false)}
-                    >
-                      <Text style={styles.billingCancelButtonText}>Cancelar</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.billingCreateButton, billingLoading && styles.disabledButton]}
-                      onPress={handleCreateBilling}
-                      disabled={billingLoading}
-                    >
-                      <Text style={styles.billingCreateButtonText}>
-                        {billingLoading ? 'Creando...' : 'Crear Factura'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-            </View>
-          </ScrollView>
-        </View>
-      </Modal>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 50,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  title: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-  },
-  addButton: {
-    backgroundColor: '#DC2626',
-    padding: 8,
-    borderRadius: 20,
-  },
-  content: {
-    flex: 1,
-  },
-  statsCard: {
-    margin: 16,
-    marginBottom: 8,
-  },
-  statsTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#DC2626',
-  },
-  statLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  promotionCard: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-  },
-  promotionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  promotionInfo: {
-    flex: 1,
-  },
-  promotionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  partnerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  partnerIcon: {
-    fontSize: 14,
-    marginRight: 6,
-  },
-  partnerName: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-  },
-  promotionAudience: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  promotionStatus: {
-    alignItems: 'flex-end',
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-  },
-  promotionImage: {
-    width: '100%',
-    height: 120,
-    borderRadius: 8,
-    marginBottom: 12,
-    resizeMode: 'cover',
-  },
-  promotionDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  promotionDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  promotionDetail: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  promotionDetailText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 4,
-  },
-  promotionStats: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  promotionStat: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  promotionStatText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginLeft: 4,
-  },
-  promotionActions: {
-    alignItems: 'flex-end',
-  },
-  emptyCard: {
-    marginHorizontal: 16,
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 4,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  modalScrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 40,
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    width: '100%',
-    maxWidth: 400,
-    alignSelf: 'center',
-  },
-  billingModalScrollContent: {
-    flexGrow: 1,
-    justifyContent: 'flex-start',
-    paddingHorizontal: 20,
-    paddingVertical: 60,
-  },
-  billingModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    width: '100%',
-    maxWidth: 400,
-    alignSelf: 'center',
-    marginBottom: 40,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  partnerSection: {
-    marginBottom: 16,
-  },
-  partnerLabel: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 4,
-  },
-  partnerDescription: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 12,
-  },
-  partnerSelector: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    backgroundColor: '#FFFFFF',
-    minHeight: 50,
-  },
-  selectedPartnerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  selectedPartnerIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  selectedPartnerDetails: {
-    flex: 1,
-  },
-  selectedPartnerName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  selectedPartnerType: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  partnerSelectorPlaceholder: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-  },
-  clearPartnerButton: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-  },
-  clearPartnerText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#EF4444',
-  },
-  partnerModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    marginTop: 100,
-    flex: 1,
-  },
-  partnerModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  partnerModalTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-  },
-  partnerModalClose: {
-    fontSize: 18,
-    color: '#6B7280',
-    padding: 4,
-  },
-  partnersList: {
-    flex: 1,
-    marginTop: 16,
-  },
-  noPartnersContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  noPartnersText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  partnerItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  selectedPartnerItem: {
-    backgroundColor: '#EBF8FF',
-    borderColor: '#3B82F6',
-    borderWidth: 1,
-  },
-  partnerItemInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  partnerItemIcon: {
-    fontSize: 24,
-    marginRight: 12,
-  },
-  partnerItemDetails: {
-    flex: 1,
-  },
-  partnerItemName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  partnerItemType: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  selectedIndicator: {
-    fontSize: 18,
-    color: '#3B82F6',
-    fontWeight: 'bold',
-  },
-  imageSection: {
-    marginBottom: 16,
-  },
-  imageLabel: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  imagePreviewContainer: {
-    marginBottom: 12,
-  },
-  selectedImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  changeImageButton: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    alignSelf: 'center',
-  },
-  changeImageText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
-  },
-  imageActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-    gap: 12,
-  },
-  imageActionButton: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 40,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    borderStyle: 'dashed',
-  },
-  imageActionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  imageHint: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    marginTop: 8,
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  audienceSection: {
-    marginBottom: 20,
-  },
-  audienceLabel: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  audienceDescription: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 12,
-    lineHeight: 18,
-  },
-  audienceOptions: {
-    gap: 8,
-  },
-  audienceOption: {
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  selectedAudience: {
-    backgroundColor: '#DC2626',
-    borderColor: '#DC2626',
-  },
-  audienceOptionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  selectedAudienceText: {
-    color: '#FFFFFF',
-  },
-  modalActions: {
-    marginTop: 20,
-  },
-  modalButtonsContainer: {
-    flexDirection: 'column',
-    gap: 12,
-    width: '100%',
-  },
-  cancelModalButton: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#DC2626',
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    width: '100%',
-  },
-  cancelModalButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#DC2626',
-  },
-  createModalButton: {
-    backgroundColor: '#DC2626',
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    width: '100%',
-  },
-  createModalButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
-  },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  // Billing modal specific styles
-  promotionSummary: {
-    backgroundColor: '#F8FAFC',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  promotionSummaryTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  promotionSummaryStats: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  billingCalculation: {
-    backgroundColor: '#F0FDF4',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: '#10B981',
-  },
-  billingCalculationTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#166534',
-    marginBottom: 8,
-  },
-  billingCalculationText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#166534',
-    marginBottom: 4,
-  },
-  billingCalculationTotal: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#166534',
-    marginTop: 8,
-  },
-  billingModalActions: {
-    flexDirection: 'column',
-    gap: 12,
-    marginTop: 20,
-    paddingBottom: 20,
-  },
-  billingCancelButton: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#6B7280',
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    width: '100%',
-  },
-  billingCancelButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-  },
-  billingCreateButton: {
-    backgroundColor: '#10B981',
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    width: '100%',
-  },
-  billingCreateButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
-  },
-  billingButton: {
-    marginTop: 8,
-  },
-  billingModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  billingModalTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-  },
-  billingForm: {
-    flex: 1,
-    marginBottom: 20,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  summaryLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  summaryValue: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  totalSection: {
-    backgroundColor: '#D1FAE5',
-    padding: 16,
-    borderRadius: 12,
-    marginVertical: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  totalLabel: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#065F46',
-  },
-  totalAmount: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#065F46',
-  },
-  linkSection: {
-    marginBottom: 20,
-  },
-  linkLabel: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 4,
-  },
-  linkDescription: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 12,
-  },
-  linkTypeSelector: {
-    flexDirection: 'row',
-    marginBottom: 16,
-    gap: 8,
-  },
-  linkTypeOption: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    alignItems: 'center',
-  },
-  selectedLinkType: {
-    backgroundColor: '#DC2626',
-    borderColor: '#DC2626',
-  },
-  linkTypeText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-  },
-  selectedLinkTypeText: {
-    color: '#FFFFFF',
-  },
-  internalLinkSection: {
-    marginTop: 16,
-  },
-  internalLinkLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  internalTypeSelector: {
-    flexDirection: 'row',
-    marginBottom: 16,
-    gap: 8,
-  },
-  internalTypeOption: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    alignItems: 'center',
-  },
-  selectedInternalType: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
-  },
-  internalTypeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-  },
-  selectedInternalTypeText: {
-    color: '#FFFFFF',
-  },
-  internalItemsContainer: {
-    marginTop: 12,
-  },
-  internalItemsLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  internalItemsList: {
-    maxHeight: 200,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-  },
-  internalItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  selectedInternalItem: {
-    backgroundColor: '#EBF8FF',
-  },
-  internalItemInfo: {
-    flex: 1,
-  },
-  internalItemName: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 2,
-  },
-  internalItemPartner: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  internalItemPrice: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#10B981',
-  },
-  accessDenied: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  accessDeniedTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#EF4444',
-    marginBottom: 8,
-  },
-  accessDeniedText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  billingButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0FDF4',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginTop: 8,
-    alignSelf: 'flex-start',
-  },
-  billingButtonText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#10B981',
-    marginLeft: 4,
-  },
-  billingInfo: {
-    marginBottom: 20,
-  },
-  billingInfoTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  billingStats: {
-    backgroundColor: '#F8FAFC',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  billingStat: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  billingStatLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  billingStatValue: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  totalCalculation: {
-    backgroundColor: '#F0FDF4',
-    padding: 16,
-    borderRadius: 12,
-    marginVertical: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  billingActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-});
+  const generateInvoicePDF = (promotion: any, clicks: number, costPerClick: number, totalAmount: number, clientEmail: string) => {
+    const invoiceNumber = `INV-${Date.now()}`;
+    const currentDate = new Date().toLocaleDateString('es-ES');
+    
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Factura - DogCatiFy</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #2D6A6F; padding-bottom: 20px; }
+          .company-name { font-size: 24px; font-weight: bold; color: #2D6A6F; margin-bottom: 5px; }
+          .invoice-title { font-size: 20px; margin-top: 15px; }
+          .invoice-info { display: flex; justify-content: space-between; margin: 20px 0; }
+          .client-info, .invoice-details { width: 45%; }
+          .section-title { font-weight: bold; margin-bottom: 10px; color: #2D6A6F; }
+          .table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+          .table th, .table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+          .table th { background-color: #f8f9fa; font-weight: bold; }
+          .total-row { background-color: #f0f9ff; font-weight: bold; }
+          .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="company-name">DogCatiFy</div>
+          <div>Plataforma de Servicios para Mascotas</div>
+          <div class="invoice-title">FACTURA DE PROMOCIÓN</div>
+        </div>
+        
+        <div class="invoice-info">
+          <div class="client-info">
+            <div class="section-title">Facturar a:</div>
+            <div>${clientEmail}</div>
+            <div>Promoción: ${promotion.title}</div>
+          </div>
+          <div class="invoice-details">
+            <div class="section-title">Detalles de Factura:</div>
+            <div>Número: ${invoiceNumber}</div>
+            <div>Fecha: ${currentDate}</div>
+            <div>Período: ${promotion.startDate} - ${promotion.endDate}</div>
+          </div>
+        </div>
+        
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Descripción</th>
+              <th>Cantidad</th>
+              <th>Precio Unitario</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Clicks en promoción "${promotion.title}"</td>
+              <td>${clicks}</td>
+              <td>$${costPerClick.toLocaleString()}</td>
+              <td>$${totalAmount.toLocaleString()}</td>
+            </tr>
+            <tr class="total-row">
+              <td colspan="3"><strong>TOTAL A PAGAR</strong></td>
+              <td><strong>$${totalAmount.toLocaleString()}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <div class="footer">
+          <p>DogCatiFy - Plataforma de Servicios para Mascotas</p>
+          <p>Esta factura fue generada automáticamente el ${currentDate}</p>
+        </div>
+      </body>
+      </html>
+    `;
+  };
+  
+  const sendBillingEmail = async (email: string, promotion: any, pdfContent: string, totalAmount: number) => {
+    try {
+      console.log('Sending billing email to:', email);
+      
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      const apiUrl = `${supabaseUrl}/functions/v1/send-email`;
+      
+      const emailData = {
+        to: email,
+        subject: `Factura de Promoción - ${promotion.title}`,
+        text: `Adjunto encontrarás la factura por la promoción "${promotion.title}" por un total de $${totalAmount.toLocaleString()}.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background-color: #2D6A6F; padding: 20px; text-align: center;">
+              <h1 style="color: white; margin: 0;">Factura de Promoción</h1>
+            </div>
+            <div style="padding: 20px; background-color: #f9f9f9;">
+              <p>Estimado cliente,</p>
+              <p>Adjunto encontrarás la factura correspondiente a la promoción <strong>"${promotion.title}"</strong>.</p>
+              <div style="background-color: white; border-left: 4px solid #2D6A6F; padding: 15px; margin: 20px 0;">
+                <p><strong>Promoción:</strong> ${promotion.title}</p>
+                <p><strong>Total de clicks:</strong> ${promotion.clicks || 0}</p>
+                <p><strong>Monto total:</strong> $${totalAmount.toLocaleString()}</p>
+              </div>
+              <p>Gracias por utilizar DogCatiFy para promocionar tu negocio.</p>
+              <p>Saludos cordiales,<br>El equipo de DogCatiFy</p>
+            </div>
+          </div>
+        `,
+        attachment: pdfContent // Send HTML content as attachment
+      };
+      
+      console.log('Making API call to:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+        },
+        body: JSON.stringify(emailData),
+      });
+      
+      console.log('Email API response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Email API error:', errorText);
+        throw new Error(`Error ${response.status}: ${errorText}`);
+      }
+      
+      const result = await response.json();
+      console.log('Email sent successfully:', result);
+      
+      return { success: true, result };
+    } catch (error) {
+      console.error('Error in sendBillingEmail:', error);
+      return { success: false, error: error.message };
+    }
+  };
+  
+  const saveBillingRecord = async (promotion: any, clicks: number, costPerClick: number, totalAmount: number, email: string) => {
+    try {
+      const billingData = {
+        promotion_
