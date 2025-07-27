@@ -49,6 +49,11 @@ export default function AdminPromotions() {
     return '🏢';
   }
 
+  function isPromotionActive(startDate: Date, endDate: Date) {
+    const now = new Date();
+    return now >= startDate && now <= endDate;
+  }
+
   useEffect(() => {
     if (!currentUser) return;
     const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
@@ -209,21 +214,11 @@ export default function AdminPromotions() {
           ? { ...promo, isActive: !isActive }
           : promo
       ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
       const { error } = await supabaseClient
         .from('promotions')
         .update({ is_active: !isActive })
         .eq('id', promotionId);
       if (error) {
-        // Revierte el estado local si falla la actualización
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
         // Revert local state if database update fails
         setPromotions(prev => prev.map(promo => 
           promo.id === promotionId 
@@ -232,6 +227,35 @@ export default function AdminPromotions() {
         ));
         throw error;
       }
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo actualizar la promoción');
+    }
+  };
+
+  if (!currentUser || currentUser.email?.toLowerCase() !== 'admin@dogcatify.com') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.accessDenied}>
+          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
+          <Text style={styles.accessDeniedText}>
+            No tienes permisos para acceder a esta sección
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Promociones</Text>
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={() => setShowPromotionModal(true)}
+        >
+          <Plus size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
 
       <ScrollView style={styles.content}>
         <View style={styles.section}>
@@ -560,6 +584,7 @@ export default function AdminPromotions() {
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
