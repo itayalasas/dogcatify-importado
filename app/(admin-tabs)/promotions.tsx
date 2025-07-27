@@ -32,6 +32,12 @@ export default function AdminPromotions() {
 
   // Billing state
   const [showBillingModal, setShowBillingModal] = useState(false);
+  const [selectedPromotion, setSelectedPromotion] = useState<any>(null);
+  const [costPerClick, setCostPerClick] = useState('5');
+  const [billingNotes, setBillingNotes] = useState('');
+  const [billingLoading, setBillingLoading] = useState(false);
+  // Billing state
+  const [showBillingModal, setShowBillingModal] = useState(false);
   const [selectedPromotionForBilling, setSelectedPromotionForBilling] = useState<any>(null);
   const [costPerClick, setCostPerClick] = useState('100');
   const [billingNotes, setBillingNotes] = useState('');
