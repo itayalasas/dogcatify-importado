@@ -9,12 +9,6 @@ import { supabaseClient } from '../../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function AdminPromotions() {
-  const { currentUser } = useAuth();
-  const [promotions, setPromotions] = useState<any[]>([]);
-  const [showPromotionModal, setShowPromotionModal] = useState(false);
-  const [showPartnerSelector, setShowPartnerSelector] = useState(false);
-  const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
-  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
 
   // Promotion form
   const [promoTitle, setPromoTitle] = useState('');
