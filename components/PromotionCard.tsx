@@ -203,20 +203,6 @@ export default function AdminPromotions() {
       Alert.alert('Error', 'No se pudo crear la promoción');
     } finally {
       setLoading(false);
-            <TouchableOpacity 
-              style={styles.likeButton}
-              onPress={handleLike}
-            >
-              <Heart 
-                size={20} 
-                color={isLiked ? "#ff3040" : "#666"} 
-                fill={isLiked ? "#ff3040" : "none"}
-              />
-              <Text style={[styles.likeText, isLiked && styles.likedText]}>
-                {likesCount}
-              </Text>
-            </TouchableOpacity>
-          </View>
     }
   };
 
