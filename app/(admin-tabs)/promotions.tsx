@@ -23,13 +23,14 @@ export default function AdminPromotions() {
   const [promoStartDate, setPromoStartDate] = useState('');
   const [promoEndDate, setPromoEndDate] = useState('');
   const [promoTargetAudience, setPromoTargetAudience] = useState('all');
+  const [promoUrl, setPromoUrl] = useState('');
+  const [promoLinkType, setPromoLinkType] = useState<'external' | 'internal' | 'none'>('none');
+  const [internalLinkType, setInternalLinkType] = useState<'service' | 'product' | 'partner'>('partner');
+  const [selectedInternalId, setSelectedInternalId] = useState<string | null>(null);
+  const [internalItems, setInternalItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Dummy partners for selector (replace with your fetch logic)
-  const partners = [
-    { id: '1', businessName: 'PetShop', businessType: 'Tienda', logo: '' },
-    { id: '2', businessName: 'VetClinic', businessType: 'Veterinaria', logo: '' },
-  ];
+  const [partners, setPartners] = useState<any[]>([]);
 
   function getSelectedPartner() {
     return partners.find(p => p.id === selectedPartnerId) || null;
@@ -54,7 +55,87 @@ export default function AdminPromotions() {
     const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
     if (!isAdmin) return;
     fetchPromotions();
+    fetchPartners();
   }, [currentUser]);
+
+  useEffect(() => {
+    if (promoLinkType === 'internal') {
+      fetchInternalItems();
+    }
+  }, [internalLinkType, promoLinkType]);
+
+  const fetchPartners = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('partners')
+        .select('id, business_name, business_type, logo, is_verified, is_active')
+        .eq('is_verified', true)
+        .eq('is_active', true)
+        .order('business_name', { ascending: true });
+      
+      if (error) throw error;
+      
+      const partnersData = data?.map(partner => ({
+        id: partner.id,
+        businessName: partner.business_name,
+        businessType: partner.business_type,
+        logo: partner.logo
+      })) || [];
+      
+      setPartners(partnersData);
+    } catch (error) {
+      console.error('Error fetching partners:', error);
+    }
+  };
+
+  const fetchInternalItems = async () => {
+    try {
+      let data, error;
+      
+      if (internalLinkType === 'service') {
+        const result = await supabaseClient
+          .from('partner_services')
+          .select(`
+            id, 
+            name, 
+            price,
+            partners!inner(business_name)
+          `)
+          .eq('is_active', true)
+          .order('name', { ascending: true });
+        data = result.data;
+        error = result.error;
+      } else if (internalLinkType === 'product') {
+        const result = await supabaseClient
+          .from('partner_products')
+          .select(`
+            id, 
+            name, 
+            price,
+            partners!inner(business_name)
+          `)
+          .eq('is_active', true)
+          .order('name', { ascending: true });
+        data = result.data;
+        error = result.error;
+      } else if (internalLinkType === 'partner') {
+        const result = await supabaseClient
+          .from('partners')
+          .select('id, business_name, business_type')
+          .eq('is_verified', true)
+          .eq('is_active', true)
+          .order('business_name', { ascending: true });
+        data = result.data;
+        error = result.error;
+      }
+      
+      if (error) throw error;
+      setInternalItems(data || []);
+    } catch (error) {
+      console.error('Error fetching internal items:', error);
+      setInternalItems([]);
+    }
+  };
 
   const fetchPromotions = () => {
     const fetchData = async () => {
@@ -147,18 +228,47 @@ export default function AdminPromotions() {
   };
 
   const handleCreatePromotion = async () => {
-    if (!promoTitle || !promoDescription || !promoStartDate || !promoEndDate || !promoImage) {
+    if (!promoTitle || !promoDescription || !promoStartDate || !promoEndDate) {
       Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
       return;
     }
+    
+    // Validate URL if external link is selected
+    if (promoLinkType === 'external' && !promoUrl.trim()) {
+      Alert.alert('Error', 'Por favor ingresa una URL válida');
+      return;
+    }
+    
+    // Validate internal link if selected
+    if (promoLinkType === 'internal' && !selectedInternalId) {
+      Alert.alert('Error', 'Por favor selecciona un elemento interno');
+      return;
+    }
+    
     setLoading(true);
     try {
       let imageUrl = null;
       if (promoImage) imageUrl = await uploadImage(promoImage);
+      
+      // Generate CTA URL based on link type
+      let ctaUrl = null;
+      if (promoLinkType === 'external') {
+        ctaUrl = promoUrl.trim();
+      } else if (promoLinkType === 'internal' && selectedInternalId) {
+        if (internalLinkType === 'service') {
+          ctaUrl = `dogcatify://services/${selectedInternalId}`;
+        } else if (internalLinkType === 'product') {
+          ctaUrl = `dogcatify://products/${selectedInternalId}`;
+        } else if (internalLinkType === 'partner') {
+          ctaUrl = `dogcatify://partners/${selectedInternalId}`;
+        }
+      }
+      
       const promotionData: any = {
         title: promoTitle.trim(),
         description: promoDescription.trim(),
         image_url: imageUrl,
+        cta_url: ctaUrl,
         start_date: new Date(promoStartDate).toISOString(),
         end_date: new Date(promoEndDate).toISOString(),
         target_audience: promoTargetAudience,
@@ -190,6 +300,9 @@ export default function AdminPromotions() {
       setPromoStartDate('');
       setPromoEndDate('');
       setPromoTargetAudience('all');
+      setPromoUrl('');
+      setPromoLinkType('none');
+      setSelectedInternalId(null);
       setSelectedPartnerId(null);
       setPartnerSearchQuery('');
       setShowPromotionModal(false);
@@ -389,6 +502,165 @@ export default function AdminPromotions() {
                 )}
               </View>
               <View style={styles.imageSection}>
+              
+              {/* Link Configuration */}
+              <View style={styles.linkSection}>
+                <Text style={styles.linkLabel}>Enlace de la promoción</Text>
+                <Text style={styles.linkDescription}>
+                  Configura hacia dónde dirigir a los usuarios cuando toquen la promoción
+                </Text>
+                
+                <View style={styles.linkTypeSelector}>
+                  <TouchableOpacity
+                    style={[
+                      styles.linkTypeOption,
+                      promoLinkType === 'none' && styles.selectedLinkType
+                    ]}
+                    onPress={() => setPromoLinkType('none')}
+                  >
+                    <Text style={[
+                      styles.linkTypeText,
+                      promoLinkType === 'none' && styles.selectedLinkTypeText
+                    ]}>
+                      Sin enlace
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[
+                      styles.linkTypeOption,
+                      promoLinkType === 'external' && styles.selectedLinkType
+                    ]}
+                    onPress={() => setPromoLinkType('external')}
+                  >
+                    <Text style={[
+                      styles.linkTypeText,
+                      promoLinkType === 'external' && styles.selectedLinkTypeText
+                    ]}>
+                      Sitio web
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[
+                      styles.linkTypeOption,
+                      promoLinkType === 'internal' && styles.selectedLinkType
+                    ]}
+                    onPress={() => setPromoLinkType('internal')}
+                  >
+                    <Text style={[
+                      styles.linkTypeText,
+                      promoLinkType === 'internal' && styles.selectedLinkTypeText
+                    ]}>
+                      Dentro de la app
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {promoLinkType === 'external' && (
+                  <Input
+                    label="URL del sitio web"
+                    placeholder="https://ejemplo.com"
+                    value={promoUrl}
+                    onChangeText={setPromoUrl}
+                    keyboardType="url"
+                    autoCapitalize="none"
+                  />
+                )}
+                
+                {promoLinkType === 'internal' && (
+                  <View style={styles.internalLinkSection}>
+                    <Text style={styles.internalLinkLabel}>Tipo de contenido</Text>
+                    <View style={styles.internalTypeSelector}>
+                      <TouchableOpacity
+                        style={[
+                          styles.internalTypeOption,
+                          internalLinkType === 'partner' && styles.selectedInternalType
+                        ]}
+                        onPress={() => setInternalLinkType('partner')}
+                      >
+                        <Text style={[
+                          styles.internalTypeText,
+                          internalLinkType === 'partner' && styles.selectedInternalTypeText
+                        ]}>
+                          Aliado
+                        </Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        style={[
+                          styles.internalTypeOption,
+                          internalLinkType === 'service' && styles.selectedInternalType
+                        ]}
+                        onPress={() => setInternalLinkType('service')}
+                      >
+                        <Text style={[
+                          styles.internalTypeText,
+                          internalLinkType === 'service' && styles.selectedInternalTypeText
+                        ]}>
+                          Servicio
+                        </Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        style={[
+                          styles.internalTypeOption,
+                          internalLinkType === 'product' && styles.selectedInternalType
+                        ]}
+                        onPress={() => setInternalLinkType('product')}
+                      >
+                        <Text style={[
+                          styles.internalTypeText,
+                          internalLinkType === 'product' && styles.selectedInternalTypeText
+                        ]}>
+                          Producto
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    
+                    {internalItems.length > 0 && (
+                      <View style={styles.internalItemsContainer}>
+                        <Text style={styles.internalItemsLabel}>
+                          Seleccionar {internalLinkType === 'partner' ? 'aliado' : 
+                                     internalLinkType === 'service' ? 'servicio' : 'producto'}
+                        </Text>
+                        <ScrollView style={styles.internalItemsList} showsVerticalScrollIndicator={false}>
+                          {internalItems.map((item) => (
+                            <TouchableOpacity
+                              key={item.id}
+                              style={[
+                                styles.internalItem,
+                                selectedInternalId === item.id && styles.selectedInternalItem
+                              ]}
+                              onPress={() => setSelectedInternalId(item.id)}
+                            >
+                              <View style={styles.internalItemInfo}>
+                                <Text style={styles.internalItemName}>
+                                  {item.name || item.business_name}
+                                </Text>
+                                {item.partners && (
+                                  <Text style={styles.internalItemPartner}>
+                                    {item.partners.business_name}
+                                  </Text>
+                                )}
+                                {item.price && (
+                                  <Text style={styles.internalItemPrice}>
+                                    ${item.price.toLocaleString()}
+                                  </Text>
+                                )}
+                              </View>
+                              {selectedInternalId === item.id && (
+                                <Text style={styles.selectedIndicator}>✓</Text>
+                              )}
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+              
                 <Text style={styles.imageLabel}>Imagen promocional *</Text>
                 
                 {promoImage ? (
@@ -1054,6 +1326,131 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  linkSection: {
+    marginBottom: 20,
+  },
+  linkLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  linkDescription: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  linkTypeSelector: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    gap: 8,
+  },
+  linkTypeOption: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+  },
+  selectedLinkType: {
+    backgroundColor: '#DC2626',
+    borderColor: '#DC2626',
+  },
+  linkTypeText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+  },
+  selectedLinkTypeText: {
+    color: '#FFFFFF',
+  },
+  internalLinkSection: {
+    marginTop: 16,
+  },
+  internalLinkLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  internalTypeSelector: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    gap: 8,
+  },
+  internalTypeOption: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    alignItems: 'center',
+  },
+  selectedInternalType: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  internalTypeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+  },
+  selectedInternalTypeText: {
+    color: '#FFFFFF',
+  },
+  internalItemsContainer: {
+    marginTop: 12,
+  },
+  internalItemsLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  internalItemsList: {
+    maxHeight: 200,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+  },
+  internalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  selectedInternalItem: {
+    backgroundColor: '#EBF8FF',
+  },
+  internalItemInfo: {
+    flex: 1,
+  },
+  internalItemName: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  internalItemPartner: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  internalItemPrice: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#10B981',
   },
   accessDenied: {
     flex: 1,
