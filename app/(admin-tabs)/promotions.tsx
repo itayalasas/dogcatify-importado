@@ -25,7 +25,7 @@ export default function AdminPromotions() {
   const [promoEndDate, setPromoEndDate] = useState('');
   const [promoTargetAudience, setPromoTargetAudience] = useState('all');
   const [loading, setLoading] = useState(false);
-
+  const [promoUrl, setPromoUrl] = useState('');
 
   // Promotion form
   const [promoLinkType, setPromoLinkType] = useState<'external' | 'internal' | 'none'>('none');
@@ -514,14 +514,15 @@ export default function AdminPromotions() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <SafeAreaView style={styles.container}>
-        <View style={styles.accessDenied}>
-          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
-          <Text style={styles.accessDeniedText}>
-            Solo los administradores pueden gestionar promociones
-          </Text>
-        </View>
-      </SafeAreaView>
+      <View style={styles.header}>
+        <Text style={styles.title}>Promociones</Text>
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={() => setShowPromotionModal(true)}
+        >
+          <Plus size={20} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
       <ScrollView style={styles.content}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Promociones activas</Text>
@@ -682,7 +683,6 @@ export default function AdminPromotions() {
                   </TouchableOpacity>
                 )}
               </View>
-              <View style={styles.imageSection}>
               
               {/* Link Configuration */}
               <View style={styles.linkSection}>
@@ -842,6 +842,7 @@ export default function AdminPromotions() {
                 )}
               </View>
               
+              <View style={styles.imageSection}>
                 <Text style={styles.imageLabel}>Imagen promocional *</Text>
                 
                 {promoImage ? (
@@ -895,8 +896,7 @@ export default function AdminPromotions() {
                   {[
                     { value: 'all', label: 'Todos los usuarios' },
                     { value: 'users', label: 'Solo usuarios' },
-          <ScrollView contentContainerStyle={styles.billingModalScrollContent}>
-            <View style={styles.billingModalContent}>
+                    { value: 'partners', label: 'Solo aliados' }
                   ].map((option) => (
                     <TouchableOpacity
                       key={option.value}
@@ -917,7 +917,7 @@ export default function AdminPromotions() {
                 </View>
               </View>
               
-              <View style={styles.billingModalActions}>
+              <View style={styles.modalActions}>
                 <View style={styles.modalButtonsContainer}>
                   <TouchableOpacity 
                     style={styles.cancelModalButton}
@@ -1028,84 +1028,89 @@ export default function AdminPromotions() {
         onRequestClose={() => setShowBillingModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.billingModalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Generar Factura</Text>
-              <TouchableOpacity onPress={() => setShowBillingModal(false)}>
-                <Text style={styles.partnerModalClose}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-                  style={styles.billingCancelButton}
-              <View style={styles.billingInfo}>
-                <Text style={styles.billingInfoTitle}>
-                  <Text style={styles.billingCancelButtonText}>Cancelar</Text>
-                </Text>
-                
-                <View style={styles.billingStats}>
-                  <View style={styles.billingStat}>
-                    <Text style={styles.billingStatLabel}>Total de clicks:</Text>
-                    <Text style={styles.billingStatValue}>
-                      {selectedPromotionForBilling.clicks || 0}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.billingStat}>
-                    <Text style={styles.billingStatLabel}>Período:</Text>
-                    <Text style={styles.billingStatValue}>
-                      {selectedPromotionForBilling.startDate.toLocaleDateString()} - {selectedPromotionForBilling.endDate.toLocaleDateString()}
-                    </Text>
-                  </View>
-                </View>
-
-                <Input
-                  label="Costo por click ($)"
-                  placeholder="100"
-                  value={costPerClick}
-                  onChangeText={setCostPerClick}
-                  keyboardType="numeric"
-                  leftIcon={<DollarSign size={20} color="#6B7280" />}
-                  style={[styles.billingCreateButton, billingLoading && styles.disabledButton]}
-
-                <View style={styles.totalCalculation}>
-                  <Text style={styles.totalLabel}>Total a facturar:</Text>
-                  <Text style={styles.billingCreateButtonText}>
-                    ${((selectedPromotionForBilling.clicks || 0) * parseFloat(costPerClick || '0')).toLocaleString()}
-                  </Text>
-                </View>
-
-                <Input
-                  label="Notas (opcional)"
-                  placeholder="Observaciones sobre la facturación..."
-                  value={billingNotes}
-                  onChangeText={setBillingNotes}
-                  multiline
-                  numberOfLines={3}
-                />
-
-                <View style={styles.billingActions}>
-                  <Button
-                    title="Cancelar"
-                    onPress={() => setShowBillingModal(false)}
-                    variant="outline"
-                    size="medium"
-                  />
-                  <Button
-                    title="Crear Factura"
-                    onPress={handleCreateBilling}
-                    loading={billingLoading}
-                    size="medium"
-                  />
-                </View>
+          <ScrollView contentContainerStyle={styles.billingModalScrollContent}>
+            <View style={styles.billingModalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Generar Factura</Text>
+                <TouchableOpacity onPress={() => setShowBillingModal(false)}>
+                  <Text style={styles.partnerModalClose}>✕</Text>
+                </TouchableOpacity>
               </View>
-            )}
+
+              {selectedPromotionForBilling && (
+                <View style={styles.billingInfo}>
+                  <Text style={styles.billingInfoTitle}>
+                    {selectedPromotionForBilling.title}
+                  </Text>
+                  
+                  <View style={styles.billingStats}>
+                    <View style={styles.billingStat}>
+                      <Text style={styles.billingStatLabel}>Total de clicks:</Text>
+                      <Text style={styles.billingStatValue}>
+                        {selectedPromotionForBilling.clicks || 0}
+                      </Text>
+                    </View>
+                    
+                    <View style={styles.billingStat}>
+                      <Text style={styles.billingStatLabel}>Período:</Text>
+                      <Text style={styles.billingStatValue}>
+                        {selectedPromotionForBilling.startDate.toLocaleDateString()} - {selectedPromotionForBilling.endDate.toLocaleDateString()}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Input
+                    label="Costo por click ($)"
+                    placeholder="100"
+                    value={costPerClick}
+                    onChangeText={setCostPerClick}
+                    keyboardType="numeric"
+                    leftIcon={<DollarSign size={20} color="#6B7280" />}
+                  />
+
+                  <View style={styles.totalCalculation}>
+                    <Text style={styles.totalLabel}>Total a facturar:</Text>
+                    <Text style={styles.totalAmount}>
+                      ${((selectedPromotionForBilling.clicks || 0) * parseFloat(costPerClick || '0')).toLocaleString()}
+                    </Text>
+                  </View>
+
+                  <Input
+                    label="Notas (opcional)"
+                    placeholder="Observaciones sobre la facturación..."
+                    value={billingNotes}
+                    onChangeText={setBillingNotes}
+                    multiline
+                    numberOfLines={3}
+                  />
+
+                  <View style={styles.billingModalActions}>
+                    <TouchableOpacity
+                      style={styles.billingCancelButton}
+                      onPress={() => setShowBillingModal(false)}
+                    >
+                      <Text style={styles.billingCancelButtonText}>Cancelar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.billingCreateButton, billingLoading && styles.disabledButton]}
+                      onPress={handleCreateBilling}
+                      disabled={billingLoading}
+                    >
+                      <Text style={styles.billingCreateButtonText}>
+                        {billingLoading ? 'Creando...' : 'Crear Factura'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </View>
           </ScrollView>
-          </View>
         </View>
       </Modal>
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1687,15 +1692,6 @@ const styles = StyleSheet.create({
   billingButton: {
     marginTop: 8,
   },
-  billingModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    marginTop: 100,
-    flex: 1,
-    maxHeight: '90%',
-  },
   billingModalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1713,18 +1709,6 @@ const styles = StyleSheet.create({
   billingForm: {
     flex: 1,
     marginBottom: 20,
-  },
-  promotionSummary: {
-    backgroundColor: '#F8FAFC',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  promotionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -1759,13 +1743,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: 'Inter-Bold',
     color: '#065F46',
-  },
-  billingModalActions: {
-    flexDirection: 'column',
-    gap: 12,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
   },
   linkSection: {
     marginBottom: 20,
@@ -1926,13 +1903,6 @@ const styles = StyleSheet.create({
     color: '#10B981',
     marginLeft: 4,
   },
-  billingModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
-    margin: 20,
-    maxHeight: '80%',
-  },
   billingInfo: {
     marginBottom: 20,
   },
@@ -1973,19 +1943,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  totalLabel: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#166534',
-  },
-  totalAmount: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#166534',
-  },
   billingActions: {
     flexDirection: 'row',
     gap: 12,
     marginTop: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
   },
 });
