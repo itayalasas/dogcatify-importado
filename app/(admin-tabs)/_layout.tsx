@@ -1,7 +1,35 @@
 import { Tabs } from 'expo-router';
 import { ChartBar as BarChart3, Users, Megaphone, Settings, MapPin, FileText, ArrowLeft } from 'lucide-react-native';
+import { useAuth } from '../../contexts/AuthContext';
+import { View, Text } from 'react-native';
 
 export default function AdminTabLayout() {
+  const { currentUser } = useAuth();
+  
+  // Check if user is admin
+  const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
+  
+  if (!currentUser) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text>Cargando...</Text>
+      </View>
+    );
+  }
+  
+  if (!isAdmin) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+        <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#EF4444', marginBottom: 8 }}>
+          Acceso Denegado
+        </Text>
+        <Text style={{ textAlign: 'center', color: '#6B7280' }}>
+          Solo los administradores pueden acceder a esta sección
+        </Text>
+      </View>
+    );
+  }
+  
   return (
     <Tabs
       screenOptions={{
