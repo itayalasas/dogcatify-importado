@@ -618,7 +618,7 @@ export default function AdminPromotions() {
         billing_period_start: promotion.startDate.toISOString(),
         billing_period_end: promotion.endDate.toISOString(),
         status: 'pending',
-        invoice_number: \`INV-${Date.now()}`,
+        invoice_number: `INV-${Date.now()}`,
         notes: billingNotes.trim() || null,
         created_at: new Date().toISOString(),
         created_by: currentUser?.id
