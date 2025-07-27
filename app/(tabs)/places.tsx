@@ -135,55 +135,59 @@ export default function AdminPromotions() {
     if (!result.canceled && result.assets[0]) {
       setPromoImage(result.assets[0].uri);
     }
+  };
+
+  const uploadImage = async (imageUri: string): Promise<string> => {
+    const response = await fetch(imageUri);
+    const blob = await response.blob();
+    const filename = `promotions/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+    const { error } = await supabaseClient.storage
+      .from('dogcatify')
+      .upload(filename, blob);
+    if (error) throw error;
+    const { data: { publicUrl } } = supabaseClient.storage
+      .from('dogcatify')
+      .getPublicUrl(filename);
+    return publicUrl;
+  };
+
+  const handleCreatePromotion = async () => {
+    if (!promoTitle || !promoDescription || !promoStartDate || !promoEndDate || !promoImage) {
+      Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
+      return;
+    }
+    setLoading(true);
+    try {
+      let imageUrl = null;
+      if (promoImage) imageUrl = await uploadImage(promoImage);
+      const promotionData: any = {
+        title: promoTitle.trim(),
+        description: promoDescription.trim(),
+        image_url: imageUrl,
+        start_date: new Date(promoStartDate).toISOString(),
+        end_date: new Date(promoEndDate).toISOString(),
+        target_audience: promoTargetAudience,
+        is_active: true,
+        views: 0,
+        clicks: 0,
+        promotion_type: 'feed',
+        cta_text: 'Más información',
+        created_at: new Date().toISOString(),
+        created_by: currentUser?.id,
+      };
+      if (selectedPartnerId) {
+        promotionData.partner_id = selectedPartnerId;
+      }
+      const { error } = await supabaseClient
+        .from('promotions')
+        .insert([promotionData])
+        .select(`
+          *,
           partners:partner_id(business_name, business_type, logo)
         `);
-  const { currentUser } = useAuth();
-  const [places, setPlaces] = useState<Place[]>([]);
+      if (error) {
         Alert.alert('Error', `No se pudo crear la promoción: ${error.message}`);
         return;
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (currentUser) {
-      fetchPlaces();
-    }
-  }, [currentUser]);
-
-  const fetchPlaces = async () => {
-    try {
-      const { data, error } = await supabaseClient
-        .from('places')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-      
-      if (error) {
-        console.error('Error fetching places:', error);
-        return;
-      }
-      
-      const placesData = data?.map(place => ({
-        id: place.id,
-        name: place.name,
-        category: place.category,
-        address: place.address,
-        phone: place.phone || '',
-        rating: place.rating,
-        description: place.description,
-        petAmenities: place.pet_amenities || [],
-        coordinates: {
-          latitude: place.coordinates?.latitude || 0,
-          longitude: place.coordinates?.longitude || 0
-        }
-      })) || [];
-      
-      setPlaces(placesData);
-    } catch (error) {
-      console.error('Error fetching places:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
       }
       setPromoTitle('');
       setPromoDescription('');
@@ -233,32 +237,6 @@ export default function AdminPromotions() {
         ));
         throw error;
       }
-  if (!currentUser) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loginPrompt}>
-          <Text style={styles.loginTitle}>Inicia sesión</Text>
-          <Text style={styles.loginText}>
-            Inicia sesión para ver lugares pet-friendly cerca de ti
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Lugares Pet-Friendly</Text>
-        </View>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando lugares...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
 
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -647,34 +625,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: 'Inter-Bold',
     color: '#111827',
-  },
-  loginPrompt: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  loginTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
-    marginBottom: 8,
-  },
-  loginText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
   },
   addButton: {
     backgroundColor: '#DC2626',
@@ -1161,5 +1111,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-  }
-}
