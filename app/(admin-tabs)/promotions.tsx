@@ -759,6 +759,106 @@ export default function AdminPromotions() {
           )}
         </View>
       </ScrollView>
+
+      {/* Billing Modal */}
+      <Modal
+        visible={showBillingModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowBillingModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Generar Factura - {selectedPromotionForBilling?.title}
+              </Text>
+              <TouchableOpacity onPress={() => setShowBillingModal(false)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {selectedPromotionForBilling && (
+              <View style={styles.billingInfo}>
+                <Text style={styles.billingInfoTitle}>Información de la Promoción</Text>
+                <View style={styles.billingInfoRow}>
+                  <Text style={styles.billingInfoLabel}>Promoción:</Text>
+                  <Text style={styles.billingInfoValue}>{selectedPromotionForBilling.title}</Text>
+                </View>
+                <View style={styles.billingInfoRow}>
+                  <Text style={styles.billingInfoLabel}>Total de clicks:</Text>
+                  <Text style={styles.billingInfoValue}>{selectedPromotionForBilling.clicks || 0}</Text>
+                </View>
+                <View style={styles.billingInfoRow}>
+                  <Text style={styles.billingInfoLabel}>Período:</Text>
+                  <Text style={styles.billingInfoValue}>
+                    {selectedPromotionForBilling.startDate?.toLocaleDateString()} - {selectedPromotionForBilling.endDate?.toLocaleDateString()}
+                  </Text>
+                </View>
+              </View>
+            )}
+            
+            <Input
+              label="Costo por click (ARS)"
+              placeholder="100"
+              value={costPerClick}
+              onChangeText={setCostPerClick}
+              keyboardType="numeric"
+              leftIcon={<DollarSign size={20} color="#6B7280" />}
+            />
+            
+            <Input
+              label="Notas adicionales"
+              placeholder="Observaciones sobre la facturación..."
+              value={billingNotes}
+              onChangeText={setBillingNotes}
+              multiline
+              numberOfLines={3}
+              leftIcon={<FileText size={20} color="#6B7280" />}
+            />
+            
+            {selectedPromotionForBilling && costPerClick && (
+              <View style={styles.billingCalculation}>
+                <Text style={styles.calculationTitle}>Cálculo de Facturación</Text>
+                <View style={styles.calculationRow}>
+                  <Text style={styles.calculationLabel}>Clicks totales:</Text>
+                  <Text style={styles.calculationValue}>{selectedPromotionForBilling.clicks || 0}</Text>
+                </View>
+                <View style={styles.calculationRow}>
+                  <Text style={styles.calculationLabel}>Costo por click:</Text>
+                  <Text style={styles.calculationValue}>${parseFloat(costPerClick || '0').toLocaleString()}</Text>
+                </View>
+                <View style={[styles.calculationRow, styles.calculationTotal]}>
+                  <Text style={styles.calculationTotalLabel}>Total a facturar:</Text>
+                  <Text style={styles.calculationTotalValue}>
+                    ${((selectedPromotionForBilling.clicks || 0) * parseFloat(costPerClick || '0')).toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+            )}
+            
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancelar"
+                onPress={() => {
+                  setShowBillingModal(false);
+                  setSelectedPromotionForBilling(null);
+                  setCostPerClick('100');
+                  setBillingNotes('');
+                }}
+                variant="outline"
+                size="medium"
+              />
+              <Button
+                title="Generar y Enviar Factura"
+                onPress={handleCreateBilling}
+                loading={billingLoading}
+                size="medium"
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -961,5 +1061,113 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    flex: 1,
+  },
+  modalCloseText: {
+    fontSize: 18,
+    color: '#6B7280',
+    padding: 4,
+  },
+  billingInfo: {
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  billingInfoTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  billingInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  billingInfoLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  billingInfoValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  billingCalculation: {
+    backgroundColor: '#F0FDF4',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#10B981',
+  },
+  calculationTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#065F46',
+    marginBottom: 12,
+  },
+  calculationRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  calculationLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#065F46',
+  },
+  calculationValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#065F46',
+  },
+  calculationTotal: {
+    borderTopWidth: 1,
+    borderTopColor: '#BBF7D0',
+    paddingTop: 8,
+    marginTop: 8,
+  },
+  calculationTotalLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    color: '#065F46',
+  },
+  calculationTotalValue: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#10B981',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
   },
 });
