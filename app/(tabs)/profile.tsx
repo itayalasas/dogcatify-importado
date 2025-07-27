@@ -214,11 +214,6 @@ export default function AdminPromotions() {
           ? { ...promo, isActive: !isActive }
           : promo
       ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
       const { error } = await supabaseClient
         .from('promotions')
         .update({ is_active: !isActive })
@@ -229,15 +224,15 @@ export default function AdminPromotions() {
           promo.id === promotionId 
             ? { ...promo, isActive: isActive }
             : promo
-        // Revert local state if database update fails
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
         ));
         throw error;
       }
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo actualizar la promoción');
+    }
+  };
 
+  return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Promociones</Text>
@@ -327,14 +322,28 @@ export default function AdminPromotions() {
                       {promotion.startDate.toLocaleDateString()} - {promotion.endDate.toLocaleDateString()}
                     </Text>
                   </View>
-                    <Text style={styles.promotionStatText}>{promotion.views || 0}</Text>
+                  <View style={styles.promotionStats}>
+                    <View style={styles.promotionStat}>
+                      <Eye size={16} color="#6B7280" />
+                      <Text style={styles.promotionStatText}>{promotion.views || 0}</Text>
+                    </View>
+                    <View style={styles.promotionStat}>
+                      <Target size={16} color="#6B7280" />
+                      <Text style={styles.promotionStatText}>{promotion.clicks || 0}</Text>
+                    </View>
                   </View>
-                  <View style={styles.promotionStat}>
-                    <Target size={16} color="#6B7280" />
-                    <Text style={styles.promotionStatText}>{promotion.clicks || 0}</Text>
-              : 'Ayuda a otros dueños de mascotas agregando lugares pet-friendly que conozcas'
+                </View>
+                <View style={styles.promotionActions}>
+                  <Button
+                    title={promotion.isActive ? 'Desactivar' : 'Activar'}
+                    onPress={() => handleTogglePromotion(promotion.id, promotion.isActive)}
                     variant={promotion.isActive && isPromotionActive(promotion.startDate, promotion.endDate) ? 'outline' : 'primary'}
                     size="medium"
+                  />
+                </View>
+              </Card>
+            ))
+          )}
         </View>
       </ScrollView>
 
