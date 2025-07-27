@@ -570,11 +570,11 @@ export default function AdminPromotions() {
                 <p><strong>Total de clicks:</strong> ${promotion.clicks || 0}</p>
                 <p><strong>Monto total:</strong> $${totalAmount.toLocaleString()}</p>
               </div>
+              ${invoiceHTML}
               <p>Gracias por utilizar DogCatiFy para promocionar tu negocio.</p>
               <p>Saludos cordiales,<br>El equipo de DogCatiFy</p>
             </div>
-          </div>
-        `,
+          `
         attachment: invoiceHTML // Send HTML content as attachment
       };
       
