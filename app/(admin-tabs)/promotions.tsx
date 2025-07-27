@@ -11,6 +11,7 @@ import { NotificationService } from '../../utils/notifications';
 
 export default function AdminPromotions() {
   const { currentUser } = useAuth();
+  const [promotions, setPromotions] = useState<any[]>([]);
 
   // Promotion form
   const [promoTitle, setPromoTitle] = useState('');
