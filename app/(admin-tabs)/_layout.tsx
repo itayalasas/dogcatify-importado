@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { BarChart3, Users, Megaphone, Settings, MapPin, FileText, ArrowLeft } from 'lucide-react-native';
+import { ChartBar as BarChart3, Users, Megaphone, Settings, MapPin, FileText, ArrowLeft } from 'lucide-react-native';
 
 export default function AdminTabLayout() {
   return (
