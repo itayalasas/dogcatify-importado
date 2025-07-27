@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Heart, ExternalLink } from 'lucide-react-native';
 import { Card } from './ui/Card';
 import { useAuth } from '../contexts/AuthContext';
-import { supabaseClient } from '../lib/supabase';
 
 interface PromotionCardProps {
   promotion: {
@@ -24,47 +23,19 @@ interface PromotionCardProps {
 
 export default function PromotionCard({ promotion, onPress, onLike }: PromotionCardProps) {
   const { currentUser } = useAuth();
-  const [localLikes, setLocalLikes] = useState(promotion.likes || []);
   const [isLiking, setIsLiking] = useState(false);
 
-  const isLiked = currentUser ? localLikes.includes(currentUser.id) : false;
+  const isLiked = currentUser ? (promotion.likes || []).includes(currentUser.id) : false;
+  const likesCount = (promotion.likes || []).length;
 
   const handleLike = async () => {
-    if (!currentUser) {
-      Alert.alert('Error', 'Debes iniciar sesión para dar me gusta');
-      return;
-    }
-
-    if (isLiking) return;
+    if (!currentUser || isLiking) return;
+    
     setIsLiking(true);
-
     try {
-      const newLikes = isLiked
-        ? localLikes.filter(id => id !== currentUser.id)
-        : [...localLikes, currentUser.id];
-
-      // Update local state immediately for better UX
-      setLocalLikes(newLikes);
-
-      // Update database
-      const { error } = await supabaseClient
-        .from('promotions')
-        .update({ likes: newLikes })
-        .eq('id', promotion.id);
-
-      if (error) {
-        // Revert local state if database update fails
-        setLocalLikes(localLikes);
-        throw error;
-      }
-
-      // Call parent onLike if provided
       if (onLike) {
         onLike(promotion.id);
       }
-    } catch (error) {
-      console.error('Error updating promotion like:', error);
-      Alert.alert('Error', 'No se pudo actualizar el me gusta');
     } finally {
       setIsLiking(false);
     }
@@ -103,26 +74,20 @@ export default function PromotionCard({ promotion, onPress, onLike }: PromotionC
           <ExternalLink size={16} color="#FFFFFF" />
         </TouchableOpacity>
 
-        {/* Separator */}
-        <View style={styles.separator} />
-
-        {/* Like Section */}
-        <View style={styles.likeSection}>
+        {/* Actions - Like button similar to posts */}
+        <View style={styles.actions}>
           <TouchableOpacity 
-            style={styles.likeButton}
+            style={styles.actionButton}
             onPress={handleLike}
             disabled={isLiking}
           >
             <Heart 
-              size={20} 
-              color={isLiked ? "#DC2626" : "#6B7280"}
-              fill={isLiked ? "#DC2626" : "transparent"}
+              size={24} 
+              color={isLiked ? "#ff3040" : "#666"} 
+              fill={isLiked ? "#ff3040" : "none"}
             />
-            <Text style={[
-              styles.likeCount,
-              { color: isLiked ? "#DC2626" : "#6B7280" }
-            ]}>
-              {localLikes.length}
+            <Text style={[styles.actionText, isLiked && styles.likedText]}>
+              {likesCount}
             </Text>
           </TouchableOpacity>
         </View>
@@ -133,14 +98,15 @@ export default function PromotionCard({ promotion, onPress, onLike }: PromotionC
 
 const styles = StyleSheet.create({
   container: {
-    marginHorizontal: 16,
-    marginVertical: 8,
-    overflow: 'hidden',
+    marginBottom: 8,
+    paddingTop: 12,
+    paddingBottom: 8,
+    backgroundColor: 'white',
   },
   promotionBadge: {
     position: 'absolute',
-    top: 12,
-    left: 12,
+    top: 24,
+    left: 28,
     backgroundColor: '#DC2626',
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -156,9 +122,10 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 200,
     resizeMode: 'cover',
+    marginBottom: 8,
   },
   content: {
-    padding: 16,
+    paddingHorizontal: 16,
   },
   title: {
     fontSize: 18,
@@ -167,11 +134,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   description: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    lineHeight: 20,
-    marginBottom: 16,
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#000',
+    marginBottom: 12,
   },
   ctaButton: {
     backgroundColor: '#DC2626',
@@ -182,31 +148,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
     gap: 8,
+    marginBottom: 8,
   },
   ctaText: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
     color: '#FFFFFF',
   },
-  separator: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 16,
-  },
-  likeSection: {
+  actions: {
     flexDirection: 'row',
+    paddingTop: 12,
     alignItems: 'center',
   },
-  likeButton: {
+  actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 20,
+    marginRight: 24,
   },
-  likeCount: {
+  actionText: {
+    marginLeft: 6,
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    color: '#666',
+    fontWeight: '500',
+  },
+  likedText: {
+    color: '#ff3040',
   },
 });
