@@ -2,9 +2,10 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
-import { Platform, Alert } from 'react-native';
+import { Platform, Alert, Linking } from 'react-native';
 import { supabaseClient } from '../lib/supabase';
 import { useAuth } from './AuthContext';
+import { router } from 'expo-router';
 
 // Configurar el comportamiento de las notificaciones
 Notifications.setNotificationHandler({
@@ -148,15 +149,78 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const handleNotificationResponse = (response: Notifications.NotificationResponse) => {
     const data = response.notification.request.content.data;
     
-    // Manejar diferentes tipos de notificaciones
-    if (data?.type === 'partner_request') {
-      // Navegar a la pantalla de solicitudes de aliados
-      console.log('Navigate to partner requests');
-    } else if (data?.type === 'booking_confirmation') {
-      // Navegar a la pantalla de reservas
-      console.log('Navigate to bookings');
+    console.log('Notification tapped with data:', data);
+    
+    // Verificar si el usuario está autenticado
+    if (!currentUser) {
+      console.log('User not authenticated, redirecting to login');
+      // Si no está autenticado, redirigir al login con deep link
+      if (data?.deepLink) {
+        // Guardar el deep link para después del login
+        router.push({
+          pathname: '/auth/login',
+          params: { redirectTo: data.deepLink }
+        });
+      } else {
+        router.push('/auth/login');
+      }
+      return;
     }
-    // Agregar más tipos según sea necesario
+    
+    // Usuario autenticado, manejar navegación según el tipo
+    if (data?.deepLink) {
+      console.log('Navigating to deep link:', data.deepLink);
+      handleDeepLink(data.deepLink);
+    } else if (data?.type) {
+      // Fallback para tipos específicos sin deep link
+      handleNotificationTypeNavigation(data.type, data);
+    }
+  };
+
+  const handleDeepLink = (deepLink: string) => {
+    try {
+      // Remover el protocolo si existe
+      const path = deepLink.replace('dogcatify://', '').replace('/', '');
+      
+      console.log('Navigating to path:', path);
+      
+      // Navegar usando expo-router
+      if (path.startsWith('(admin-tabs)')) {
+        router.push(`/${path}` as any);
+      } else if (path.startsWith('(tabs)')) {
+        router.push(`/${path}` as any);
+      } else {
+        router.push(`/${path}` as any);
+      }
+    } catch (error) {
+      console.error('Error handling deep link:', error);
+      // Fallback a la pantalla principal
+      router.push('/(tabs)');
+    }
+  };
+
+  const handleNotificationTypeNavigation = (type: string, data: any) => {
+    switch (type) {
+      case 'partner_request':
+        // Verificar si es admin
+        if (currentUser?.email?.toLowerCase() === 'admin@dogcatify.com') {
+          router.push('/(admin-tabs)/requests');
+        } else {
+          router.push('/(tabs)/profile');
+        }
+        break;
+      case 'partner_approved':
+        router.push('/(tabs)/profile');
+        break;
+      case 'booking_confirmation':
+        router.push('/(tabs)/services');
+        break;
+      case 'order_update':
+        router.push('/orders');
+        break;
+      default:
+        router.push('/(tabs)');
+    }
   };
 
   const sendNotification = async (title: string, body: string, data?: any) => {
@@ -171,6 +235,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       title,
       body,
       data: data || {},
+      // Agregar logo de DogCatiFy
+      icon: 'https://zkgiwamycbjcogcgqhff.supabase.co/storage/v1/object/public/dogcatify/system/logo-notification.png',
+      image: 'https://zkgiwamycbjcogcgqhff.supabase.co/storage/v1/object/public/dogcatify/system/logo-notification.png',
     };
 
     try {
@@ -209,6 +276,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         title,
         body,
         data: data || {},
+        // Agregar logo de DogCatiFy
+        icon: 'https://zkgiwamycbjcogcgqhff.supabase.co/storage/v1/object/public/dogcatify/system/logo-notification.png',
+        image: 'https://zkgiwamycbjcogcgqhff.supabase.co/storage/v1/object/public/dogcatify/system/logo-notification.png',
       };
 
       await fetch('https://exp.host/--/api/v2/push/send', {
@@ -247,6 +317,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         title,
         body,
         data: data || {},
+        // Agregar logo de DogCatiFy
+        icon: 'https://zkgiwamycbjcogcgqhff.supabase.co/storage/v1/object/public/dogcatify/system/logo-notification.png',
+        image: 'https://zkgiwamycbjcogcgqhff.supabase.co/storage/v1/object/public/dogcatify/system/logo-notification.png',
       };
 
       await fetch('https://exp.host/--/api/v2/push/send', {

@@ -211,7 +211,8 @@ export default function AdminRequests() {
             type: 'partner_approved',
             businessName: partnerData.business_name,
             businessType: partnerData.business_type,
-            partnerId: requestId
+            partnerId: requestId,
+            deepLink: '(tabs)/profile'
           }
         );
         console.log('Approval notification sent to user');

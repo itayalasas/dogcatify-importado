@@ -334,7 +334,8 @@ export default function PartnerRegister() {
             type: 'partner_request',
             businessName: businessName.trim(),
             businessType: selectedType,
-            userId: currentUser.id
+            userId: currentUser.id,
+            deepLink: '(admin-tabs)/requests'
           }
         );
         console.log('Push notification sent to admin');

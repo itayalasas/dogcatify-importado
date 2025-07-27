@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Image } from 'react-native';
-import { Link, router } from 'expo-router';
+import { Link, router, useLocalSearchParams } from 'expo-router';
 import { Mail, Lock, Eye, EyeOff, Check } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -10,6 +10,7 @@ import { useBiometric } from '../../contexts/BiometricContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function Login() {
+  const { redirectTo } = useLocalSearchParams<{ redirectTo?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberPassword, setRememberPassword] = useState(false);
@@ -117,7 +118,13 @@ export default function Login() {
               router.replace('/(admin-tabs)/requests');
             } else {
               console.log('Regular user login, redirecting to regular tabs');
-              router.replace('/(tabs)');
+              // Verificar si hay un deep link pendiente
+              if (redirectTo) {
+                console.log('Redirecting to deep link after login:', redirectTo);
+                router.replace(`/${redirectTo}` as any);
+              } else {
+                router.replace('/(tabs)');
+              }
             }
           }
         }
