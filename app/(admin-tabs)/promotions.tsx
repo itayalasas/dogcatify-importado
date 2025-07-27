@@ -638,3 +638,328 @@ export default function AdminPromotions() {
   };
 
   return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Promociones</Text>
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={() => setShowPromotionModal(true)}
+        >
+          <Plus size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <Card style={styles.statsCard}>
+          <Text style={styles.statsTitle}>Estadísticas</Text>
+          <View style={styles.statsGrid}>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{promotions.length}</Text>
+              <Text style={styles.statLabel}>Total{'\n'}Promociones</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {promotions.filter(p => p.isActive && isPromotionActive(p.startDate, p.endDate)).length}
+              </Text>
+              <Text style={styles.statLabel}>Activas</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {promotions.reduce((sum, p) => sum + (p.views || 0), 0)}
+              </Text>
+              <Text style={styles.statLabel}>Total{'\n'}Vistas</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {promotions.reduce((sum, p) => sum + (p.clicks || 0), 0)}
+              </Text>
+              <Text style={styles.statLabel}>Total{'\n'}Clicks</Text>
+            </View>
+          </View>
+        </Card>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Todas las Promociones</Text>
+          {promotions.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Megaphone size={32} color="#DC2626" />
+              <Text style={styles.emptyTitle}>No hay promociones</Text>
+              <Text style={styles.emptySubtitle}>Crea una promoción para los usuarios</Text>
+            </View>
+          ) : (
+            promotions.map((promotion) => (
+              <Card key={promotion.id} style={styles.promotionCard}>
+                <View style={styles.promotionHeader}>
+                  <View style={styles.promotionInfo}>
+                    <Text style={styles.promotionTitle}>{promotion.title}</Text>
+                    {promotion.partnerInfo && (
+                      <View style={styles.partnerInfo}>
+                        <Text style={styles.partnerIcon}>
+                          {getBusinessTypeIcon(promotion.partnerInfo.businessType)}
+                        </Text>
+                        <Text style={styles.partnerName}>{promotion.partnerInfo.businessName}</Text>
+                      </View>
+                    )}
+                    <Text style={styles.promotionAudience}>
+                      Audiencia: {promotion.targetAudience}
+                    </Text>
+                  </View>
+                  <View style={styles.promotionStatus}>
+                    <View style={[
+                      styles.statusBadge,
+                      { backgroundColor: promotion.isActive ? '#DCFCE7' : '#F3F4F6' }
+                    ]}>
+                      <Text style={[
+                        styles.statusText,
+                        { color: promotion.isActive ? '#22C55E' : '#6B7280' }
+                      ]}>
+                        {promotion.isActive ? 'Activa' : 'Inactiva'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <Image source={{ uri: promotion.imageURL }} style={styles.promotionImage} />
+                <Text style={styles.promotionDescription}>{promotion.description}</Text>
+                <View style={styles.promotionDetails}>
+                  <View style={styles.promotionDetail}>
+                    <Calendar size={16} color="#6B7280" />
+                    <Text style={styles.promotionDetailText}>
+                      {promotion.startDate.toLocaleDateString()} - {promotion.endDate.toLocaleDateString()}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.promotionStats}>
+                  <View style={styles.promotionStat}>
+                    <Eye size={16} color="#6B7280" />
+                    <Text style={styles.promotionStatText}>{promotion.views || 0}</Text>
+                  </View>
+                  <View style={styles.promotionStat}>
+                    <Target size={16} color="#6B7280" />
+                    <Text style={styles.promotionStatText}>{promotion.clicks || 0}</Text>
+                  </View>
+                </View>
+                <View style={styles.promotionActions}>
+                  <Button
+                    title={promotion.isActive && isPromotionActive(promotion.startDate, promotion.endDate) ? 'Desactivar' : 'Activar'}
+                    onPress={() => handleTogglePromotion(promotion.id, promotion.isActive)}
+                    variant={promotion.isActive && isPromotionActive(promotion.startDate, promotion.endDate) ? 'outline' : 'primary'}
+                    size="medium"
+                  />
+                  {promotion.partnerId && (promotion.clicks || 0) > 0 && (
+                    <Button
+                      title="Generar Factura"
+                      onPress={() => handleGenerateBilling(promotion)}
+                      variant="outline"
+                      size="medium"
+                    />
+                  )}
+                </View>
+              </Card>
+            ))
+          )}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function isPromotionActive(startDate: Date, endDate: Date) {
+  const now = new Date();
+  return now >= startDate && now <= endDate;
+}
+
+function getBusinessTypeIcon(type: string) {
+  switch (type) {
+    case 'veterinary': return '🏥';
+    case 'grooming': return '✂️';
+    case 'walking': return '🚶';
+    case 'boarding': return '🏠';
+    case 'shop': return '🛍️';
+    case 'shelter': return '🐾';
+    default: return '🏢';
+  }
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 50,
+    paddingBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  title: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+  },
+  addButton: {
+    backgroundColor: '#DC2626',
+    padding: 8,
+    borderRadius: 20,
+  },
+  content: {
+    flex: 1,
+  },
+  statsCard: {
+    margin: 16,
+    marginBottom: 8,
+  },
+  statsTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 16,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#DC2626',
+  },
+  statLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  promotionCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  promotionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  promotionInfo: {
+    flex: 1,
+  },
+  promotionTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  partnerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  partnerIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  partnerName: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#3B82F6',
+  },
+  promotionAudience: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  promotionStatus: {
+    alignItems: 'flex-end',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  promotionImage: {
+    width: '100%',
+    height: 120,
+    borderRadius: 8,
+    marginBottom: 12,
+    resizeMode: 'cover',
+  },
+  promotionDescription: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  promotionDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  promotionDetail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  promotionDetailText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginLeft: 4,
+  },
+  promotionStats: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  promotionStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  promotionStatText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    marginLeft: 4,
+  },
+  promotionActions: {
+    alignItems: 'flex-end',
+  },
+  emptyCard: {
+    marginHorizontal: 16,
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginTop: 16,
+    marginBottom: 4,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+});
