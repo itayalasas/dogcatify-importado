@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image } from 'react-native';
-import { Plus, Megaphone, Calendar, Eye, Target, Search } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image, TextInput } from 'react-native';
+import { Plus, Megaphone, Calendar, Eye, Target, Search, MapPin, Star, Clock, Navigation, Phone } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -15,6 +15,8 @@ export default function AdminPromotions() {
   const [showPartnerSelector, setShowPartnerSelector] = useState(false);
   const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
   // Promotion form
   const [promoTitle, setPromoTitle] = useState('');
@@ -24,6 +26,59 @@ export default function AdminPromotions() {
   const [promoEndDate, setPromoEndDate] = useState('');
   const [promoTargetAudience, setPromoTargetAudience] = useState('all');
   const [loading, setLoading] = useState(false);
+
+  // Categories for places
+  const categories = [
+    { id: 'all', name: 'Todos', icon: '🏠' },
+    { id: 'restaurant', name: 'Restaurantes', icon: '🍽️' },
+    { id: 'park', name: 'Parques', icon: '🌳' },
+    { id: 'shopping', name: 'Shopping', icon: '🛍️' },
+    { id: 'hotel', name: 'Hoteles', icon: '🏨' },
+    { id: 'vet', name: 'Veterinarias', icon: '🏥' },
+  ];
+
+  // Dummy places data
+  const places = [
+    {
+      id: '1',
+      name: 'Parque Centenario',
+      category: 'park',
+      address: 'Caballito, Buenos Aires',
+      rating: 4.5,
+      reviews: 324,
+      distance: '0.8 km',
+      isOpen: true,
+      phone: '+54 11 1234-5678',
+      description: 'Amplio parque con área especial para perros y senderos para caminar.',
+      features: ['Área para perros', 'Senderos', 'Fuentes de agua', 'Estacionamiento']
+    },
+    {
+      id: '2',
+      name: 'Café Mascota',
+      category: 'restaurant',
+      address: 'Palermo, Buenos Aires',
+      rating: 4.8,
+      reviews: 89,
+      distance: '1.2 km',
+      isOpen: true,
+      phone: '+54 11 5678-9012',
+      description: 'Restaurante familiar con área especial para mascotas.',
+      features: ['Área pet-friendly', 'Menú para mascotas', 'Estacionamiento']
+    },
+    {
+      id: '3',
+      name: 'Shopping Pet Plaza',
+      category: 'shopping',
+      address: 'Recoleta, Buenos Aires',
+      rating: 4.3,
+      reviews: 256,
+      distance: '2.1 km',
+      isOpen: false,
+      phone: '+54 11 9012-3456',
+      description: 'Centro comercial con política pet-friendly en todas sus tiendas.',
+      features: ['Pet-friendly', 'Veterinaria', 'Tienda de mascotas', 'Área de descanso']
+    }
+  ];
 
   // Dummy partners for selector (replace with your fetch logic)
   const partners = [
@@ -53,6 +108,13 @@ export default function AdminPromotions() {
     const now = new Date();
     return now >= startDate && now <= endDate;
   }
+
+  const filteredPlaces = places.filter(place => {
+    const matchesCategory = selectedCategory === 'all' || place.category === selectedCategory;
+    const matchesSearch = place.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         place.address.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
   useEffect(() => {
     if (!currentUser) return;
@@ -214,11 +276,6 @@ export default function AdminPromotions() {
           ? { ...promo, isActive: !isActive }
           : promo
       ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
       const { error } = await supabaseClient
         .from('promotions')
         .update({ is_active: !isActive })
@@ -229,49 +286,26 @@ export default function AdminPromotions() {
           promo.id === promotionId 
             ? { ...promo, isActive: isActive }
             : promo
-        // Revert local state if database update fails
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
         ));
         throw error;
-      rating: 4.8,
-      reviews: 89,
-      distance: '1.2 km',
-      isOpen: true,
-      phone: '+54 11 5678-9012',
-      description: 'Restaurante familiar con área especial para mascotas.',
-      features: ['Área pet-friendly', 'Menú para mascotas', 'Estacionamiento']
-    },
-    {
-      id: '3',
-      name: 'Shopping Pet Plaza',
-      category: 'shopping',
-      address: 'Recoleta, Buenos Aires',
-      rating: 4.3,
-      reviews: 256,
-      distance: '2.1 km',
-      isOpen: false,
-      phone: '+54 11 9012-3456',
-      description: 'Centro comercial con política pet-friendly en todas sus tiendas.',
-      features: ['Pet-friendly', 'Veterinaria', 'Tienda de mascotas', 'Área de descanso']
-    }
-  ];
-
-  const filteredPlaces = places.filter(place => {
-    const matchesCategory = selectedCategory === 'all' || place.category === selectedCategory;
-    const matchesSearch = place.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         place.address.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
       }
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo actualizar la promoción');
+    }
+  };
 
+  return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>🐾 Lugares Pet Friendly</Text>
         <TouchableOpacity 
           style={styles.addButton}
+          onPress={() => setShowPromotionModal(true)}
+        >
+          <Plus size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Barra de búsqueda */}
         <View style={styles.searchContainer}>
@@ -397,9 +431,7 @@ export default function AdminPromotions() {
             <Text style={styles.suggestButtonText}>Sugerir lugar</Text>
           </TouchableOpacity>
         </Card>
-      </ScrollView>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Card style={styles.statsCard}>
           <Text style={styles.statsTitle}>Estadísticas</Text>
           <View style={styles.statsGrid}>
@@ -767,6 +799,9 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   title: {
     fontSize: 20,
@@ -775,8 +810,11 @@ const styles = StyleSheet.create({
   },
   addButton: {
     backgroundColor: '#DC2626',
-    color: '#2D6A6F',
-    textAlign: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   content: {
     flex: 1,
@@ -863,6 +901,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   statusText: {
     fontSize: 12,
@@ -902,6 +942,7 @@ const styles = StyleSheet.create({
   promotionStats: {
     flexDirection: 'row',
     gap: 12,
+    marginBottom: 12,
   },
   promotionStat: {
     flexDirection: 'row',
@@ -982,6 +1023,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     backgroundColor: '#FFFFFF',
     minHeight: 50,
+    justifyContent: 'center',
   },
   selectedPartnerInfo: {
     flexDirection: 'row',
@@ -1289,14 +1331,7 @@ const styles = StyleSheet.create({
   categoryText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#EF4444',
-    marginBottom: 8,
-  },
-  accessDeniedText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
     color: '#6B7280',
-    textAlign: 'center',
   },
   selectedCategoryText: {
     color: '#FFFFFF',
@@ -1304,23 +1339,6 @@ const styles = StyleSheet.create({
   placesContainer: {
     paddingHorizontal: 16,
     paddingBottom: 20,
-  },
-  emptyCard: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 4,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
   },
   placeCard: {
     marginBottom: 16,
@@ -1354,18 +1372,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
-    marginLeft: 4,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
     marginLeft: 4,
   },
   placeDetails: {
