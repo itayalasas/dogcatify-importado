@@ -32,7 +32,6 @@ export default function AdminPromotions() {
   const [internalLinkType, setInternalLinkType] = useState<'service' | 'product' | 'partner'>('partner');
   const [selectedInternalId, setSelectedInternalId] = useState<string | null>(null);
   const [internalItems, setInternalItems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
 
   // Billing state
   const [showBillingModal, setShowBillingModal] = useState(false);
