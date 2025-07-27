@@ -328,11 +328,30 @@ export default function Home() {
         console.log('Supabase update result:', result);
         error = result.error;
         updateSuccess = !result.error;
+        
+        // Si la actualización "exitosa" no cambió el valor, usar API directa
+        if (updateSuccess) {
+          console.log('Verifying Supabase update worked...');
+          const { data: verifyData, error: verifyError } = await supabaseClient
+            .from('promotions')
+            .select('clicks')
+            .eq('id', promotion.id)
+            .single();
+          
+          if (!verifyError && verifyData && verifyData.clicks === (promotion.clicks || 0)) {
+            console.log('Supabase update did not work, falling back to direct API');
+            updateSuccess = false; // Force fallback to direct API
+          }
+        }
       } catch (updateError) {
         console.error('Supabase update failed, trying direct API call:', updateError);
-        
-        // Fallback: Direct API call
+        updateSuccess = false;
+      }
+      
+      // Fallback: Direct API call if Supabase client didn't work
+      if (!updateSuccess) {
         try {
+          console.log('Using direct API call as fallback...');
           const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
           const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
           
@@ -356,6 +375,8 @@ export default function Home() {
             const errorText = await response.text();
             console.error('Direct API error:', errorText);
             error = new Error(`API Error: ${response.status} - ${errorText}`);
+          } else {
+            console.log('Direct API update successful');
           }
         } catch (apiError) {
           console.error('Direct API call also failed:', apiError);
