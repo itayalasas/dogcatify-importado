@@ -309,20 +309,84 @@ export default function Home() {
       
       // Increment clicks
       console.log('Attempting to increment clicks...');
-      const { error } = await supabaseClient
-        .from('promotions')
-        .update({ 
-          clicks: (promotion.clicks || 0) + 1 
-        })
-        .eq('id', promotion.id);
+      console.log('Using supabaseClient:', typeof supabaseClient);
+      console.log('supabaseClient.from:', typeof supabaseClient.from);
+      
+      // Try direct API call as fallback
+      const newClicksCount = (promotion.clicks || 0) + 1;
+      let updateSuccess = false;
+      let error = null;
+      
+      try {
+        const result = await supabaseClient
+          .from('promotions')
+          .update({ 
+            clicks: newClicksCount 
+          })
+          .eq('id', promotion.id);
+        
+        console.log('Supabase update result:', result);
+        error = result.error;
+        updateSuccess = !result.error;
+      } catch (updateError) {
+        console.error('Supabase update failed, trying direct API call:', updateError);
+        
+        // Fallback: Direct API call
+        try {
+          const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+          const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+          
+          const response = await fetch(`${supabaseUrl}/rest/v1/promotions?id=eq.${promotion.id}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': supabaseKey,
+              'Authorization': `Bearer ${supabaseKey}`,
+              'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify({
+              clicks: newClicksCount
+            })
+          });
+          
+          console.log('Direct API response status:', response.status);
+          updateSuccess = response.ok;
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Direct API error:', errorText);
+            error = new Error(`API Error: ${response.status} - ${errorText}`);
+          }
+        } catch (apiError) {
+          console.error('Direct API call also failed:', apiError);
+          error = apiError;
+        }
+      }
 
+      console.log('Update result - error:', error);
+      console.log('Update success:', updateSuccess);
+      
       if (error) {
         console.error('Error incrementing clicks:', error);
         throw error;
       }
       
-      const newClicksCount = (promotion.clicks || 0) + 1;
       console.log('Clicks incremented successfully. New count:', newClicksCount);
+      
+      // Verificar que realmente se guardó en la base de datos
+      console.log('Verifying update in database...');
+      try {
+        const { data: verifyData, error: verifyError } = await supabaseClient
+          .from('promotions')
+          .select('clicks')
+          .eq('id', promotion.id)
+          .single();
+        
+        console.log('Database verification - error:', verifyError);
+        console.log('Database verification - clicks value:', verifyData?.clicks);
+      } catch (verifyErr) {
+        console.error('Error verifying database update:', verifyErr);
+      }
       
       // Update local state to reflect the click increment
       setPromotions(prevPromotions => 
