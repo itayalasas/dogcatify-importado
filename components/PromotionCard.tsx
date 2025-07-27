@@ -214,22 +214,11 @@ export default function AdminPromotions() {
           ? { ...promo, isActive: !isActive }
           : promo
       ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
       const { error } = await supabaseClient
         .from('promotions')
         .update({ is_active: !isActive })
         .eq('id', promotionId);
       if (error) {
-        // Revert local state if database update fails
-        setPromotions(prev => prev.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
         // Revert local state if database update fails
         setPromotions(prev => prev.map(promo => 
           promo.id === promotionId 
