@@ -18,6 +18,13 @@ config.resolver.nodeModulesPaths = [
   path.resolve(__dirname, 'node_modules'),
 ];
 
+// Configure jsPDF to use browser version
+config.resolver.alias = {
+  ...config.resolver.alias,
+  'jspdf': path.resolve(__dirname, 'node_modules/jspdf/dist/jspdf.min.js'),
+  'html2canvas': path.resolve(__dirname, 'src/mocks/html2canvas.js'),
+};
+
 // Ensure Metro can find all dependencies
 config.watchFolders = [__dirname];
 
