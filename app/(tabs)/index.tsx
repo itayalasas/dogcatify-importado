@@ -306,107 +306,81 @@ export default function Home() {
       console.log('Promotion ID:', promotion.id);
       console.log('Current clicks:', promotion.clicks);
       console.log('CTA URL:', promotion.ctaUrl);
+      console.log('Current user ID:', currentUser?.id);
       
       // Increment clicks
       console.log('Attempting to increment clicks...');
-      console.log('Using supabaseClient:', typeof supabaseClient);
-      console.log('supabaseClient.from:', typeof supabaseClient.from);
       
-      // Try direct API call as fallback
       const newClicksCount = (promotion.clicks || 0) + 1;
-      let updateSuccess = false;
-      let error = null;
       
+      // Use direct API call with proper authentication
       try {
-        const result = await supabaseClient
-          .from('promotions')
-          .update({ 
-            clicks: newClicksCount 
+        // Get current user token for authentication
+        const token = await supabaseClient.auth.getSession();
+        const accessToken = token.data?.session?.access_token;
+        
+        console.log('Has access token:', !!accessToken);
+        
+        const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+        
+        const headers = {
+          'Content-Type': 'application/json',
+          'apikey': supabaseKey,
+          'Prefer': 'return=representation'
+        };
+        
+        // Add authorization header if we have a token
+        if (accessToken) {
+          headers['Authorization'] = `Bearer ${accessToken}`;
+        }
+        
+        console.log('Making API call with headers:', Object.keys(headers));
+        
+        const response = await fetch(`${supabaseUrl}/rest/v1/promotions?id=eq.${promotion.id}`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({
+            clicks: newClicksCount
           })
-          .eq('id', promotion.id);
+        });
         
-        console.log('Supabase update result:', result);
-        error = result.error;
-        updateSuccess = !result.error;
+        console.log('API response status:', response.status);
         
-        // Si la actualización "exitosa" no cambió el valor, usar API directa
-        if (updateSuccess) {
-          console.log('Verifying Supabase update worked...');
-          const { data: verifyData, error: verifyError } = await supabaseClient
-            .from('promotions')
-            .select('clicks')
-            .eq('id', promotion.id)
-            .single();
-          
-          if (!verifyError && verifyData && verifyData.clicks === (promotion.clicks || 0)) {
-            console.log('Supabase update did not work, falling back to direct API');
-            updateSuccess = false; // Force fallback to direct API
-          }
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('API error response:', errorText);
+          throw new Error(`API Error: ${response.status} - ${errorText}`);
         }
-      } catch (updateError) {
-        console.error('Supabase update failed, trying direct API call:', updateError);
-        updateSuccess = false;
-      }
-      
-      // Fallback: Direct API call if Supabase client didn't work
-      if (!updateSuccess) {
-        try {
-          console.log('Using direct API call as fallback...');
-          const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-          const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+        
+        const responseData = await response.json();
+        console.log('API response data:', responseData);
+        
+        console.log('Clicks incremented successfully. New count:', newClicksCount);
+        
+        // Verify the update worked
+        console.log('Verifying update in database...');
+        const verifyResponse = await fetch(`${supabaseUrl}/rest/v1/promotions?id=eq.${promotion.id}&select=clicks`, {
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': accessToken ? `Bearer ${accessToken}` : `Bearer ${supabaseKey}`
+          }
+        });
+        
+        if (verifyResponse.ok) {
+          const verifyData = await verifyResponse.json();
+          console.log('Database verification - clicks value:', verifyData[0]?.clicks);
           
-          const response = await fetch(`${supabaseUrl}/rest/v1/promotions?id=eq.${promotion.id}`, {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': supabaseKey,
-              'Authorization': `Bearer ${supabaseKey}`,
-              'Prefer': 'return=minimal'
-            },
-            body: JSON.stringify({
-              clicks: newClicksCount
-            })
-          });
-          
-          console.log('Direct API response status:', response.status);
-          updateSuccess = response.ok;
-          
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Direct API error:', errorText);
-            error = new Error(`API Error: ${response.status} - ${errorText}`);
+          if (verifyData[0]?.clicks === newClicksCount) {
+            console.log('✅ Update verified successfully in database');
           } else {
-            console.log('Direct API update successful');
+            console.log('❌ Update not reflected in database');
           }
-        } catch (apiError) {
-          console.error('Direct API call also failed:', apiError);
-          error = apiError;
         }
-      }
-
-      console.log('Update result - error:', error);
-      console.log('Update success:', updateSuccess);
-      
-      if (error) {
-        console.error('Error incrementing clicks:', error);
-        throw error;
-      }
-      
-      console.log('Clicks incremented successfully. New count:', newClicksCount);
-      
-      // Verificar que realmente se guardó en la base de datos
-      console.log('Verifying update in database...');
-      try {
-        const { data: verifyData, error: verifyError } = await supabaseClient
-          .from('promotions')
-          .select('clicks')
-          .eq('id', promotion.id)
-          .single();
         
-        console.log('Database verification - error:', verifyError);
-        console.log('Database verification - clicks value:', verifyData?.clicks);
-      } catch (verifyErr) {
-        console.error('Error verifying database update:', verifyErr);
+      } catch (error) {
+        console.error('Error incrementing clicks:', error);
+        // Don't throw error, continue with navigation
       }
       
       // Update local state to reflect the click increment
