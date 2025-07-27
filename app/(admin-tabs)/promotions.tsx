@@ -32,12 +32,6 @@ export default function AdminPromotions() {
 
   // Billing state
   const [showBillingModal, setShowBillingModal] = useState(false);
-  const [selectedPromotion, setSelectedPromotion] = useState<any>(null);
-  const [costPerClick, setCostPerClick] = useState('5');
-  const [billingNotes, setBillingNotes] = useState('');
-  const [billingLoading, setBillingLoading] = useState(false);
-  // Billing state
-  const [showBillingModal, setShowBillingModal] = useState(false);
   const [selectedPromotionForBilling, setSelectedPromotionForBilling] = useState<any>(null);
   const [costPerClick, setCostPerClick] = useState('100');
   const [billingNotes, setBillingNotes] = useState('');
@@ -1557,6 +1551,89 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  billingButton: {
+    marginTop: 8,
+  },
+  billingModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    marginTop: 100,
+    flex: 1,
+    maxHeight: '90%',
+  },
+  billingModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  billingModalTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+  },
+  billingForm: {
+    flex: 1,
+    marginBottom: 20,
+  },
+  promotionSummary: {
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  promotionTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  summaryValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  totalSection: {
+    backgroundColor: '#D1FAE5',
+    padding: 16,
+    borderRadius: 12,
+    marginVertical: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#065F46',
+  },
+  totalAmount: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#065F46',
+  },
+  billingModalActions: {
+    flexDirection: 'column',
+    gap: 12,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
   },
   linkSection: {
     marginBottom: 20,
