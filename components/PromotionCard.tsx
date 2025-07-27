@@ -42,8 +42,12 @@ export default function PromotionCard({ promotion, onPress, onLike }: PromotionC
   };
 
   const handlePress = () => {
+    console.log('PromotionCard - handlePress called for promotion:', promotion.id);
     if (onPress) {
+      console.log('PromotionCard - Calling onPress callback');
       onPress();
+    } else {
+      console.warn('PromotionCard - No onPress callback provided');
     }
   };
 

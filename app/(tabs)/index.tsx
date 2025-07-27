@@ -302,8 +302,13 @@ export default function Home() {
 
   const handlePromotionPress = async (promotion: any) => {
     try {
+      console.log('=== PROMOTION CLICK DEBUG ===');
+      console.log('Promotion ID:', promotion.id);
+      console.log('Current clicks:', promotion.clicks);
+      console.log('CTA URL:', promotion.ctaUrl);
+      
       // Increment clicks
-      console.log('Incrementing clicks for promotion:', promotion.id);
+      console.log('Attempting to increment clicks...');
       const { error } = await supabaseClient
         .from('promotions')
         .update({ 
@@ -311,7 +316,12 @@ export default function Home() {
         })
         .eq('id', promotion.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error incrementing clicks:', error);
+        throw error;
+      }
+      
+      console.log('Clicks incremented successfully');
       
       // Update local state to reflect the click increment
       setPromotions(prevPromotions => 
@@ -321,6 +331,8 @@ export default function Home() {
             : promo
         )
       );
+      
+      console.log('Local state updated');
 
       // Handle promotion CTA URL
       if (promotion.ctaUrl) {
@@ -332,14 +344,19 @@ export default function Home() {
           const type = urlParts[0]; // 'services', 'products', 'partners'
           const id = urlParts[1];
           
+          console.log('Internal link - Type:', type, 'ID:', id);
+          
           switch (type) {
             case 'services':
+              console.log('Navigating to service:', id);
               router.push(`/services/${id}`);
               break;
             case 'products':
+              console.log('Navigating to product:', id);
               router.push(`/products/${id}`);
               break;
             case 'partners':
+              console.log('Navigating to partner:', id);
               router.push(`/services/partner/${id}`);
               break;
             default:
@@ -347,15 +364,19 @@ export default function Home() {
           }
         } else if (promotion.ctaUrl.startsWith('http')) {
           // Handle external links
+          console.log('External link detected:', promotion.ctaUrl);
           try {
             if (Platform.OS === 'web') {
+              console.log('Opening in web browser');
               window.open(promotion.ctaUrl, '_blank');
             } else {
+              console.log('Opening with Linking API');
               const { Linking } = require('react-native');
               const supported = await Linking.canOpenURL(promotion.ctaUrl);
               if (supported) {
                 await Linking.openURL(promotion.ctaUrl);
               } else {
+                console.error('URL not supported:', promotion.ctaUrl);
                 Alert.alert('Error', 'No se puede abrir este enlace');
               }
             }
@@ -363,16 +384,24 @@ export default function Home() {
             console.error('Error opening external link:', error);
             Alert.alert('Error', 'No se pudo abrir el enlace');
           }
+        } else {
+          console.warn('Invalid URL format:', promotion.ctaUrl);
+          Alert.alert('Error', 'Formato de enlace inválido');
         }
       } else if (promotion.partnerId) {
         // Fallback: Navigate to partner profile if no CTA URL
+        console.log('No CTA URL, navigating to partner:', promotion.partnerId);
         router.push(`/services/partner/${promotion.partnerId}`);
       } else {
         // No action defined
+        console.log('No action defined for promotion');
         Alert.alert('Información', 'Esta promoción no tiene enlace configurado');
       }
+      
+      console.log('=== END PROMOTION CLICK DEBUG ===');
     } catch (error) {
       console.error('Error handling promotion press:', error);
+      Alert.alert('Error', `Error al procesar la promoción: ${error.message}`);
     }
   };
 
