@@ -247,15 +247,33 @@ export default function AdminPromotions() {
         promo.id === promotionId 
           ? { ...promo, isActive: !isActive }
           : promo
+      ));
+      
+      const { error } = await supabaseClient
+        .from('promotions')
+        .update({ is_active: !isActive })
+        .eq('id', promotionId);
+      
+      if (error) {
         // Revert local state if database update fails
         setPromotions(prev => prev.map(promo => 
           promo.id === promotionId 
             ? { ...promo, isActive: isActive }
             : promo
         ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error toggling promotion:', error);
+      Alert.alert('Error', 'No se pudo actualizar la promoción');
+    }
+  };
 
+  // Check if user is admin
+  const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
+  
+  if (!isAdmin) {
+    return (
       <SafeAreaView style={styles.container}>
         <View style={styles.accessDenied}>
           <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
