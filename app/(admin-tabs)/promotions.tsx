@@ -248,11 +248,6 @@ export default function AdminPromotions() {
           ? { ...promo, isActive: !isActive }
           : promo
       ));
-      setPromotions(prev => prev.map(promo => 
-        promo.id === promotionId 
-          ? { ...promo, isActive: !isActive }
-          : promo
-      ));
       
       const { error } = await supabaseClient
         .from('promotions')
@@ -262,20 +257,17 @@ export default function AdminPromotions() {
       if (error) {
         // Revert local state if database update fails
         setPromotions(prev => prev.map(promo => 
-        // Revert local state if database update fails
-        setPromotions(prev => prev.map(promo => 
           promo.id === promotionId 
-            ? { ...promo, isActive: isActive }
-            : promo
-        ));
             ? { ...promo, isActive: isActive }
             : promo
         ));
         throw error;
       }
 
-    );
-  }
+    } catch (error) {
+      console.error('Error toggling promotion:', error);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
