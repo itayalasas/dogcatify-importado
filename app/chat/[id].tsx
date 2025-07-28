@@ -353,7 +353,6 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
-            {adoptionPet.breed} • {adoptionPet.age} {adoptionPet.age_unit === 'years' ? 'años' : 'meses'}
           style={styles.messagesContainer}
           contentContainerStyle={styles.messagesContent}
           showsVerticalScrollIndicator={false}
