@@ -290,7 +290,12 @@ export default function ConfigureActivities() {
         <Card style={styles.infoCard}>
           <Text style={styles.infoTitle}>{config.title}</Text>
           <Text style={styles.infoDescription}>
-            Define las actividades que ofreces para que los clientes puedan hacer reservas
+            {businessType === 'shelter' 
+              ? 'Publica mascotas disponibles para adopción y encuentra hogares responsables'
+              : businessType === 'shop'
+              ? 'Administra los productos de tu tienda para que los clientes puedan comprar'
+              : 'Define las actividades que ofreces para que los clientes puedan hacer reservas'
+            }
           </Text>
         </Card>
 
