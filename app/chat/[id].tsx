@@ -1,384 +1,306 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  FlatList, 
-  StyleSheet, 
-  SafeAreaView, 
-  KeyboardAvoidingView, 
-  Platform,
-  Alert
-} from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Send } from 'lucide-react-native';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../contexts/AuthContext';
-import { useNotifications } from '../../contexts/NotificationContext';
+import { Platform } from 'react-native';
+import { EmailTemplates } from './emailTemplates';
 
-export default function ChatScreen() {
-  const { id } = useLocalSearchParams();
-  const router = useRouter();
-  const { user: currentUser } = useAuth();
-  const { sendPushNotification } = useNotifications();
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [conversationData, setConversationData] = useState(null);
-  const flatListRef = useRef(null);
-
-  useEffect(() => {
-    if (id && currentUser) {
-      fetchConversation();
-      fetchMessages();
-      subscribeToMessages();
-    }
-  }, [id, currentUser]);
-
-  const fetchConversation = async () => {
+/**
+ * Utility functions for sending notifications via email
+ */
+export const NotificationService = {
+  /**
+   * Send an email notification
+   * @param to Recipient email address
+   * @param subject Email subject
+   * @param text Plain text content (optional if html is provided)
+   * @param html HTML content (optional if text is provided)
+   * @returns Promise with the result of the email sending operation
+   */
+  sendEmail: async (
+    to: string,
+    subject: string,
+    text?: string,
+    html?: string
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> => {
     try {
-      const { data, error } = await supabase
-        .from('adoption_conversations')
-        .select(`
-          *,
-          adoption_pets (
-            name,
-            profiles!adoption_pets_owner_id_fkey (
-              full_name,
-              id
-            )
-          ),
-          interested_user:profiles!adoption_conversations_interested_user_id_fkey (
-            full_name,
-            id
-          )
-        `)
-        .eq('id', id)
-        .single();
-
-      if (error) throw error;
-      setConversationData(data);
-    } catch (error) {
-      console.error('Error fetching conversation:', error);
-      Alert.alert('Error', 'No se pudo cargar la conversación');
-    }
-  };
-
-  const fetchMessages = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('adoption_messages')
-        .select(`
-          *,
-          sender:profiles!adoption_messages_sender_id_fkey (
-            full_name
-          )
-        `)
-        .eq('conversation_id', id)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-      setMessages(data || []);
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const subscribeToMessages = () => {
-    const subscription = supabase
-      .channel(`messages-${id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'adoption_messages',
-          filter: `conversation_id=eq.${id}`
+      // Get the Supabase URL from environment variables
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'your-anon-key';
+      
+      // Construct the Edge Function URL
+      const apiUrl = `${supabaseUrl}/functions/v1/send-email`;
+      
+      console.log('Sending email to:', to);
+      console.log('Subject:', subject);
+      
+      // Make the request to the Edge Function
+      console.log('Enviando solicitud a:', apiUrl);
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
         },
-        (payload) => {
-          console.log('New message received:', payload);
-          fetchMessages(); // Refetch to get sender info
-        }
-      )
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  };
-
-  const sendMessage = async () => {
-    if (!newMessage.trim() || !currentUser || !conversationData) return;
-
-    try {
-      const messageData = {
-        conversation_id: id,
-        sender_id: currentUser.id,
-        message: newMessage.trim(),
-        created_at: new Date().toISOString()
-      };
-
-      const { error } = await supabase
-        .from('adoption_messages')
-        .insert([messageData]);
-
-      if (error) throw error;
-
-      // Determinar el destinatario de la notificación
-      const isUserTheInterestedUser = currentUser.id === conversationData.interested_user_id;
-      const recipientId = isUserTheInterestedUser 
-        ? conversationData.adoption_pets.profiles.id 
-        : conversationData.interested_user.id;
+        body: JSON.stringify({
+          to,
+          subject,
+          text,
+          html,
+          attachment,
+        }),
+      });
       
-      const senderName = isUserTheInterestedUser 
-        ? conversationData.interested_user.full_name 
-        : conversationData.adoption_pets.profiles.full_name;
-      
-      const petName = conversationData.adoption_pets.name;
-      const messagePreview = newMessage.length > 50 
-        ? newMessage.substring(0, 50) + '...' 
-        : newMessage;
-
-      // Enviar notificación push al destinatario
-      try {
-        await sendPushNotification(
-          recipientId,
-          `${senderName} - Adopción de ${petName}`,
-          messagePreview,
-          {
-            type: 'chat_message',
-            conversationId: id,
-            petName: petName,
-            senderName: senderName
-          }
-        );
-        console.log('Push notification sent successfully');
-      } catch (notificationError) {
-        console.error('Error sending push notification:', notificationError);
-        // No bloquear el envío del mensaje si falla la notificación
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response from email API:', errorText);
+        return { 
+          success: false, 
+          error: `API responded with status ${response.status}: ${errorText}` 
+        };
       }
-
-      setNewMessage('');
       
-      // Scroll to bottom after sending
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-
+      // Parse the response
+      const result = await response.json();
+      
+      if (!response.ok) {
+        console.error('Error sending email:', result);
+        return { 
+          success: false, 
+          error: result.error || 'Failed to send email' 
+        };
+      }
+      
+      console.log('Email sent successfully:', result);
+      return { 
+        success: true, 
+        messageId: result.messageId 
+      };
     } catch (error) {
-      console.error('Error sending message:', error);
-      Alert.alert('Error', 'No se pudo enviar el mensaje');
+      console.error('Error in sendEmail:', error);
+      return { 
+        success: false, 
+        error: error.message || 'Unknown error occurred' 
+      };
     }
-  };
-
-  const renderMessage = (message: any) => {
-    // Force different alignment for testing
-    const testAlignment = message.message.includes('refugio') ? false : true;
+  },
+  
+  /**
+   * Send a welcome email to a new user
+   * @param email User's email address
+   * @param name User's display name
+   * @param activationLink Optional activation link
+   */
+  sendWelcomeEmail: async (email: string, name: string, activationLink?: string): Promise<void> => {
+    const subject = '¡Bienvenido a DogCatiFy!';
+    const text = `Hola ${name},\n\nBienvenido a DogCatiFy, la plataforma para amantes de mascotas.\n\nGracias por unirte a nuestra comunidad.\n\nEl equipo de DogCatiFy`;
+    const html = EmailTemplates.welcome(name, activationLink);
     
-    console.log('Test alignment (refugio=left, other=right):', testAlignment);
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a booking confirmation email
+   * @param email User's email address
+   * @param name User's display name
+   * @param serviceName Name of the booked service
+   * @param partnerName Name of the service provider
+   * @param date Date of the appointment
+   * @param time Time of the appointment
+   */
+  sendBookingConfirmationEmail: async (
+    email: string, 
+    name: string,
+    serviceName: string,
+    partnerName: string,
+    date: string,
+    time: string,
+    petName: string
+  ): Promise<void> => {
+    const subject = 'Confirmación de Reserva - DogCatiFy';
+    const text = `Hola ${name},\n\nTu reserva ha sido confirmada:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\nMascota: ${petName}\n\nGracias por usar DogCatiFy.`;
+    const html = EmailTemplates.bookingConfirmation(name, serviceName, partnerName, date, time, petName);
     
-    return (
-      <View
-        key={message.id}
-        style={[
-          styles.messageContainer,
-          testAlignment ? styles.ownMessage : styles.otherMessage
-        ]}
-      >
-        <View style={[
-          styles.messageBubble,
-          testAlignment ? styles.ownMessageBubble : styles.otherMessageBubble
-        ]}>
-          <Text style={[
-            styles.messageText,
-            testAlignment ? styles.ownMessageText : styles.otherMessageText
-          ]}>
-            {message.message}
-          </Text>
-          <Text style={styles.messageTime}>
-            {new Date(message.created_at).toLocaleTimeString('es-ES', {
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
-          </Text>
-        </View>
-      </View>
-    );
-  };
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text>Cargando conversación...</Text>
-        </View>
-      </SafeAreaView>
-    );
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a booking cancellation email
+   * @param email User's email address
+   * @param name User's display name
+   * @param serviceName Name of the cancelled service
+   * @param partnerName Name of the service provider
+   * @param date Date of the appointment
+   * @param time Time of the appointment
+   */
+  sendBookingCancellationEmail: async (
+    email: string, 
+    name: string,
+    serviceName: string,
+    partnerName: string,
+    date: string,
+    time: string
+  ): Promise<void> => {
+    const subject = 'Reserva Cancelada - DogCatiFy';
+    const text = `Hola ${name},\n\nTu reserva ha sido cancelada:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\n\nGracias por usar DogCatiFy.`;
+    const html = EmailTemplates.bookingCancellation(name, serviceName, partnerName, date, time);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a booking reminder email
+   * @param email User's email address
+   * @param name User's display name
+   * @param serviceName Name of the booked service
+   * @param partnerName Name of the service provider
+   * @param date Date of the appointment
+   * @param time Time of the appointment
+   * @param petName Name of the pet
+   */
+  sendBookingReminderEmail: async (
+    email: string, 
+    name: string,
+    serviceName: string,
+    partnerName: string,
+    date: string,
+    time: string,
+    petName: string
+  ): Promise<void> => {
+    const subject = 'Recordatorio de Cita - DogCatiFy';
+    const text = `Hola ${name},\n\nTe recordamos que tienes una cita programada para mañana:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\nMascota: ${petName}\n\nGracias por usar DogCatiFy.`;
+    const html = EmailTemplates.bookingReminder(name, serviceName, partnerName, date, time, petName);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a partner verification email
+   * @param email Partner's email address
+   * @param businessName Business name
+   */
+  sendPartnerVerificationEmail: async (
+    email: string,
+    businessName: string
+  ): Promise<void> => {
+    const subject = 'Tu negocio ha sido verificado - DogCatiFy';
+    const text = `Felicidades,\n\nTu negocio "${businessName}" ha sido verificado en DogCatiFy. Ahora puedes comenzar a ofrecer tus servicios a nuestra comunidad de amantes de mascotas.\n\nGracias por unirte a DogCatiFy.`;
+    const html = EmailTemplates.partnerApproved(businessName, '');
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a partner registration confirmation email
+   * @param email Partner's email address
+   * @param businessName Business name
+   * @param businessType Business type
+   */
+  sendPartnerRegistrationEmail: async (
+    email: string,
+    businessName: string,
+    businessType: string
+  ): Promise<void> => {
+    const subject = 'Solicitud de Registro Recibida - DogCatiFy';
+    const text = `Hola,\n\nHemos recibido tu solicitud para registrar "${businessName}" como ${businessType} en DogCatiFy. Nuestro equipo revisará tu solicitud y te notificaremos cuando sea aprobada.\n\nGracias por elegir DogCatiFy para hacer crecer tu negocio.`;
+    const html = EmailTemplates.partnerRegistration(businessName, businessType);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a partner rejection email
+   * @param email Partner's email address
+   * @param businessName Business name
+   * @param reason Reason for rejection
+   */
+  sendPartnerRejectionEmail: async (
+    email: string,
+    businessName: string,
+    reason: string
+  ): Promise<void> => {
+    const subject = 'Solicitud No Aprobada - DogCatiFy';
+    const text = `Hola,\n\nLamentamos informarte que tu solicitud para registrar "${businessName}" en DogCatiFy no ha sido aprobada en esta ocasión.\n\nMotivo: ${reason || 'No cumple con los requisitos necesarios para ser parte de nuestra plataforma en este momento.'}\n\nSi deseas obtener más información o volver a intentarlo con los ajustes necesarios, por favor contacta con nuestro equipo de soporte.\n\nAgradecemos tu interés en DogCatiFy.`;
+    const html = EmailTemplates.partnerRejected(businessName, reason);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a chat message notification
+   * @param recipientEmail Recipient's email address
+   * @param senderName Name of the message sender
+   * @param petName Name of the pet being discussed
+   * @param messagePreview Preview of the message content
+   * @param conversationId ID of the conversation for deep linking
+   */
+  sendChatMessageNotification: async (
+    recipientEmail: string,
+    senderName: string,
+    petName: string,
+    messagePreview: string,
+    conversationId: string
+  ): Promise<void> => {
+    const subject = `Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
+    const text = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
+    const html = `
+  },
+  
+  /**
+   * Send a chat message notification
+   * @param recipientEmail Recipient's email address
+   * @param senderName Name of the message sender
+   * @param petName Name of the pet being discussed
+   * @param messagePreview Preview of the message content
+   * @param conversationId ID of the conversation for deep linking
+   */
+  sendChatMessageNotification: async (
+    recipientEmail: string,
+    senderName: string,
+    petName: string,
+    messagePreview: string,
+    conversationId: string
+  ): Promise<void> => {
+    const subject = \`Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
+    const text = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
+    const html = `
+  },
+  
+  /**
+   * Send a chat message notification
+   * @param recipientEmail Recipient's email address
+  /**
+   * Send a chat message notification
+   * @param recipientEmail Recipient's email address
+   * @param senderName Name of the message sender
+   * @param petName Name of the pet being discussed
+   * @param messagePreview Preview of the message content
+   * @param conversationId ID of the conversation for deep linking
+   */
+  sendChatMessageNotification: async (
+    recipientEmail: string,
+    senderName: string,
+    petName: string,
+    messagePreview: string,
+    conversationId: string
+  ): Promise<void> => {
+    const subject = `Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
+    const messageText = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #2D6A6F; padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 0;">Nuevo mensaje sobre adopción</h1>
+        </div>
+        <div style="padding: 20px; background-color: #f9f9f9;">
+          <p>Hola,</p>
+          <p><strong>${senderName}</strong> te ha enviado un mensaje sobre la adopción de <strong>${petName}</strong>:</p>
+          <div style="background-color: white; border-left: 4px solid #2D6A6F; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; font-style: italic;">"${messagePreview}"</p>
+          </div>
+          <p>Responde desde la app DogCatiFy para continuar la conversación sobre la adopción.</p>
+        </div>
+        <div style="background-color: #f0f0f0; padding: 10px; text-align: center; font-size: 12px; color: #666;">
+          <p>© 2025 DogCatiFy. Todos los derechos reservados.</p>
+        </div>
+      </div>
+    `;
+    
+    await NotificationService.sendEmail(recipientEmail, subject, messageText, html);
   }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
-        style={styles.container} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#000" />
-          </TouchableOpacity>
-          <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle}>
-              {conversationData?.adoption_pets?.profiles?.full_name || 'Refugio'}
-            </Text>
-            <Text style={styles.headerSubtitle}>
-              Adopción de {conversationData?.adoption_pets?.name || 'Mascota'}
-            </Text>
-          </View>
-        </View>
-
-        {/* Messages */}
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={({ item }) => renderMessage(item)}
-          keyExtractor={(item) => item.id.toString()}
-          style={styles.messagesList}
-          contentContainerStyle={styles.messagesContainer}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-        />
-
-        {/* Input */}
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.textInput}
-            value={newMessage}
-            onChangeText={setNewMessage}
-            placeholder="Escribe un mensaje..."
-            multiline
-            maxLength={500}
-          />
-          <TouchableOpacity 
-            onPress={sendMessage}
-            style={[
-              styles.sendButton,
-              { opacity: newMessage.trim() ? 1 : 0.5 }
-            ]}
-            disabled={!newMessage.trim()}
-          >
-            <Send size={20} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  backButton: {
-    marginRight: 16,
-  },
-  headerInfo: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
-  },
-  messagesList: {
-    flex: 1,
-  },
-  messagesContainer: {
-    padding: 16,
-  },
-  messageContainer: {
-    marginVertical: 4,
-  },
-  ownMessage: {
-    alignItems: 'flex-end',
-  },
-  otherMessage: {
-    alignItems: 'flex-start',
-  },
-  messageBubble: {
-    maxWidth: '80%',
-    padding: 12,
-    borderRadius: 18,
-  },
-  ownMessageBubble: {
-    backgroundColor: '#007AFF',
-  },
-  otherMessageBubble: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  messageText: {
-    fontSize: 16,
-    lineHeight: 20,
-  },
-  ownMessageText: {
-    color: '#fff',
-  },
-  otherMessageText: {
-    color: '#000',
-  },
-  messageTime: {
-    fontSize: 11,
-    marginTop: 4,
-    opacity: 0.7,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    padding: 16,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-  },
-  textInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    marginRight: 12,
-    maxHeight: 100,
-    fontSize: 16,
-  },
-  sendButton: {
-    backgroundColor: '#007AFF',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
+};
