@@ -251,35 +251,7 @@ export default function AddAdoptionPet() {
         duration: 0, // No aplica para adopciones
         images: imageUrls,
         is_active: true,
-        created_at: new Date().toISOString(),
-        // Datos adicionales en un campo JSON personalizado si es necesario
-        adoption_data: {
-          species,
-          breed: breed.trim(),
-          gender,
-          age: parseInt(age),
-          age_unit: ageUnit,
-          size,
-          weight: parseFloat(weight),
-          color: color.trim(),
-          is_vaccinated: isVaccinated,
-          vaccines: vaccines,
-          is_dewormed: isDewormed,
-          is_neutered: isNeutered,
-          health_condition: healthCondition.trim() || null,
-          last_vet_visit: lastVetVisit.trim() || null,
-          temperament: temperament,
-          good_with_dogs: goodWithDogs,
-          good_with_cats: goodWithCats,
-          good_with_kids: goodWithKids,
-          energy_level: energyLevel,
-          special_needs: specialNeeds.trim() || null,
-          adoption_requirements: adoptionRequirements,
-          adoption_zones: adoptionZones.trim() || null,
-          contact_info: contactInfo.trim() || null,
-          adoption_process: adoptionProcess.trim() || null,
-          type: 'adoption'
-        }
+        created_at: new Date().toISOString()
       };
 
       const { error } = await supabaseClient
