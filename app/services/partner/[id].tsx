@@ -15,7 +15,6 @@ export default function PartnerServices() {
   const [partner, setPartner] = useState<any>(null);
   const [services, setServices] = useState<any[]>([]);
   const [filteredServices, setFilteredServices] = useState<any[]>([]);
-  const [filteredServices, setFilteredServices] = useState<any[]>([]);
   const [adoptionPets, setAdoptionPets] = useState<any[]>([]);
   const [partnerReviews, setPartnerReviews] = useState<any[]>([]);
   const [averageRating, setAverageRating] = useState(0);
