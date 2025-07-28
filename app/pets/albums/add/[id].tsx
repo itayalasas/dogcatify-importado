@@ -158,46 +158,48 @@ export default function AddPhoto() {
     setSelectedImages(newImages);
   };
 
-  const uploadImageToStorage = async (imageAsset: ImagePicker.ImagePickerAsset, albumId: string): Promise<string> => {
+  const uploadImageToStorage = async (imageAsset: ImagePicker.ImagePickerAsset): Promise<string> => {
     try {
       console.log('Starting image upload for:', imageAsset.uri);
       
       // Create a unique filename
       const filename = `pets/albums/${id}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+      console.log('Upload filename:', filename);
       
-      console.log('Uploading to path:', filename);
+      // Fetch the image and convert to blob
+      console.log('Fetching image from URI...');
+      const response = await fetch(imageAsset.uri);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.status}`);
+      }
       
-      // Create FormData for proper file upload
-      const formData = new FormData();
-      formData.append('file', {
-        uri: imageAsset.uri,
-        type: 'image/jpeg',
-        name: filename,
-      } as any);
+      const blob = await response.blob();
+      console.log('Image converted to blob, size:', blob.size);
       
-      console.log('FormData created for upload');
-      
-      // Upload using FormData to Supabase storage
-      const uploadResult = await supabaseClient.storage
+      // Upload blob to Supabase storage
+      console.log('Uploading blob to Supabase storage...');
+      const { data, error } = await supabaseClient.storage
         .from('dogcatify')
-        .upload(filename, formData, {
+        .upload(filename, blob, {
           contentType: 'image/jpeg',
           cacheControl: '3600',
         });
       
-      console.log('Upload result:', uploadResult);
-      
-      if (uploadResult.error) {
-        console.error('Upload error:', uploadResult.error);
-        throw uploadResult.error;
+      if (error) {
+        console.error('Supabase storage error:', error);
+        throw error;
       }
       
-      // Get public URL
-      const { data: { publicUrl } } = supabaseClient.storage
+      console.log('Upload successful, data:', data);
+      
+      // Get the public URL
+      const { data: urlData } = supabaseClient.storage
         .from('dogcatify')
         .getPublicUrl(filename);
       
+      const publicUrl = urlData.publicUrl;
       console.log('Generated public URL:', publicUrl);
+      
       return publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
@@ -234,7 +236,6 @@ export default function AddPhoto() {
     }
   };
 
-
   const handleSavePhotos = async () => {
     if (selectedImages.length === 0) {
       Alert.alert('Error', 'Por favor selecciona al menos una foto');
@@ -246,15 +247,12 @@ export default function AddPhoto() {
       return;
     }
 
-    // Generate unique album ID at the beginning of the function
-    const albumId = `album_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-
     setLoading(true);
     try {
       console.log('Starting to save photos, total images:', selectedImages.length);
       
-      // Upload all images to Firebase Storage
-      const uploadPromises = selectedImages.map(image => uploadImageToStorage(image, albumId));
+      // Upload all images to storage
+      const uploadPromises = selectedImages.map(image => uploadImageToStorage(image));
       
       console.log('Starting parallel uploads...');
       let imageUrls;
@@ -267,7 +265,7 @@ export default function AddPhoto() {
       }
 
       console.log('Saving album to database...');
-      // Save album to Firestore
+      // Save album to database
       const albumResult = await supabaseClient
         .from('pet_albums')
         .insert({
