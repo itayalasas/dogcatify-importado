@@ -170,27 +170,17 @@ export default function AddPhoto() {
       
       console.log('Upload filename:', filename);
       
-      // Leer el archivo como base64
-      const base64 = await FileSystem.readAsStringAsync(imageAsset.uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      // Usar fetch para obtener el blob directamente (compatible con RN)
+      const response = await fetch(imageAsset.uri);
+      const blob = await response.blob();
       
-      console.log('File read as base64, length:', base64.length);
-      
-      // Convertir base64 a Uint8Array (método que funciona en RN)
-      const binaryString = atob(base64);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      
-      console.log('Converted to bytes, length:', bytes.length);
+      console.log('File fetched as blob, size:', blob.size);
       
       // Subir usando el array de bytes
       console.log('Uploading to Supabase Storage...');
       const { data, error } = await supabaseClient.storage
         .from('dogcatify')
-        .upload(filename, bytes, {
+        .upload(filename, blob, {
           contentType: 'image/jpeg',
           cacheControl: '3600',
           upsert: false
@@ -214,10 +204,6 @@ export default function AddPhoto() {
       
       return publicUrl;
     } catch (error) {
-      console.error('Error uploading image:', error);
-      throw error;
-    }
-  };
 
   const createPostFromAlbum = async (imageUrls: string[], petData: any) => {
     try {
