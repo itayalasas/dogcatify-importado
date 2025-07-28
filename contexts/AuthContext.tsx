@@ -129,9 +129,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const checkSession = async () => {
       try {
         if (!mounted) return;
+        console.log('AuthContext - Checking initial session...');
         const { data } = await supabaseClient.auth.getSession();
         const session = data?.session;
         
+        console.log('AuthContext - Initial session check result:', session?.user?.email || 'No session');
         setSession(session);
         
         if (session?.user) {
@@ -140,6 +142,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             if (!mounted) return;
             if (profile) {
+              console.log('AuthContext - Initial profile loaded:', profile.display_name);
               setCurrentUser({
                 id: session.user.id,
                 email: session.user.email!,
@@ -165,6 +168,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               await supabaseClient.auth.signOut();
             }
           }
+        } else {
+          console.log('AuthContext - No initial session found');
         }
       } catch (error) {
         console.error('AuthContext - Error in checkSession:', error);
