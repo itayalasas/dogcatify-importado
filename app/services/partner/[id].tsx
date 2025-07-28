@@ -477,38 +477,63 @@ export default function PartnerServices() {
       if (!existingConversation) {
         // No existe conversación, crear una nueva
         console.log('Creating new conversation...');
-        const { data: newConversation, error: createError } = await supabaseClient
+        
+        // Crear conversación usando insert directo
+        const conversationData = {
+          adoption_pet_id: petId,
+          partner_id: id,
+          user_id: currentUser!.id,
+          status: 'active',
+          created_at: new Date().toISOString()
+        };
+        
+        const { error: createError } = await supabaseClient
           .from('chat_conversations')
-          .insert({
-            adoption_pet_id: petId,
-            partner_id: id,
-            user_id: currentUser!.id,
-            status: 'active'
-          })
-          .select('id')
-          .single();
+          .insert([conversationData]);
 
         if (createError) {
           console.error('Error creating conversation:', createError);
           throw createError;
         }
         
-        console.log('New conversation created:', newConversation);
-        conversationId = newConversation.id;
+        console.log('New conversation created successfully');
+        
+        // Buscar la conversación recién creada para obtener el ID
+        const { data: createdConversation, error: fetchError } = await supabaseClient
+          .from('chat_conversations')
+          .select('id')
+          .eq('adoption_pet_id', petId)
+          .eq('user_id', currentUser!.id)
+          .eq('partner_id', id)
+          .single();
+        
+        if (fetchError || !createdConversation) {
+          console.error('Error fetching created conversation:', fetchError);
+          throw new Error('No se pudo obtener el ID de la conversación creada');
+        }
+        
+        conversationId = createdConversation.id;
+        console.log('Conversation ID obtained:', conversationId);
 
         // Enviar mensaje inicial
+        const messageData = {
+          conversation_id: conversationId,
+          sender_id: currentUser!.id,
+          message: `Hola! Estoy interesado/a en adoptar a ${petName}. ¿Podrían darme más información?`,
+          message_type: 'text',
+          is_read: false,
+          created_at: new Date().toISOString()
+        };
+        
         const { error: messageError } = await supabaseClient
           .from('chat_messages')
-          .insert({
-            conversation_id: conversationId,
-            sender_id: currentUser!.id,
-            message: `Hola! Estoy interesado/a en adoptar a ${petName}. ¿Podrían darme más información?`,
-            message_type: 'text'
-          });
+          .insert([messageData]);
         
         if (messageError) {
           console.error('Error sending initial message:', messageError);
           // No lanzar error aquí, la conversación ya se creó
+        } else {
+          console.log('Initial message sent successfully');
         }
       } else {
         console.log('Using existing conversation:', existingConversation.id);
@@ -520,7 +545,7 @@ export default function PartnerServices() {
       router.push(`/chat/${conversationId}?petName=${petName}`);
     } catch (error) {
       console.error('Error starting adoption chat:', error);
-      Alert.alert('Error', `No se pudo iniciar la conversación: ${error?.message || 'Error desconocido'}`);
+      Alert.alert('Error', `No se pudo iniciar la conversación: ${error?.message || error || 'Error desconocido'}`);
     }
   };
 
