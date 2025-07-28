@@ -482,15 +482,6 @@ export default function Home() {
   };
 
   if (!currentUser) {
-    // Si no hay usuario, redirigir al login con delay para evitar errores de navegación
-    React.useEffect(() => {
-      const timer = setTimeout(() => {
-        router.replace('/auth/login');
-      }, 100);
-      
-      return () => clearTimeout(timer);
-    }, []);
-    
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingText}>Redirigiendo...</Text>
