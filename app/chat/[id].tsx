@@ -270,7 +270,22 @@ export default function ChatScreen() {
   const renderMessage = (message: any) => {
     const isOwnMessage = message.sender_id === currentUser?.id;
     
-    console.log('Message debug:', {
+    console.log('=== MESSAGE DEBUG ===');
+    console.log('Message ID:', message.id);
+    console.log('Message text:', message.message);
+    console.log('Message sender_id:', message.sender_id);
+    console.log('Message sender_id type:', typeof message.sender_id);
+    console.log('Current user ID:', currentUser?.id);
+    console.log('Current user ID type:', typeof currentUser?.id);
+    console.log('Are they equal?:', message.sender_id === currentUser?.id);
+    console.log('Is own message?:', isOwnMessage);
+    console.log('Message created at:', message.created_at);
+    console.log('=== END MESSAGE DEBUG ===');
+    
+    // Force different alignment for testing
+    const testAlignment = message.message.includes('refugio') ? false : true;
+    
+    console.log('Test alignment (refugio=left, other=right):', testAlignment);
       messageId: message.id,
       senderId: message.sender_id,
       currentUserId: currentUser?.id,
@@ -282,16 +297,16 @@ export default function ChatScreen() {
         key={message.id}
         style={[
           styles.messageContainer,
-          isOwnMessage ? styles.ownMessage : styles.otherMessage
+          testAlignment ? styles.ownMessage : styles.otherMessage
         ]}
       >
         <View style={[
           styles.messageBubble,
-          isOwnMessage ? styles.ownMessageBubble : styles.otherMessageBubble
+          testAlignment ? styles.ownMessageBubble : styles.otherMessageBubble
         ]}>
           <Text style={[
             styles.messageText,
-            isOwnMessage ? styles.ownMessageText : styles.otherMessageText
+            testAlignment ? styles.ownMessageText : styles.otherMessageText
           ]}>
             {message.message}
           </Text>
