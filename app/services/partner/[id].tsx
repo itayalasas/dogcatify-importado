@@ -20,14 +20,7 @@ export default function PartnerServices() {
   const [averageRating, setAverageRating] = useState(0);
   const [totalReviews, setTotalReviews] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
-  const [partnerReviews, setPartnerReviews] = useState<any[]>([]);
-  const [averageRating, setAverageRating] = useState(0);
-  const [totalReviews, setTotalReviews] = useState(0);
-  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
-  const [showReviewsModal, setShowReviewsModal] = useState(false);
-  const [detailedReviews, setDetailedReviews] = useState<any[]>([]);
-  const [loadingDetailedReviews, setLoadingDetailedReviews] = useState(false);
   const [showReviewsModal, setShowReviewsModal] = useState(false);
   const [detailedReviews, setDetailedReviews] = useState<any[]>([]);
   const [loadingDetailedReviews, setLoadingDetailedReviews] = useState(false);
