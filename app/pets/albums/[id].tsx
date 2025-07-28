@@ -6,6 +6,7 @@ import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { supabaseClient } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 
@@ -94,6 +95,8 @@ export default function AlbumDetail() {
     }
   };
 
+  const uploadImageToStorage = async (imageAsset: ImagePicker.ImagePickerAsset) => {
+    try {
       console.log('Starting upload for image:', imageAsset.uri);
       
       // Crear un nombre de archivo único
@@ -128,10 +131,12 @@ export default function AlbumDetail() {
           cacheControl: '3600',
           upsert: false
         });
+      
+      if (error) {
         console.error('Supabase upload error:', error);
         throw error;
+      }
       
-      if (error) throw error;
       console.log('Upload successful, getting public URL...');
       
 
