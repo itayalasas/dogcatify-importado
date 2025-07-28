@@ -257,7 +257,7 @@ export const NotificationService = {
     messagePreview: string,
     conversationId: string
   ): Promise<void> => {
-    const subject = `Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
+    const subject = \`Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
     const text = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
     const html = `
   },
