@@ -207,6 +207,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await supabaseClient.auth.signOut();
         }
         
+        // Mejorar mensajes de error específicos
+        if (error.message.includes('Invalid login credentials')) {
+          throw new Error('Invalid login credentials');
+        } else if (error.message.includes('Email not confirmed')) {
+          throw new Error('Email not confirmed');
+        } else if (error.message.includes('Too many requests')) {
+          throw new Error('Too many requests');
+        } else if (error.message.includes('User not found')) {
+          throw new Error('User not found');
+        }
+        
         throw error;
       }
       
