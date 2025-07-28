@@ -179,7 +179,7 @@ export default function BusinessSelector() {
       // Show confirmation dialog
       Alert.alert(
         `${currentValue ? 'Desactivar' : 'Activar'} ${featureType}`,
-        `¿Estás seguro de que quieres ${currentValue ? 'desactivar' : 'activar'} esta funcionalidad?${currentValue ? ' Esto impedirá el acceso a esta sección.' : ''}`,
+        `¿Estás seguro de que quieres ${currentValue ? 'desactivar' : 'activar'} esta funcionalidad?${currentValue ? ' Esto ocultará las opciones relacionadas en el dashboard.' : ' Esto habilitará nuevas opciones en el dashboard.'}`,
         [
           { text: 'Cancelar', style: 'cancel' },
           {
@@ -233,17 +233,9 @@ export default function BusinessSelector() {
 
       Alert.alert(
         'Funcionalidad actualizada',
-        `${featureType} ha sido ${!currentValue ? 'activada' : 'desactivada'} correctamente.`
+        `${featureType} ha sido ${!currentValue ? 'activada' : 'desactivada'} correctamente. ${!currentValue ? 'Ahora verás nuevas opciones en el dashboard.' : 'Las opciones relacionadas se han ocultado del dashboard.'}`
       );
 
-      // Navigate to configuration screen if activating a functionality
-      if (!currentValue) {
-        if (featureKey === 'agenda') {
-          router.push(`/partner/configure-schedule-page?partnerId=${businessId}`);
-        } else if (featureKey === 'products') {
-          router.push({pathname: '/(partner-tabs)/products', params: { businessId }});
-        }
-      }
     } catch (error) {
       console.error('Error updating feature:', error);
       Alert.alert('Error', 'No se pudo actualizar la funcionalidad');
