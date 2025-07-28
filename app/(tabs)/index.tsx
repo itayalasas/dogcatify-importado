@@ -483,12 +483,14 @@ export default function Home() {
 
   // Manejar redirección cuando no hay usuario - FUERA del render condicional
   useEffect(() => {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Redirigiendo...</Text>
-      </View>
-    );
-  }
+    if (!currentUser) {
+      return (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Redirigiendo...</Text>
+        </View>
+      );
+    }
+  }, [currentUser]);
 
   return (
     <SafeAreaView style={styles.container}>
