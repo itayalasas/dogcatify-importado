@@ -44,41 +44,72 @@ export default function Services() {
         const partnersWithServices = [];
 
         for (const partner of partnersData) {
-          // Fetch one service to represent this partner
-          const { data: servicesData, error: servicesError } = await supabaseClient
-            .from('partner_services')
-            .select('*')
-            .eq('partner_id', partner.id)
-            .eq('is_active', true)
-            .order('created_at', { ascending: false })
-            .limit(3); // Get up to 3 services to have more image options
+          if (partner.business_type === 'shelter') {
+            // For shelters, check if they have adoption pets
+            const { data: adoptionPets, error: adoptionError } = await supabaseClient
+              .from('adoption_pets')
+              .select('*')
+              .eq('partner_id', partner.id)
+              .eq('is_available', true)
+              .limit(1);
+            
+            if (adoptionPets && adoptionPets.length > 0 && !adoptionError) {
+              const pet = adoptionPets[0];
+              partnersWithServices.push({
+                id: `adoption-${pet.id}`,
+                partnerId: partner.id,
+                partnerName: partner.business_name,
+                partnerAddress: partner.address,
+                partnerLogo: partner.logo,
+                partnerType: partner.business_type,
+                rating: partner.rating || 0,
+                reviews: partner.reviews_count || 0,
+                location: partner.address,
+                // For shelters, show adoption info
+                name: `Adopciones disponibles`,
+                price: 0,
+                duration: 0,
+                category: partner.business_type,
+                serviceImages: pet.images || [],
+                images: pet.images || [],
+              });
+            }
+          } else {
+            // For other business types, fetch services
+            const { data: servicesData, error: servicesError } = await supabaseClient
+              .from('partner_services')
+              .select('*')
+              .eq('partner_id', partner.id)
+              .eq('is_active', true)
+              .order('created_at', { ascending: false })
+              .limit(3);
 
-          if (servicesData && servicesData.length > 0 && !servicesError) {
-            const serviceData = servicesData[0];
-            
-            // Collect all service images
-            const allServiceImages = servicesData
-              .filter(s => s.images && s.images.length > 0)
-              .flatMap(s => s.images);
-            
-            partnersWithServices.push({
-              id: serviceData.id,
-              partnerId: partner.id,
-              partnerName: partner.business_name,
-              partnerAddress: partner.address,
-              partnerLogo: partner.logo,
-              partnerType: partner.business_type,
-              rating: partner.rating || 0,
-              reviews: partner.reviews_count || 0,
-              location: partner.address,
-              // Include one service data for compatibility
-              name: serviceData.name,
-              price: serviceData.price,
-              duration: serviceData.duration,
-              category: partner.business_type,
-              serviceImages: allServiceImages, // Add all service images
-              images: serviceData.images || [], // Keep individual service images
-            });
+            if (servicesData && servicesData.length > 0 && !servicesError) {
+              const serviceData = servicesData[0];
+              
+              // Collect all service images
+              const allServiceImages = servicesData
+                .filter(s => s.images && s.images.length > 0)
+                .flatMap(s => s.images);
+              
+              partnersWithServices.push({
+                id: serviceData.id,
+                partnerId: partner.id,
+                partnerName: partner.business_name,
+                partnerAddress: partner.address,
+                partnerLogo: partner.logo,
+                partnerType: partner.business_type,
+                rating: partner.rating || 0,
+                reviews: partner.reviews_count || 0,
+                location: partner.address,
+                name: serviceData.name,
+                price: serviceData.price,
+                duration: serviceData.duration,
+                category: partner.business_type,
+                serviceImages: allServiceImages,
+                images: serviceData.images || [],
+              });
+            }
           }
         }
         setPartners(partnersWithServices);
@@ -190,7 +221,7 @@ export default function Services() {
           )}
           
           {!loading && !error && currentUser && filteredPartners.length > 0 && (
-            <View>
+            <>
               {filteredPartners.map((partner) => (
                 <ServiceCard
                   key={partner.partnerId}
@@ -198,7 +229,7 @@ export default function Services() {
                   onPress={() => handlePartnerPress(partner.partnerId)}
                 />
               ))}
-            </View>
+            </>
           )}
         </View>
       </ScrollView>
