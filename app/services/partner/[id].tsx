@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, TextInput, Dimensions, Modal, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, TextInput, Dimensions, Modal, Alert, Share, Platform, Linking } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, MapPin, Clock, Phone, Star, Search, User, Heart, MessageCircle } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
@@ -9,18 +9,28 @@ import { supabaseClient } from '../../../lib/supabase';
 
 const { width } = Dimensions.get('window');
 
+const { width } = Dimensions.get('window');
+
 export default function PartnerServices() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { currentUser } = useAuth();
   const [partner, setPartner] = useState<any>(null);
   const [services, setServices] = useState<any[]>([]);
   const [filteredServices, setFilteredServices] = useState<any[]>([]);
+  const [filteredServices, setFilteredServices] = useState<any[]>([]);
   const [adoptionPets, setAdoptionPets] = useState<any[]>([]);
   const [partnerReviews, setPartnerReviews] = useState<any[]>([]);
   const [averageRating, setAverageRating] = useState(0);
   const [totalReviews, setTotalReviews] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [partnerReviews, setPartnerReviews] = useState<any[]>([]);
+  const [averageRating, setAverageRating] = useState(0);
+  const [totalReviews, setTotalReviews] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showReviewsModal, setShowReviewsModal] = useState(false);
+  const [detailedReviews, setDetailedReviews] = useState<any[]>([]);
+  const [loadingDetailedReviews, setLoadingDetailedReviews] = useState(false);
   const [showReviewsModal, setShowReviewsModal] = useState(false);
   const [detailedReviews, setDetailedReviews] = useState<any[]>([]);
   const [loadingDetailedReviews, setLoadingDetailedReviews] = useState(false);
@@ -31,6 +41,20 @@ export default function PartnerServices() {
       fetchAdoptionPets();
     } else {
       fetchPartnerServices();
+    }
+    fetchPartnerReviews();
+  }, [id]);
+
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      setFilteredServices(
+        services.filter(service => 
+          service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          service.description?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      );
+    } else {
+      setFilteredServices(services);
     }
     fetchPartnerReviews();
   }, [id]);
