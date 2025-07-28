@@ -70,7 +70,7 @@ export default function ChatScreen() {
         .select(`
           *,
           adoption_pets(*),
-          partners(business_name, logo, phone)
+          partners(id, business_name, logo, phone)
         `)
         .eq('id', id)
         .single();
@@ -78,18 +78,19 @@ export default function ChatScreen() {
       if (convError) throw convError;
 
       setConversation(conversationData);
-      setAdoptionPet(conversationData.adoption_pets);
+      setAdoptionPet(conversationData?.adoption_pets);
 
       // Determine other participant
       const isUserCustomer = conversationData.user_id === currentUser?.id;
       
       if (isUserCustomer) {
         // Current user is the customer, other participant is the shelter
+        const partnerData = conversationData?.partners;
         setOtherParticipant({
           id: conversationData.partner_id,
-          name: conversationData.partners.business_name,
-          avatar: conversationData.partners.logo,
-          phone: conversationData.partners.phone,
+          name: partnerData?.business_name || 'Refugio',
+          avatar: partnerData?.logo,
+          phone: partnerData?.phone,
           type: 'shelter'
         });
       } else {
@@ -100,15 +101,25 @@ export default function ChatScreen() {
           .eq('id', conversationData.user_id)
           .single();
 
-        if (customerError) throw customerError;
-
-        setOtherParticipant({
-          id: customerData.id,
-          name: customerData.display_name || 'Usuario',
-          avatar: customerData.photo_url,
-          phone: customerData.phone,
-          type: 'customer'
-        });
+        if (customerError) {
+          console.error('Error fetching customer data:', customerError);
+          // Set default customer data if fetch fails
+          setOtherParticipant({
+            id: conversationData.user_id,
+            name: 'Usuario',
+            avatar: null,
+            phone: null,
+            type: 'customer'
+          });
+        } else {
+          setOtherParticipant({
+            id: customerData.id,
+            name: customerData.display_name || 'Usuario',
+            avatar: customerData.photo_url,
+            phone: customerData.phone,
+            type: 'customer'
+          });
+        }
       }
 
       // Fetch messages
@@ -123,7 +134,7 @@ export default function ChatScreen() {
       const formattedMessages = messagesData.map(msg => ({
         ...msg,
         created_at: new Date(msg.created_at)
-      }));
+      })) || [];
 
       setMessages(formattedMessages);
 
@@ -258,7 +269,7 @@ export default function ChatScreen() {
             styles.messageTime,
             isOwnMessage ? styles.ownMessageTime : styles.otherMessageTime
           ]}>
-            {formatMessageTime(message.created_at)}
+            Adopción de {adoptionPet?.name || petName || 'mascota'}
           </Text>
         </View>
       </View>
@@ -342,7 +353,7 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
-          ref={scrollViewRef}
+            {adoptionPet.breed} • {adoptionPet.age} {adoptionPet.age_unit === 'years' ? 'años' : 'meses'}
           style={styles.messagesContainer}
           contentContainerStyle={styles.messagesContent}
           showsVerticalScrollIndicator={false}
