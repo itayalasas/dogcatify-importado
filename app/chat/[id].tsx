@@ -286,12 +286,6 @@ export default function ChatScreen() {
     const testAlignment = message.message.includes('refugio') ? false : true;
     
     console.log('Test alignment (refugio=left, other=right):', testAlignment);
-    console.log({
-      messageId: message.id,
-      senderId: message.sender_id,
-      currentUserId: currentUser?.id,
-      isOwnMessage
-    });
     
     return (
       <View
