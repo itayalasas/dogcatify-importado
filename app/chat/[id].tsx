@@ -26,6 +26,12 @@ export const NotificationService = {
       
       // Construct the Edge Function URL
       const apiUrl = `${supabaseUrl}/functions/v1/send-email`;
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+};
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
