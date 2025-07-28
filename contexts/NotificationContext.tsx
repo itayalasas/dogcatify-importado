@@ -22,6 +22,7 @@ interface NotificationContextType {
   sendNotification: (title: string, body: string, data?: any) => Promise<void>;
   sendNotificationToUser: (userId: string, title: string, body: string, data?: any) => Promise<void>;
   sendNotificationToAdmin: (title: string, body: string, data?: any) => Promise<void>;
+  sendChatNotification: (recipientId: string, senderName: string, petName: string, messagePreview: string, conversationId: string) => Promise<void>;
   registerForPushNotifications: () => Promise<string | null>;
 }
 
@@ -396,12 +397,43 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   };
 
+  const sendChatNotification = async (
+    recipientId: string,
+    senderName: string,
+    petName: string,
+    messagePreview: string,
+    conversationId: string
+  ) => {
+    try {
+      console.log('Sending chat notification to:', recipientId);
+      
+      const title = `${senderName} - Adopción de ${petName}`;
+      const body = messagePreview.length > 100 
+        ? messagePreview.substring(0, 100) + '...' 
+        : messagePreview;
+      
+      const notificationData = {
+        type: 'chat_message',
+        conversationId,
+        petName,
+        senderName,
+        deepLink: `/chat/${conversationId}?petName=${encodeURIComponent(petName)}`
+      };
+      
+      await sendNotificationToUser(recipientId, title, body, notificationData);
+      console.log('Chat notification sent successfully');
+    } catch (error) {
+      console.error('Error sending chat notification:', error);
+    }
+  };
+
   const value = {
     expoPushToken,
     notification,
     sendNotification,
     sendNotificationToUser,
     sendNotificationToAdmin,
+    sendChatNotification,
     registerForPushNotifications,
   };
 
