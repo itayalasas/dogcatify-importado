@@ -217,6 +217,10 @@ export default function AddPhoto() {
       console.error('Error uploading image:', error);
       throw error;
     }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      throw error;
+    }
   };
 
   const createPostFromAlbum = async (imageUrls: string[], petData: any) => {
