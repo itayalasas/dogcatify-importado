@@ -9,8 +9,6 @@ import { supabaseClient } from '../../../lib/supabase';
 
 const { width } = Dimensions.get('window');
 
-const { width } = Dimensions.get('window');
-
 export default function PartnerServices() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { currentUser } = useAuth();
