@@ -5,7 +5,7 @@ import { ArrowLeft, Camera, Upload, X, Share2 } from 'lucide-react-native';
 import { Input } from '../../../../components/ui/Input';
 import { Button } from '../../../../components/ui/Button';
 import { Card } from '../../../../components/ui/Card';
-import { launchImageLibraryAsync, launchCameraAsync, MediaType, requestMediaLibraryPermissionsAsync, requestCameraPermissionsAsync, ImagePickerAsset } from 'expo-image-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { supabaseClient } from '../../../../lib/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { detectPetInImage, validateImagesForPets } from '../../../../utils/petDetection';
@@ -15,22 +15,22 @@ export default function AddPhoto() {
   const { currentUser } = useAuth();
   const [photoTitle, setPhotoTitle] = useState('');
   const [photoDescription, setPhotoDescription] = useState('');
-  const [selectedImages, setSelectedImages] = useState<ImagePickerAsset[]>([]);
+  const [selectedImages, setSelectedImages] = useState<ImagePicker.ImagePickerAsset[]>([]);
   const [loading, setLoading] = useState(false);
   const [isShared, setIsShared] = useState(false);
   const [validatingImages, setValidatingImages] = useState(false);
 
   const handleSelectPhoto = async () => {
     try {
-      const permissionResult = await requestMediaLibraryPermissionsAsync();
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (permissionResult.granted === false) {
         Alert.alert('Permisos requeridos', 'Se necesitan permisos para acceder a la galería');
         return;
       }
 
-      const result = await launchImageLibraryAsync({
-        mediaTypes: MediaType.Images,
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaType.Images,
         allowsMultipleSelection: true,
         quality: 0.8,
         aspect: [1, 1],
@@ -94,15 +94,15 @@ export default function AddPhoto() {
 
   const handleTakePhoto = async () => {
     try {
-      const permissionResult = await requestCameraPermissionsAsync();
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
       
       if (permissionResult.granted === false) {
         Alert.alert('Permisos requeridos', 'Se necesitan permisos para usar la cámara');
         return;
       }
 
-      const result = await launchCameraAsync({
-        mediaTypes: MediaType.Images,
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaType.Images,
         quality: 0.8,
         aspect: [1, 1],
       });
@@ -158,7 +158,7 @@ export default function AddPhoto() {
     setSelectedImages(newImages);
   };
 
-  const uploadImageToStorage = async (imageAsset: ImagePickerAsset, albumId: string): Promise<string> => {
+  const uploadImageToStorage = async (imageAsset: ImagePicker.ImagePickerAsset, albumId: string): Promise<string> => {
     try {
       console.log('Starting image upload for:', imageAsset.uri);
       
@@ -167,16 +167,20 @@ export default function AddPhoto() {
       
       console.log('Uploading to path:', filename);
       
-      // Fetch the image and convert to blob for proper upload
-      const response = await fetch(imageAsset.uri);
-      const blob = await response.blob();
+      // Create FormData for proper file upload
+      const formData = new FormData();
+      formData.append('file', {
+        uri: imageAsset.uri,
+        type: 'image/jpeg',
+        name: filename,
+      } as any);
       
-      console.log('Image converted to blob, size:', blob.size);
+      console.log('FormData created for upload');
       
-      // Upload blob to Supabase storage
+      // Upload using FormData to Supabase storage
       const uploadResult = await supabaseClient.storage
         .from('dogcatify')
-        .upload(filename, blob, {
+        .upload(filename, formData, {
           contentType: 'image/jpeg',
           cacheControl: '3600',
         });
