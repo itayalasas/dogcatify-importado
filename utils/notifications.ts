@@ -220,5 +220,64 @@ export const NotificationService = {
     const html = EmailTemplates.partnerRejected(businessName, reason);
     
     await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a chat message notification
+   * @param recipientEmail Recipient's email address
+   * @param senderName Name of the message sender
+   * @param petName Name of the pet being discussed
+   * @param messagePreview Preview of the message content
+   * @param conversationId ID of the conversation for deep linking
+   */
+  sendChatMessageNotification: async (
+    recipientEmail: string,
+    senderName: string,
+    petName: string,
+    messagePreview: string,
+    conversationId: string
+  ): Promise<void> => {
+    const subject = `Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
+    const text = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
+    const html = `
+  },
+  
+  /**
+   * Send a chat message notification
+   * @param recipientEmail Recipient's email address
+   * @param senderName Name of the message sender
+   * @param petName Name of the pet being discussed
+   * @param messagePreview Preview of the message content
+   * @param conversationId ID of the conversation for deep linking
+   */
+  sendChatMessageNotification: async (
+    recipientEmail: string,
+    senderName: string,
+    petName: string,
+    messagePreview: string,
+    conversationId: string
+  ): Promise<void> => {
+    const subject = `Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
+    const text = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #2D6A6F; padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 0;">Nuevo mensaje sobre adopción</h1>
+        </div>
+        <div style="padding: 20px; background-color: #f9f9f9;">
+          <p>Hola,</p>
+          <p><strong>${senderName}</strong> te ha enviado un mensaje sobre la adopción de <strong>${petName}</strong>:</p>
+          <div style="background-color: white; border-left: 4px solid #2D6A6F; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; font-style: italic;">"${messagePreview}"</p>
+          </div>
+          <p>Responde desde la app DogCatiFy para continuar la conversación sobre la adopción.</p>
+        </div>
+        <div style="background-color: #f0f0f0; padding: 10px; text-align: center; font-size: 12px; color: #666;">
+          <p>© 2025 DogCatiFy. Todos los derechos reservados.</p>
+        </div>
+      </div>
+    `;
+    
+    await NotificationService.sendEmail(recipientEmail, subject, text, html);
   }
 };
