@@ -161,64 +161,34 @@ export default function AddPhoto() {
 
   const uploadImageToStorage = async (imageAsset: ImagePicker.ImagePickerAsset): Promise<string> => {
     try {
-      console.log('Starting image upload for:', imageAsset.uri);
-      
-      // Create a unique filename
       const filename = `pets/albums/${id}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-      console.log('Upload filename:', filename);
       
-      // Use FileSystem to read the file as base64
-      console.log('Reading file with FileSystem...');
-      const fileInfo = await FileSystem.getInfoAsync(imageAsset.uri);
-      console.log('File info:', fileInfo);
+      // Create FormData for upload
+      const formData = new FormData();
+      formData.append('file', {
+        uri: imageAsset.uri,
+        type: 'image/jpeg',
+        name: filename,
+      } as any);
       
-      if (!fileInfo.exists) {
-        throw new Error('File does not exist');
-      }
-      
-      // Read file as base64
-      const base64 = await FileSystem.readAsStringAsync(imageAsset.uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      
-      console.log('File read as base64, length:', base64.length);
-      
-      // Convert base64 to blob
-      const byteCharacters = atob(base64);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'image/jpeg' });
-      
-      console.log('Blob created, size:', blob.size);
-      
-      // Upload blob to Supabase storage
-      console.log('Uploading blob to Supabase storage...');
+      // Upload using FormData
       const { data, error } = await supabaseClient.storage
         .from('dogcatify')
-        .upload(filename, blob, {
+        .upload(filename, formData, {
           contentType: 'image/jpeg',
           cacheControl: '3600',
         });
       
       if (error) {
-        console.error('Supabase storage error:', error);
         throw error;
       }
-      
-      console.log('Upload successful, data:', data);
       
       // Get the public URL
       const { data: urlData } = supabaseClient.storage
         .from('dogcatify')
         .getPublicUrl(filename);
       
-      const publicUrl = urlData.publicUrl;
-      console.log('Generated public URL:', publicUrl);
-      
-      return publicUrl;
+      return urlData.publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
       throw error;
