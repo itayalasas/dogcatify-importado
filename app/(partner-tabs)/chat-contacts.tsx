@@ -77,12 +77,7 @@ export default function ChatContacts() {
     try {
       const { data, error } = await supabaseClient
         .from('chat_conversations')
-        .select(`
-          *,
-          adoption_pets(name, species, images),
-          profiles:user_id(display_name, photo_url),
-          latest_message:chat_messages(message, created_at, sender_id, is_read)
-        `)
+        .select('*')
         .eq('partner_id', businessId)
         .order('last_message_at', { ascending: false });
 
@@ -91,6 +86,20 @@ export default function ChatContacts() {
       // Process conversations to get latest message and unread count
       const processedConversations = await Promise.all(
         (data || []).map(async (conv) => {
+          // Get adoption pet info
+          const { data: petData } = await supabaseClient
+            .from('adoption_pets')
+            .select('name, species, images')
+            .eq('id', conv.adoption_pet_id)
+            .single();
+          
+          // Get customer profile
+          const { data: customerData } = await supabaseClient
+            .from('profiles')
+            .select('display_name, photo_url')
+            .eq('id', conv.user_id)
+            .single();
+          
           // Get latest message
           const { data: latestMessage } = await supabaseClient
             .from('chat_messages')
@@ -112,16 +121,17 @@ export default function ChatContacts() {
             ...conv,
             latestMessage,
             unreadCount: unreadCount || 0,
-            customerName: conv.profiles?.display_name || 'Usuario',
-            customerAvatar: conv.profiles?.photo_url,
-            petName: conv.adoption_pets?.name,
-            petSpecies: conv.adoption_pets?.species,
-            petImage: conv.adoption_pets?.images?.[0],
+            customerName: customerData?.display_name || 'Usuario',
+            customerAvatar: customerData?.photo_url,
+            petName: petData?.name,
+            petSpecies: petData?.species,
+            petImage: petData?.images?.[0],
           };
         })
       );
 
       setConversations(processedConversations);
+      console.log('Conversations loaded:', processedConversations.length);
     } catch (error) {
       console.error('Error fetching conversations:', error);
     } finally {

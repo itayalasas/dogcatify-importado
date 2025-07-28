@@ -22,34 +22,21 @@ export default function ChatScreen() {
   useEffect(() => {
     fetchConversationData();
     
-    // Set up real-time subscription for new messages
-    const subscription = supabaseClient
-      .channel(`chat-${id}`)
-      .on('postgres_changes', 
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'chat_messages',
-          filter: `conversation_id=eq.${id}`
-        }, 
-        (payload) => {
-          console.log('New message received:', payload);
-          const newMessage = payload.new;
-          setMessages(prev => [...prev, {
-            ...newMessage,
-            created_at: new Date(newMessage.created_at)
-          }]);
-          
-          // Mark message as read if it's not from current user
-          if (newMessage.sender_id !== currentUser?.id) {
-            markMessageAsRead(newMessage.id);
-          }
-        }
-      )
-      .subscribe();
+  }, [id, currentUser]);
 
+  useEffect(() => {
+    if (!id || !currentUser) return;
+    
+    // Set up real-time subscription for new messages
+    console.log('Setting up real-time subscription for conversation:', id);
+    
+    // Poll for new messages every 2 seconds as fallback
+    const pollInterval = setInterval(() => {
+      fetchMessages();
+    }, 2000);
+    
     return () => {
-      subscription.unsubscribe();
+      clearInterval(pollInterval);
     };
   }, [id, currentUser]);
 
@@ -166,6 +153,42 @@ export default function ChatScreen() {
         .eq('id', messageId);
     } catch (error) {
       console.error('Error marking message as read:', error);
+    }
+  };
+
+  const fetchMessages = async () => {
+    try {
+      const { data: messagesData, error } = await supabaseClient
+        .from('chat_messages')
+        .select('*')
+        .eq('conversation_id', id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      const formattedMessages = messagesData.map(msg => ({
+        ...msg,
+        created_at: new Date(msg.created_at)
+      })) || [];
+
+      // Only update if there are new messages
+      if (formattedMessages.length !== messages.length) {
+        setMessages(formattedMessages);
+        
+        // Mark unread messages as read
+        const unreadMessages = formattedMessages.filter(
+          msg => !msg.is_read && msg.sender_id !== currentUser?.id
+        );
+
+        if (unreadMessages.length > 0) {
+          await supabaseClient
+            .from('chat_messages')
+            .update({ is_read: true })
+            .in('id', unreadMessages.map(msg => msg.id));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching messages:', error);
     }
   };
 

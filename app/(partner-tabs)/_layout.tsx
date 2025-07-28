@@ -96,6 +96,7 @@ export default function PartnerTabLayout() {
   // Log para depuración
   console.log('PartnerTabLayout - Has products enabled:', hasProductsEnabled);
   console.log('PartnerTabLayout - Business type:', businessType);
+  console.log('PartnerTabLayout - Should show chat:', shouldShowChat());
 
   return (
     <Tabs
