@@ -270,6 +270,13 @@ export default function ChatScreen() {
   const renderMessage = (message: any) => {
     const isOwnMessage = message.sender_id === currentUser?.id;
     
+    console.log('Message debug:', {
+      messageId: message.id,
+      senderId: message.sender_id,
+      currentUserId: currentUser?.id,
+      isOwnMessage
+    });
+    
     return (
       <View
         key={message.id}
@@ -288,11 +295,8 @@ export default function ChatScreen() {
           ]}>
             {message.message}
           </Text>
-          <Text style={[
-            styles.messageTime,
-            isOwnMessage ? styles.ownMessageTime : styles.otherMessageTime
-          ]}>
-            Adopción de {adoptionPet?.name || petName || 'mascota'}
+          <Text style={styles.messageTime}>
+            {formatMessageTime(message.created_at)}
           </Text>
         </View>
       </View>
@@ -545,12 +549,14 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   ownMessageBubble: {
-    backgroundColor: '#DCF8C6',
+    backgroundColor: '#007AFF',
     borderBottomRightRadius: 6,
   },
   otherMessageBubble: {
     backgroundColor: '#FFFFFF',
     borderBottomLeftRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   messageText: {
     fontSize: 16,
@@ -558,7 +564,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   ownMessageText: {
-    color: '#000000',
+    color: '#FFFFFF',
   },
   otherMessageText: {
     color: '#111827',
@@ -568,12 +574,8 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     textAlign: 'right',
     marginTop: 4,
-  },
-  ownMessageTime: {
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  otherMessageTime: {
-    color: '#6B7280',
+    color: 'rgba(0, 0, 0, 0.5)',
+    fontSize: 11,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -598,7 +600,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
   },
   sendButton: {
-    backgroundColor: '#25D366',
+    backgroundColor: '#007AFF',
     width: 40,
     height: 40,
     borderRadius: 20,
