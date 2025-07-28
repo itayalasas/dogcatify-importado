@@ -442,12 +442,26 @@ export default function PartnerServices() {
       return;
     }
 
+    console.log('Starting adoption chat with:', { petId, petName, partnerId: id, userId: currentUser.id });
+    
+    if (!petId || !petName || !id) {
+      console.error('Missing required parameters for adoption chat:', { petId, petName, partnerId: id });
+      Alert.alert('Error', 'Información incompleta para iniciar la conversación');
+      return;
+    }
+
     // Crear o encontrar conversación existente
     createOrFindAdoptionConversation(petId, petName);
   };
 
   const createOrFindAdoptionConversation = async (petId: string, petName: string) => {
     try {
+      console.log('Creating/finding conversation for:', { petId, petName, partnerId: id, userId: currentUser?.id });
+      
+      if (!currentUser?.id || !id) {
+        throw new Error('Usuario o partner ID no disponible');
+      }
+      
       // Verificar si ya existe una conversación
       const { data: existingConversation, error: checkError } = await supabaseClient
         .from('chat_conversations')
@@ -456,10 +470,13 @@ export default function PartnerServices() {
         .eq('user_id', currentUser!.id)
         .single();
 
+      console.log('Existing conversation check:', { existingConversation, checkError });
+
       let conversationId;
 
       if (checkError && checkError.code === 'PGRST116') {
         // No existe conversación, crear una nueva
+        console.log('Creating new conversation...');
         const { data: newConversation, error: createError } = await supabaseClient
           .from('chat_conversations')
           .insert({
@@ -471,11 +488,16 @@ export default function PartnerServices() {
           .select('id')
           .single();
 
-        if (createError) throw createError;
+        if (createError) {
+          console.error('Error creating conversation:', createError);
+          throw createError;
+        }
+        
+        console.log('New conversation created:', newConversation);
         conversationId = newConversation.id;
 
         // Enviar mensaje inicial
-        await supabaseClient
+        const { error: messageError } = await supabaseClient
           .from('chat_messages')
           .insert({
             conversation_id: conversationId,
@@ -483,17 +505,25 @@ export default function PartnerServices() {
             message: `Hola! Estoy interesado/a en adoptar a ${petName}. ¿Podrían darme más información?`,
             message_type: 'text'
           });
+        
+        if (messageError) {
+          console.error('Error sending initial message:', messageError);
+          // No lanzar error aquí, la conversación ya se creó
+        }
       } else if (existingConversation) {
+        console.log('Using existing conversation:', existingConversation.id);
         conversationId = existingConversation.id;
       } else {
+        console.error('Unexpected error checking conversation:', checkError);
         throw checkError;
       }
 
+      console.log('Navigating to chat with conversation ID:', conversationId);
       // Navegar al chat
       router.push(`/chat/${conversationId}?petName=${petName}`);
     } catch (error) {
       console.error('Error starting adoption chat:', error);
-      Alert.alert('Error', 'No se pudo iniciar la conversación');
+      Alert.alert('Error', `No se pudo iniciar la conversación: ${error?.message || 'Error desconocido'}`);
     }
   };
 
@@ -612,7 +642,15 @@ export default function PartnerServices() {
           
           <TouchableOpacity 
             style={styles.adoptionButton}
-            onPress={() => handleStartAdoptionChat(pet.id, pet.name)}
+            onPress={() => {
+              console.log('Adoption button pressed for pet:', { id: pet.id, name: pet.name });
+              if (pet.id && pet.name) {
+                handleStartAdoptionChat(pet.id, pet.name);
+              } else {
+                console.error('Pet ID or name is missing:', { id: pet.id, name: pet.name });
+                Alert.alert('Error', 'Información de la mascota incompleta');
+              }
+            }}
           >
             <MessageCircle size={16} color="#FFFFFF" />
             <Text style={styles.adoptionButtonText}>Adopción</Text>
