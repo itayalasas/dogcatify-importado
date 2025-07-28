@@ -13,6 +13,13 @@ export default function AddAdoptionPet() {
   const { partnerId } = useLocalSearchParams<{ partnerId: string }>();
   const { currentUser } = useAuth();
   
+  // Debug logs
+  useEffect(() => {
+    console.log('AddAdoptionPet component loaded');
+    console.log('Partner ID:', partnerId);
+    console.log('Current user:', currentUser?.email);
+  }, [partnerId, currentUser]);
+  
   // Datos básicos
   const [petName, setPetName] = useState('');
   const [species, setSpecies] = useState<'dog' | 'cat' | 'other'>('dog');

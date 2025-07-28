@@ -302,6 +302,7 @@ export default function PartnerDashboard() {
     if (partnerProfile?.id) {
       // Si es un refugio, redirigir al formulario de adopción
       if (partnerProfile.businessType === 'shelter') {
+        console.log('Dashboard: Redirecting to adoption form for shelter');
         router.push({
           pathname: '/partner/add-adoption-pet',
           params: {
@@ -309,6 +310,7 @@ export default function PartnerDashboard() {
           }
         });
       } else {
+        console.log('Dashboard: Redirecting to service form for business type:', partnerProfile.businessType);
         router.push({
           pathname: '/partner/add-service',
           params: { 
