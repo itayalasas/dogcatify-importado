@@ -185,15 +185,27 @@ export default function ConfigureActivities() {
   };
 
   const handleAddActivity = async () => {
-    // Navigate to the full add service form
     if (partnerProfile && partnerProfile.id) {
-      router.push({
-        pathname: '/partner/add-service',
-        params: {
-          partnerId: partnerProfile.id,
-          businessType: partnerProfile.businessType
-        }
-      });
+      // Si es un refugio, redirigir al formulario de adopción
+      if (partnerProfile.businessType === 'shelter') {
+        console.log('Redirecting to adoption form for shelter');
+        router.push({
+          pathname: '/partner/add-adoption-pet',
+          params: {
+            partnerId: partnerProfile.id
+          }
+        });
+      } else {
+        // Para otros tipos de negocio, usar el formulario normal
+        console.log('Redirecting to service form for business type:', partnerProfile.businessType);
+        router.push({
+          pathname: '/partner/add-service',
+          params: {
+            partnerId: partnerProfile.id,
+            businessType: partnerProfile.businessType
+          }
+        });
+      }
     } else {
       Alert.alert('Error', 'No se pudo obtener la información del negocio');
     }
