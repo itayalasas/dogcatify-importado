@@ -21,34 +21,13 @@ export default function ChatContacts() {
     fetchPartnerProfile();
     fetchConversations();
     
-    // Set up real-time subscription for conversation updates
-    const subscription = supabaseClient
-      .channel('partner-conversations')
-      .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'chat_conversations',
-          filter: `partner_id=eq.${businessId}`
-        }, 
-        () => {
-          fetchConversations();
-        }
-      )
-      .on('postgres_changes', 
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'chat_messages'
-        }, 
-        () => {
-          fetchConversations();
-        }
-      )
-      .subscribe();
+    // Set up polling for conversation updates every 5 seconds
+    const pollInterval = setInterval(() => {
+      fetchConversations();
+    }, 5000);
 
     return () => {
-      subscription.unsubscribe();
+      clearInterval(pollInterval);
     };
   }, [currentUser, businessId]);
 
