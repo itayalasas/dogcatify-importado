@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
-import { EmailTemplates } from './emailTemplates';
+import { EmailTemplates } from './emailTemplates'
+import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 
 /**
  * Utility functions for sending notifications via email
@@ -242,3 +243,5 @@ export const NotificationService = {
     const html = `
   }
 };
+  }
+}
