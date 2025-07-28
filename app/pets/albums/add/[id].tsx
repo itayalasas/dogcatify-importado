@@ -5,7 +5,6 @@ import { ArrowLeft, Camera, Upload, X, Share2 } from 'lucide-react-native';
 import { Input } from '../../../../components/ui/Input';
 import { Button } from '../../../../components/ui/Button';
 import { Card } from '../../../../components/ui/Card';
-import { launchImageLibraryAsync, launchCameraAsync, MediaTypeOptions, requestMediaLibraryPermissionsAsync, requestCameraPermissionsAsync, ImagePickerAsset } from 'expo-image-picker';
 import { launchImageLibraryAsync, launchCameraAsync, MediaType, requestMediaLibraryPermissionsAsync, requestCameraPermissionsAsync, ImagePickerAsset } from 'expo-image-picker';
 import { supabaseClient } from '../../../../lib/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
