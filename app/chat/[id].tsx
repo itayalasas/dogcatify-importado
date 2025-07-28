@@ -1,638 +1,265 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput, KeyboardAvoidingView, Platform, Alert, Image, Linking } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Send, Phone, MoveVertical as MoreVertical } from 'lucide-react-native';
-import { useAuth } from '../../contexts/AuthContext';
-import { supabaseClient } from '../../lib/supabase';
-import { useNotifications } from '../../contexts/NotificationContext';
+import { Platform } from 'react-native';
+import { EmailTemplates } from './emailTemplates';
 
-export default function ChatScreen() {
-  const { id, petName } = useLocalSearchParams<{ id: string; petName?: string }>();
-  const { currentUser } = useAuth();
-  const { sendNotificationToUser } = useNotifications();
-  const [conversation, setConversation] = useState<any>(null);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [otherParticipant, setOtherParticipant] = useState<any>(null);
-  const [adoptionPet, setAdoptionPet] = useState<any>(null);
-  const scrollViewRef = useRef<ScrollView>(null);
-
-  useEffect(() => {
-    fetchConversationData();
-    
-  }, [id, currentUser]);
-
-  useEffect(() => {
-    if (!id || !currentUser) return;
-    
-    // Set up real-time subscription for new messages
-    console.log('Setting up real-time subscription for conversation:', id);
-    
-    // Poll for new messages every 2 seconds as fallback
-    const pollInterval = setInterval(() => {
-      fetchMessages();
-    }, 2000);
-    
-    return () => {
-      clearInterval(pollInterval);
-    };
-  }, [id, currentUser]);
-
-  useEffect(() => {
-    // Scroll to bottom when new messages arrive
-    if (messages.length > 0) {
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    }
-  }, [messages]);
-
-  const fetchConversationData = async () => {
+/**
+ * Utility functions for sending notifications via email
+ */
+export const NotificationService = {
+  /**
+   * Send an email notification
+   * @param to Recipient email address
+   * @param subject Email subject
+   * @param text Plain text content (optional if html is provided)
+   * @param html HTML content (optional if text is provided)
+   * @param attachment Optional attachment
+   * @returns Promise with the result of the email sending operation
+   */
+  sendEmail: async (
+    to: string,
+    subject: string,
+    text?: string,
+    html?: string,
+    attachment?: any
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> => {
     try {
-      // Fetch conversation details
-      const { data: conversationData, error: convError } = await supabaseClient
-        .from('chat_conversations')
-        .select(`
-          *,
-          adoption_pets(*),
-          partners(id, business_name, logo, phone)
-        `)
-        .eq('id', id)
-        .single();
-
-      if (convError) throw convError;
-
-      setConversation(conversationData);
-      setAdoptionPet(conversationData?.adoption_pets);
-
-      // Determine other participant
-      const isUserCustomer = conversationData.user_id === currentUser?.id;
+      // Get the Supabase URL from environment variables
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'your-anon-key';
       
-      if (isUserCustomer) {
-        // Current user is the customer, other participant is the shelter
-        const partnerData = conversationData?.partners;
-        setOtherParticipant({
-          id: conversationData.partner_id,
-          name: partnerData?.business_name || 'Refugio',
-          avatar: partnerData?.logo,
-          phone: partnerData?.phone,
-          type: 'shelter'
-        });
-      } else {
-        // Current user is the shelter, other participant is the customer
-        const { data: customerData, error: customerError } = await supabaseClient
-          .from('profiles')
-          .select('id, display_name, photo_url, phone')
-          .eq('id', conversationData.user_id)
-          .single();
-
-        if (customerError) {
-          console.error('Error fetching customer data:', customerError);
-          // Set default customer data if fetch fails
-          setOtherParticipant({
-            id: conversationData.user_id,
-            name: 'Usuario',
-            avatar: null,
-            phone: null,
-            type: 'customer'
-          });
-        } else {
-          setOtherParticipant({
-            id: customerData.id,
-            name: customerData.display_name || 'Usuario',
-            avatar: customerData.photo_url,
-            phone: customerData.phone,
-            type: 'customer'
-          });
-        }
-      }
-
-      // Fetch messages
-      const { data: messagesData, error: messagesError } = await supabaseClient
-        .from('chat_messages')
-        .select('*')
-        .eq('conversation_id', id)
-        .order('created_at', { ascending: true });
-
-      if (messagesError) throw messagesError;
-
-      const formattedMessages = messagesData.map(msg => ({
-        ...msg,
-        created_at: new Date(msg.created_at)
-      })) || [];
-
-      setMessages(formattedMessages);
-
-      // Mark unread messages as read
-      const unreadMessages = formattedMessages.filter(
-        msg => !msg.is_read && msg.sender_id !== currentUser?.id
-      );
-
-      if (unreadMessages.length > 0) {
-        await supabaseClient
-          .from('chat_messages')
-          .update({ is_read: true })
-          .in('id', unreadMessages.map(msg => msg.id));
-      }
-
-    } catch (error) {
-      console.error('Error fetching conversation data:', error);
-      Alert.alert('Error', 'No se pudo cargar la conversación');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const markMessageAsRead = async (messageId: string) => {
-    try {
-      await supabaseClient
-        .from('chat_messages')
-        .update({ is_read: true })
-        .eq('id', messageId);
-    } catch (error) {
-      console.error('Error marking message as read:', error);
-    }
-  };
-
-  const fetchMessages = async () => {
-    try {
-      const { data: messagesData, error } = await supabaseClient
-        .from('chat_messages')
-        .select('*')
-        .eq('conversation_id', id)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-
-      const formattedMessages = messagesData.map(msg => ({
-        ...msg,
-        created_at: new Date(msg.created_at)
-      })) || [];
-
-      // Only update if there are new messages
-      if (formattedMessages.length !== messages.length) {
-        setMessages(formattedMessages);
-        
-        // Mark unread messages as read
-        const unreadMessages = formattedMessages.filter(
-          msg => !msg.is_read && msg.sender_id !== currentUser?.id
-        );
-
-        if (unreadMessages.length > 0) {
-          await supabaseClient
-            .from('chat_messages')
-            .update({ is_read: true })
-            .in('id', unreadMessages.map(msg => msg.id));
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-    }
-  };
-
-  const sendMessage = async () => {
-    if (!newMessage.trim() || sending || !currentUser) return;
-
-    setSending(true);
-    try {
-      const messageData = {
-        conversation_id: id,
-        sender_id: currentUser.id,
-        message: newMessage.trim(),
-        message_type: 'text',
-        is_read: false
-      };
-
-      const { error } = await supabaseClient
-        .from('chat_messages')
-        .insert(messageData);
-
-      if (error) throw error;
-
-      // Send push notification to other participant
-      if (otherParticipant) {
-        const notificationTitle = `Nuevo mensaje de ${currentUser.displayName || 'Usuario'}`;
-        const notificationBody = newMessage.trim();
-        const notificationData = {
-          type: 'chat_message',
-          conversationId: id,
-          petName: adoptionPet?.name,
-          deepLink: `chat/${id}`
+      // Construct the Edge Function URL
+      const apiUrl = `${supabaseUrl}/functions/v1/send-email`;
+      
+      console.log('Sending email to:', to);
+      console.log('Subject:', subject);
+      
+      // Make the request to the Edge Function
+      console.log('Enviando solicitud a:', apiUrl);
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+        },
+        body: JSON.stringify({
+          to,
+          subject,
+          text,
+          html,
+          attachment,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response from email API:', errorText);
+        return { 
+          success: false, 
+          error: `API responded with status ${response.status}: ${errorText}` 
         };
-
-        await sendNotificationToUser(
-          otherParticipant.id,
-          notificationTitle,
-          notificationBody,
-          notificationData
-        );
       }
-
-      setNewMessage('');
-    } catch (error) {
-      console.error('Error sending message:', error);
-      Alert.alert('Error', 'No se pudo enviar el mensaje');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const handleCall = async () => {
-    if (!otherParticipant?.phone) {
-      Alert.alert('Error', 'No hay número de teléfono disponible');
-      return;
-    }
-
-    try {
-      const phoneUrl = `tel:${otherParticipant.phone}`;
-      const canOpen = await Linking.canOpenURL(phoneUrl);
       
-      if (canOpen) {
-        await Linking.openURL(phoneUrl);
-      } else {
-        Alert.alert('Error', 'No se puede abrir la aplicación de llamadas');
+      // Parse the response
+      const result = await response.json();
+      
+      if (!response.ok) {
+        console.error('Error sending email:', result);
+        return { 
+          success: false, 
+          error: result.error || 'Failed to send email' 
+        };
       }
+      
+      console.log('Email sent successfully:', result);
+      return { 
+        success: true, 
+        messageId: result.messageId 
+      };
     } catch (error) {
-      console.error('Error opening phone app:', error);
-      Alert.alert('Error', 'No se pudo realizar la llamada');
+      console.error('Error in sendEmail:', error);
+      return { 
+        success: false, 
+        error: error.message || 'Unknown error occurred' 
+      };
     }
-  };
-
-  const formatMessageTime = (date: Date) => {
-    return date.toLocaleTimeString('es-ES', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-  };
-
-  const renderMessage = (message: any) => {
-    const isOwnMessage = message.sender_id === currentUser?.id;
+  },
+  
+  /**
+   * Send a welcome email to a new user
+   * @param email User's email address
+   * @param name User's display name
+   * @param activationLink Optional activation link
+   */
+  sendWelcomeEmail: async (email: string, name: string, activationLink?: string): Promise<void> => {
+    const subject = '¡Bienvenido a DogCatiFy!';
+    const text = `Hola ${name},\n\nBienvenido a DogCatiFy, la plataforma para amantes de mascotas.\n\nGracias por unirte a nuestra comunidad.\n\nEl equipo de DogCatiFy`;
+    const html = EmailTemplates.welcome(name, activationLink);
     
-    console.log('=== MESSAGE DEBUG ===');
-    console.log('Message ID:', message.id);
-    console.log('Message text:', message.message);
-    console.log('Message sender_id:', message.sender_id);
-    console.log('Message sender_id type:', typeof message.sender_id);
-    console.log('Current user ID:', currentUser?.id);
-    console.log('Current user ID type:', typeof currentUser?.id);
-    console.log('Are they equal?:', message.sender_id === currentUser?.id);
-    console.log('Is own message?:', isOwnMessage);
-    console.log('Message created at:', message.created_at);
-    console.log('=== END MESSAGE DEBUG ===');
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a booking confirmation email
+   * @param email User's email address
+   * @param name User's display name
+   * @param serviceName Name of the booked service
+   * @param partnerName Name of the service provider
+   * @param date Date of the appointment
+   * @param time Time of the appointment
+   */
+  sendBookingConfirmationEmail: async (
+    email: string, 
+    name: string,
+    serviceName: string,
+    partnerName: string,
+    date: string,
+    time: string,
+    petName: string
+  ): Promise<void> => {
+    const subject = 'Confirmación de Reserva - DogCatiFy';
+    const text = `Hola ${name},\n\nTu reserva ha sido confirmada:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\nMascota: ${petName}\n\nGracias por usar DogCatiFy.`;
+    const html = EmailTemplates.bookingConfirmation(name, serviceName, partnerName, date, time, petName);
     
-    // Force different alignment for testing
-    const testAlignment = message.message.includes('refugio') ? false : true;
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a booking cancellation email
+   * @param email User's email address
+   * @param name User's display name
+   * @param serviceName Name of the cancelled service
+   * @param partnerName Name of the service provider
+   * @param date Date of the appointment
+   * @param time Time of the appointment
+   */
+  sendBookingCancellationEmail: async (
+    email: string, 
+    name: string,
+    serviceName: string,
+    partnerName: string,
+    date: string,
+    time: string
+  ): Promise<void> => {
+    const subject = 'Reserva Cancelada - DogCatiFy';
+    const text = `Hola ${name},\n\nTu reserva ha sido cancelada:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\n\nGracias por usar DogCatiFy.`;
+    const html = EmailTemplates.bookingCancellation(name, serviceName, partnerName, date, time);
     
-    console.log('Test alignment (refugio=left, other=right):', testAlignment);
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a booking reminder email
+   * @param email User's email address
+   * @param name User's display name
+   * @param serviceName Name of the booked service
+   * @param partnerName Name of the service provider
+   * @param date Date of the appointment
+   * @param time Time of the appointment
+   * @param petName Name of the pet
+   */
+  sendBookingReminderEmail: async (
+    email: string, 
+    name: string,
+    serviceName: string,
+    partnerName: string,
+    date: string,
+    time: string,
+    petName: string
+  ): Promise<void> => {
+    const subject = 'Recordatorio de Cita - DogCatiFy';
+    const text = `Hola ${name},\n\nTe recordamos que tienes una cita programada para mañana:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\nMascota: ${petName}\n\nGracias por usar DogCatiFy.`;
+    const html = EmailTemplates.bookingReminder(name, serviceName, partnerName, date, time, petName);
     
-    return (
-      <View
-        key={message.id}
-        style={[
-          styles.messageContainer,
-          testAlignment ? styles.ownMessage : styles.otherMessage
-        ]}
-      >
-        <View style={[
-          styles.messageBubble,
-          testAlignment ? styles.ownMessageBubble : styles.otherMessageBubble
-        ]}>
-          <Text style={[
-            styles.messageText,
-            testAlignment ? styles.ownMessageText : styles.otherMessageText
-          ]}>
-            {message.message}
-          </Text>
-          <Text style={styles.messageTime}>
-            {formatMessageTime(message.created_at)}
-          </Text>
-        </View>
-      </View>
-    );
-  };
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando conversación...</Text>
-        </View>
-      </SafeAreaView>
-    );
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a partner verification email
+   * @param email Partner's email address
+   * @param businessName Business name
+   */
+  sendPartnerVerificationEmail: async (
+    email: string,
+    businessName: string
+  ): Promise<void> => {
+    const subject = 'Tu negocio ha sido verificado - DogCatiFy';
+    const text = `Felicidades,\n\nTu negocio "${businessName}" ha sido verificado en DogCatiFy. Ahora puedes comenzar a ofrecer tus servicios a nuestra comunidad de amantes de mascotas.\n\nGracias por unirte a DogCatiFy.`;
+    const html = EmailTemplates.partnerApproved(businessName, '');
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a partner registration confirmation email
+   * @param email Partner's email address
+   * @param businessName Business name
+   * @param businessType Business type
+   */
+  sendPartnerRegistrationEmail: async (
+    email: string,
+    businessName: string,
+    businessType: string
+  ): Promise<void> => {
+    const subject = 'Solicitud de Registro Recibida - DogCatiFy';
+    const text = `Hola,\n\nHemos recibido tu solicitud para registrar "${businessName}" como ${businessType} en DogCatiFy. Nuestro equipo revisará tu solicitud y te notificaremos cuando sea aprobada.\n\nGracias por elegir DogCatiFy para hacer crecer tu negocio.`;
+    const html = EmailTemplates.partnerRegistration(businessName, businessType);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a partner rejection email
+   * @param email Partner's email address
+   * @param businessName Business name
+   * @param reason Reason for rejection
+   */
+  sendPartnerRejectionEmail: async (
+    email: string,
+    businessName: string,
+    reason: string
+  ): Promise<void> => {
+    const subject = 'Solicitud No Aprobada - DogCatiFy';
+    const text = `Hola,\n\nLamentamos informarte que tu solicitud para registrar "${businessName}" en DogCatiFy no ha sido aprobada en esta ocasión.\n\nMotivo: ${reason || 'No cumple con los requisitos necesarios para ser parte de nuestra plataforma en este momento.'}\n\nSi deseas obtener más información o volver a intentarlo con los ajustes necesarios, por favor contacta con nuestro equipo de soporte.\n\nAgradecemos tu interés en DogCatiFy.`;
+    const html = EmailTemplates.partnerRejected(businessName, reason);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a chat message notification
+   * @param recipientEmail Recipient's email address
+   * @param senderName Name of the message sender
+   * @param petName Name of the pet being discussed
+   * @param messagePreview Preview of the message content
+   * @param conversationId ID of the conversation for deep linking
+   */
+  sendChatMessageNotification: async (
+    recipientEmail: string,
+    senderName: string,
+    petName: string,
+    messagePreview: string,
+    conversationId: string
+  ): Promise<void> => {
+    const subject = `Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
+    const messageText = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #2D6A6F; padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 0;">Nuevo mensaje sobre adopción</h1>
+        </div>
+        <div style="padding: 20px; background-color: #f9f9f9;">
+          <p>Hola,</p>
+          <p><strong>${senderName}</strong> te ha enviado un mensaje sobre la adopción de <strong>${petName}</strong>:</p>
+          <div style="background-color: white; border-left: 4px solid #2D6A6F; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; font-style: italic;">"${messagePreview}"</p>
+          </div>
+          <p>Responde desde la app DogCatiFy para continuar la conversación sobre la adopción.</p>
+        </div>
+        <div style="background-color: #f0f0f0; padding: 10px; text-align: center; font-size: 12px; color: #666;">
+          <p>© 2025 DogCatiFy. Todos los derechos reservados.</p>
+        </div>
+      </div>
+    `;
+    
+    await NotificationService.sendEmail(recipientEmail, subject, messageText, html);
   }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        
-        <View style={styles.headerInfo}>
-          {otherParticipant?.avatar ? (
-            <Image source={{ uri: otherParticipant.avatar }} style={styles.headerAvatar} />
-          ) : (
-            <View style={styles.headerAvatarPlaceholder}>
-              <Text style={styles.headerAvatarText}>
-                {otherParticipant?.type === 'shelter' ? '🐾' : '👤'}
-              </Text>
-            </View>
-          )}
-          <View style={styles.headerText}>
-            <Text style={styles.headerName}>
-              {otherParticipant?.name || 'Usuario'}
-            </Text>
-            <Text style={styles.headerSubtitle}>
-              Adopción de {adoptionPet?.name || petName || 'mascota'}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.headerActions}>
-          {otherParticipant?.phone && (
-            <TouchableOpacity onPress={handleCall} style={styles.headerAction}>
-              <Phone size={20} color="#3B82F6" />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity style={styles.headerAction}>
-            <MoreVertical size={20} color="#6B7280" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Pet Info Banner */}
-      {adoptionPet && (
-        <View style={styles.petBanner}>
-          {adoptionPet.images && adoptionPet.images.length > 0 ? (
-            <Image source={{ uri: adoptionPet.images[0] }} style={styles.petBannerImage} />
-          ) : (
-            <View style={styles.petBannerImagePlaceholder}>
-              <Text style={styles.petBannerImageText}>
-                {adoptionPet.species === 'dog' ? '🐶' : '🐱'}
-              </Text>
-            </View>
-          )}
-          <View style={styles.petBannerInfo}>
-            <Text style={styles.petBannerName}>{adoptionPet.name}</Text>
-            <Text style={styles.petBannerDetails}>
-              {adoptionPet.breed} • {adoptionPet.age} {adoptionPet.age_unit === 'years' ? 'años' : 'meses'}
-            </Text>
-          </View>
-        </View>
-      )}
-
-      {/* Messages */}
-      <KeyboardAvoidingView 
-        style={styles.chatContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <ScrollView
-          ref={scrollViewRef}
-          style={styles.messagesContainer}
-          contentContainerStyle={styles.messagesContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {messages.map(renderMessage)}
-        </ScrollView>
-
-        {/* Message Input */}
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.messageInput}
-            placeholder="Escribe un mensaje..."
-            value={newMessage}
-            onChangeText={setNewMessage}
-            multiline
-            maxLength={500}
-          />
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              (!newMessage.trim() || sending) && styles.sendButtonDisabled
-            ]}
-            onPress={sendMessage}
-            disabled={!newMessage.trim() || sending}
-          >
-            <Send size={20} color={newMessage.trim() && !sending ? "#FFFFFF" : "#9CA3AF"} />
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  backButton: {
-    padding: 8,
-    marginRight: 8,
-  },
-  headerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  headerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
-  },
-  headerAvatarPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  headerAvatarText: {
-    fontSize: 18,
-  },
-  headerText: {
-    flex: 1,
-  },
-  headerName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  headerAction: {
-    padding: 8,
-  },
-  petBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#FDE68A',
-  },
-  petBannerImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: 12,
-  },
-  petBannerImagePlaceholder: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#F59E0B',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  petBannerImageText: {
-    fontSize: 24,
-    color: '#FFFFFF',
-  },
-  petBannerInfo: {
-    flex: 1,
-  },
-  petBannerName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#92400E',
-  },
-  petBannerDetails: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#92400E',
-  },
-  chatContainer: {
-    flex: 1,
-  },
-  messagesContainer: {
-    flex: 1,
-    backgroundColor: '#F0F2F5',
-  },
-  messagesContent: {
-    padding: 16,
-    paddingBottom: 20,
-  },
-  messageContainer: {
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
-  ownMessage: {
-    alignItems: 'flex-end',
-  },
-  otherMessage: {
-    alignItems: 'flex-start',
-  },
-  messageBubble: {
-    maxWidth: '75%',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  ownMessageBubble: {
-    backgroundColor: '#007AFF',
-    borderBottomRightRadius: 6,
-  },
-  otherMessageBubble: {
-    backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 6,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  messageText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 22,
-  },
-  ownMessageText: {
-    color: '#FFFFFF',
-  },
-  otherMessageText: {
-    color: '#111827',
-  },
-  messageTime: {
-    fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    textAlign: 'right',
-    marginTop: 4,
-    color: 'rgba(0, 0, 0, 0.5)',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-  },
-  messageInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 25,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    maxHeight: 100,
-    marginRight: 8,
-    backgroundColor: '#F8F9FA',
-  },
-  sendButton: {
-    backgroundColor: '#007AFF',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  sendButtonDisabled: {
-    backgroundColor: '#E0E0E0',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-});
+};
