@@ -4,29 +4,44 @@ import { router } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Index() {
-  const { currentUser, authInitialized } = useAuth();
+  const { currentUser, authInitialized, loading } = useAuth();
 
   useEffect(() => {
-    if (!authInitialized) return;
+    // Solo proceder cuando la autenticación esté completamente inicializada
+    if (!authInitialized || loading) {
+      console.log('Auth not ready yet:', { authInitialized, loading });
+      return;
+    }
+
+    console.log('Auth ready, checking user:', currentUser?.email || 'No user');
 
     if (!currentUser) {
-      // No user logged in, go to login
+      console.log('No user found, redirecting to login');
       router.replace('/auth/login');
     } else {
-      // User is logged in, check if admin
+      console.log('User found, checking admin status');
       const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
       
       if (isAdmin) {
-        // Admin user, go to admin panel
+        console.log('Admin user detected, redirecting to admin panel');
         router.replace('/(admin-tabs)/requests');
       } else {
-        // Regular user, go to main tabs
+        console.log('Regular user detected, redirecting to main tabs');
         router.replace('/(tabs)');
       }
     }
-  }, [currentUser, authInitialized]);
+  }, [currentUser, authInitialized, loading]);
 
-  // Show loading while checking authentication
+  // Mostrar loading mientras se inicializa la autenticación
+  if (!authInitialized || loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#2D6A6F" />
+      </View>
+    );
+  }
+
+  // Fallback loading (no debería llegar aquí normalmente)
   return (
     <View style={styles.container}>
       <ActivityIndicator size="large" color="#2D6A6F" />
