@@ -161,12 +161,15 @@ export default function PartnerTabLayout() {
         name="products"
         options={{
           title: 'Productos', 
-          href: businessType === 'shop' || hasProductsEnabled 
+          href: (businessType === 'shop' || hasProductsEnabled) && partnerProfile
             ? { pathname: '/products', params: { businessId } }
             : null,
           tabBarIcon: ({ size, color }) => (
             <ShoppingBag size={size} color={color} />
           ),
+          tabBarStyle: (businessType === 'shop' || hasProductsEnabled) && partnerProfile
+            ? undefined
+            : { display: 'none' },
         }}
       />
       <Tabs.Screen
