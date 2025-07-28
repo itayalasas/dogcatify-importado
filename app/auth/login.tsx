@@ -129,6 +129,9 @@ export default function Login() {
           }
         }
       } catch (error: any) {
+        console.error('Login error details:', error);
+        
+        // Manejar errores específicos de autenticación
         if (error.message.includes('confirma tu correo')) {
           Alert.alert(
             'Correo no confirmado',
@@ -155,10 +158,42 @@ export default function Login() {
               { text: 'Entendido', style: 'default' }
             ]
           );
+        } else if (error.message.includes('Invalid login credentials') || 
+                   error.message.includes('invalid_credentials') ||
+                   error.message.includes('Invalid email or password')) {
+          Alert.alert(
+            'Credenciales incorrectas',
+            'El correo electrónico o la contraseña son incorrectos. Por favor verifica tus datos e intenta nuevamente.',
+            [{ text: 'Entendido', style: 'default' }]
+          );
+        } else if (error.message.includes('Email not confirmed')) {
+          Alert.alert(
+            'Correo no confirmado',
+            'Tu cuenta aún no ha sido confirmada. Por favor revisa tu correo electrónico y confirma tu cuenta.',
+            [{ text: 'Entendido', style: 'default' }]
+          );
+        } else if (error.message.includes('Too many requests')) {
+          Alert.alert(
+            'Demasiados intentos',
+            'Has realizado demasiados intentos de inicio de sesión. Por favor espera unos minutos antes de intentar nuevamente.',
+            [{ text: 'Entendido', style: 'default' }]
+          );
+        } else if (error.message.includes('User not found')) {
+          Alert.alert(
+            'Usuario no encontrado',
+            'No existe una cuenta con este correo electrónico. ¿Deseas crear una cuenta nueva?',
+            [
+              { text: 'Cancelar', style: 'cancel' },
+              { 
+                text: 'Crear cuenta', 
+                onPress: () => router.push('/auth/register')
+              }
+            ]
+          );
         } else {
           Alert.alert(
-            'No pudimos iniciar sesión',
-            'Por favor verifica tu correo electrónico y contraseña e intenta nuevamente.',
+            'Error de inicio de sesión',
+            'Ocurrió un error al intentar iniciar sesión. Por favor verifica tu conexión a internet e intenta nuevamente.',
             [{ text: 'Entendido', style: 'default' }]
           );
         }
