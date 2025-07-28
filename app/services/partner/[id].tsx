@@ -125,6 +125,83 @@ export default function PartnerServices() {
 
   const fetchAdoptionPets = async () => {
     try {
+      console.log('Fetching adoption pets for partner:', id);
+      
+      // Fetch from adoption_pets table (the correct table)
+      const { data, error } = await supabaseClient
+        .from('adoption_pets')
+        .select('*')
+        .eq('partner_id', id)
+        .eq('is_available', true)
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching from adoption_pets:', error);
+        // Fallback to partner_services for backward compatibility
+        return await fetchAdoptionPetsFromServices();
+      }
+      
+      console.log('Found adoption pets:', data?.length || 0);
+      
+      // Process adoption pets data
+      const adoptionData = data?.map(pet => {
+        return {
+          id: pet.id,
+          name: pet.name,
+          species: pet.species,
+          breed: pet.breed,
+          gender: pet.gender,
+          age: pet.age,
+          ageUnit: pet.age_unit,
+          size: pet.size,
+          weight: pet.weight,
+          color: pet.color,
+          description: pet.description,
+          
+          // Health info
+          isVaccinated: pet.is_vaccinated,
+          vaccines: pet.vaccines || [],
+          isDewormed: pet.is_dewormed,
+          isNeutered: pet.is_neutered,
+          healthCondition: pet.health_condition,
+          lastVetVisit: pet.last_vet_visit,
+          
+          // Behavior
+          temperament: pet.temperament || [],
+          goodWithDogs: pet.good_with_dogs,
+          goodWithCats: pet.good_with_cats,
+          goodWithKids: pet.good_with_kids,
+          energyLevel: pet.energy_level,
+          specialNeeds: pet.special_needs,
+          
+          // Adoption
+          adoptionRequirements: pet.adoption_requirements || [],
+          adoptionFee: pet.adoption_fee || 0,
+          adoptionZones: pet.adoption_zones,
+          contactInfo: pet.contact_info,
+          adoptionProcess: pet.adoption_process,
+          
+          images: pet.images || [],
+          isAvailable: pet.is_available,
+          createdAt: new Date(pet.created_at)
+        };
+      }) || [];
+      
+      setAdoptionPets(adoptionData);
+    } catch (error) {
+      console.error('Error fetching adoption pets:', error);
+      // Try fallback method
+      await fetchAdoptionPetsFromServices();
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Fallback method for backward compatibility
+  const fetchAdoptionPetsFromServices = async () => {
+    try {
+      console.log('Fetching adoption pets from partner_services (fallback)');
+      
       const { data, error } = await supabaseClient
         .from('partner_services')
         .select('*')
@@ -134,7 +211,7 @@ export default function PartnerServices() {
       
       if (error) throw error;
       
-      // Parse adoption pets from services
+      // Parse adoption pets from services (legacy format)
       const adoptionData = data?.map(service => {
         // Extract adoption info from description
         const description = service.description || '';
@@ -159,15 +236,14 @@ export default function PartnerServices() {
           adoptionInfo,
           contactInfo,
           fullDescription: description,
-          createdAt: new Date(service.created_at)
+          createdAt: new Date(service.created_at),
+          isLegacyFormat: true // Flag to identify legacy data
         };
       }) || [];
       
       setAdoptionPets(adoptionData);
     } catch (error) {
-      console.error('Error fetching adoption pets:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error fetching adoption pets from services:', error);
     }
   };
 
@@ -437,35 +513,90 @@ export default function PartnerServices() {
       {/* Pet Info */}
       <View style={styles.petInfo}>
         <View style={styles.petHeader}>
-          <Text style={styles.petName}>🐶 {pet.name}</Text>
-          {pet.price > 0 && (
-            <Text style={styles.adoptionFee}>${pet.price.toLocaleString()}</Text>
+          <Text style={styles.petName}>
+            {pet.species === 'dog' ? '🐶' : pet.species === 'cat' ? '🐱' : '🐾'} {pet.name}
+          </Text>
+          {(pet.adoptionFee || pet.price) > 0 && (
+            <Text style={styles.adoptionFee}>
+              ${(pet.adoptionFee || pet.price).toLocaleString()}
+            </Text>
           )}
         </View>
         
-        <Text style={styles.petBasicInfo}>{pet.basicInfo}</Text>
-        
-        {pet.healthInfo && (
-          <Text style={styles.petHealthInfo}>{pet.healthInfo}</Text>
-        )}
-        
-        {pet.temperamentInfo && (
-          <Text style={styles.petTemperament}>{pet.temperamentInfo}</Text>
-        )}
-        
-        {pet.adoptionInfo && (
-          <Text style={styles.petAdoptionInfo}>{pet.adoptionInfo}</Text>
-        )}
-        
-        {pet.contactInfo && (
-          <Text style={styles.petContactInfo}>{pet.contactInfo}</Text>
+        {/* Handle both new format and legacy format */}
+        {pet.isLegacyFormat ? (
+          <>
+            <Text style={styles.petBasicInfo}>{pet.basicInfo}</Text>
+            {pet.healthInfo && (
+              <Text style={styles.petHealthInfo}>{pet.healthInfo}</Text>
+            )}
+            {pet.temperamentInfo && (
+              <Text style={styles.petTemperament}>{pet.temperamentInfo}</Text>
+            )}
+            {pet.adoptionInfo && (
+              <Text style={styles.petAdoptionInfo}>{pet.adoptionInfo}</Text>
+            )}
+            {pet.contactInfo && (
+              <Text style={styles.petContactInfo}>{pet.contactInfo}</Text>
+            )}
+          </>
+        ) : (
+          <>
+            <Text style={styles.petBasicInfo}>
+              {pet.breed} • {pet.age} {pet.ageUnit === 'years' ? 'años' : 'meses'} • {pet.size} • {pet.gender === 'male' ? 'Macho' : 'Hembra'}
+            </Text>
+            
+            <Text style={styles.petDescription}>{pet.description}</Text>
+            
+            {/* Health Status */}
+            <View style={styles.healthStatus}>
+              {pet.isVaccinated && (
+                <View style={styles.healthBadge}>
+                  <Text style={styles.healthBadgeText}>Vacunado</Text>
+                </View>
+              )}
+              {pet.isNeutered && (
+                <View style={styles.healthBadge}>
+                  <Text style={styles.healthBadgeText}>Castrado</Text>
+                </View>
+              )}
+              {pet.isDewormed && (
+                <View style={styles.healthBadge}>
+                  <Text style={styles.healthBadgeText}>Desparasitado</Text>
+                </View>
+              )}
+            </View>
+            
+            {/* Temperament */}
+            {pet.temperament && pet.temperament.length > 0 && (
+              <Text style={styles.petTemperament}>
+                🧠 Temperamento: {pet.temperament.slice(0, 3).join(', ')}
+                {pet.temperament.length > 3 && '...'}
+              </Text>
+            )}
+            
+            {/* Adoption Requirements */}
+            {pet.adoptionRequirements && pet.adoptionRequirements.length > 0 && (
+              <Text style={styles.petAdoptionInfo}>
+                🏡 Requisitos: {pet.adoptionRequirements.slice(0, 2).join(', ')}
+                {pet.adoptionRequirements.length > 2 && ` +${pet.adoptionRequirements.length - 2} más`}
+              </Text>
+            )}
+            
+            {/* Contact Info */}
+            {pet.contactInfo && (
+              <Text style={styles.petContactInfo}>
+                📞 Contacto: {pet.contactInfo}
+              </Text>
+            )}
+          </>
         )}
         
         {/* Action Buttons */}
         <View style={styles.petActions}>
           <TouchableOpacity 
             style={styles.contactButton}
-            onPress={() => handleContactShelter(pet.contactInfo)}
+            onPress={() => handleContactShelter(pet.contactInfo || pet.contact_info || partner?.phone || '')}
           >
             <Phone size={16} color="#FFFFFF" />
             <Text style={styles.contactButtonText}>Contactar</Text>
