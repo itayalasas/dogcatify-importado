@@ -353,16 +353,64 @@ export default function PartnerServices() {
   };
 
   const handleStartAdoptionChat = (petId: string, petName: string) => {
-    // Navigate to chat screen
-    router.push({
-      pathname: '/chat/adoption',
-      params: {
-        petId,
-        petName,
-        partnerId: id,
-        partnerName: partner?.business_name || 'Refugio'
+    if (!currentUser) {
+      Alert.alert('Iniciar sesión', 'Debes iniciar sesión para contactar sobre adopciones');
+      return;
+    }
+
+    // Crear o encontrar conversación existente
+    createOrFindAdoptionConversation(petId, petName);
+  };
+
+  const createOrFindAdoptionConversation = async (petId: string, petName: string) => {
+    try {
+      // Verificar si ya existe una conversación
+      const { data: existingConversation, error: checkError } = await supabaseClient
+        .from('chat_conversations')
+        .select('id')
+        .eq('adoption_pet_id', petId)
+        .eq('user_id', currentUser!.id)
+        .single();
+
+      let conversationId;
+
+      if (checkError && checkError.code === 'PGRST116') {
+        // No existe conversación, crear una nueva
+        const { data: newConversation, error: createError } = await supabaseClient
+          .from('chat_conversations')
+          .insert({
+            adoption_pet_id: petId,
+            partner_id: id,
+            user_id: currentUser!.id,
+            status: 'active'
+          })
+          .select('id')
+          .single();
+
+        if (createError) throw createError;
+        conversationId = newConversation.id;
+
+        // Enviar mensaje inicial
+        await supabaseClient
+          .from('chat_messages')
+          .insert({
+            conversation_id: conversationId,
+            sender_id: currentUser!.id,
+            message: `Hola! Estoy interesado/a en adoptar a ${petName}. ¿Podrían darme más información?`,
+            message_type: 'text'
+          });
+      } else if (existingConversation) {
+        conversationId = existingConversation.id;
+      } else {
+        throw checkError;
       }
-    });
+
+      // Navegar al chat
+      router.push(`/chat/${conversationId}?petName=${petName}`);
+    } catch (error) {
+      console.error('Error starting adoption chat:', error);
+      Alert.alert('Error', 'No se pudo iniciar la conversación');
+    }
   };
 
   const renderAdoptionPet = (pet: any) => (
