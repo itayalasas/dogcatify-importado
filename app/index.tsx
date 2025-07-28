@@ -8,7 +8,7 @@ export default function Index() {
 
   useEffect(() => {
     // Solo proceder cuando la autenticación esté completamente inicializada
-    if (!authInitialized || loading) {
+    if (!authInitialized) {
       console.log('Auth not ready yet:', { authInitialized, loading });
       return;
     }
@@ -30,10 +30,10 @@ export default function Index() {
         router.replace('/(tabs)');
       }
     }
-  }, [currentUser, authInitialized, loading]);
+  }, [currentUser, authInitialized]);
 
   // Mostrar loading mientras se inicializa la autenticación
-  if (!authInitialized || loading) {
+  if (!authInitialized) {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="large" color="#2D6A6F" />

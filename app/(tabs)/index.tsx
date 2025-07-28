@@ -482,16 +482,9 @@ export default function Home() {
   };
 
   if (!currentUser) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.authPrompt}>
-          <Text style={styles.authTitle}>¡Bienvenido a DogCatiFy! 🐾</Text>
-          <Text style={styles.authSubtitle}>
-            Inicia sesión para ver el feed de la comunidad
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
+    // Si no hay usuario, redirigir al login
+    router.replace('/auth/login');
+    return null;
   }
 
   return (
