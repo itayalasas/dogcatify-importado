@@ -72,30 +72,38 @@ export default function PartnerServices() {
 
   const fetchPartnerServices = async () => {
     try {
-      const { data, error } = await supabaseClient
-        .from('partner_services')
-        .select('*')
-        .eq('partner_id', id)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      
-      const servicesData = data?.map(service => ({
-        id: service.id,
-        name: service.name,
-        description: service.description,
-        price: service.price,
-        duration: service.duration,
-        category: service.category,
-        images: service.images,
-        isActive: service.is_active,
-        partnerId: service.partner_id,
-        createdAt: new Date(service.created_at)
-      })) || [];
-      
-      setServices(servicesData);
-      setFilteredServices(servicesData);
+      // Check if this is a shelter
+      if (partnerInfo?.businessType === 'shelter') {
+        // For shelters, redirect to adoption page
+        router.replace(`/services/shelter/${id}`);
+        return;
+      } else {
+        // For other partners, fetch services normally
+        const { data, error } = await supabaseClient
+          .from('partner_services')
+          .select('*')
+          .eq('partner_id', id)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        const servicesData = data?.map(service => ({
+          id: service.id,
+          name: service.name,
+          description: service.description,
+          price: service.price,
+          duration: service.duration,
+          category: service.category,
+          images: service.images,
+          isActive: service.is_active,
+          partnerId: service.partner_id,
+          createdAt: new Date(service.created_at)
+        })) || [];
+        
+        setServices(servicesData);
+        setFilteredServices(servicesData);
+      }
     } catch (error) {
       console.error('Error fetching partner services:', error);
     } finally {
