@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, TextInput, Dimensions, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, TextInput, Dimensions, Modal, Linking, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MapPin, Clock, Phone, Star, Search, User } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Clock, Phone, Star, Search, User, Heart, MessageCircle } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
+import { Button } from '../../../components/ui/Button';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient } from '../../../lib/supabase';
 
@@ -14,6 +15,7 @@ export default function PartnerServices() {
   const [partner, setPartner] = useState<any>(null);
   const [services, setServices] = useState<any[]>([]);
   const [filteredServices, setFilteredServices] = useState<any[]>([]);
+  const [adoptionPets, setAdoptionPets] = useState<any[]>([]);
   const [partnerReviews, setPartnerReviews] = useState<any[]>([]);
   const [averageRating, setAverageRating] = useState(0);
   const [totalReviews, setTotalReviews] = useState(0);
@@ -25,7 +27,11 @@ export default function PartnerServices() {
 
   useEffect(() => {
     fetchPartnerDetails();
-    fetchPartnerServices();
+    if (partner?.business_type === 'shelter') {
+      fetchAdoptionPets();
+    } else {
+      fetchPartnerServices();
+    }
     fetchPartnerReviews();
   }, [id]);
 
@@ -72,40 +78,80 @@ export default function PartnerServices() {
 
   const fetchPartnerServices = async () => {
     try {
-      // Check if this is a shelter
-      if (partnerInfo?.businessType === 'shelter') {
-        // For shelters, redirect to adoption page
-        router.replace(`/services/shelter/${id}`);
-        return;
-      } else {
-        // For other partners, fetch services normally
-        const { data, error } = await supabaseClient
-          .from('partner_services')
-          .select('*')
-          .eq('partner_id', id)
-          .eq('is_active', true)
-          .order('created_at', { ascending: false });
-        
-        if (error) throw error;
-        
-        const servicesData = data?.map(service => ({
-          id: service.id,
-          name: service.name,
-          description: service.description,
-          price: service.price,
-          duration: service.duration,
-          category: service.category,
-          images: service.images,
-          isActive: service.is_active,
-          partnerId: service.partner_id,
-          createdAt: new Date(service.created_at)
-        })) || [];
-        
-        setServices(servicesData);
-        setFilteredServices(servicesData);
-      }
+      const { data, error } = await supabaseClient
+        .from('partner_services')
+        .select('*')
+        .eq('partner_id', id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      const servicesData = data?.map(service => ({
+        id: service.id,
+        name: service.name,
+        description: service.description,
+        price: service.price,
+        duration: service.duration,
+        category: service.category,
+        images: service.images,
+        isActive: service.is_active,
+        partnerId: service.partner_id,
+        createdAt: new Date(service.created_at)
+      })) || [];
+      
+      setServices(servicesData);
+      setFilteredServices(servicesData);
     } catch (error) {
       console.error('Error fetching partner services:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAdoptionPets = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('partner_services')
+        .select('*')
+        .eq('partner_id', id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      // Parse adoption pets from services
+      const adoptionData = data?.map(service => {
+        // Extract adoption info from description
+        const description = service.description || '';
+        
+        // Parse basic info
+        const lines = description.split('\n');
+        const basicInfo = lines[0] || '';
+        const healthInfo = lines.find(line => line.includes('🩺')) || '';
+        const temperamentInfo = lines.find(line => line.includes('🧠')) || '';
+        const adoptionInfo = lines.find(line => line.includes('🏡')) || '';
+        const contactInfo = lines.find(line => line.includes('📞')) || '';
+        
+        return {
+          id: service.id,
+          name: service.name,
+          category: service.category,
+          price: service.price,
+          images: service.images || [],
+          basicInfo,
+          healthInfo,
+          temperamentInfo,
+          adoptionInfo,
+          contactInfo,
+          fullDescription: description,
+          createdAt: new Date(service.created_at)
+        };
+      }) || [];
+      
+      setAdoptionPets(adoptionData);
+    } catch (error) {
+      console.error('Error fetching adoption pets:', error);
     } finally {
       setLoading(false);
     }
@@ -258,6 +304,122 @@ export default function PartnerServices() {
       percentage: detailedReviews.length > 0 ? (count / detailedReviews.length) * 100 : 0
     })).reverse(); // Show 5 stars first
   };
+
+  const handleContactShelter = async (contactInfo: string) => {
+    try {
+      // Extract phone number from contact info
+      const phoneMatch = contactInfo.match(/(\+?\d{1,4}[\s-]?\d{1,4}[\s-]?\d{1,4}[\s-]?\d{1,4})/);
+      const emailMatch = contactInfo.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+      
+      if (phoneMatch) {
+        const phoneNumber = phoneMatch[1].replace(/[\s-]/g, '');
+        const phoneUrl = `tel:${phoneNumber}`;
+        
+        if (await Linking.canOpenURL(phoneUrl)) {
+          await Linking.openURL(phoneUrl);
+        } else {
+          Alert.alert('Error', 'No se puede realizar la llamada');
+        }
+      } else if (emailMatch) {
+        const email = emailMatch[1];
+        const emailUrl = `mailto:${email}`;
+        
+        if (await Linking.canOpenURL(emailUrl)) {
+          await Linking.openURL(emailUrl);
+        } else {
+          Alert.alert('Error', 'No se puede abrir el email');
+        }
+      } else {
+        Alert.alert('Contacto', contactInfo);
+      }
+    } catch (error) {
+      console.error('Error contacting shelter:', error);
+      Alert.alert('Error', 'No se pudo contactar al refugio');
+    }
+  };
+
+  const handleStartAdoptionChat = (petId: string, petName: string) => {
+    // Navigate to chat screen
+    router.push({
+      pathname: '/chat/adoption',
+      params: {
+        petId,
+        petName,
+        partnerId: id,
+        partnerName: partner?.business_name || 'Refugio'
+      }
+    });
+  };
+
+  const renderAdoptionPet = (pet: any) => (
+    <Card key={pet.id} style={styles.adoptionPetCard}>
+      {/* Pet Images */}
+      {pet.images && pet.images.length > 0 && (
+        <ScrollView 
+          horizontal 
+          pagingEnabled 
+          showsHorizontalScrollIndicator={false}
+          style={styles.petImagesContainer}
+        >
+          {pet.images.map((image: string, index: number) => (
+            <Image 
+              key={index} 
+              source={{ uri: image }} 
+              style={styles.petImage} 
+              resizeMode="cover"
+            />
+          ))}
+        </ScrollView>
+      )}
+      
+      {/* Pet Info */}
+      <View style={styles.petInfo}>
+        <View style={styles.petHeader}>
+          <Text style={styles.petName}>🐶 {pet.name}</Text>
+          {pet.price > 0 && (
+            <Text style={styles.adoptionFee}>${pet.price.toLocaleString()}</Text>
+          )}
+        </View>
+        
+        <Text style={styles.petBasicInfo}>{pet.basicInfo}</Text>
+        
+        {pet.healthInfo && (
+          <Text style={styles.petHealthInfo}>{pet.healthInfo}</Text>
+        )}
+        
+        {pet.temperamentInfo && (
+          <Text style={styles.petTemperament}>{pet.temperamentInfo}</Text>
+        )}
+        
+        {pet.adoptionInfo && (
+          <Text style={styles.petAdoptionInfo}>{pet.adoptionInfo}</Text>
+        )}
+        
+        {pet.contactInfo && (
+          <Text style={styles.petContactInfo}>{pet.contactInfo}</Text>
+        )}
+        
+        {/* Action Buttons */}
+        <View style={styles.petActions}>
+          <TouchableOpacity 
+            style={styles.contactButton}
+            onPress={() => handleContactShelter(pet.contactInfo)}
+          >
+            <Phone size={16} color="#FFFFFF" />
+            <Text style={styles.contactButtonText}>Contactar</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.adoptionButton}
+            onPress={() => handleStartAdoptionChat(pet.id, pet.name)}
+          >
+            <MessageCircle size={16} color="#FFFFFF" />
+            <Text style={styles.adoptionButtonText}>Adopción</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Card>
+  );
   
   if (loading) {
     return (
@@ -328,58 +490,78 @@ export default function PartnerServices() {
         </Card>
 
         {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <View style={styles.searchBar}>
-            <Search size={20} color="#9CA3AF" />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Buscar servicios..."
-              placeholderTextColor="#9CA3AF"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
+        {partner?.business_type !== 'shelter' && (
+          <View style={styles.searchContainer}>
+            <View style={styles.searchBar}>
+              <Search size={20} color="#9CA3AF" />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Buscar servicios..."
+                placeholderTextColor="#9CA3AF"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+            </View>
           </View>
-        </View>
+        )}
 
-        {/* Services List */}
-        <Text style={styles.sectionTitle}>Servicios Disponibles</Text>
+        {/* Services or Adoption Pets List */}
+        <Text style={styles.sectionTitle}>
+          {partner?.business_type === 'shelter' ? 'Mascotas en Adopción' : 'Servicios Disponibles'}
+        </Text>
         
-        {filteredServices.length === 0 ? (
-          <Card style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No hay servicios disponibles</Text>
-            <Text style={styles.emptySubtitle}>
-              {searchQuery ? 'No se encontraron servicios que coincidan con tu búsqueda' : 'Este negocio aún no tiene servicios registrados'}
-            </Text>
-          </Card>
-        ) : (
-          filteredServices.map((service) => (
-            <Card key={service.id} style={styles.serviceCard}>
-              <TouchableOpacity 
-                style={styles.serviceContent}
-                onPress={() => handleServicePress(service.id)}
-              >
-                <View style={styles.serviceHeader}>
-                  <Text style={styles.serviceName}>{service.name}</Text>
-                  <Text style={styles.servicePrice}>{formatPrice(service.price)}</Text>
-                </View>
-                
-                {service.description && (
-                  <Text style={styles.serviceDescription} numberOfLines={2}>
-                    {service.description}
-                  </Text>
-                )}
-                
-                <View style={styles.serviceDetails}>
-                  <View style={styles.serviceDetail}>
-                    <Clock size={14} color="#6B7280" />
-                    <Text style={styles.serviceDetailText}>
-                      {service.duration || 60} min
-                    </Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
+        {partner?.business_type === 'shelter' ? (
+          adoptionPets.length === 0 ? (
+            <Card style={styles.emptyCard}>
+              <Heart size={48} color="#EF4444" />
+              <Text style={styles.emptyTitle}>No hay mascotas en adopción</Text>
+              <Text style={styles.emptySubtitle}>
+                Este refugio aún no tiene mascotas disponibles para adopción
+              </Text>
             </Card>
-          ))
+          ) : (
+            <View style={styles.adoptionPetsList}>
+              {adoptionPets.map(renderAdoptionPet)}
+            </View>
+          )
+        ) : (
+          filteredServices.length === 0 ? (
+            <Card style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>No hay servicios disponibles</Text>
+              <Text style={styles.emptySubtitle}>
+                {searchQuery ? 'No se encontraron servicios que coincidan con tu búsqueda' : 'Este negocio aún no tiene servicios registrados'}
+              </Text>
+            </Card>
+          ) : (
+            filteredServices.map((service) => (
+              <Card key={service.id} style={styles.serviceCard}>
+                <TouchableOpacity 
+                  style={styles.serviceContent}
+                  onPress={() => handleServicePress(service.id)}
+                >
+                  <View style={styles.serviceHeader}>
+                    <Text style={styles.serviceName}>{service.name}</Text>
+                    <Text style={styles.servicePrice}>{formatPrice(service.price)}</Text>
+                  </View>
+                  
+                  {service.description && (
+                    <Text style={styles.serviceDescription} numberOfLines={2}>
+                      {service.description}
+                    </Text>
+                  )}
+                  
+                  <View style={styles.serviceDetails}>
+                    <View style={styles.serviceDetail}>
+                      <Clock size={14} color="#6B7280" />
+                      <Text style={styles.serviceDetailText}>
+                        {service.duration || 60} min
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              </Card>
+            ))
+          )
         )}
       </ScrollView>
 
@@ -856,5 +1038,109 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     marginLeft: 4,
+  },
+  // Adoption pets styles
+  adoptionPetsList: {
+    gap: 16,
+  },
+  adoptionPetCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  petImagesContainer: {
+    height: 200,
+  },
+  petImage: {
+    width: width - 64, // Account for card margins
+    height: 200,
+  },
+  petInfo: {
+    padding: 16,
+  },
+  petHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  petName: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+  },
+  adoptionFee: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#10B981',
+  },
+  petBasicInfo: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  petHealthInfo: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#059669',
+    marginBottom: 6,
+    lineHeight: 18,
+  },
+  petTemperament: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#7C3AED',
+    marginBottom: 6,
+    lineHeight: 18,
+  },
+  petAdoptionInfo: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#DC2626',
+    marginBottom: 6,
+    lineHeight: 18,
+  },
+  petContactInfo: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  petActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  contactButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3B82F6',
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  contactButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  adoptionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EF4444',
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  adoptionButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
 });
