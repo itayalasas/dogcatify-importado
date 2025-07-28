@@ -69,6 +69,9 @@
       "icon": "./assets/images/icon.png",
       "color": "#2D6A6F"
     },
+    "permissions": [
+      "NOTIFICATIONS"
+    ],
     "privacy": "public",
     "owner": "pedro86cu"
   }
