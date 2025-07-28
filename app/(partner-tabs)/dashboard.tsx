@@ -300,13 +300,23 @@ export default function PartnerDashboard() {
 
   const handleAddService = () => {
     if (partnerProfile?.id) {
-      router.push({
-        pathname: '/partner/add-service',
-        params: { 
-          partnerId: partnerProfile.id,
-          businessType: partnerProfile.businessType
-        }
-      });
+      // Si es un refugio, redirigir al formulario de adopción
+      if (partnerProfile.businessType === 'shelter') {
+        router.push({
+          pathname: '/partner/add-adoption-pet',
+          params: {
+            partnerId: partnerProfile.id
+          }
+        });
+      } else {
+        router.push({
+          pathname: '/partner/add-service',
+          params: { 
+            partnerId: partnerProfile.id,
+            businessType: partnerProfile.businessType
+          }
+        });
+      }
     }
   };
 
