@@ -70,7 +70,9 @@ export default function Pets() {
       .subscribe();
     
     return () => {
-      subscription.unsubscribe();
+      if (subscription && typeof subscription.unsubscribe === 'function') {
+        subscription.unsubscribe();
+      }
     };
   }, [currentUser]);
 

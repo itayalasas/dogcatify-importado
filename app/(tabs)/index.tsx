@@ -484,11 +484,11 @@ export default function Home() {
   // Manejar redirección cuando no hay usuario - FUERA del render condicional
   useEffect(() => {
     if (!currentUser) {
-      return (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Redirigiendo...</Text>
-        </View>
-      );
+      const timer = setTimeout(() => {
+        router.replace('/auth/login');
+      }, 100);
+      
+      return () => clearTimeout(timer);
     }
   }, [currentUser]);
 

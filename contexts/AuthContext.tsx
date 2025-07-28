@@ -183,8 +183,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     return () => {
       mounted = false;
-      if (subscription?.data?.subscription?.unsubscribe) {
-        subscription.data.subscription.unsubscribe();
+      if (subscription && typeof subscription.unsubscribe === 'function') {
+        subscription.unsubscribe();
       }
     };
   }, []);
