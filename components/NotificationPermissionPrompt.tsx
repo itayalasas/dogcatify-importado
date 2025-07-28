@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import { Bell, X } from 'lucide-react-native';
+import Constants from 'expo-constants';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -18,6 +19,13 @@ export const NotificationPermissionPrompt: React.FC = () => {
 
   const checkShouldShowPrompt = async () => {
     try {
+      // Don't show prompt in Expo Go
+      const isExpoGo = Constants.appOwnership === 'expo';
+      if (isExpoGo) {
+        console.log('Skipping notification prompt in Expo Go');
+        return;
+      }
+
       const hasShown = await AsyncStorage.getItem(NOTIFICATION_PROMPT_KEY);
       
       // Mostrar si no se ha mostrado antes y no tiene token

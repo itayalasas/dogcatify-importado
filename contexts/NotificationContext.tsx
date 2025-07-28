@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
-import { Platform, Alert, Linking } from 'react-native';
+import { Platform, Alert, Linking, __DEV__ } from 'react-native';
 import { supabaseClient } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { router } from 'expo-router';
@@ -79,6 +79,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const registerForPushNotifications = async (): Promise<string | null> => {
     let token = null;
 
+    // Check if we're in Expo Go (which doesn't support push notifications in SDK 53+)
+    const isExpoGo = Constants.appOwnership === 'expo';
+    
+    if (isExpoGo && __DEV__) {
+      console.warn('Push notifications are not supported in Expo Go. Use a development build for full functionality.');
+      return null;
+    }
+
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
         name: 'default',
@@ -98,17 +106,20 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
       
       if (finalStatus !== 'granted') {
-        Alert.alert(
-          'Permisos de notificaciones',
-          'Para recibir notificaciones importantes, habilita los permisos en la configuración de la app.'
-        );
+        if (!isExpoGo) {
+          Alert.alert(
+            'Permisos de notificaciones',
+            'Para recibir notificaciones importantes, habilita los permisos en la configuración de la app.'
+          );
+        }
         return null;
       }
       
       try {
         const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
         if (!projectId) {
-          throw new Error('Project ID not found');
+          console.warn('Project ID not found for push notifications');
+          return null;
         }
         
         token = (await Notifications.getExpoPushTokenAsync({
@@ -118,10 +129,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         console.log('Expo push token:', token);
       } catch (error) {
         console.error('Error getting push token:', error);
-        Alert.alert('Error', 'No se pudo registrar para notificaciones push');
+        if (!isExpoGo) {
+          Alert.alert('Error', 'No se pudo registrar para notificaciones push');
+        }
       }
     } else {
-      Alert.alert('Error', 'Las notificaciones push solo funcionan en dispositivos físicos');
+      if (!isExpoGo) {
+        Alert.alert('Error', 'Las notificaciones push solo funcionan en dispositivos físicos');
+      }
     }
 
     return token;
@@ -235,7 +250,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const sendNotification = async (title: string, body: string, data?: any) => {
     if (!expoPushToken) {
-      console.log('No push token available');
+      console.log('No push token available - notifications may not be supported in current environment');
       return;
     }
 
@@ -268,6 +283,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const sendNotificationToUser = async (userId: string, title: string, body: string, data?: any) => {
     try {
+      // Check if we're in a supported environment
+      const isExpoGo = Constants.appOwnership === 'expo';
+      if (isExpoGo && __DEV__) {
+        console.log('Skipping notification in Expo Go environment');
+        return;
+      }
+
       // Obtener el token del usuario
       const { data: userData, error } = await supabaseClient
         .from('profiles')
@@ -276,7 +298,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         .single();
 
       if (error || !userData?.push_token) {
-        console.log('User push token not found');
+        console.log('User push token not found or notifications not supported');
         return;
       }
 
@@ -309,6 +331,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const sendNotificationToAdmin = async (title: string, body: string, data?: any) => {
     try {
+      // Check if we're in a supported environment
+      const isExpoGo = Constants.appOwnership === 'expo';
+      if (isExpoGo && __DEV__) {
+        console.log('Skipping admin notification in Expo Go environment');
+        return;
+      }
+
       // Obtener el token del admin
       const { data: adminData, error } = await supabaseClient
         .from('profiles')
@@ -317,7 +346,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         .single();
 
       if (error || !adminData?.push_token) {
-        console.log('Admin push token not found');
+        console.log('Admin push token not found or notifications not supported');
         return;
       }
 
