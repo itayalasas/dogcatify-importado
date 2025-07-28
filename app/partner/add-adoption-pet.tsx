@@ -30,6 +30,7 @@ export default function AddAdoptionPet() {
   const [size, setSize] = useState<'small' | 'medium' | 'large'>('medium');
   const [weight, setWeight] = useState('');
   const [color, setColor] = useState('');
+  const [description, setDescription] = useState('');
   
   // Salud
   const [isVaccinated, setIsVaccinated] = useState(false);
@@ -169,8 +170,8 @@ export default function AddAdoptionPet() {
   };
 
   const handleSubmit = async () => {
-    if (!petName || !breed || !age || !weight) {
-      Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
+    if (!petName || !breed || !age || !weight || !description.trim()) {
+      Alert.alert('Error', 'Por favor completa todos los campos obligatorios (nombre, raza, edad, peso y descripción)');
       return;
     }
 
@@ -203,6 +204,7 @@ export default function AddAdoptionPet() {
         size,
         weight: parseFloat(weight),
         color: color.trim(),
+        description: description.trim(),
         
         // Salud
         is_vaccinated: isVaccinated,
@@ -422,6 +424,15 @@ export default function AddAdoptionPet() {
               />
             </View>
           </View>
+
+          <Input
+            label="Descripción de la mascota *"
+            placeholder="Describe la personalidad, historia y características especiales de la mascota..."
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            numberOfLines={4}
+          />
 
           {/* Salud */}
           <Text style={styles.sectionTitle}>🩺 Salud y Cuidados</Text>
