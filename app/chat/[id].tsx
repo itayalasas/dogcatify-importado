@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput, KeyboardAvoidingView, Platform, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput, KeyboardAvoidingView, Platform, Alert, Image, Linking } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Send, Phone, MoveVertical as MoreVertical } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
@@ -286,6 +286,7 @@ export default function ChatScreen() {
     const testAlignment = message.message.includes('refugio') ? false : true;
     
     console.log('Test alignment (refugio=left, other=right):', testAlignment);
+    console.log({
       messageId: message.id,
       senderId: message.sender_id,
       currentUserId: currentUser?.id,
@@ -395,6 +396,7 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
+          ref={scrollViewRef}
           style={styles.messagesContainer}
           contentContainerStyle={styles.messagesContent}
           showsVerticalScrollIndicator={false}
@@ -585,12 +587,11 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   messageTime: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: 'Inter-Regular',
     textAlign: 'right',
     marginTop: 4,
     color: 'rgba(0, 0, 0, 0.5)',
-    fontSize: 11,
   },
   inputContainer: {
     flexDirection: 'row',
