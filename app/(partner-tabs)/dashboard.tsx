@@ -321,6 +321,26 @@ export default function PartnerDashboard() {
     }
   };
 
+  // Función para verificar si una funcionalidad está habilitada
+  const isFeatureEnabled = (featureKey: string): boolean => {
+    if (!partnerProfile?.features) return false;
+    return partnerProfile.features[featureKey] === true;
+  };
+
+  // Función para verificar si el negocio es de tipo tienda
+  const isShopBusiness = (): boolean => {
+    return partnerProfile?.businessType === 'shop';
+  };
+
+  // Función para verificar si debe mostrar la gestión de productos
+  const shouldShowProducts = (): boolean => {
+    return isShopBusiness() || isFeatureEnabled('products');
+  };
+
+  // Función para verificar si debe mostrar la agenda
+  const shouldShowAgenda = (): boolean => {
+    return isFeatureEnabled('agenda') || ['veterinary', 'grooming', 'boarding'].includes(partnerProfile?.businessType);
+  };
   const getBusinessTypeIcon = (type: string) => { 
     switch (type) {
       case 'veterinary': return '🏥';
@@ -430,13 +450,15 @@ export default function PartnerDashboard() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
           <View style={styles.quickActions}>
-            <TouchableOpacity 
-              style={styles.quickAction} 
-              onPress={handleViewAgenda}
-            >
-              <Calendar size={24} color="#3B82F6" />
-              <Text style={styles.quickActionText}>Ver Agenda</Text>
-            </TouchableOpacity>
+            {shouldShowAgenda() && (
+              <TouchableOpacity 
+                style={styles.quickAction} 
+                onPress={handleViewAgenda}
+              >
+                <Calendar size={24} color="#3B82F6" />
+                <Text style={styles.quickActionText}>Ver Agenda</Text>
+              </TouchableOpacity>
+            )}
             
             <TouchableOpacity 
               style={styles.quickAction} 
@@ -454,15 +476,17 @@ export default function PartnerDashboard() {
               <Text style={styles.quickActionText}>Ver Clientes</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity 
-              style={styles.quickAction}
-              onPress={handleViewOrders}
-            >
-              <Package size={24} color="#8B5CF6" />
-              <Text style={styles.quickActionText}>
-                Ver Pedidos
-              </Text>
-            </TouchableOpacity>
+            {shouldShowProducts() && (
+              <TouchableOpacity 
+                style={styles.quickAction}
+                onPress={handleViewOrders}
+              >
+                <Package size={24} color="#8B5CF6" />
+                <Text style={styles.quickActionText}>
+                  Ver Pedidos
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
