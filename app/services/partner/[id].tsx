@@ -27,13 +27,20 @@ export default function PartnerServices() {
 
   useEffect(() => {
     fetchPartnerDetails();
-    if (partner?.business_type === 'shelter') {
-      fetchAdoptionPets();
-    } else {
-      fetchPartnerServices();
-    }
-    fetchPartnerReviews();
   }, [id]);
+
+  useEffect(() => {
+    if (partner) {
+      if (partner.business_type === 'shelter') {
+        console.log('Partner is shelter, fetching adoption pets...');
+        fetchAdoptionPets();
+      } else {
+        console.log('Partner is not shelter, fetching services...');
+        fetchPartnerServices();
+      }
+      fetchPartnerReviews();
+    }
+  }, [partner]);
 
   useEffect(() => {
     if (searchQuery.trim()) {
@@ -137,11 +144,12 @@ export default function PartnerServices() {
       
       if (error) {
         console.error('Error fetching from adoption_pets:', error);
-        // Fallback to partner_services for backward compatibility
-        return await fetchAdoptionPetsFromServices();
+        setAdoptionPets([]);
+        return;
       }
       
       console.log('Found adoption pets:', data?.length || 0);
+      console.log('Adoption pets data:', data);
       
       // Process adoption pets data
       const adoptionData = data?.map(pet => {
@@ -187,11 +195,11 @@ export default function PartnerServices() {
         };
       }) || [];
       
+      console.log('Processed adoption data:', adoptionData.length, 'pets');
       setAdoptionPets(adoptionData);
     } catch (error) {
       console.error('Error fetching adoption pets:', error);
-      // Try fallback method
-      await fetchAdoptionPetsFromServices();
+      setAdoptionPets([]);
     } finally {
       setLoading(false);
     }
@@ -713,7 +721,7 @@ export default function PartnerServices() {
               </Text>
             </Card>
           ) : (
-            <View style={styles.adoptionPetsList}>
+            <View>
               {adoptionPets.map(renderAdoptionPet)}
             </View>
           )
