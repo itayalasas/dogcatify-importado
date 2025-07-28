@@ -103,34 +103,42 @@ export const NotificationService = {
    * @param name User's display name
    * @param serviceName Name of the booked service
    * @param partnerName Name of the service provider
-        // Determine recipient ID
    * @param date Date of the appointment
-        const recipientId = conversation.user_id === currentUser!.id 
-   * @param serviceName Name of the cancelled service
-          ? conversation.partner_id 
-   * @param partnerName Name of the service provider
-          : conversation.user_id;
-   * @param date Date of the appointment
-        
    * @param time Time of the appointment
-        // Send push notification
    */
-        await sendChatNotification(
-  sendBookingCancellationEmail: async (
-          recipientId,
+  sendBookingConfirmationEmail: async (
     email: string, 
-          currentUser!.displayName || 'Usuario',
     name: string,
-          petName || 'mascota',
     serviceName: string,
-          newMessage.trim(),
     partnerName: string,
-          conversation.id
     date: string,
-        );
     time: string
-        console.error('Error sending push notification:', notificationError);
   ): Promise<void> => {
+    const subject = 'Confirmación de reserva - DogCatiFy';
+    const text = `Hola ${name},\n\nTu reserva ha sido confirmada:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\n\nGracias por usar DogCatiFy.`;
+    const html = EmailTemplates.bookingConfirmation(name, serviceName, partnerName, date, time);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a booking cancellation email
+   * @param email User's email address
+   * @param name User's display name
+   * @param serviceName Name of the cancelled service
+   * @param partnerName Name of the service provider
+   * @param date Date of the appointment
+   * @param time Time of the appointment
+   */
+  sendBookingCancellationEmail: async (
+    email: string, 
+    name: string,
+    serviceName: string,
+    partnerName: string,
+    date: string,
+    time: string
+  ): Promise<void> => {
+    const subject = 'Cancelación de reserva - DogCatiFy';
     const text = `Hola ${name},\n\nTu reserva ha sido cancelada:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\n\nGracias por usar DogCatiFy.`;
     const html = EmailTemplates.bookingCancellation(name, serviceName, partnerName, date, time);
     
@@ -139,4 +147,25 @@ export const NotificationService = {
   
   /**
    * Send a booking reminder email
-  const { sendChatNotification } = useNotifications();
+   * @param email User's email address
+   * @param name User's display name
+   * @param serviceName Name of the service
+   * @param partnerName Name of the service provider
+   * @param date Date of the appointment
+   * @param time Time of the appointment
+   */
+  sendBookingReminderEmail: async (
+    email: string, 
+    name: string,
+    serviceName: string,
+    partnerName: string,
+    date: string,
+    time: string
+  ): Promise<void> => {
+    const subject = 'Recordatorio de cita - DogCatiFy';
+    const text = `Hola ${name},\n\nTe recordamos tu próxima cita:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\n\nNo olvides asistir a tu cita.\n\nGracias por usar DogCatiFy.`;
+    const html = EmailTemplates.bookingReminder(name, serviceName, partnerName, date, time);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  }
+};
