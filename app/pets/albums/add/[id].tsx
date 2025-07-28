@@ -6,6 +6,7 @@ import { Input } from '../../../../components/ui/Input';
 import { Button } from '../../../../components/ui/Button';
 import { Card } from '../../../../components/ui/Card';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { supabaseClient } from '../../../../lib/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { detectPetInImage, validateImagesForPets } from '../../../../utils/petDetection';
@@ -30,7 +31,7 @@ export default function AddPhoto() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
         quality: 0.8,
         aspect: [1, 1],
@@ -102,7 +103,7 @@ export default function AddPhoto() {
       }
 
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
         aspect: [1, 1],
       });
@@ -166,15 +167,32 @@ export default function AddPhoto() {
       const filename = `pets/albums/${id}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
       console.log('Upload filename:', filename);
       
-      // Fetch the image and convert to blob
-      console.log('Fetching image from URI...');
-      const response = await fetch(imageAsset.uri);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.status}`);
+      // Use FileSystem to read the file as base64
+      console.log('Reading file with FileSystem...');
+      const fileInfo = await FileSystem.getInfoAsync(imageAsset.uri);
+      console.log('File info:', fileInfo);
+      
+      if (!fileInfo.exists) {
+        throw new Error('File does not exist');
       }
       
-      const blob = await response.blob();
-      console.log('Image converted to blob, size:', blob.size);
+      // Read file as base64
+      const base64 = await FileSystem.readAsStringAsync(imageAsset.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      
+      console.log('File read as base64, length:', base64.length);
+      
+      // Convert base64 to blob
+      const byteCharacters = atob(base64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/jpeg' });
+      
+      console.log('Blob created, size:', blob.size);
       
       // Upload blob to Supabase storage
       console.log('Uploading blob to Supabase storage...');
