@@ -1,370 +1,638 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-} from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { supabase } from '../../lib/supabase';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput, KeyboardAvoidingView, Platform, Alert, Image, Linking } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { ArrowLeft, Send, Phone, MoveVertical as MoreVertical } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
-import { Send, ArrowLeft } from 'lucide-react-native';
-
-interface Message {
-  id: string;
-  text: string;
-  sender_id: string;
-  created_at: string;
-  conversation_id: string;
-}
-
-interface Conversation {
-  id: string;
-  pet_id: string;
-  user_id: string;
-  shelter_id: string;
-  created_at: string;
-  pet?: {
-    name: string;
-    photos: string[];
-  };
-  user?: {
-    full_name: string;
-    email: string;
-  };
-  shelter?: {
-    business_name: string;
-    email: string;
-  };
-}
+import { supabaseClient } from '../../lib/supabase';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 export default function ChatScreen() {
-  const { id } = useLocalSearchParams();
-  const router = useRouter();
+  const { id, petName } = useLocalSearchParams<{ id: string; petName?: string }>();
   const { currentUser } = useAuth();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { sendNotificationToUser } = useNotifications();
+  const [conversation, setConversation] = useState<any>(null);
+  const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
-  const [conversation, setConversation] = useState<Conversation | null>(null);
   const [loading, setLoading] = useState(true);
-  const flatListRef = useRef<FlatList>(null);
+  const [sending, setSending] = useState(false);
+  const [otherParticipant, setOtherParticipant] = useState<any>(null);
+  const [adoptionPet, setAdoptionPet] = useState<any>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
-    if (id && currentUser) {
-      fetchConversation();
-      fetchMessages();
-      subscribeToMessages();
-    }
+    fetchConversationData();
+    
   }, [id, currentUser]);
 
-  const fetchConversation = async () => {
+  useEffect(() => {
+    if (!id || !currentUser) return;
+    
+    // Set up real-time subscription for new messages
+    console.log('Setting up real-time subscription for conversation:', id);
+    
+    // Poll for new messages every 2 seconds as fallback
+    const pollInterval = setInterval(() => {
+      fetchMessages();
+    }, 2000);
+    
+    return () => {
+      clearInterval(pollInterval);
+    };
+  }, [id, currentUser]);
+
+  useEffect(() => {
+    // Scroll to bottom when new messages arrive
+    if (messages.length > 0) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [messages]);
+
+  const fetchConversationData = async () => {
     try {
-      const { data, error } = await supabase
-        .from('conversations')
+      // Fetch conversation details
+      const { data: conversationData, error: convError } = await supabaseClient
+        .from('chat_conversations')
         .select(`
           *,
-          pet:pets(name, photos),
-          user:profiles!conversations_user_id_fkey(full_name, email),
-          shelter:partners!conversations_shelter_id_fkey(business_name, email)
+          adoption_pets(*),
+          partners(id, business_name, logo, phone)
         `)
         .eq('id', id)
         .single();
 
-      if (error) throw error;
-      setConversation(data);
-    } catch (error) {
-      console.error('Error fetching conversation:', error);
-      Alert.alert('Error', 'No se pudo cargar la conversación');
-    }
-  };
+      if (convError) throw convError;
 
-  const fetchMessages = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('messages')
+      setConversation(conversationData);
+      setAdoptionPet(conversationData?.adoption_pets);
+
+      // Determine other participant
+      const isUserCustomer = conversationData.user_id === currentUser?.id;
+      
+      if (isUserCustomer) {
+        // Current user is the customer, other participant is the shelter
+        const partnerData = conversationData?.partners;
+        setOtherParticipant({
+          id: conversationData.partner_id,
+          name: partnerData?.business_name || 'Refugio',
+          avatar: partnerData?.logo,
+          phone: partnerData?.phone,
+          type: 'shelter'
+        });
+      } else {
+        // Current user is the shelter, other participant is the customer
+        const { data: customerData, error: customerError } = await supabaseClient
+          .from('profiles')
+          .select('id, display_name, photo_url, phone')
+          .eq('id', conversationData.user_id)
+          .single();
+
+        if (customerError) {
+          console.error('Error fetching customer data:', customerError);
+          // Set default customer data if fetch fails
+          setOtherParticipant({
+            id: conversationData.user_id,
+            name: 'Usuario',
+            avatar: null,
+            phone: null,
+            type: 'customer'
+          });
+        } else {
+          setOtherParticipant({
+            id: customerData.id,
+            name: customerData.display_name || 'Usuario',
+            avatar: customerData.photo_url,
+            phone: customerData.phone,
+            type: 'customer'
+          });
+        }
+      }
+
+      // Fetch messages
+      const { data: messagesData, error: messagesError } = await supabaseClient
+        .from('chat_messages')
         .select('*')
         .eq('conversation_id', id)
         .order('created_at', { ascending: true });
 
-      if (error) throw error;
-      setMessages(data || []);
+      if (messagesError) throw messagesError;
+
+      const formattedMessages = messagesData.map(msg => ({
+        ...msg,
+        created_at: new Date(msg.created_at)
+      })) || [];
+
+      setMessages(formattedMessages);
+
+      // Mark unread messages as read
+      const unreadMessages = formattedMessages.filter(
+        msg => !msg.is_read && msg.sender_id !== currentUser?.id
+      );
+
+      if (unreadMessages.length > 0) {
+        await supabaseClient
+          .from('chat_messages')
+          .update({ is_read: true })
+          .in('id', unreadMessages.map(msg => msg.id));
+      }
+
     } catch (error) {
-      console.error('Error fetching messages:', error);
+      console.error('Error fetching conversation data:', error);
+      Alert.alert('Error', 'No se pudo cargar la conversación');
     } finally {
       setLoading(false);
     }
   };
 
-  const subscribeToMessages = () => {
-    const subscription = supabase
-      .channel(`messages:${id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${id}`,
-        },
-        (payload) => {
-          setMessages((prev) => [...prev, payload.new as Message]);
-          scrollToBottom();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  };
-
-  const sendMessage = async () => {
-    if (!newMessage.trim() || !currentUser || !conversation) return;
-
+  const markMessageAsRead = async (messageId: string) => {
     try {
-      const { error } = await supabase.from('messages').insert({
-        text: newMessage.trim(),
-        sender_id: currentUser.id,
-        conversation_id: id,
-      });
-
-      if (error) throw error;
-
-      setNewMessage('');
-      scrollToBottom();
+      await supabaseClient
+        .from('chat_messages')
+        .update({ is_read: true })
+        .eq('id', messageId);
     } catch (error) {
-      console.error('Error sending message:', error);
-      Alert.alert('Error', 'No se pudo enviar el mensaje');
+      console.error('Error marking message as read:', error);
     }
   };
 
-  const scrollToBottom = () => {
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+  const fetchMessages = async () => {
+    try {
+      const { data: messagesData, error } = await supabaseClient
+        .from('chat_messages')
+        .select('*')
+        .eq('conversation_id', id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      const formattedMessages = messagesData.map(msg => ({
+        ...msg,
+        created_at: new Date(msg.created_at)
+      })) || [];
+
+      // Only update if there are new messages
+      if (formattedMessages.length !== messages.length) {
+        setMessages(formattedMessages);
+        
+        // Mark unread messages as read
+        const unreadMessages = formattedMessages.filter(
+          msg => !msg.is_read && msg.sender_id !== currentUser?.id
+        );
+
+        if (unreadMessages.length > 0) {
+          await supabaseClient
+            .from('chat_messages')
+            .update({ is_read: true })
+            .in('id', unreadMessages.map(msg => msg.id));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+    }
   };
 
-  const renderMessage = ({ item }: { item: Message }) => {
-    const isOwnMessage = item.sender_id === currentUser?.id;
+  const sendMessage = async () => {
+    if (!newMessage.trim() || sending || !currentUser) return;
+
+    setSending(true);
+    try {
+      const messageData = {
+        conversation_id: id,
+        sender_id: currentUser.id,
+        message: newMessage.trim(),
+        message_type: 'text',
+        is_read: false
+      };
+
+      const { error } = await supabaseClient
+        .from('chat_messages')
+        .insert(messageData);
+
+      if (error) throw error;
+
+      // Send push notification to other participant
+      if (otherParticipant) {
+        const notificationTitle = `Nuevo mensaje de ${currentUser.displayName || 'Usuario'}`;
+        const notificationBody = newMessage.trim();
+        const notificationData = {
+          type: 'chat_message',
+          conversationId: id,
+          petName: adoptionPet?.name,
+          deepLink: `chat/${id}`
+        };
+
+        await sendNotificationToUser(
+          otherParticipant.id,
+          notificationTitle,
+          notificationBody,
+          notificationData
+        );
+      }
+
+      setNewMessage('');
+    } catch (error) {
+      console.error('Error sending message:', error);
+      Alert.alert('Error', 'No se pudo enviar el mensaje');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleCall = async () => {
+    if (!otherParticipant?.phone) {
+      Alert.alert('Error', 'No hay número de teléfono disponible');
+      return;
+    }
+
+    try {
+      const phoneUrl = `tel:${otherParticipant.phone}`;
+      const canOpen = await Linking.canOpenURL(phoneUrl);
+      
+      if (canOpen) {
+        await Linking.openURL(phoneUrl);
+      } else {
+        Alert.alert('Error', 'No se puede abrir la aplicación de llamadas');
+      }
+    } catch (error) {
+      console.error('Error opening phone app:', error);
+      Alert.alert('Error', 'No se pudo realizar la llamada');
+    }
+  };
+
+  const formatMessageTime = (date: Date) => {
+    return date.toLocaleTimeString('es-ES', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  };
+
+  const renderMessage = (message: any) => {
+    const isOwnMessage = message.sender_id === currentUser?.id;
     
     console.log('=== MESSAGE DEBUG ===');
-    console.log('Message ID:', item.id);
-    console.log('Message text:', item.text);
-    console.log('Message sender_id:', item.sender_id);
-    console.log('Message sender_id type:', typeof item.sender_id);
+    console.log('Message ID:', message.id);
+    console.log('Message text:', message.message);
+    console.log('Message sender_id:', message.sender_id);
+    console.log('Message sender_id type:', typeof message.sender_id);
     console.log('Current user ID:', currentUser?.id);
     console.log('Current user ID type:', typeof currentUser?.id);
-    console.log('Are they equal?:', item.sender_id === currentUser?.id);
+    console.log('Are they equal?:', message.sender_id === currentUser?.id);
     console.log('Is own message?:', isOwnMessage);
-    console.log('Message created at:', item.created_at);
+    console.log('Message created at:', message.created_at);
     console.log('=== END MESSAGE DEBUG ===');
-
+    
+    // Force different alignment for testing
+    const testAlignment = message.message.includes('refugio') ? false : true;
+    
+    console.log('Test alignment (refugio=left, other=right):', testAlignment);
+    
     return (
       <View
+        key={message.id}
         style={[
           styles.messageContainer,
-          isOwnMessage ? styles.ownMessage : styles.otherMessage,
+          testAlignment ? styles.ownMessage : styles.otherMessage
         ]}
       >
-        <Text style={[
-          styles.messageText,
-          isOwnMessage ? styles.ownMessageText : styles.otherMessageText,
+        <View style={[
+          styles.messageBubble,
+          testAlignment ? styles.ownMessageBubble : styles.otherMessageBubble
         ]}>
-          {item.text}
-        </Text>
-        <Text style={[
-          styles.messageTime,
-          isOwnMessage ? styles.ownMessageTime : styles.otherMessageTime,
-        ]}>
-          {new Date(item.created_at).toLocaleTimeString('es-ES', {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
-        </Text>
+          <Text style={[
+            styles.messageText,
+            testAlignment ? styles.ownMessageText : styles.otherMessageText
+          ]}>
+            {message.message}
+          </Text>
+          <Text style={styles.messageTime}>
+            {formatMessageTime(message.created_at)}
+          </Text>
+        </View>
       </View>
     );
   };
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text>Cargando conversación...</Text>
-      </View>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Cargando conversación...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#2D6A6F" />
+          <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
+        
         <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>
-            {conversation?.pet?.name || 'Chat'}
-          </Text>
-          <Text style={styles.headerSubtitle}>
-            {currentUser?.id === conversation?.user_id
-              ? conversation?.shelter?.business_name
-              : conversation?.user?.full_name}
-          </Text>
+          {otherParticipant?.avatar ? (
+            <Image source={{ uri: otherParticipant.avatar }} style={styles.headerAvatar} />
+          ) : (
+            <View style={styles.headerAvatarPlaceholder}>
+              <Text style={styles.headerAvatarText}>
+                {otherParticipant?.type === 'shelter' ? '🐾' : '👤'}
+              </Text>
+            </View>
+          )}
+          <View style={styles.headerText}>
+            <Text style={styles.headerName}>
+              {otherParticipant?.name || 'Usuario'}
+            </Text>
+            <Text style={styles.headerSubtitle}>
+              Adopción de {adoptionPet?.name || petName || 'mascota'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.headerActions}>
+          {otherParticipant?.phone && (
+            <TouchableOpacity onPress={handleCall} style={styles.headerAction}>
+              <Phone size={20} color="#3B82F6" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={styles.headerAction}>
+            <MoreVertical size={20} color="#6B7280" />
+          </TouchableOpacity>
         </View>
       </View>
 
-      {/* Messages */}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={renderMessage}
-        style={styles.messagesList}
-        contentContainerStyle={styles.messagesContainer}
-        onContentSizeChange={scrollToBottom}
-      />
+      {/* Pet Info Banner */}
+      {adoptionPet && (
+        <View style={styles.petBanner}>
+          {adoptionPet.images && adoptionPet.images.length > 0 ? (
+            <Image source={{ uri: adoptionPet.images[0] }} style={styles.petBannerImage} />
+          ) : (
+            <View style={styles.petBannerImagePlaceholder}>
+              <Text style={styles.petBannerImageText}>
+                {adoptionPet.species === 'dog' ? '🐶' : '🐱'}
+              </Text>
+            </View>
+          )}
+          <View style={styles.petBannerInfo}>
+            <Text style={styles.petBannerName}>{adoptionPet.name}</Text>
+            <Text style={styles.petBannerDetails}>
+              {adoptionPet.breed} • {adoptionPet.age} {adoptionPet.age_unit === 'years' ? 'años' : 'meses'}
+            </Text>
+          </View>
+        </View>
+      )}
 
-      {/* Input */}
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.textInput}
-          value={newMessage}
-          onChangeText={setNewMessage}
-          placeholder="Escribe un mensaje..."
-          multiline
-          maxLength={500}
-        />
-        <TouchableOpacity
-          style={[
-            styles.sendButton,
-            !newMessage.trim() && styles.sendButtonDisabled,
-          ]}
-          onPress={sendMessage}
-          disabled={!newMessage.trim()}
+      {/* Messages */}
+      <KeyboardAvoidingView 
+        style={styles.chatContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.messagesContainer}
+          contentContainerStyle={styles.messagesContent}
+          showsVerticalScrollIndicator={false}
         >
-          <Send size={20} color={newMessage.trim() ? '#FFFFFF' : '#CCCCCC'} />
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+          {messages.map(renderMessage)}
+        </ScrollView>
+
+        {/* Message Input */}
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.messageInput}
+            placeholder="Escribe un mensaje..."
+            value={newMessage}
+            onChangeText={setNewMessage}
+            multiline
+            maxLength={500}
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              (!newMessage.trim() || sending) && styles.sendButtonDisabled
+            ]}
+            onPress={sendMessage}
+            disabled={!newMessage.trim() || sending}
+          >
+            <Send size={20} color={newMessage.trim() && !sending ? "#FFFFFF" : "#9CA3AF"} />
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F9FAFB',
+    paddingTop: 50,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  backButton: {
+    padding: 8,
+    marginRight: 8,
+  },
+  headerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  headerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  headerAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  headerAvatarText: {
+    fontSize: 18,
+  },
+  headerText: {
+    flex: 1,
+  },
+  headerName: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  headerAction: {
+    padding: 8,
+  },
+  petBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FDE68A',
+  },
+  petBannerImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 12,
+  },
+  petBannerImagePlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#F59E0B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  petBannerImageText: {
+    fontSize: 24,
+    color: '#FFFFFF',
+  },
+  petBannerInfo: {
+    flex: 1,
+  },
+  petBannerName: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#92400E',
+  },
+  petBannerDetails: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#92400E',
+  },
+  chatContainer: {
+    flex: 1,
+  },
+  messagesContainer: {
+    flex: 1,
+    backgroundColor: '#F0F2F5',
+  },
+  messagesContent: {
+    padding: 16,
+    paddingBottom: 20,
+  },
+  messageContainer: {
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  ownMessage: {
+    alignItems: 'flex-end',
+  },
+  otherMessage: {
+    alignItems: 'flex-start',
+  },
+  messageBubble: {
+    maxWidth: '75%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  ownMessageBubble: {
+    backgroundColor: '#007AFF',
+    borderBottomRightRadius: 6,
+  },
+  otherMessageBubble: {
+    backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  messageText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 22,
+  },
+  ownMessageText: {
+    color: '#FFFFFF',
+  },
+  otherMessageText: {
+    color: '#111827',
+  },
+  messageTime: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'right',
+    marginTop: 4,
+    color: 'rgba(0, 0, 0, 0.5)',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  messageInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 25,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    maxHeight: 100,
+    marginRight: 8,
+    backgroundColor: '#F8F9FA',
+  },
+  sendButton: {
+    backgroundColor: '#007AFF',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  sendButtonDisabled: {
+    backgroundColor: '#E0E0E0',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    paddingTop: Platform.OS === 'ios' ? 60 : 12,
-  },
-  backButton: {
-    marginRight: 12,
-  },
-  headerInfo: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2D6A6F',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#666666',
-    marginTop: 2,
-  },
-  messagesList: {
-    flex: 1,
-  },
-  messagesContainer: {
-    padding: 16,
-  },
-  messageContainer: {
-    maxWidth: '80%',
-    marginVertical: 4,
-    padding: 12,
-    borderRadius: 16,
-  },
-  ownMessage: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#2D6A6F',
-    borderBottomRightRadius: 4,
-  },
-  otherMessage: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  messageText: {
+  loadingText: {
     fontSize: 16,
-    lineHeight: 20,
-  },
-  ownMessageText: {
-    color: '#FFFFFF',
-  },
-  otherMessageText: {
-    color: '#333333',
-  },
-  messageTime: {
-    fontSize: 12,
-    marginTop: 4,
-  },
-  ownMessageTime: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    textAlign: 'right',
-  },
-  otherMessageTime: {
-    color: '#999999',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-  },
-  textInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginRight: 12,
-    maxHeight: 100,
-    fontSize: 16,
-  },
-  sendButton: {
-    backgroundColor: '#2D6A6F',
-    borderRadius: 20,
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sendButtonDisabled: {
-    backgroundColor: '#F0F0F0',
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
   },
 });
