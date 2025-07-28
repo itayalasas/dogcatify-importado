@@ -474,7 +474,7 @@ export default function PartnerServices() {
 
       let conversationId;
 
-      if (checkError && checkError.code === 'PGRST116') {
+      if (!existingConversation) {
         // No existe conversación, crear una nueva
         console.log('Creating new conversation...');
         const { data: newConversation, error: createError } = await supabaseClient
@@ -510,12 +510,9 @@ export default function PartnerServices() {
           console.error('Error sending initial message:', messageError);
           // No lanzar error aquí, la conversación ya se creó
         }
-      } else if (existingConversation) {
+      } else {
         console.log('Using existing conversation:', existingConversation.id);
         conversationId = existingConversation.id;
-      } else {
-        console.error('Unexpected error checking conversation:', checkError);
-        throw checkError;
       }
 
       console.log('Navigating to chat with conversation ID:', conversationId);
