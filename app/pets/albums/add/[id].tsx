@@ -6,6 +6,7 @@ import { Input } from '../../../../components/ui/Input';
 import { Button } from '../../../../components/ui/Button';
 import { Card } from '../../../../components/ui/Card';
 import { launchImageLibraryAsync, launchCameraAsync, MediaTypeOptions, requestMediaLibraryPermissionsAsync, requestCameraPermissionsAsync, ImagePickerAsset } from 'expo-image-picker';
+import { launchImageLibraryAsync, launchCameraAsync, MediaType, requestMediaLibraryPermissionsAsync, requestCameraPermissionsAsync, ImagePickerAsset } from 'expo-image-picker';
 import { supabaseClient } from '../../../../lib/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { detectPetInImage, validateImagesForPets } from '../../../../utils/petDetection';
@@ -30,7 +31,7 @@ export default function AddPhoto() {
       }
 
       const result = await launchImageLibraryAsync({
-        mediaTypes: MediaTypeOptions.Images,
+        mediaTypes: MediaType.Images,
         allowsMultipleSelection: true,
         quality: 0.8,
         aspect: [1, 1],
@@ -102,7 +103,7 @@ export default function AddPhoto() {
       }
 
       const result = await launchCameraAsync({
-        mediaTypes: MediaTypeOptions.Images,
+        mediaTypes: MediaType.Images,
         quality: 0.8,
         aspect: [1, 1],
       });
@@ -167,10 +168,19 @@ export default function AddPhoto() {
       
       console.log('Uploading to path:', filename);
       
-      // Upload to Supabase storage
+      // Fetch the image and convert to blob for proper upload
+      const response = await fetch(imageAsset.uri);
+      const blob = await response.blob();
+      
+      console.log('Image converted to blob, size:', blob.size);
+      
+      // Upload blob to Supabase storage
       const uploadResult = await supabaseClient.storage
         .from('dogcatify')
-        .upload(filename, imageAsset.uri);
+        .upload(filename, blob, {
+          contentType: 'image/jpeg',
+          cacheControl: '3600',
+        });
       
       console.log('Upload result:', uploadResult);
       
