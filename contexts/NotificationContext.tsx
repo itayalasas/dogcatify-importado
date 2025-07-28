@@ -177,6 +177,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const data = response.notification.request.content.data;
     
     console.log('Notification tapped with data:', data);
+    console.log('Notification tapped with data:', data);
     
     // Verificar si el usuario está autenticado
     if (!currentUser) {
@@ -207,6 +208,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const handleDeepLink = (deepLink: string) => {
     try {
       // Limpiar y formatear el path correctamente
+      console.log('Handling deep link:', deepLink);
+      
+      // Handle chat deep links specially
+      if (deepLink.includes('chat/')) {
+        console.log('Chat deep link detected, navigating to:', deepLink);
+        router.push(`/${deepLink}` as any);
+        return;
+      }
+      
       let path = deepLink.replace('dogcatify://', '');
       
       // Asegurar que empiece con /
@@ -239,9 +249,16 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const handleNotificationTypeNavigation = (type: string, data: any) => {
     switch (type) {
       case 'chat_message':
+        console.log('Navigating to chat from notification:', data);
         if (data?.conversationId) {
-          router.push(`/chat/${data.conversationId}?petName=${data.petName || ''}`);
+          const chatPath = `/chat/${data.conversationId}`;
+          const params = data.petName ? `?petName=${data.petName}` : '';
+          const fullPath = chatPath + params;
+          
+          console.log('Chat navigation path:', fullPath);
+          router.push(fullPath as any);
         } else {
+          console.log('No conversation ID in notification data, going to home');
           router.push('/(tabs)');
         }
         break;
