@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput, KeyboardAvoidingView, Platform, Alert, Image } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Send, Phone, MoreVertical } from 'lucide-react-native';
+import { ArrowLeft, Send, Phone, MoveVertical as MoreVertical } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { useNotifications } from '../../contexts/NotificationContext';
