@@ -179,23 +179,33 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const handleDeepLink = (deepLink: string) => {
     try {
-      // Remover el protocolo si existe
-      const path = deepLink.replace('dogcatify://', '').replace('/', '');
+      // Limpiar y formatear el path correctamente
+      let path = deepLink.replace('dogcatify://', '');
       
-      console.log('Navigating to path:', path);
+      // Asegurar que empiece con /
+      if (!path.startsWith('/')) {
+        path = '/' + path;
+      }
+      
+      console.log('Cleaned path for navigation:', path);
       
       // Navegar usando expo-router
-      if (path.startsWith('(admin-tabs)')) {
-        router.push(`/${path}` as any);
-      } else if (path.startsWith('(tabs)')) {
-        router.push(`/${path}` as any);
+      if (path.startsWith('/(admin-tabs)')) {
+        router.push(path as any);
+      } else if (path.startsWith('/(tabs)')) {
+        router.push(path as any);
       } else {
-        router.push(`/${path}` as any);
+        // Para rutas que no empiecen con grupos, agregar /
+        router.push(path as any);
       }
     } catch (error) {
       console.error('Error handling deep link:', error);
       // Fallback a la pantalla principal
-      router.push('/(tabs)');
+      if (currentUser?.email?.toLowerCase() === 'admin@dogcatify.com') {
+        router.push('/(admin-tabs)/requests');
+      } else {
+        router.push('/(tabs)');
+      }
     }
   };
 
