@@ -43,6 +43,7 @@ export const NotificationService = {
           subject,
           text,
           html,
+          attachment,
         }),
       });
       
@@ -239,10 +240,5 @@ export const NotificationService = {
     const subject = `Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
     const text = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
     const html = `
-      <div>
-      </div>
-    `;
-    
-    await NotificationService.sendEmail(recipientEmail, subject, text, html);
   }
 };
