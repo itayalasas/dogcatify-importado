@@ -161,34 +161,59 @@ export default function AddPhoto() {
 
   const uploadImageToStorage = async (imageAsset: ImagePicker.ImagePickerAsset): Promise<string> => {
     try {
-      const filename = `pets/albums/${id}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+      console.log('Starting upload for image:', imageAsset.uri);
       
-      // Create FormData for upload
-      const formData = new FormData();
-      formData.append('file', {
-        uri: imageAsset.uri,
-        type: 'image/jpeg',
-        name: filename,
-      } as any);
+      // Crear un nombre de archivo único
+      const timestamp = Date.now();
+      const randomId = Math.random().toString(36).substring(7);
+      const filename = `pets/albums/${id}/${timestamp}-${randomId}.jpg`;
       
-      // Upload using FormData
+      console.log('Upload filename:', filename);
+      
+      // Leer el archivo como base64
+      const base64 = await FileSystem.readAsStringAsync(imageAsset.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      
+      console.log('File read as base64, length:', base64.length);
+      
+      // Convertir base64 a Uint8Array (método que funciona en RN)
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      console.log('Converted to bytes, length:', bytes.length);
+      
+      // Subir usando el array de bytes
+      console.log('Uploading to Supabase Storage...');
       const { data, error } = await supabaseClient.storage
         .from('dogcatify')
-        .upload(filename, formData, {
+        .upload(filename, bytes, {
           contentType: 'image/jpeg',
           cacheControl: '3600',
+          upsert: false
         });
       
+      console.log('Upload result:', { data, error });
+      
       if (error) {
+        console.error('Supabase upload error:', error);
         throw error;
       }
+      
+      console.log('Upload successful, getting public URL...');
       
       // Get the public URL
       const { data: urlData } = supabaseClient.storage
         .from('dogcatify')
         .getPublicUrl(filename);
       
-      return urlData.publicUrl;
+      const publicUrl = urlData.publicUrl;
+      console.log('Public URL generated:', publicUrl);
+      
+      return publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
       throw error;
