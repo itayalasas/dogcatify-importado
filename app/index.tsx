@@ -2,11 +2,11 @@ import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
-import { useFocusEffect } from '@react-navigation/native';
 
 export default function Index() {
   const { currentUser, authInitialized, loading } = useAuth();
   const [isMounted, setIsMounted] = React.useState(false);
+  const [hasRedirected, setHasRedirected] = React.useState(false);
 
   // Asegurar que el componente esté montado
   useEffect(() => {
@@ -18,8 +18,8 @@ export default function Index() {
   }, []);
 
   useEffect(() => {
-    // Solo proceder cuando TANTO la autenticación esté inicializada COMO el componente esté montado
-    if (!authInitialized || !isMounted) {
+    // Solo proceder cuando TANTO la autenticación esté inicializada COMO el componente esté montado Y no hayamos redirigido
+    if (!authInitialized || !isMounted || hasRedirected) {
       console.log('Not ready yet:', { authInitialized, isMounted });
       return;
     }
@@ -28,6 +28,7 @@ export default function Index() {
 
     if (!currentUser) {
       console.log('No user found, redirecting to login');
+      setHasRedirected(true);
       // Usar setTimeout para asegurar que la navegación ocurra después del render
       setTimeout(() => {
         router.replace('/auth/login');
@@ -38,17 +39,19 @@ export default function Index() {
       
       if (isAdmin) {
         console.log('Admin user detected, redirecting to admin panel');
+        setHasRedirected(true);
         setTimeout(() => {
           router.replace('/(admin-tabs)/requests');
         }, 50);
       } else {
         console.log('Regular user detected, redirecting to main tabs');
+        setHasRedirected(true);
         setTimeout(() => {
           router.replace('/(tabs)');
         }, 50);
       }
     }
-  }, [currentUser, authInitialized, isMounted]);
+  }, [currentUser, authInitialized, isMounted, hasRedirected]);
 
   // Mostrar loading mientras se inicializa la autenticación o el componente se monta
   if (!authInitialized || !isMounted) {
