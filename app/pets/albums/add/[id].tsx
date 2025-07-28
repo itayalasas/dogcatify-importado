@@ -174,6 +174,16 @@ export default function AddPhoto() {
       const base64 = await FileSystem.readAsStringAsync(imageAsset.uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
+      });
+      
+      console.log('File read as base64, length:', base64.length);
+      
+      // Convertir base64 a Uint8Array (método que funciona en RN)
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
       
       console.log('File read as base64, length:', base64.length);
       
@@ -198,13 +208,14 @@ export default function AddPhoto() {
       
       console.log('Upload result:', { data, error });
       
+      console.log('Upload result:', { data, error });
+      
       if (error) {
         console.error('Supabase upload error:', error);
         throw error;
       }
       
       console.log('Upload successful, getting public URL...');
-      
       // Get the public URL
       const { data: urlData } = supabaseClient.storage
         .from('dogcatify')
