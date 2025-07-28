@@ -238,6 +238,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const handleNotificationTypeNavigation = (type: string, data: any) => {
     switch (type) {
+      case 'chat_message':
+        if (data?.conversationId) {
+          router.push(`/chat/${data.conversationId}?petName=${data.petName || ''}`);
+        } else {
+          router.push('/(tabs)');
+        }
+        break;
       case 'partner_request':
         // Verificar si es admin
         if (currentUser?.email?.toLowerCase() === 'admin@dogcatify.com') {

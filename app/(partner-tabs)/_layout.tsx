@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { ChartBar as BarChart3, ArrowLeft, Building, ShoppingBag, Calendar, Settings } from 'lucide-react-native';
+import { MessageCircle } from 'lucide-react-native';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { TouchableOpacity, View, Text, ActivityIndicator } from 'react-native';
@@ -86,6 +87,11 @@ export default function PartnerTabLayout() {
   const features = partnerProfile?.features || {};
   
   const hasProductsEnabled = features.products || businessType === 'shop';
+
+  // Función para verificar si debe mostrar el chat (solo refugios)
+  const shouldShowChat = (): boolean => {
+    return partnerProfile?.business_type === 'shelter';
+  };
   
   // Log para depuración
   console.log('PartnerTabLayout - Has products enabled:', hasProductsEnabled);
@@ -168,6 +174,21 @@ export default function PartnerTabLayout() {
             <ShoppingBag size={size} color={color} />
           ),
           tabBarStyle: (businessType === 'shop' || hasProductsEnabled) && partnerProfile
+            ? undefined
+            : { display: 'none' },
+        }}
+      />
+      <Tabs.Screen
+        name="chat-contacts"
+        options={{
+          title: 'Contactos',
+          href: shouldShowChat() && partnerProfile
+            ? { pathname: '/chat-contacts', params: { businessId } }
+            : null,
+          tabBarIcon: ({ size, color }) => (
+            <MessageCircle size={size} color={color} />
+          ),
+          tabBarStyle: shouldShowChat() && partnerProfile
             ? undefined
             : { display: 'none' },
         }}
