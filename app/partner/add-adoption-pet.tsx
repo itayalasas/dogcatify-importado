@@ -293,7 +293,18 @@ export default function AddAdoptionPet() {
       ]);
     } catch (error) {
       console.error('Error adding adoption pet:', error);
-      Alert.alert('Error', 'No se pudo agregar la mascota para adopción');
+      
+      let errorMessage = 'No se pudo agregar la mascota para adopción';
+      if (error && typeof error === 'object') {
+        if ('message' in error) {
+          errorMessage = `Error: ${error.message}`;
+        } else if ('details' in error) {
+          errorMessage = `Error: ${error.details}`;
+        }
+      }
+      
+      console.error('Detailed error:', JSON.stringify(error, null, 2));
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
