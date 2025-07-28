@@ -79,11 +79,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const registerForPushNotifications = async (): Promise<string | null> => {
     let token = null;
 
-    // Verificar si estamos en Expo Go (que no soporta push notifications en SDK 53+)
+    // Verificar si estamos en Expo Go
     const isExpoGo = Constants.appOwnership === 'expo';
     
-    if (isExpoGo && __DEV__) {
-      console.log('Push notifications not supported in Expo Go - this is expected');
+    if (isExpoGo) {
+      console.log('Push notifications not fully supported in Expo Go');
       return null;
     }
 
@@ -117,8 +117,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       
       try {
         const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+        
         if (!projectId) {
-          console.warn('Project ID not found for push notifications');
+          console.warn('Project ID not found. Push notifications require EAS Build.');
+          // En desarrollo, no mostrar error al usuario
+          if (__DEV__) {
+            console.log('Development mode: Skipping push notification registration');
+            return null;
+          }
           return null;
         }
         
@@ -129,14 +135,20 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         console.log('Expo push token:', token);
       } catch (error) {
         console.error('Error getting push token:', error);
-        if (!isExpoGo) {
-          Alert.alert('Error', 'No se pudo registrar para notificaciones push');
+        
+        // Manejo mejorado de errores
+        if (error.message?.includes('projectId')) {
+          console.log('Project not configured for push notifications');
+          return null;
+        }
+        
+        // Solo mostrar error si no es un problema de configuración conocido
+        if (!isExpoGo && !__DEV__) {
+          throw new Error('No se pudo registrar para notificaciones push');
         }
       }
     } else {
-      if (!isExpoGo) {
-        Alert.alert('Error', 'Las notificaciones push solo funcionan en dispositivos físicos');
-      }
+      console.log('Not a physical device - push notifications not available');
     }
 
     return token;
