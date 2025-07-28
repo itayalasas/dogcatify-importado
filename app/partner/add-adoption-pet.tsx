@@ -232,31 +232,10 @@ export default function AddAdoptionPet() {
         created_at: new Date().toISOString()
       };
 
-      // Save to database (you'll need to create this table)
-      // Usar la tabla partner_services con un tipo especial para adopciones
-      const serviceData = {
-        partner_id: partnerId,
-        name: petName.trim(),
-        description: `${breed.trim()} • ${age} ${ageUnit === 'years' ? 'años' : 'meses'} • ${size} • ${gender === 'male' ? 'Macho' : 'Hembra'}
-
-🩺 Salud: ${isVaccinated ? 'Vacunado' : 'Sin vacunar'} • ${isDewormed ? 'Desparasitado' : 'Sin desparasitar'} • ${isNeutered ? 'Castrado' : 'Sin castrar'}
-
-🧠 Temperamento: ${temperament.join(', ')}
-
-🏡 Adopción: ${adoptionRequirements.join(', ')}
-
-📞 Contacto: ${contactInfo.trim()}`,
-        category: species === 'dog' ? 'Perro' : species === 'cat' ? 'Gato' : 'Otro',
-        price: adoptionFee ? parseFloat(adoptionFee) : 0,
-        duration: 0, // No aplica para adopciones
-        images: imageUrls,
-        is_active: true,
-        created_at: new Date().toISOString()
-      };
-
+      // Save to adoption_pets table
       const { error } = await supabaseClient
-        .from('partner_services')
-        .insert(serviceData);
+        .from('adoption_pets')
+        .insert(adoptionData);
 
       if (error) throw error;
 
