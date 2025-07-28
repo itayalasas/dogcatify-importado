@@ -233,9 +233,58 @@ export default function AddAdoptionPet() {
       };
 
       // Save to database (you'll need to create this table)
+      // Usar la tabla partner_services con un tipo especial para adopciones
+      const serviceData = {
+        partner_id: partnerId,
+        name: petName.trim(),
+        description: `${breed.trim()} • ${age} ${ageUnit === 'years' ? 'años' : 'meses'} • ${size} • ${gender === 'male' ? 'Macho' : 'Hembra'}
+
+🩺 Salud: ${isVaccinated ? 'Vacunado' : 'Sin vacunar'} • ${isDewormed ? 'Desparasitado' : 'Sin desparasitar'} • ${isNeutered ? 'Castrado' : 'Sin castrar'}
+
+🧠 Temperamento: ${temperament.join(', ')}
+
+🏡 Adopción: ${adoptionRequirements.join(', ')}
+
+📞 Contacto: ${contactInfo.trim()}`,
+        category: species === 'dog' ? 'Perro' : species === 'cat' ? 'Gato' : 'Otro',
+        price: adoptionFee ? parseFloat(adoptionFee) : 0,
+        duration: 0, // No aplica para adopciones
+        images: imageUrls,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        // Datos adicionales en un campo JSON personalizado si es necesario
+        adoption_data: {
+          species,
+          breed: breed.trim(),
+          gender,
+          age: parseInt(age),
+          age_unit: ageUnit,
+          size,
+          weight: parseFloat(weight),
+          color: color.trim(),
+          is_vaccinated: isVaccinated,
+          vaccines: vaccines,
+          is_dewormed: isDewormed,
+          is_neutered: isNeutered,
+          health_condition: healthCondition.trim() || null,
+          last_vet_visit: lastVetVisit.trim() || null,
+          temperament: temperament,
+          good_with_dogs: goodWithDogs,
+          good_with_cats: goodWithCats,
+          good_with_kids: goodWithKids,
+          energy_level: energyLevel,
+          special_needs: specialNeeds.trim() || null,
+          adoption_requirements: adoptionRequirements,
+          adoption_zones: adoptionZones.trim() || null,
+          contact_info: contactInfo.trim() || null,
+          adoption_process: adoptionProcess.trim() || null,
+          type: 'adoption'
+        }
+      };
+
       const { error } = await supabaseClient
-        .from('adoption_pets')
-        .insert(adoptionData);
+        .from('partner_services')
+        .insert(serviceData);
 
       if (error) throw error;
 
