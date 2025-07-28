@@ -79,11 +79,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const registerForPushNotifications = async (): Promise<string | null> => {
     let token = null;
 
-    // Check if we're in Expo Go (which doesn't support push notifications in SDK 53+)
+    // Verificar si estamos en Expo Go (que no soporta push notifications en SDK 53+)
     const isExpoGo = Constants.appOwnership === 'expo';
     
     if (isExpoGo && __DEV__) {
-      console.warn('Push notifications are not supported in Expo Go. Use a development build for full functionality.');
+      console.log('Push notifications not supported in Expo Go - this is expected');
       return null;
     }
 
