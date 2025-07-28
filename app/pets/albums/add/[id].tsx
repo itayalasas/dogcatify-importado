@@ -493,6 +493,7 @@ const styles = StyleSheet.create({
   selectedPhotos: {
     marginBottom: 24,
   },
+  },
   selectedPhotosTitle: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
