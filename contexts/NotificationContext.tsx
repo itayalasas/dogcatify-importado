@@ -242,3 +242,5 @@ export const NotificationService = {
     const html = `
   }
 };
+  }
+}
