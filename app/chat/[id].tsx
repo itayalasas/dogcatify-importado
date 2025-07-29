@@ -22,3 +22,6 @@ export const NotificationService = {
     attachment?: any
   ): Promise<{ success: boolean; messageId?: string; error?: string }> => {
     try {
+    }
+  }
+}
