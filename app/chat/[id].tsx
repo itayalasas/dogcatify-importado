@@ -242,6 +242,16 @@ export const NotificationService = {
     const subject = `Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
     const text = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
     const html = `
+            [
+              { 
+                text: 'OK', 
+                onPress: () => router.replace('/auth/login')
+              }
+            ]
+          );
+          return;
+        }
+        
   },
   
   /**
