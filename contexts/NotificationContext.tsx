@@ -184,6 +184,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           body: JSON.stringify(notifications),
         });
       }import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';

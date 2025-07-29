@@ -687,5 +687,10 @@ const styles = StyleSheet.create({
   },
   orderActionButton: {
     marginBottom: 4,
+    gap: 12,
+    marginTop: 12,
+  },
+  actionButton: {
+    width: '100%',
   },
 });

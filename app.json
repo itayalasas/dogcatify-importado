@@ -4,7 +4,7 @@
     "slug": "dogcatify",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/logo.jpg",
     "scheme": "dogcatify",
     "userInterfaceStyle": "automatic",
     "platforms": [
@@ -13,7 +13,7 @@
       "web"
     ],
     "splash": {
-      "image": "./assets/images/icon.png",
+      "image": "./assets/images/logo.jpg",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -39,13 +39,14 @@
       "bundleIdentifier": "com.dogcatify.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Esta aplicación necesita acceso a la cámara para tomar fotos de mascotas.",
-        "NSPhotoLibraryUsageDescription": "Esta aplicación necesita acceso a la galería para seleccionar fotos de mascotas."
+        "NSPhotoLibraryUsageDescription": "Esta aplicación necesita acceso a la galería para seleccionar fotos de mascotas.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.dogcatify.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
+        "foregroundImage": "./assets/images/logo.jpg",
         "backgroundColor": "#FFFFFF"
       },
       "permissions": [
@@ -55,7 +56,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/images/favicon.png",
+      "favicon": "./assets/images/logo.jpg",
       "bundler": "metro",
       "output": "static"
     },
@@ -66,7 +67,7 @@
       "policy": "sdkVersion"
     },
     "notification": {
-      "icon": "./assets/images/icon.png",
+      "icon": "./assets/images/logo.jpg",
       "color": "#2D6A6F"
     },
     "permissions": [

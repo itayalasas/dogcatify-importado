@@ -58,10 +58,22 @@ export default function PetsTab() {
           );
           return;
         }
+
         console.error('Error fetching pets:', error);
         Alert.alert('Error', 'No se pudieron cargar las mascotas');
         return;
       }
+
+      )
+      .subscribe();
+    
+    return () => {
+      if (subscription && typeof subscription.unsubscribe === 'function') {
+        subscription.unsubscribe();
+      }
+    };
+  }, [currentUser]);
+
 
       setPets(data || []);
     } catch (error) {
@@ -120,9 +132,23 @@ export default function PetsTab() {
 
   if (loading) {
     return (
+
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingText}>Cargando mascotas...</Text>
       </View>
+
+      <SafeAreaView style={styles.container}>        
+        <View style={styles.headerContainer}>
+          <Text style={styles.headerTitle}>{t('myPets')}</Text>
+          <TouchableOpacity style={styles.addButton} onPress={handleAddPet}>
+            <Plus size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#10B981" />
+          <Text style={styles.loadingText}>{t('loadingPets')}</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -130,6 +156,10 @@ export default function PetsTab() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Mis Mascotas</Text>
+
+    <SafeAreaView style={styles.container}>
+      <View style={styles.headerContainer}>
+        <Text style={styles.headerTitle}>{t('myPets')}</Text>
         <TouchableOpacity style={styles.addButton} onPress={handleAddPet}>
           <Plus size={24} color="#fff" />
         </TouchableOpacity>
@@ -145,6 +175,32 @@ export default function PetsTab() {
             <Plus size={20} color="#fff" />
             <Text style={styles.emptyButtonText}>Agregar Mascota</Text>
           </TouchableOpacity>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.petsContainer}>
+          {pets.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyTitle}>{t('addFirstPet')}</Text>
+              <Text style={styles.emptySubtitle}>
+                {t('createPetProfile')}
+              </Text>
+              <TouchableOpacity style={styles.emptyButton} onPress={handleAddPet}>
+                <Plus size={20} color="#FFFFFF" />
+                <Text style={styles.emptyButtonText}>{t('addPet')}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              {pets.map((pet) => (
+                <PetCard
+                  key={pet.id}
+                  pet={pet}
+                  onPress={() => handlePetPress(pet.id)}
+                  onDelete={handleDeletePet}
+                />
+              ))}
+            </>
+          )}
         </View>
       ) : (
         <FlatList
