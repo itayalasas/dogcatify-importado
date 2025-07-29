@@ -1,534 +1,285 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  SafeAreaView,
-  Image,
-} from 'react-native';
-import { useLocalSearchParams, router } from 'expo-router';
-import { supabaseClient } from '../../lib/supabase';
-import { useAuth } from '../../contexts/AuthContext';
-import { useNotifications } from '../../contexts/NotificationContext';
-import { Send, ArrowLeft, User } from 'lucide-react-native';
+import { Platform } from 'react-native';
+import { EmailTemplates } from './emailTemplates';
 
-interface Message {
-  id: string;
-  message: string;
-  sender_id: string;
-  created_at: string;
-  sender_name?: string;
-  is_read: boolean;
-}
-
-interface ConversationDetails {
-  id: string;
-  adoption_pet_id: string;
-  partner_id: string;
-  user_id: string;
-  status: string;
-  petName?: string;
-  customerName?: string;
-  partnerName?: string;
-}
-
-export default function ChatScreen() {
-  const { id: conversationId, petName } = useLocalSearchParams<{ 
-    id: string; 
-    petName?: string; 
-  }>();
-  const { currentUser } = useAuth();
-  const { sendChatNotification } = useNotifications();
-  
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [conversationDetails, setConversationDetails] = useState<ConversationDetails | null>(null);
-  const [recipientId, setRecipientId] = useState<string>('');
-  const [recipientName, setRecipientName] = useState<string>('');
-  const flatListRef = useRef<FlatList>(null);
-
-  useEffect(() => {
-    if (!conversationId || !currentUser) {
-      console.log('Missing conversationId or currentUser');
-      setLoading(false);
-      return;
-    }
-    
-    console.log('Loading chat for conversation:', conversationId);
-    loadConversationDetails();
-    loadMessages();
-    
-    // Set up polling for new messages every 3 seconds
-    const pollInterval = setInterval(() => {
-      loadMessages();
-    }, 3000);
-
-    return () => {
-      clearInterval(pollInterval);
-    };
-  }, [conversationId, currentUser]);
-
-  const loadConversationDetails = async () => {
+/**
+ * Utility functions for sending notifications via email
+ */
+export const NotificationService = {
+  /**
+   * Send an email notification
+   * @param to Recipient email address
+   * @param subject Email subject
+   * @param text Plain text content (optional if html is provided)
+   * @param html HTML content (optional if text is provided)
+   * @param attachment Optional attachment
+   * @returns Promise with the result of the email sending operation
+   */
+  sendEmail: async (
+    to: string,
+    subject: string,
+    text?: string,
+    html?: string,
+    attachment?: any
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> => {
     try {
-      console.log('Loading conversation details for:', conversationId);
+      // Get the Supabase URL from environment variables
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'your-anon-key';
       
-      const { data: conversation, error } = await supabaseClient
-        .from('chat_conversations')
-        .select('*')
-        .eq('id', conversationId)
-        .single();
-
-      if (error) {
-        console.error('Error loading conversation:', error);
-        throw error;
-      }
-
-      console.log('Conversation data:', conversation);
-      setConversationDetails(conversation);
-
-      // Determine recipient based on current user
-      if (conversation.user_id === currentUser?.id) {
-        // Current user is the customer, recipient is the partner
-        setRecipientId(conversation.partner_id);
-        
-        // Get partner name
-        const { data: partnerData } = await supabaseClient
-          .from('partners')
-          .select('business_name')
-          .eq('id', conversation.partner_id)
-          .single();
-        
-        setRecipientName(partnerData?.business_name || 'Refugio');
-      } else {
-        // Current user is the partner, recipient is the customer
-        setRecipientId(conversation.user_id);
-        
-        // Get customer name
-        const { data: customerData } = await supabaseClient
-          .from('profiles')
-          .select('display_name')
-          .eq('id', conversation.user_id)
-          .single();
-        
-        setRecipientName(customerData?.display_name || 'Usuario');
-      }
-    } catch (error) {
-      console.error('Error loading conversation details:', error);
-      Alert.alert('Error', 'No se pudo cargar la información de la conversación');
-    }
-  };
-
-  const loadMessages = async () => {
-    try {
-      console.log('Loading messages for conversation:', conversationId);
+      // Construct the Edge Function URL
+      const apiUrl = `${supabaseUrl}/functions/v1/send-email`;
       
-      const { data, error } = await supabaseClient
-        .from('chat_messages')
-        .select('*')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true });
-
-      if (error) {
-        console.error('Error loading messages:', error);
-        throw error;
-      }
-
-      console.log('Messages loaded:', data?.length || 0);
+      console.log('Sending email to:', to);
+      console.log('Subject:', subject);
       
-      // Get sender names for messages
-      const messagesWithSenderNames = await Promise.all(
-        (data || []).map(async (msg) => {
-          let senderName = 'Usuario';
-          
-          try {
-            if (msg.sender_id === currentUser?.id) {
-              senderName = currentUser.displayName || 'Tú';
-            } else {
-              // Get sender name from profiles
-              const { data: senderData } = await supabaseClient
-                .from('profiles')
-                .select('display_name')
-                .eq('id', msg.sender_id)
-                .single();
-              
-              if (senderData?.display_name) {
-                senderName = senderData.display_name;
-              } else {
-                // Try to get from partners if it's a partner
-                const { data: partnerData } = await supabaseClient
-                  .from('partners')
-                  .select('business_name')
-                  .eq('user_id', msg.sender_id)
-                  .single();
-                
-                if (partnerData?.business_name) {
-                  senderName = partnerData.business_name;
-                }
-              }
-            }
-          } catch (error) {
-            console.error('Error getting sender name:', error);
-          }
-          
-          return {
-            ...msg,
-            sender_name: senderName
-          };
-        })
-      );
-
-      setMessages(messagesWithSenderNames);
+      // Make the request to the Edge Function
+      console.log('Enviando solicitud a:', apiUrl);
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+        },
+        body: JSON.stringify({
+          to,
+          subject,
+          text,
+          html,
+          attachment,
+        }),
+      });
       
-      // Mark messages as read if they're not from current user
-      const unreadMessages = messagesWithSenderNames.filter(
-        msg => !msg.is_read && msg.sender_id !== currentUser?.id
-      );
-      
-      if (unreadMessages.length > 0) {
-        markMessagesAsRead(unreadMessages.map(msg => msg.id));
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response from email API:', errorText);
+        return { 
+          success: false, 
+          error: `API responded with status ${response.status}: ${errorText}` 
+        };
       }
       
-    } catch (error) {
-      console.error('Error loading messages:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const markMessagesAsRead = async (messageIds: string[]) => {
-    try {
-      const { error } = await supabaseClient
-        .from('chat_messages')
-        .update({ is_read: true })
-        .in('id', messageIds);
+      // Parse the response
+      const result = await response.json();
       
-      if (error) {
-        console.error('Error marking messages as read:', error);
+      if (!response.ok) {
+        console.error('Error sending email:', result);
+        return { 
+          success: false, 
+          error: result.error || 'Failed to send email' 
+        };
       }
-    } catch (error) {
-      console.error('Error marking messages as read:', error);
-    }
-  };
-
-  const sendMessage = async () => {
-    if (!newMessage.trim() || !currentUser || !conversationId) return;
-
-    try {
-      console.log('Sending message:', newMessage.trim());
       
-      const messageData = {
-        conversation_id: conversationId,
-        sender_id: currentUser.id,
-        message: newMessage.trim(),
-        message_type: 'text',
-        is_read: false,
-        created_at: new Date().toISOString()
+      console.log('Email sent successfully:', result);
+      return { 
+        success: true, 
+        messageId: result.messageId 
       };
-
-      const { error } = await supabaseClient
-        .from('chat_messages')
-        .insert([messageData]);
-
-      if (error) {
-        console.error('Error sending message:', error);
-        throw error;
-      }
-
-      console.log('Message sent successfully');
-
-      // Send push notification to recipient
-      if (recipientId && recipientName) {
-        try {
-          await sendChatNotification(
-            recipientId,
-            currentUser.displayName || 'Usuario',
-            petName || 'mascota',
-            newMessage.trim(),
-            conversationId
-          );
-          console.log('Push notification sent');
-        } catch (notificationError) {
-          console.error('Error sending push notification:', notificationError);
-          // Don't fail the message sending if notification fails
-        }
-      }
-
-      setNewMessage('');
-      
-      // Reload messages to show the new one
-      setTimeout(() => {
-        loadMessages();
-        scrollToBottom();
-      }, 500);
-      
     } catch (error) {
-      console.error('Error sending message:', error);
-      Alert.alert('Error', 'No se pudo enviar el mensaje');
+      console.error('Error in sendEmail:', error);
+      return { 
+        success: false, 
+        error: error.message || 'Unknown error occurred' 
+      };
     }
-  };
-
-  const scrollToBottom = () => {
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-  };
-
-  const renderMessage = ({ item }: { item: Message }) => {
-    const isMyMessage = item.sender_id === currentUser?.id;
+  },
+  
+  /**
+   * Send a welcome email to a new user
+   * @param email User's email address
+   * @param name User's display name
+   * @param activationLink Optional activation link
+   */
+  sendWelcomeEmail: async (email: string, name: string, activationLink?: string): Promise<void> => {
+    const subject = '¡Bienvenido a DogCatiFy!';
+    const text = `Hola ${name},\n\nBienvenido a DogCatiFy, la plataforma para amantes de mascotas.\n\nGracias por unirte a nuestra comunidad.\n\nEl equipo de DogCatiFy`;
+    const html = EmailTemplates.welcome(name, activationLink);
     
-    return (
-      <View style={[
-        styles.messageContainer,
-        isMyMessage ? styles.myMessage : styles.otherMessage
-      ]}>
-        {!isMyMessage && (
-          <Text style={styles.senderName}>{item.sender_name}</Text>
-        )}
-        <Text style={[
-          styles.messageText,
-          isMyMessage ? styles.myMessageText : styles.otherMessageText
-        ]}>
-          {item.message}
-        </Text>
-        <Text style={[
-          styles.messageTime,
-          isMyMessage ? styles.myMessageTime : styles.otherMessageTime
-        ]}>
-          {new Date(item.created_at).toLocaleTimeString('es-ES', {
-            hour: '2-digit',
-            minute: '2-digit'
-          })}
-        </Text>
-      </View>
-    );
-  };
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando mensajes...</Text>
-        </View>
-      </SafeAreaView>
-    );
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a booking confirmation email
+   * @param email User's email address
+   * @param name User's display name
+   * @param serviceName Name of the booked service
+   * @param partnerName Name of the service provider
+   * @param date Date of the appointment
+   * @param time Time of the appointment
+   */
+  sendBookingConfirmationEmail: async (
+    email: string, 
+    name: string,
+    serviceName: string,
+    partnerName: string,
+    date: string,
+    time: string,
+    petName: string
+  ): Promise<void> => {
+    const subject = 'Confirmación de Reserva - DogCatiFy';
+    const text = `Hola ${name},\n\nTu reserva ha sido confirmada:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\nMascota: ${petName}\n\nGracias por usar DogCatiFy.`;
+    const html = EmailTemplates.bookingConfirmation(name, serviceName, partnerName, date, time, petName);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a booking cancellation email
+   * @param email User's email address
+   * @param name User's display name
+   * @param serviceName Name of the cancelled service
+   * @param partnerName Name of the service provider
+   * @param date Date of the appointment
+   * @param time Time of the appointment
+   */
+  sendBookingCancellationEmail: async (
+    email: string, 
+    name: string,
+    serviceName: string,
+    partnerName: string,
+    date: string,
+    time: string
+  ): Promise<void> => {
+    const subject = 'Reserva Cancelada - DogCatiFy';
+    const text = `Hola ${name},\n\nTu reserva ha sido cancelada:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\n\nGracias por usar DogCatiFy.`;
+    const html = EmailTemplates.bookingCancellation(name, serviceName, partnerName, date, time);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a booking reminder email
+   * @param email User's email address
+   * @param name User's display name
+   * @param serviceName Name of the booked service
+   * @param partnerName Name of the service provider
+   * @param date Date of the appointment
+   * @param time Time of the appointment
+   * @param petName Name of the pet
+   */
+  sendBookingReminderEmail: async (
+    email: string, 
+    name: string,
+    serviceName: string,
+    partnerName: string,
+    date: string,
+    time: string,
+    petName: string
+  ): Promise<void> => {
+    const subject = 'Recordatorio de Cita - DogCatiFy';
+    const text = `Hola ${name},\n\nTe recordamos que tienes una cita programada para mañana:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\nMascota: ${petName}\n\nGracias por usar DogCatiFy.`;
+    const html = EmailTemplates.bookingReminder(name, serviceName, partnerName, date, time, petName);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a partner verification email
+   * @param email Partner's email address
+   * @param businessName Business name
+   */
+  sendPartnerVerificationEmail: async (
+    email: string,
+    businessName: string
+  ): Promise<void> => {
+    const subject = 'Tu negocio ha sido verificado - DogCatiFy';
+    const text = `Felicidades,\n\nTu negocio "${businessName}" ha sido verificado en DogCatiFy. Ahora puedes comenzar a ofrecer tus servicios a nuestra comunidad de amantes de mascotas.\n\nGracias por unirte a DogCatiFy.`;
+    const html = EmailTemplates.partnerApproved(businessName, '');
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a partner registration confirmation email
+   * @param email Partner's email address
+   * @param businessName Business name
+   * @param businessType Business type
+   */
+  sendPartnerRegistrationEmail: async (
+    email: string,
+    businessName: string,
+    businessType: string
+  ): Promise<void> => {
+    const subject = 'Solicitud de Registro Recibida - DogCatiFy';
+    const text = `Hola,\n\nHemos recibido tu solicitud para registrar "${businessName}" como ${businessType} en DogCatiFy. Nuestro equipo revisará tu solicitud y te notificaremos cuando sea aprobada.\n\nGracias por elegir DogCatiFy para hacer crecer tu negocio.`;
+    const html = EmailTemplates.partnerRegistration(businessName, businessType);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a partner rejection email
+   * @param email Partner's email address
+   * @param businessName Business name
+   * @param reason Reason for rejection
+   */
+  sendPartnerRejectionEmail: async (
+    email: string,
+    businessName: string,
+    reason: string
+  ): Promise<void> => {
+    const subject = 'Solicitud No Aprobada - DogCatiFy';
+    const text = `Hola,\n\nLamentamos informarte que tu solicitud para registrar "${businessName}" en DogCatiFy no ha sido aprobada en esta ocasión.\n\nMotivo: ${reason || 'No cumple con los requisitos necesarios para ser parte de nuestra plataforma en este momento.'}\n\nSi deseas obtener más información o volver a intentarlo con los ajustes necesarios, por favor contacta con nuestro equipo de soporte.\n\nAgradecemos tu interés en DogCatiFy.`;
+    const html = EmailTemplates.partnerRejected(businessName, reason);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a chat message notification
+   * @param recipientEmail Recipient's email address
+   * @param senderName Name of the message sender
+   * @param petName Name of the pet being discussed
+   * @param messagePreview Preview of the message content
+   * @param conversationId ID of the conversation for deep linking
+   */
+  sendChatMessageNotification: async (
+    recipientEmail: string,
+    senderName: string,
+    petName: string,
+    messagePreview: string,
+    conversationId: string
+  ): Promise<void> => {
+    const subject = `Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
+    const text = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
+    const html = `
+  },
+  
+  /**
+   * Send a chat message notification
+   * @param recipientEmail Recipient's email address
+   * @param senderName Name of the message sender
+   * @param petName Name of the pet being discussed
+   * @param messagePreview Preview of the message content
+   * @param conversationId ID of the conversation for deep linking
+   */
+  sendChatMessageNotification: async (
+    recipientEmail: string,
+    senderName: string,
+    petName: string,
+    messagePreview: string,
+    conversationId: string
+  ): Promise<void> => {
+    const subject = `Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
+    const messageText = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #2D6A6F; padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 0;">Nuevo mensaje sobre adopción</h1>
+        </div>
+        <div style="padding: 20px; background-color: #f9f9f9;">
+          <p>Hola,</p>
+          <p><strong>${senderName}</strong> te ha enviado un mensaje sobre la adopción de <strong>${petName}</strong>:</p>
+          <div style="background-color: white; border-left: 4px solid #2D6A6F; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; font-style: italic;">"${messagePreview}"</p>
+          </div>
+          <p>Responde desde la app DogCatiFy para continuar la conversación sobre la adopción.</p>
+        </div>
+        <div style="background-color: #f0f0f0; padding: 10px; text-align: center; font-size: 12px; color: #666;">
+          <p>© 2025 DogCatiFy. Todos los derechos reservados.</p>
+        </div>
+      </div>
+    `;
+    
+    await NotificationService.sendEmail(recipientEmail, subject, messageText, html);
   }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
-        style={styles.keyboardContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
-          
-          <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle}>
-              {recipientName || 'Chat'}
-            </Text>
-            {petName && (
-              <Text style={styles.headerSubtitle}>
-                Sobre la adopción de {petName}
-              </Text>
-            )}
-          </View>
-          
-          <View style={styles.headerAvatar}>
-            <User size={24} color="#6B7280" />
-          </View>
-        </View>
-
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
-          style={styles.messagesList}
-          contentContainerStyle={styles.messagesContainer}
-          onContentSizeChange={scrollToBottom}
-          showsVerticalScrollIndicator={false}
-        />
-
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.textInput}
-            value={newMessage}
-            onChangeText={setNewMessage}
-            placeholder="Escribe un mensaje..."
-            placeholderTextColor="#9CA3AF"
-            multiline
-            maxLength={500}
-          />
-          <TouchableOpacity 
-            style={[
-              styles.sendButton, 
-              !newMessage.trim() && styles.sendButtonDisabled
-            ]}
-            onPress={sendMessage}
-            disabled={!newMessage.trim()}
-          >
-            <Send 
-              size={20} 
-              color={!newMessage.trim() ? '#9CA3AF' : '#FFFFFF'} 
-            />
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
-  },
-  keyboardContainer: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerInfo: {
-    flex: 1,
-    marginLeft: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  headerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  messagesList: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  messagesContainer: {
-    padding: 16,
-    paddingBottom: 20,
-  },
-  messageContainer: {
-    marginVertical: 4,
-    maxWidth: '80%',
-    padding: 12,
-    borderRadius: 16,
-  },
-  myMessage: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#EF4444',
-  },
-  otherMessage: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  senderName: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  messageText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 20,
-  },
-  myMessageText: {
-    color: '#FFFFFF',
-  },
-  otherMessageText: {
-    color: '#111827',
-  },
-  messageTime: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    marginTop: 4,
-  },
-  myMessageTime: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    textAlign: 'right',
-  },
-  otherMessageTime: {
-    color: '#9CA3AF',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  textInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginRight: 12,
-    maxHeight: 100,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    backgroundColor: '#F9FAFB',
-  },
-  sendButton: {
-    backgroundColor: '#EF4444',
-    borderRadius: 20,
-    padding: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minWidth: 44,
-    minHeight: 44,
-  },
-  sendButtonDisabled: {
-    backgroundColor: '#D1D5DB',
-  },
-});
+};

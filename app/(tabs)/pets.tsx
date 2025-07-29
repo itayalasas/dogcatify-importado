@@ -1,471 +1,265 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator, Dimensions, Alert } from 'react-native';
-import { router } from 'expo-router';
-import { Plus } from 'lucide-react-native';
-import { PetCard } from '../../components/PetCard'; 
-import { useLanguage } from '../../contexts/LanguageContext';
-import { useAuth } from '../../contexts/AuthContext';
-import { getPets, supabaseClient, deletePet } from '../../lib/supabase';
+import { Platform } from 'react-native';
+import { EmailTemplates } from './emailTemplates';
 
-export default function Pets() {
-  const [pets, setPets] = useState<Pet[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { t } = useLanguage();
-  const { currentUser } = useAuth();
-  
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const fetchPets = async () => {
-      try {
-        const petsData = await getPets(currentUser.id);
-
-        // Transform data to match the expected format
-        const transformedPets = petsData?.map(pet => ({
-          id: pet.id,
-          name: pet.name,
-          species: pet.species,
-          breed: pet.breed,
-          breedInfo: pet.breed_info,
-          age: pet.age,
-          ageDisplay: pet.age_display,
-          gender: pet.gender,
-          weight: pet.weight,
-          weightDisplay: pet.weight_display,
-          isNeutered: pet.is_neutered,
-          hasChip: pet.has_chip,
-          chipNumber: pet.chip_number,
-          photoURL: pet.photo_url,
-          ownerId: pet.owner_id,
-          personality: pet.personality || [],
-          medicalNotes: pet.medical_notes,
-          createdAt: new Date(pet.created_at),
-          photo_url: pet.photo_url, // Añadir el campo photo_url directamente
-        }));
-
-        setPets(transformedPets || []);
-        setLoading(false);
-      } catch (error) {
-        console.error('Error fetching pets:', error);
-        setLoading(false);
-      }
-    };
-
-    fetchPets();
-
-    // Set up real-time subscription for pets
-    const subscription = supabaseClient
-      .channel('pets-changes')
-      .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'pets',
-          filter: `owner_id=eq.${currentUser.id}`
-        }, 
-        () => {
-          fetchPets();
-        }
-      )
-      .subscribe();
-    
-    return () => {
-      if (subscription && typeof subscription.unsubscribe === 'function') {
-        subscription.unsubscribe();
-      }
-    };
-  }, [currentUser]);
-
-  const handlePetPress = (petId: string) => {
-    router.push(`/pets/${petId}`);
-  };
-
-  const handleAddPet = () => {
-    router.push('/pets/add');
-  };
-
-  const handleDeletePet = async (petId: string) => {
-    const petToDelete = pets.find(p => p.id === petId);
-    if (!petToDelete) return;
-
-    // Check and refresh session before deletion
+/**
+ * Utility functions for sending notifications via email
+ */
+export const NotificationService = {
+  /**
+   * Send an email notification
+   * @param to Recipient email address
+   * @param subject Email subject
+   * @param text Plain text content (optional if html is provided)
+   * @param html HTML content (optional if text is provided)
+   * @param attachment Optional attachment
+   * @returns Promise with the result of the email sending operation
+   */
+  sendEmail: async (
+    to: string,
+    subject: string,
+    text?: string,
+    html?: string,
+    attachment?: any
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> => {
     try {
-      const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
-      if (sessionError || !session) {
-        Alert.alert(
-          'Sesión expirada',
-          'Tu sesión ha expirado. Por favor inicia sesión nuevamente.',
-          [
-            { 
-              text: 'OK', 
-              onPress: () => router.replace('/auth/login')
-            }
-          ]
-        );
-        return;
+      // Get the Supabase URL from environment variables
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'your-anon-key';
+      
+      // Construct the Edge Function URL
+      const apiUrl = `${supabaseUrl}/functions/v1/send-email`;
+      
+      console.log('Sending email to:', to);
+      console.log('Subject:', subject);
+      
+      // Make the request to the Edge Function
+      console.log('Enviando solicitud a:', apiUrl);
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+        },
+        body: JSON.stringify({
+          to,
+          subject,
+          text,
+          html,
+          attachment,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response from email API:', errorText);
+        return { 
+          success: false, 
+          error: `API responded with status ${response.status}: ${errorText}` 
+        };
       }
+      
+      // Parse the response
+      const result = await response.json();
+      
+      if (!response.ok) {
+        console.error('Error sending email:', result);
+        return { 
+          success: false, 
+          error: result.error || 'Failed to send email' 
+        };
+      }
+      
+      console.log('Email sent successfully:', result);
+      return { 
+        success: true, 
+        messageId: result.messageId 
+      };
     } catch (error) {
-      console.error('Error checking session:', error);
-      Alert.alert('Error', 'No se pudo verificar la sesión');
-      return;
+      console.error('Error in sendEmail:', error);
+      return { 
+        success: false, 
+        error: error.message || 'Unknown error occurred' 
+      };
     }
-
-    Alert.alert(
-      'Eliminar Mascota',
-      `¿Estás seguro de que quieres eliminar a ${petToDelete.name}? Esta acción eliminará toda la información relacionada (registros de salud, álbumes, publicaciones) y no se puede deshacer.`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Double-check session before proceeding
-              const { data: { session } } = await supabaseClient.auth.getSession();
-              if (!session) {
-                Alert.alert('Error', 'Sesión expirada. Por favor inicia sesión nuevamente.');
-                router.replace('/auth/login');
-                return;
-              }
-
-              console.log('Starting pet deletion process for:', petToDelete.name);
-              
-              // Step 1: Check if pet has any posts
-              console.log('Step 1: Checking for posts...');
-              const { data: petPosts, error: getPostsError } = await supabaseClient
-                .from('posts')
-                .select('id', { count: 'exact' })
-                .eq('pet_id', petId);
-              
-              if (getPostsError) {
-                console.error('Error getting posts:', getPostsError);
-                if (getPostsError.message?.includes('JWT expired')) {
-                  Alert.alert('Sesión expirada', 'Por favor inicia sesión nuevamente.');
-                  router.replace('/auth/login');
-                  return;
-                }
-              }
-              
-              console.log(`Found ${petPosts?.length || 0} posts for this pet`);
-              
-              // Step 2: Only delete comments if there are posts
-              if (petPosts && petPosts.length > 0) {
-                console.log(`Step 2: Deleting comments for ${petPosts.length} posts...`);
-                
-                for (const post of petPosts) {
-                  const { data: allComments, error: getCommentsError } = await supabaseClient
-                    .from('comments')
-                    .select('id')
-                    .eq('post_id', post.id);
-                  
-                  if (getCommentsError) {
-                    console.error(`Error getting comments for post ${post.id}:`, getCommentsError);
-                    if (getCommentsError.message?.includes('JWT expired')) {
-                      Alert.alert('Sesión expirada', 'Por favor inicia sesión nuevamente.');
-                      router.replace('/auth/login');
-                      return;
-                    }
-                    continue; // Skip this post if we can't get comments
-                  }
-                  
-                  if (allComments && allComments.length > 0) {
-                    console.log(`Deleting ${allComments.length} comments for post ${post.id}`);
-                    for (const comment of allComments) {
-                      const { error: deleteCommentError } = await supabaseClient
-                        .from('comments')
-                        .delete()
-                        .eq('id', comment.id);
-                      
-                      if (deleteCommentError) {
-                        console.error(`Error deleting comment ${comment.id}:`, deleteCommentError);
-                        // Continue even if individual comment deletion fails
-                      }
-                    }
-                  }
-                }
-                console.log('Comments deleted successfully');
-              } else {
-                console.log('No posts found, skipping comment deletion');
-              }
-
-              // Step 3: Only delete posts if there are any
-              if (petPosts && petPosts.length > 0) {
-                console.log('Step 3: Deleting posts...');
-                const { error: postsError } = await supabaseClient
-                  .from('posts')
-                  .delete()
-                  .eq('pet_id', petId);
-                
-                if (postsError) {
-                  console.error('Error deleting posts:', postsError);
-                  if (postsError.message?.includes('JWT expired')) {
-                    Alert.alert('Sesión expirada', 'Por favor inicia sesión nuevamente.');
-                    router.replace('/auth/login');
-                    return;
-                  }
-                  // Don't throw error, just log it and continue
-                  console.log('Continuing despite posts deletion error...');
-                } else {
-                  console.log('Posts deleted successfully');
-                }
-              } else {
-                console.log('No posts to delete');
-              }
-
-              console.log('Step 4: Deleting bookings...');
-              const { error: bookingsError } = await supabaseClient
-                .from('bookings')
-                .delete()
-                .eq('pet_id', petId);
-              
-              if (bookingsError) {
-                console.error('Error deleting bookings:', bookingsError);
-                console.log('Continuing despite bookings deletion error...');
-              } else {
-                console.log('Bookings deleted successfully');
-              }
-
-              console.log('Step 5: Deleting health records...');
-              const { error: healthError } = await supabaseClient
-                .from('pet_health')
-                .delete()
-                .eq('pet_id', petId);
-              
-              if (healthError) {
-                console.error('Error deleting health records:', healthError);
-                console.log('Continuing despite health records deletion error...');
-              } else {
-                console.log('Health records deleted successfully');
-              }
-
-              console.log('Step 6: Deleting albums...');
-              const { error: albumsError } = await supabaseClient
-                .from('pet_albums')
-                .delete()
-                .eq('pet_id', petId);
-              
-              if (albumsError) {
-                console.error('Error deleting albums:', albumsError);
-                console.log('Continuing despite albums deletion error...');
-              } else {
-                console.log('Albums deleted successfully');
-              }
-
-              console.log('Step 7: Deleting behavior records...');
-              const { error: behaviorError } = await supabaseClient
-                .from('pet_behavior')
-                .delete()
-                .eq('pet_id', petId);
-              
-              if (behaviorError) {
-                console.error('Error deleting behavior records:', behaviorError);
-                console.log('Continuing despite behavior records deletion error...');
-              } else {
-                console.log('Behavior records deleted successfully');
-              }
-              
-              console.log('Step 8: Now deleting the pet...');
-              const { error: petError } = await supabaseClient
-                .from('pets')
-                .delete()
-                .eq('id', petId);
-              
-              if (petError) {
-                console.error('Error deleting pet:', petError);
-                if (petError.message?.includes('JWT expired')) {
-                  Alert.alert('Sesión expirada', 'Por favor inicia sesión nuevamente.');
-                  router.replace('/auth/login');
-                  return;
-                }
-                Alert.alert('Error', `No se pudo eliminar la mascota: ${petError.message}`);
-                return;
-              }
-              
-              console.log('Pet deleted successfully');
-              
-              // Update local state to remove the deleted pet
-              setPets(prevPets => prevPets.filter(pet => pet.id !== petId));
-              
-              Alert.alert('Éxito', `${petToDelete.name} ha sido eliminado correctamente`);
-            } catch (error) {
-              console.error('Error deleting pet:', error);
-              
-              // Handle JWT expiration specifically
-              if (error && typeof error === 'object' && 'message' in error && 
-                  error.message.includes('JWT expired')) {
-                Alert.alert(
-                  'Sesión expirada',
-                  'Tu sesión ha expirado. Por favor inicia sesión nuevamente.',
-                  [
-                    { 
-                      text: 'OK', 
-                      onPress: () => router.replace('/auth/login')
-                    }
-                  ]
-                );
-                return;
-              }
-              
-              // Show more specific error message for other errors
-              let errorMessage = 'No se pudo eliminar la mascota';
-              if (error && typeof error === 'object' && 'message' in error) {
-                errorMessage = `Error: ${error.message}`;
-              }
-              
-              Alert.alert('Error', errorMessage);
-            }
-          }
-        }
-      ]
-    );
-  };
-
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>        
-        <View style={styles.headerContainer}>
-          <Text style={styles.headerTitle}>{t('myPets')}</Text>
-          <TouchableOpacity style={styles.addButton} onPress={handleAddPet}>
-            <Plus size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#10B981" />
-          <Text style={styles.loadingText}>{t('loadingPets')}</Text>
-        </View>
-      </SafeAreaView>
-    );
+  },
+  
+  /**
+   * Send a welcome email to a new user
+   * @param email User's email address
+   * @param name User's display name
+   * @param activationLink Optional activation link
+   */
+  sendWelcomeEmail: async (email: string, name: string, activationLink?: string): Promise<void> => {
+    const subject = '¡Bienvenido a DogCatiFy!';
+    const text = `Hola ${name},\n\nBienvenido a DogCatiFy, la plataforma para amantes de mascotas.\n\nGracias por unirte a nuestra comunidad.\n\nEl equipo de DogCatiFy`;
+    const html = EmailTemplates.welcome(name, activationLink);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a booking confirmation email
+   * @param email User's email address
+   * @param name User's display name
+   * @param serviceName Name of the booked service
+   * @param partnerName Name of the service provider
+   * @param date Date of the appointment
+   * @param time Time of the appointment
+   */
+  sendBookingConfirmationEmail: async (
+    email: string, 
+    name: string,
+    serviceName: string,
+    partnerName: string,
+    date: string,
+    time: string,
+    petName: string
+  ): Promise<void> => {
+    const subject = 'Confirmación de Reserva - DogCatiFy';
+    const text = `Hola ${name},\n\nTu reserva ha sido confirmada:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\nMascota: ${petName}\n\nGracias por usar DogCatiFy.`;
+    const html = EmailTemplates.bookingConfirmation(name, serviceName, partnerName, date, time, petName);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a booking cancellation email
+   * @param email User's email address
+   * @param name User's display name
+   * @param serviceName Name of the cancelled service
+   * @param partnerName Name of the service provider
+   * @param date Date of the appointment
+   * @param time Time of the appointment
+   */
+  sendBookingCancellationEmail: async (
+    email: string, 
+    name: string,
+    serviceName: string,
+    partnerName: string,
+    date: string,
+    time: string
+  ): Promise<void> => {
+    const subject = 'Reserva Cancelada - DogCatiFy';
+    const text = `Hola ${name},\n\nTu reserva ha sido cancelada:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\n\nGracias por usar DogCatiFy.`;
+    const html = EmailTemplates.bookingCancellation(name, serviceName, partnerName, date, time);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a booking reminder email
+   * @param email User's email address
+   * @param name User's display name
+   * @param serviceName Name of the booked service
+   * @param partnerName Name of the service provider
+   * @param date Date of the appointment
+   * @param time Time of the appointment
+   * @param petName Name of the pet
+   */
+  sendBookingReminderEmail: async (
+    email: string, 
+    name: string,
+    serviceName: string,
+    partnerName: string,
+    date: string,
+    time: string,
+    petName: string
+  ): Promise<void> => {
+    const subject = 'Recordatorio de Cita - DogCatiFy';
+    const text = `Hola ${name},\n\nTe recordamos que tienes una cita programada para mañana:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\nMascota: ${petName}\n\nGracias por usar DogCatiFy.`;
+    const html = EmailTemplates.bookingReminder(name, serviceName, partnerName, date, time, petName);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a partner verification email
+   * @param email Partner's email address
+   * @param businessName Business name
+   */
+  sendPartnerVerificationEmail: async (
+    email: string,
+    businessName: string
+  ): Promise<void> => {
+    const subject = 'Tu negocio ha sido verificado - DogCatiFy';
+    const text = `Felicidades,\n\nTu negocio "${businessName}" ha sido verificado en DogCatiFy. Ahora puedes comenzar a ofrecer tus servicios a nuestra comunidad de amantes de mascotas.\n\nGracias por unirte a DogCatiFy.`;
+    const html = EmailTemplates.partnerApproved(businessName, '');
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a partner registration confirmation email
+   * @param email Partner's email address
+   * @param businessName Business name
+   * @param businessType Business type
+   */
+  sendPartnerRegistrationEmail: async (
+    email: string,
+    businessName: string,
+    businessType: string
+  ): Promise<void> => {
+    const subject = 'Solicitud de Registro Recibida - DogCatiFy';
+    const text = `Hola,\n\nHemos recibido tu solicitud para registrar "${businessName}" como ${businessType} en DogCatiFy. Nuestro equipo revisará tu solicitud y te notificaremos cuando sea aprobada.\n\nGracias por elegir DogCatiFy para hacer crecer tu negocio.`;
+    const html = EmailTemplates.partnerRegistration(businessName, businessType);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a partner rejection email
+   * @param email Partner's email address
+   * @param businessName Business name
+   * @param reason Reason for rejection
+   */
+  sendPartnerRejectionEmail: async (
+    email: string,
+    businessName: string,
+    reason: string
+  ): Promise<void> => {
+    const subject = 'Solicitud No Aprobada - DogCatiFy';
+    const text = `Hola,\n\nLamentamos informarte que tu solicitud para registrar "${businessName}" en DogCatiFy no ha sido aprobada en esta ocasión.\n\nMotivo: ${reason || 'No cumple con los requisitos necesarios para ser parte de nuestra plataforma en este momento.'}\n\nSi deseas obtener más información o volver a intentarlo con los ajustes necesarios, por favor contacta con nuestro equipo de soporte.\n\nAgradecemos tu interés en DogCatiFy.`;
+    const html = EmailTemplates.partnerRejected(businessName, reason);
+    
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+  
+  /**
+   * Send a chat message notification
+   * @param recipientEmail Recipient's email address
+   * @param senderName Name of the message sender
+   * @param petName Name of the pet being discussed
+   * @param messagePreview Preview of the message content
+   * @param conversationId ID of the conversation for deep linking
+   */
+  sendChatMessageNotification: async (
+    recipientEmail: string,
+    senderName: string,
+    petName: string,
+    messagePreview: string,
+    conversationId: string
+  ): Promise<void> => {
+    const subject = `Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
+    const messageText = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #2D6A6F; padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 0;">Nuevo mensaje sobre adopción</h1>
+        </div>
+        <div style="padding: 20px; background-color: #f9f9f9;">
+          <p>Hola,</p>
+          <p><strong>${senderName}</strong> te ha enviado un mensaje sobre la adopción de <strong>${petName}</strong>:</p>
+          <div style="background-color: white; border-left: 4px solid #2D6A6F; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; font-style: italic;">"${messagePreview}"</p>
+          </div>
+          <p>Responde desde la app DogCatiFy para continuar la conversación sobre la adopción.</p>
+        </div>
+        <div style="background-color: #f0f0f0; padding: 10px; text-align: center; font-size: 12px; color: #666;">
+          <p>© 2025 DogCatiFy. Todos los derechos reservados.</p>
+        </div>
+      </div>
+    `;
+    
+    await NotificationService.sendEmail(recipientEmail, subject, messageText, html);
   }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>{t('myPets')}</Text>
-        <TouchableOpacity style={styles.addButton} onPress={handleAddPet}>
-          <Plus size={20} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.petsContainer}>
-          {pets.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>{t('addFirstPet')}</Text>
-              <Text style={styles.emptySubtitle}>
-                {t('createPetProfile')}
-              </Text>
-              <TouchableOpacity style={styles.emptyButton} onPress={handleAddPet}>
-                <Plus size={20} color="#FFFFFF" />
-                <Text style={styles.emptyButtonText}>{t('addPet')}</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              {pets.map((pet) => (
-                <PetCard
-                  key={pet.id}
-                  pet={pet}
-                  onPress={() => handlePetPress(pet.id)}
-                  onDelete={handleDeletePet}
-                />
-              ))}
-            </>
-          )}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingTop: 30, // Add padding at the top to show status bar
-  },
-  headerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
-  },
-  addButton: {
-    backgroundColor: '#10B981',
-    padding: 8,
-    borderRadius: 20,
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 10,
-    paddingBottom: 10,
-  },
-  petsContainer: {
-    padding: 5,
-    paddingTop: 16,
-    position: 'relative',
-    minHeight: 500,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 40,
-  },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 12,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 100,
-    height: 500,
-  },
-  emptyTitle: {
-    fontSize: 22,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  emptySubtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 24,
-  },
-  emptyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2D6A6F',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 20,
-    minHeight: 44,
-  },
-  emptyButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
-    marginLeft: 6,
-  },
-});
+};
