@@ -259,7 +259,7 @@ export const NotificationService = {
     messagePreview: string,
     conversationId: string
   ): Promise<void> => {
-    const subject = `Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
+    const subject = \`Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
     const messageText = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -277,3 +277,5 @@ export const NotificationService = {
         <div style="background-color: #f0f0f0; padding: 10px; text-align: center; font-size: 12px; color: #666;">
           <p>© 2025 DogCatiFy. Todos los derechos reservados.</p>
         </div>
+  }
+}
