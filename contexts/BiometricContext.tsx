@@ -1,287 +1,226 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import * as LocalAuthentication from 'expo-local-authentication';
+import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import { EmailTemplates } from './emailTemplates';
+import { useAuth } from './AuthContext';
+import { supabaseClient } from '../lib/supabase';
 
-/**
- * Utility functions for sending notifications via email
- */
-export const NotificationService = {
-  /**
-   * Send an email notification
-   * @param to Recipient email address
-   * @param subject Email subject
-   * @param text Plain text content (optional if html is provided)
-   * @param html HTML content (optional if text is provided)
-   * @param attachment Optional attachment
-   * @returns Promise with the result of the email sending operation
-   */
-  sendEmail: async (
-    to: string,
-    subject: string,
-    text?: string,
-    html?: string,
-    attachment?: any
-  ): Promise<{ success: boolean; messageId?: string; error?: string }> => {
-    try {
-      // Get the Supabase URL from environment variables
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'your-anon-key';
-      
-      // Construct the Edge Function URL
-      const apiUrl = `${supabaseUrl}/functions/v1/send-email`;
-      
-      console.log('Sending email to:', to);
-      console.log('Subject:', subject);
-      
-      // Make the request to the Edge Function
-      console.log('Enviando solicitud a:', apiUrl);
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseAnonKey}`,
-        },
-        body: JSON.stringify({
-          to,
-          subject,
-          text,
-          html,
-          attachment,
-        }),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response from email API:', errorText);
-        return { 
-          success: false, 
-          error: `API responded with status ${response.status}: ${errorText}` 
-        };
-      }
-      
-      // Parse the response
-      const result = await response.json();
-      
-      if (!response.ok) {
-        console.error('Error sending email:', result);
-        return { 
-          success: false, 
-          error: result.error || 'Failed to send email' 
-        };
-      }
-      
-      console.log('Email sent successfully:', result);
-      return { 
-        success: true, 
-        messageId: result.messageId 
-      };
-    } catch (error) {
-      console.error('Error in sendEmail:', error);
-      return { 
-        success: false, 
-        error: error.message || 'Unknown error occurred' 
-      };
-    }
-  },
-  
-  /**
-   * Send a welcome email to a new user
-   * @param email User's email address
-   * @param name User's display name
-   * @param activationLink Optional activation link
-   */
-  sendWelcomeEmail: async (email: string, name: string, activationLink?: string): Promise<void> => {
-    const subject = '¡Bienvenido a DogCatiFy!';
-    const text = `Hola ${name},\n\nBienvenido a DogCatiFy, la plataforma para amantes de mascotas.\n\nGracias por unirte a nuestra comunidad.\n\nEl equipo de DogCatiFy`;
-    const html = EmailTemplates.welcome(name, activationLink);
-    
-    await NotificationService.sendEmail(email, subject, text, html);
-  },
-  
-  /**
-   * Send a booking confirmation email
-   * @param email User's email address
-   * @param name User's display name
-   * @param serviceName Name of the booked service
-   * @param partnerName Name of the service provider
-   * @param date Date of the appointment
-   * @param time Time of the appointment
-   */
-  sendBookingConfirmationEmail: async (
-    email: string, 
-    name: string,
-    serviceName: string,
-    partnerName: string,
-    date: string,
-    time: string,
-    petName: string
-  ): Promise<void> => {
-    const subject = 'Confirmación de Reserva - DogCatiFy';
-    const text = `Hola ${name},\n\nTu reserva ha sido confirmada:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\nMascota: ${petName}\n\nGracias por usar DogCatiFy.`;
-    const html = EmailTemplates.bookingConfirmation(name, serviceName, partnerName, date, time, petName);
-    
-    await NotificationService.sendEmail(email, subject, text, html);
-  },
-  
-  /**
-   * Send a booking cancellation email
-   * @param email User's email address
-   * @param name User's display name
-   * @param serviceName Name of the cancelled service
-   * @param partnerName Name of the service provider
-   * @param date Date of the appointment
-   * @param time Time of the appointment
-   */
-  sendBookingCancellationEmail: async (
-    email: string, 
-    name: string,
-    serviceName: string,
-    partnerName: string,
-    date: string,
-    time: string
-  ): Promise<void> => {
-    const subject = 'Reserva Cancelada - DogCatiFy';
-    const text = `Hola ${name},\n\nTu reserva ha sido cancelada:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\n\nGracias por usar DogCatiFy.`;
-    const html = EmailTemplates.bookingCancellation(name, serviceName, partnerName, date, time);
-    
-    await NotificationService.sendEmail(email, subject, text, html);
-  },
-  
-  /**
-   * Send a booking reminder email
-   * @param email User's email address
-   * @param name User's display name
-   * @param serviceName Name of the booked service
-   * @param partnerName Name of the service provider
-   * @param date Date of the appointment
-   * @param time Time of the appointment
-   * @param petName Name of the pet
-   */
-  sendBookingReminderEmail: async (
-    email: string, 
-    name: string,
-    serviceName: string,
-    partnerName: string,
-    date: string,
-    time: string,
-    petName: string
-  ): Promise<void> => {
-    const subject = 'Recordatorio de Cita - DogCatiFy';
-    const text = `Hola ${name},\n\nTe recordamos que tienes una cita programada para mañana:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\nMascota: ${petName}\n\nGracias por usar DogCatiFy.`;
-    const html = EmailTemplates.bookingReminder(name, serviceName, partnerName, date, time, petName);
-    
-    await NotificationService.sendEmail(email, subject, text, html);
-  },
-  
-  /**
-   * Send a partner verification email
-   * @param email Partner's email address
-   * @param businessName Business name
-   */
-  sendPartnerVerificationEmail: async (
-    email: string,
-    businessName: string
-  ): Promise<void> => {
-    const subject = 'Tu negocio ha sido verificado - DogCatiFy';
-    const text = `Felicidades,\n\nTu negocio "${businessName}" ha sido verificado en DogCatiFy. Ahora puedes comenzar a ofrecer tus servicios a nuestra comunidad de amantes de mascotas.\n\nGracias por unirte a DogCatiFy.`;
-    const html = EmailTemplates.partnerApproved(businessName, '');
-    
-    await NotificationService.sendEmail(email, subject, text, html);
-  },
-  
-  /**
-   * Send a partner registration confirmation email
-   * @param email Partner's email address
-   * @param businessName Business name
-   * @param businessType Business type
-   */
-  sendPartnerRegistrationEmail: async (
-    email: string,
-    businessName: string,
-    businessType: string
-  ): Promise<void> => {
-    const subject = 'Solicitud de Registro Recibida - DogCatiFy';
-    const text = `Hola,\n\nHemos recibido tu solicitud para registrar "${businessName}" como ${businessType} en DogCatiFy. Nuestro equipo revisará tu solicitud y te notificaremos cuando sea aprobada.\n\nGracias por elegir DogCatiFy para hacer crecer tu negocio.`;
-    const html = EmailTemplates.partnerRegistration(businessName, businessType);
-    
-    await NotificationService.sendEmail(email, subject, text, html);
-  },
-  
-  /**
-   * Send a partner rejection email
-   * @param email Partner's email address
-   * @param businessName Business name
-   * @param reason Reason for rejection
-   */
-  sendPartnerRejectionEmail: async (
-    email: string,
-    businessName: string,
-    reason: string
-  ): Promise<void> => {
-    const subject = 'Solicitud No Aprobada - DogCatiFy';
-    const text = `Hola,\n\nLamentamos informarte que tu solicitud para registrar "${businessName}" en DogCatiFy no ha sido aprobada en esta ocasión.\n\nMotivo: ${reason || 'No cumple con los requisitos necesarios para ser parte de nuestra plataforma en este momento.'}\n\nSi deseas obtener más información o volver a intentarlo con los ajustes necesarios, por favor contacta con nuestro equipo de soporte.\n\nAgradecemos tu interés en DogCatiFy.`;
-    const html = EmailTemplates.partnerRejected(businessName, reason);
-    
-    await NotificationService.sendEmail(email, subject, text, html);
-  },
-  
-  /**
-   * Send a chat message notification
-   * @param recipientEmail Recipient's email address
-   * @param senderName Name of the message sender
-   * @param petName Name of the pet being discussed
-   * @param messagePreview Preview of the message content
-   * @param conversationId ID of the conversation for deep linking
-   */
-  sendChatMessageNotification: async (
-    recipientEmail: string,
-    senderName: string,
-    petName: string,
-    messagePreview: string,
-    conversationId: string
-  ): Promise<void> => {
-    const subject = `Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
-    const text = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
-    const html = `
-  },
-  
-  /**
-   * Send a chat message notification
-   * @param recipientEmail Recipient's email address
-   * @param senderName Name of the message sender
-   * @param petName Name of the pet being discussed
-   * @param messagePreview Preview of the message content
-   * @param conversationId ID of the conversation for deep linking
-   */
-  sendChatMessageNotification: async (
-    recipientEmail: string,
-    senderName: string,
-    petName: string,
-    messagePreview: string,
-    conversationId: string
-  ): Promise<void> => {
-    const subject = \`Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
-    const messageText = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
-    const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background-color: #2D6A6F; padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 0;">Nuevo mensaje sobre adopción</h1>
-        </div>
-        <div style="padding: 20px; background-color: #f9f9f9;">
-          <p>Hola,</p>
-          <p><strong>${senderName}</strong> te ha enviado un mensaje sobre la adopción de <strong>${petName}</strong>:</p>
-          <div style="background-color: white; border-left: 4px solid #2D6A6F; padding: 15px; margin: 20px 0;">
-            <p style="margin: 0; font-style: italic;">"${messagePreview}"</p>
-          </div>
-          <p>Responde desde la app DogCatiFy para continuar la conversación sobre la adopción.</p>
-        </div>
-        <div style="background-color: #f0f0f0; padding: 10px; text-align: center; font-size: 12px; color: #666;">
-          <p>© 2025 DogCatiFy. Todos los derechos reservados.</p>
-        </div>
-      </div>
-    `;
-    
-    await NotificationService.sendEmail(recipientEmail, subject, messageText, html);
-  }
-};
-  }
+interface BiometricContextType {
+  isBiometricAvailable: boolean;
+  isBiometricEnabled: boolean;
+  enableBiometric: (email: string, password: string) => Promise<boolean>;
+  disableBiometric: () => Promise<void>;
+  authenticateWithBiometric: () => Promise<boolean>;
+  getStoredCredentials: () => Promise<{ email: string; password: string } | null>;
 }
+
+const BiometricContext = createContext<BiometricContextType | undefined>(undefined);
+
+export const useBiometric = () => {
+  const context = useContext(BiometricContext);
+  if (!context) {
+    throw new Error('useBiometric must be used within a BiometricProvider');
+  }
+  return context;
+};
+
+export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [isBiometricAvailable, setIsBiometricAvailable] = useState(false);
+  const [isBiometricEnabled, setIsBiometricEnabled] = useState(false);
+  const { currentUser } = useAuth();
+
+  useEffect(() => {
+    checkBiometricAvailability();
+    checkBiometricEnabled();
+  }, [currentUser]);
+
+  const checkBiometricAvailability = async () => {
+    try {
+      const compatible = await LocalAuthentication.hasHardwareAsync();
+      const enrolled = await LocalAuthentication.isEnrolledAsync();
+      setIsBiometricAvailable(compatible && enrolled);
+    } catch (error) {
+      console.error('Error checking biometric availability:', error);
+      setIsBiometricAvailable(false);
+    }
+  };
+
+  const checkBiometricEnabled = async () => {
+    try {
+      if (!currentUser) {
+        setIsBiometricEnabled(false);
+        return;
+      }
+
+      // Check if biometric is enabled in user profile
+      const { data, error } = await supabaseClient
+        .from('profiles')
+        .select('biometric_enabled')
+        .eq('id', currentUser.id)
+        .single();
+
+      if (error) {
+        console.error('Error checking biometric status:', error);
+        setIsBiometricEnabled(false);
+        return;
+      }
+
+      const isEnabled = data?.biometric_enabled || false;
+      setIsBiometricEnabled(isEnabled);
+      
+      console.log('Biometric enabled status:', isEnabled);
+    } catch (error) {
+      console.error('Error checking biometric enabled:', error);
+      setIsBiometricEnabled(false);
+    }
+  };
+
+  const enableBiometric = async (email: string, password: string): Promise<boolean> => {
+    try {
+      console.log('Starting biometric setup...');
+      
+      if (!isBiometricAvailable) {
+        throw new Error('Biometric authentication is not available');
+      }
+
+      if (!email || !password) {
+        throw new Error('Email and password are required');
+      }
+
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      // Authenticate with biometric first
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Configura tu autenticación biométrica',
+        cancelLabel: 'Cancelar',
+        fallbackLabel: 'Usar contraseña',
+      });
+
+      if (!result.success) {
+        console.log('Biometric authentication failed or cancelled');
+        return false;
+      }
+
+      console.log('Biometric authentication successful, storing credentials...');
+
+      // Store credentials securely
+      await SecureStore.setItemAsync('biometric_email', email);
+      await SecureStore.setItemAsync('biometric_password', password);
+      
+      console.log('Credentials stored, updating user profile...');
+
+      // Update user profile in Supabase
+      const { error } = await supabaseClient
+        .from('profiles')
+        .update({
+          biometric_enabled: true,
+          biometric_enabled_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', currentUser.id);
+
+      if (error) {
+        console.error('Error updating biometric status in Supabase:', error);
+        // Clean up stored credentials if database update fails
+        await SecureStore.deleteItemAsync('biometric_email');
+        await SecureStore.deleteItemAsync('biometric_password');
+        throw error;
+      }
+
+      console.log('Biometric setup completed successfully');
+      setIsBiometricEnabled(true);
+      return true;
+    } catch (error) {
+      console.error('Error enabling biometric:', error);
+      // Clean up any stored credentials on error
+      try {
+        await SecureStore.deleteItemAsync('biometric_email');
+        await SecureStore.deleteItemAsync('biometric_password');
+      } catch (cleanupError) {
+        console.error('Error cleaning up credentials:', cleanupError);
+      }
+      throw error;
+    }
+  };
+
+  const disableBiometric = async (): Promise<void> => {
+    try {
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      // Remove stored credentials
+      await SecureStore.deleteItemAsync('biometric_email');
+      await SecureStore.deleteItemAsync('biometric_password');
+
+      // Update user profile
+      const { error } = await supabaseClient
+        .from('profiles')
+        .update({
+          biometric_enabled: false,
+          biometric_enabled_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', currentUser.id);
+
+      if (error) throw error;
+
+      setIsBiometricEnabled(false);
+    } catch (error) {
+      console.error('Error disabling biometric:', error);
+      throw error;
+    }
+  };
+
+  const authenticateWithBiometric = async (): Promise<boolean> => {
+    try {
+      if (!isBiometricAvailable || !isBiometricEnabled) {
+        return false;
+      }
+
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Autentícate para iniciar sesión',
+        cancelLabel: 'Cancelar',
+        fallbackLabel: 'Usar contraseña',
+      });
+
+      return result.success;
+    } catch (error) {
+      console.error('Error authenticating with biometric:', error);
+      return false;
+    }
+  };
+
+  const getStoredCredentials = async (): Promise<{ email: string; password: string } | null> => {
+    try {
+      const email = await SecureStore.getItemAsync('biometric_email');
+      const password = await SecureStore.getItemAsync('biometric_password');
+
+      if (email && password) {
+        return { email, password };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error getting stored credentials:', error);
+      return null;
+    }
+  };
+
+  return (
+    <BiometricContext.Provider
+      value={{
+        isBiometricAvailable,
+        isBiometricEnabled,
+        enableBiometric,
+        disableBiometric,
+        authenticateWithBiometric,
+        getStoredCredentials,
+      }}
+    >
+      {children}
+    </BiometricContext.Provider>
+  );
+};

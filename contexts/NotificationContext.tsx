@@ -1,287 +1,205 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
 import { Platform } from 'react-native';
-import { EmailTemplates } from './emailTemplates';
+import { useAuth } from './AuthContext';
+import { supabaseClient } from '../lib/supabase';
 
-/**
- * Utility functions for sending notifications via email
- */
-export const NotificationService = {
-  /**
-   * Send an email notification
-   * @param to Recipient email address
-   * @param subject Email subject
-   * @param text Plain text content (optional if html is provided)
-   * @param html HTML content (optional if text is provided)
-   * @param attachment Optional attachment
-   * @returns Promise with the result of the email sending operation
-   */
-  sendEmail: async (
-    to: string,
-    subject: string,
-    text?: string,
-    html?: string,
-    attachment?: any
-  ): Promise<{ success: boolean; messageId?: string; error?: string }> => {
+// Configure notification behavior
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
+interface NotificationContextType {
+  expoPushToken: string | null;
+  notification: Notifications.Notification | null;
+  registerForPushNotifications: () => Promise<string | null>;
+  sendNotificationToUser: (userId: string, title: string, body: string, data?: any) => Promise<void>;
+  sendNotificationToAdmin: (title: string, body: string, data?: any) => Promise<void>;
+}
+
+const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
+
+export const useNotifications = () => {
+  const context = useContext(NotificationContext);
+  if (!context) {
+    throw new Error('useNotifications must be used within a NotificationProvider');
+  }
+  return context;
+};
+
+export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
+  const [notification, setNotification] = useState<Notifications.Notification | null>(null);
+  const { currentUser } = useAuth();
+
+  useEffect(() => {
+    // Set up notification listeners
+    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
+      setNotification(notification);
+    });
+
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('Notification response:', response);
+      // Handle notification tap here
+    });
+
+    return () => {
+      Notifications.removeNotificationSubscription(notificationListener);
+      Notifications.removeNotificationSubscription(responseListener);
+    };
+  }, []);
+
+  const registerForPushNotifications = async (): Promise<string | null> => {
     try {
-      // Get the Supabase URL from environment variables
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'your-anon-key';
+      if (!Device.isDevice) {
+        console.log('Must use physical device for Push Notifications');
+        return null;
+      }
+
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
       
-      // Construct the Edge Function URL
-      const apiUrl = `${supabaseUrl}/functions/v1/send-email`;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
       
-      console.log('Sending email to:', to);
-      console.log('Subject:', subject);
-      
-      // Make the request to the Edge Function
-      console.log('Enviando solicitud a:', apiUrl);
-      const response = await fetch(apiUrl, {
+      if (finalStatus !== 'granted') {
+        console.log('Failed to get push token for push notification!');
+        return null;
+      }
+
+      const token = await Notifications.getExpoPushTokenAsync({
+        projectId: process.env.EXPO_PUBLIC_PROJECT_ID,
+      });
+
+      console.log('Push token:', token.data);
+
+      if (Platform.OS === 'android') {
+        Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#FF231F7C',
+        });
+      }
+
+      // Store token in user profile
+      if (currentUser && token.data) {
+        await supabaseClient
+          .from('profiles')
+          .update({ push_token: token.data })
+          .eq('id', currentUser.id);
+      }
+
+      setExpoPushToken(token.data);
+      return token.data;
+    } catch (error) {
+      console.error('Error registering for push notifications:', error);
+      return null;
+    }
+  };
+
+  const sendNotificationToUser = async (
+    userId: string, 
+    title: string, 
+    body: string, 
+    data?: any
+  ): Promise<void> => {
+    try {
+      // Get user's push token
+      const { data: userData, error } = await supabaseClient
+        .from('profiles')
+        .select('push_token')
+        .eq('id', userId)
+        .single();
+
+      if (error || !userData?.push_token) {
+        console.log('User does not have a push token');
+        return;
+      }
+
+      // Send push notification
+      await fetch('https://exp.host/--/api/v2/push/send', {
         method: 'POST',
         headers: {
+          Accept: 'application/json',
+          'Accept-encoding': 'gzip, deflate',
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseAnonKey}`,
         },
         body: JSON.stringify({
-          to,
-          subject,
-          text,
-          html,
-          attachment,
+          to: userData.push_token,
+          title,
+          body,
+          data,
+          sound: 'default',
         }),
       });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response from email API:', errorText);
-        return { 
-          success: false, 
-          error: `API responded with status ${response.status}: ${errorText}` 
-        };
-      }
-      
-      // Parse the response
-      const result = await response.json();
-      
-      if (!response.ok) {
-        console.error('Error sending email:', result);
-        return { 
-          success: false, 
-          error: result.error || 'Failed to send email' 
-        };
-      }
-      
-      console.log('Email sent successfully:', result);
-      return { 
-        success: true, 
-        messageId: result.messageId 
-      };
     } catch (error) {
-      console.error('Error in sendEmail:', error);
-      return { 
-        success: false, 
-        error: error.message || 'Unknown error occurred' 
-      };
+      console.error('Error sending notification to user:', error);
     }
-  },
-  
-  /**
-   * Send a welcome email to a new user
-   * @param email User's email address
-   * @param name User's display name
-   * @param activationLink Optional activation link
-   */
-  sendWelcomeEmail: async (email: string, name: string, activationLink?: string): Promise<void> => {
-    const subject = '¡Bienvenido a DogCatiFy!';
-    const text = `Hola ${name},\n\nBienvenido a DogCatiFy, la plataforma para amantes de mascotas.\n\nGracias por unirte a nuestra comunidad.\n\nEl equipo de DogCatiFy`;
-    const html = EmailTemplates.welcome(name, activationLink);
-    
-    await NotificationService.sendEmail(email, subject, text, html);
-  },
-  
-  /**
-   * Send a booking confirmation email
-   * @param email User's email address
-   * @param name User's display name
-   * @param serviceName Name of the booked service
-   * @param partnerName Name of the service provider
-   * @param date Date of the appointment
-   * @param time Time of the appointment
-   */
-  sendBookingConfirmationEmail: async (
-    email: string, 
-    name: string,
-    serviceName: string,
-    partnerName: string,
-    date: string,
-    time: string,
-    petName: string
+  };
+
+  const sendNotificationToAdmin = async (
+    title: string, 
+    body: string, 
+    data?: any
   ): Promise<void> => {
-    const subject = 'Confirmación de Reserva - DogCatiFy';
-    const text = `Hola ${name},\n\nTu reserva ha sido confirmada:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\nMascota: ${petName}\n\nGracias por usar DogCatiFy.`;
-    const html = EmailTemplates.bookingConfirmation(name, serviceName, partnerName, date, time, petName);
-    
-    await NotificationService.sendEmail(email, subject, text, html);
-  },
-  
-  /**
-   * Send a booking cancellation email
-   * @param email User's email address
-   * @param name User's display name
-   * @param serviceName Name of the cancelled service
-   * @param partnerName Name of the service provider
-   * @param date Date of the appointment
-   * @param time Time of the appointment
-   */
-  sendBookingCancellationEmail: async (
-    email: string, 
-    name: string,
-    serviceName: string,
-    partnerName: string,
-    date: string,
-    time: string
-  ): Promise<void> => {
-    const subject = 'Reserva Cancelada - DogCatiFy';
-    const text = `Hola ${name},\n\nTu reserva ha sido cancelada:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\n\nGracias por usar DogCatiFy.`;
-    const html = EmailTemplates.bookingCancellation(name, serviceName, partnerName, date, time);
-    
-    await NotificationService.sendEmail(email, subject, text, html);
-  },
-  
-  /**
-   * Send a booking reminder email
-   * @param email User's email address
-   * @param name User's display name
-   * @param serviceName Name of the booked service
-   * @param partnerName Name of the service provider
-   * @param date Date of the appointment
-   * @param time Time of the appointment
-   * @param petName Name of the pet
-   */
-  sendBookingReminderEmail: async (
-    email: string, 
-    name: string,
-    serviceName: string,
-    partnerName: string,
-    date: string,
-    time: string,
-    petName: string
-  ): Promise<void> => {
-    const subject = 'Recordatorio de Cita - DogCatiFy';
-    const text = `Hola ${name},\n\nTe recordamos que tienes una cita programada para mañana:\n\nServicio: ${serviceName}\nProveedor: ${partnerName}\nFecha: ${date}\nHora: ${time}\nMascota: ${petName}\n\nGracias por usar DogCatiFy.`;
-    const html = EmailTemplates.bookingReminder(name, serviceName, partnerName, date, time, petName);
-    
-    await NotificationService.sendEmail(email, subject, text, html);
-  },
-  
-  /**
-   * Send a partner verification email
-   * @param email Partner's email address
-   * @param businessName Business name
-   */
-  sendPartnerVerificationEmail: async (
-    email: string,
-    businessName: string
-  ): Promise<void> => {
-    const subject = 'Tu negocio ha sido verificado - DogCatiFy';
-    const text = `Felicidades,\n\nTu negocio "${businessName}" ha sido verificado en DogCatiFy. Ahora puedes comenzar a ofrecer tus servicios a nuestra comunidad de amantes de mascotas.\n\nGracias por unirte a DogCatiFy.`;
-    const html = EmailTemplates.partnerApproved(businessName, '');
-    
-    await NotificationService.sendEmail(email, subject, text, html);
-  },
-  
-  /**
-   * Send a partner registration confirmation email
-   * @param email Partner's email address
-   * @param businessName Business name
-   * @param businessType Business type
-   */
-  sendPartnerRegistrationEmail: async (
-    email: string,
-    businessName: string,
-    businessType: string
-  ): Promise<void> => {
-    const subject = 'Solicitud de Registro Recibida - DogCatiFy';
-    const text = `Hola,\n\nHemos recibido tu solicitud para registrar "${businessName}" como ${businessType} en DogCatiFy. Nuestro equipo revisará tu solicitud y te notificaremos cuando sea aprobada.\n\nGracias por elegir DogCatiFy para hacer crecer tu negocio.`;
-    const html = EmailTemplates.partnerRegistration(businessName, businessType);
-    
-    await NotificationService.sendEmail(email, subject, text, html);
-  },
-  
-  /**
-   * Send a partner rejection email
-   * @param email Partner's email address
-   * @param businessName Business name
-   * @param reason Reason for rejection
-   */
-  sendPartnerRejectionEmail: async (
-    email: string,
-    businessName: string,
-    reason: string
-  ): Promise<void> => {
-    const subject = 'Solicitud No Aprobada - DogCatiFy';
-    const text = `Hola,\n\nLamentamos informarte que tu solicitud para registrar "${businessName}" en DogCatiFy no ha sido aprobada en esta ocasión.\n\nMotivo: ${reason || 'No cumple con los requisitos necesarios para ser parte de nuestra plataforma en este momento.'}\n\nSi deseas obtener más información o volver a intentarlo con los ajustes necesarios, por favor contacta con nuestro equipo de soporte.\n\nAgradecemos tu interés en DogCatiFy.`;
-    const html = EmailTemplates.partnerRejected(businessName, reason);
-    
-    await NotificationService.sendEmail(email, subject, text, html);
-  },
-  
-  /**
-   * Send a chat message notification
-   * @param recipientEmail Recipient's email address
-   * @param senderName Name of the message sender
-   * @param petName Name of the pet being discussed
-   * @param messagePreview Preview of the message content
-   * @param conversationId ID of the conversation for deep linking
-   */
-  sendChatMessageNotification: async (
-    recipientEmail: string,
-    senderName: string,
-    petName: string,
-    messagePreview: string,
-    conversationId: string
-  ): Promise<void> => {
-    const subject = `Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
-    const text = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
-    const html = `
-  },
-  
-  /**
-   * Send a chat message notification
-   * @param recipientEmail Recipient's email address
-   * @param senderName Name of the message sender
-   * @param petName Name of the pet being discussed
-   * @param messagePreview Preview of the message content
-   * @param conversationId ID of the conversation for deep linking
-   */
-  sendChatMessageNotification: async (
-    recipientEmail: string,
-    senderName: string,
-    petName: string,
-    messagePreview: string,
-    conversationId: string
-  ): Promise<void> => {
-    const subject = \`Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
-    const messageText = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
-    const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background-color: #2D6A6F; padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 0;">Nuevo mensaje sobre adopción</h1>
-        </div>
-        <div style="padding: 20px; background-color: #f9f9f9;">
-          <p>Hola,</p>
-          <p><strong>${senderName}</strong> te ha enviado un mensaje sobre la adopción de <strong>${petName}</strong>:</p>
-          <div style="background-color: white; border-left: 4px solid #2D6A6F; padding: 15px; margin: 20px 0;">
-            <p style="margin: 0; font-style: italic;">"${messagePreview}"</p>
-          </div>
-          <p>Responde desde la app DogCatiFy para continuar la conversación sobre la adopción.</p>
-        </div>
-        <div style="background-color: #f0f0f0; padding: 10px; text-align: center; font-size: 12px; color: #666;">
-          <p>© 2025 DogCatiFy. Todos los derechos reservados.</p>
-        </div>
-      </div>
-    `;
-    
-    await NotificationService.sendEmail(recipientEmail, subject, messageText, html);
-  }
+    try {
+      // Get admin users (you can define admin criteria)
+      const { data: adminUsers, error } = await supabaseClient
+        .from('profiles')
+        .select('push_token')
+        .eq('email', 'admin@dogcatify.com'); // Or however you identify admins
+
+      if (error || !adminUsers?.length) {
+        console.log('No admin users found');
+        return;
+      }
+
+      // Send to all admin users
+      const notifications = adminUsers
+        .filter(admin => admin.push_token)
+        .map(admin => ({
+          to: admin.push_token,
+          title,
+          body,
+          data,
+          sound: 'default',
+        }));
+
+      if (notifications.length > 0) {
+        await fetch('https://exp.host/--/api/v2/push/send', {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Accept-encoding': 'gzip, deflate',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(notifications),
+        });
+      }
+    } catch (error) {
+      console.error('Error sending notification to admin:', error);
+    }
+  };
+
+  return (
+    <NotificationContext.Provider
+      value={{
+        expoPushToken,
+        notification,
+        registerForPushNotifications,
+        sendNotificationToUser,
+        sendNotificationToAdmin,
+      }}
+    >
+      {children}
+    </NotificationContext.Provider>
+  );
 };
-  }
-}
