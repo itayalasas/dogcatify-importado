@@ -1,98 +1,289 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, Image, TouchableOpacity } from 'react-native';
-import { Link, router } from 'expo-router';
-import { Mail, Lock, Fingerprint } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Image } from 'react-native';
+import { Link, router, useLocalSearchParams } from 'expo-router';
+import { Mail, Lock, Eye, EyeOff, Check } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
-import { useBiometric } from '../../contexts/BiometricContext';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useBiometric } from '../../contexts/BiometricContext'; 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function Login() {
+  const { redirectTo } = useLocalSearchParams<{ redirectTo?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberPassword, setRememberPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showBiometricSetup, setShowBiometricSetup] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showBiometricOption, setShowBiometricOption] = useState(false);
   const { login } = useAuth();
-  const { 
-    isBiometricAvailable, 
-    isBiometricEnabled, 
-    authenticateWithBiometric, 
-    enableBiometric,
-    getStoredCredentials 
-  } = useBiometric();
   const { t } = useLanguage();
+  const { 
+    isBiometricSupported, 
+    isBiometricEnabled, 
+    biometricType, 
+    enableBiometric, 
+    authenticateWithBiometric,
+    checkBiometricStatus
+  } = useBiometric();
+
+  // Cargar credenciales guardadas al iniciar
+  React.useEffect(() => {
+    const loadSavedCredentials = async () => {
+      try {
+        const savedEmail = await AsyncStorage.getItem('remembered_email');
+        const savedPassword = await AsyncStorage.getItem('remembered_password');
+        
+        if (savedEmail && savedPassword) {
+          setEmail(savedEmail);
+          setPassword(savedPassword);
+          setRememberPassword(true);
+        }
+      } catch (error) {
+        console.error('Error loading saved credentials:', error);
+      }
+    };
+    
+    loadSavedCredentials();
+  }, []);
+
+  React.useEffect(() => {
+    // Check biometric status when component mounts
+    checkBiometricStatus();
+  }, [checkBiometricStatus]);
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert(t('error'), t('fillAllFields'));
-      return;
+    // If biometric is enabled and supported, try biometric first
+    if (isBiometricEnabled && isBiometricSupported) {
+      try {
+        console.log('Attempting biometric login first...');
+        const biometricResult = await handleBiometricLogin();
+        if (biometricResult) {
+          console.log('Biometric login successful');
+          return; // Biometric login successful
+        }
+      } catch (error) {
+        console.log('Biometric login failed, continuing with credentials');
+        // Continue with credential validation
+      }
     }
 
+    // Validate credentials are provided
+    if (!email || !password) {
+      Alert.alert(t('error'), 'Por favor completa el correo electrónico y la contraseña');
+      return;
+    }
+    
+    // Guardar credenciales si rememberPassword está activado
+    if (rememberPassword) {
+      try {
+        await AsyncStorage.setItem('remembered_email', email);
+        // No guardar la contraseña en texto plano en producción
+        // Esto es solo para demostración
+        await AsyncStorage.setItem('remembered_password', password);
+      } catch (error) {
+        console.error('Error saving credentials:', error);
+      }
+    } else {
+      // Limpiar credenciales guardadas
+      try {
+        await AsyncStorage.removeItem('remembered_email');
+        await AsyncStorage.removeItem('remembered_password');
+      } catch (error) {
+        console.error('Error removing credentials:', error);
+      }
+    }
+
+    // Proceed with credential login
+    await handleCredentialLogin();
+  };
+
+  const handleCredentialLogin = async () => {
     setLoading(true);
     try {
-      const user = await login(email, password);
-      if (user) {
-        // Check if biometric is available and not yet enabled
-        if (isBiometricAvailable && !isBiometricEnabled) {
-          setShowBiometricSetup(true);
-        } else {
-          router.replace('/(tabs)');
+      console.log('Attempting login with credentials:', email);
+      try {
+        const result = await login(email, password);
+        
+        if (result) {
+          // Show biometric setup option after successful login
+          if (isBiometricSupported && !isBiometricEnabled && email && password) {
+            setShowBiometricOption(true);
+          } else {
+            // Redirect based on user type after successful login
+            const isAdmin = result?.email?.toLowerCase() === 'admin@dogcatify.com';
+            if (isAdmin) {
+              console.log('Admin login, redirecting to admin tabs');
+              router.replace('/(admin-tabs)/requests');
+            } else {
+              console.log('Regular user login, redirecting to regular tabs');
+              // Verificar si hay un deep link pendiente
+              if (redirectTo) {
+                console.log('Redirecting to deep link after login:', redirectTo);
+                router.replace(`/${redirectTo}` as any);
+              } else {
+                router.replace('/(tabs)');
+              }
+            }
+          }
         }
+      } catch (error: any) {
+        console.error('Login error details:', error);
+        
+        // Manejar errores específicos de autenticación
+        if (error.message.includes('confirma tu correo')) {
+          Alert.alert(
+            'Correo no confirmado',
+            'Por favor confirma tu correo electrónico antes de iniciar sesión. Revisa tu bandeja de entrada.',
+            [
+              { 
+                text: 'Reenviar correo', 
+                onPress: async () => {
+                  try {
+                    await supabaseClient.auth.resend({
+                      type: 'signup',
+                      email: email,
+                      options: {
+                        emailRedirectTo: 'https://dogcatify.com/auth/login',
+                      }
+                    });
+                    Alert.alert('Correo enviado', 'Se ha enviado un nuevo correo de confirmación');
+                  } catch (resendError) {
+                    console.error('Error resending confirmation email:', resendError);
+                    Alert.alert('Error', 'No se pudo reenviar el correo de confirmación');
+                  }
+                }
+              },
+              { text: 'Entendido', style: 'default' }
+            ]
+          );
+        } else if (error.message.includes('Invalid login credentials') || 
+                   error.message.includes('invalid_credentials') ||
+                   error.message.includes('Invalid email or password')) {
+          Alert.alert(
+            'Credenciales incorrectas',
+            'El correo electrónico o la contraseña son incorrectos. Por favor verifica tus datos e intenta nuevamente.',
+            [{ text: 'Entendido', style: 'default' }]
+          );
+        } else if (error.message.includes('Email not confirmed')) {
+          Alert.alert(
+            'Correo no confirmado',
+            'Tu cuenta aún no ha sido confirmada. Por favor revisa tu correo electrónico y confirma tu cuenta.',
+            [{ text: 'Entendido', style: 'default' }]
+          );
+        } else if (error.message.includes('Too many requests')) {
+          Alert.alert(
+            'Demasiados intentos',
+            'Has realizado demasiados intentos de inicio de sesión. Por favor espera unos minutos antes de intentar nuevamente.',
+            [{ text: 'Entendido', style: 'default' }]
+          );
+        } else if (error.message.includes('User not found')) {
+          Alert.alert(
+            'Usuario no encontrado',
+            'No existe una cuenta con este correo electrónico. ¿Deseas crear una cuenta nueva?',
+            [
+              { text: 'Cancelar', style: 'cancel' },
+              { 
+                text: 'Crear cuenta', 
+                onPress: () => router.push('/auth/register')
+              }
+            ]
+          );
+        } else {
+          Alert.alert(
+            'Error de inicio de sesión',
+            'Ocurrió un error al intentar iniciar sesión. Por favor verifica tu conexión a internet e intenta nuevamente.',
+            [{ text: 'Entendido', style: 'default' }]
+          );
+        }
+        throw error;
       }
     } catch (error: any) {
       console.error('Login error:', error);
-      Alert.alert(t('error'), error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleBiometricLogin = async () => {
+  const handleBiometricLogin = async (): Promise<boolean> => {
     try {
-      const credentials = await getStoredCredentials();
+      setLoading(true);
+      console.log('Starting biometric authentication process');
+      const credentials = await authenticateWithBiometric();
       if (credentials) {
-        const success = await authenticateWithBiometric();
-        if (success) {
-          setEmail(credentials.email);
-          setPassword(credentials.password);
-          // Auto-login with stored credentials
-          const user = await login(credentials.email, credentials.password);
-          if (user) {
-            router.replace('/(tabs)');
-          }
+        console.log('Got credentials from biometric, attempting login');
+        await login(credentials.email, credentials.password);
+        // Redirect based on user type after biometric login
+        const isAdmin = credentials.email.toLowerCase() === 'admin@dogcatify.com';
+        if (isAdmin) {
+          console.log('Admin biometric login, redirecting to admin tabs');
+          router.replace('/(admin-tabs)/requests');
+        } else {
+          console.log('Regular user biometric login, redirecting to regular tabs');
+          router.replace('/(tabs)');
         }
-      } else {
-        Alert.alert('Error', 'No hay credenciales guardadas para autenticación biométrica');
+        return true;
       }
-    } catch (error) {
-      console.error('Biometric login error:', error);
-      Alert.alert('Error', 'No se pudo autenticar con biometría');
+      console.log('No credentials returned from biometric authentication');
+      return false;
+    } catch (error: any) {
+      console.error('Biometric authentication error:', error);
+      Alert.alert(
+        'Error de autenticación biométrica',
+        'No pudimos verificar tu identidad. Por favor, intenta con tu correo y contraseña.',
+        [{ text: 'Entendido', style: 'default' }]
+      );
+      return false;
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleEnableBiometric = async () => {
-    try {
-      if (!email || !password) {
-        Alert.alert('Error', 'Email y contraseña son requeridos para configurar biometría');
-        return;
-      }
-
-      const success = await enableBiometric(email, password);
-      if (success) {
-        setShowBiometricSetup(false);
+    console.log('Attempting to enable biometric with credentials');
+    const success = await enableBiometric(email, password);
+    if (success) {
+      console.log('Biometric successfully enabled');
+      Alert.alert(
+        'Autenticación biométrica habilitada',
+        `Ahora puedes usar tu ${biometricType || 'biometría'} para iniciar sesión rápidamente. Esta opción aparecerá la próxima vez que inicies la aplicación.`,
+        [
+          { 
+            text: 'OK', 
+            onPress: () => {
+              const isAdmin = email.toLowerCase() === 'admin@dogcatify.com';
+              if (isAdmin) {
+                router.replace('/(admin-tabs)/requests');
+              } else {
+                router.replace('/(tabs)');
+              }
+            }
+          }
+        ]
+      );
+      setShowBiometricOption(false);
+    } else {
+      console.error('Failed to enable biometric');
+      Alert.alert('Error', 'No se pudo habilitar la autenticación biométrica');
+      // Redirect even if biometric setup failed
+      if (email === 'admin@dogcatify.com') {
+        router.replace('/(admin-tabs)/requests');
+      } else {
         router.replace('/(tabs)');
       }
-    } catch (error) {
-      console.error('Error enabling biometric:', error);
-      Alert.alert('Error', 'No se pudo configurar la autenticación biométrica');
-      skipBiometricSetup();
     }
   };
 
   const skipBiometricSetup = () => {
-    setShowBiometricSetup(false);
-    router.replace('/(tabs)');
+    setShowBiometricOption(false);
+    // Redirect when skipping biometric setup
+    const isAdmin = email.toLowerCase() === 'admin@dogcatify.com';
+    if (isAdmin) {
+      router.replace('/(admin-tabs)/requests');
+    } else {
+      router.replace('/(tabs)');
+    }
   };
 
   return (
@@ -102,11 +293,12 @@ export default function Login() {
           source={require('../../assets/images/logo.jpg')} 
           style={styles.logo} 
         />
-        <Text style={styles.title}>{t('welcomeBack')}</Text>
+        <Text style={styles.title}>¡Bienvenido de vuelta!</Text>
         <Text style={styles.subtitle}>{t('signInSubtitle')}</Text>
       </View>
 
       <View style={styles.form}>
+
         <Input
           label={t('email')}
           placeholder={t('email')}
@@ -122,9 +314,26 @@ export default function Login() {
           placeholder={t('password')}
           value={password}
           onChangeText={setPassword}
-          secureTextEntry
+          secureTextEntry={!showPassword}
           leftIcon={<Lock size={20} color="#6B7280" />}
+          rightIcon={
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+              {showPassword ? <EyeOff size={20} color="#6B7280" /> : <Eye size={20} color="#6B7280" />}
+            </TouchableOpacity>
+          }
         />
+
+        <View style={styles.rememberContainer}>
+          <TouchableOpacity 
+            style={styles.rememberRow} 
+            onPress={() => setRememberPassword(!rememberPassword)}
+          >
+            <View style={[styles.checkbox, rememberPassword && styles.checkedCheckbox]}>
+              {rememberPassword && <Check size={16} color="#FFFFFF" />}
+            </View>
+            <Text style={styles.rememberText}>Recordar contraseña</Text>
+          </TouchableOpacity>
+        </View>
 
         <Button
           title={t('signIn')}
@@ -133,24 +342,34 @@ export default function Login() {
           size="large"
         />
 
-        {/* Biometric Login Button */}
-        {isBiometricEnabled && (
-          <TouchableOpacity 
-            style={styles.biometricButton}
-            onPress={handleBiometricLogin}
-          >
-            <Fingerprint size={24} color="#3B82F6" />
-            <Text style={styles.biometricButtonText}>
-              Iniciar sesión con biometría
+        {/* Biometric Setup Option */}
+        {showBiometricOption && (
+          <View style={styles.biometricSetup}>
+            <Text style={styles.biometricSetupTitle} numberOfLines={2}>
+              🔒 Habilitar acceso rápido
             </Text>
-          </TouchableOpacity>
+            <Text style={styles.biometricSetupText} numberOfLines={3}>
+              ¿Quieres usar tu {biometricType} para iniciar sesión más rápido la próxima vez?
+            </Text>
+            <View style={styles.biometricSetupButtons}>
+              <View style={styles.biometricButton}>
+                <Button title="Ahora no" onPress={skipBiometricSetup} variant="outline" size="small" />
+              </View>
+              <View style={styles.biometricButton}>
+                <Button title="Habilitar" onPress={handleEnableBiometric} size="small" />
+              </View>
+            </View>
+          </View>
         )}
 
+        <TouchableOpacity 
+          style={styles.forgotPasswordButton}
+          onPress={() => router.push('/auth/forgot-password')}
+        >
+          <Text style={styles.forgotPasswordText}>¿Olvidaste tu contraseña?</Text>
+        </TouchableOpacity>
+
         <View style={styles.footer}>
-          <Link href="/auth/forgot-password" style={styles.link}>
-            {t('forgotPassword')}
-          </Link>
-          
           <Text style={styles.footerText}>
             {t('dontHaveAccount')}{' '}
             <Link href="/auth/register" style={styles.link}>
@@ -159,37 +378,6 @@ export default function Login() {
           </Text>
         </View>
       </View>
-
-      {/* Biometric Setup Modal */}
-      {showBiometricSetup && (
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Fingerprint size={48} color="#3B82F6" />
-              <Text style={styles.modalTitle}>Habilitar acceso rápido</Text>
-              <Text style={styles.modalSubtitle}>
-                ¿Quieres usar tu Reconocimiento facial para iniciar sesión más rápido la próxima vez?
-              </Text>
-            </View>
-            
-            <View style={styles.modalActions}>
-              <TouchableOpacity 
-                style={styles.skipButton}
-                onPress={skipBiometricSetup}
-              >
-                <Text style={styles.skipButtonText}>Ahora no</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.enableButton}
-                onPress={handleEnableBiometric}
-              >
-                <Text style={styles.enableButtonText}>Habilitar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      )}
     </ScrollView>
   );
 }
@@ -198,7 +386,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    paddingTop: 30,
+    paddingTop: 30, // Add padding at the top to show status bar
   },
   content: {
     flexGrow: 1,
@@ -233,28 +421,9 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     alignSelf: 'center',
   },
-  biometricButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#EBF8FF',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: '#3B82F6',
-  },
-  biometricButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-    marginLeft: 8,
-  },
   footer: {
     alignItems: 'center',
     marginTop: 24,
-    gap: 16,
   },
   footerText: {
     fontSize: 16,
@@ -265,73 +434,82 @@ const styles = StyleSheet.create({
     color: '#3B82F6',
     fontFamily: 'Inter-SemiBold',
   },
-  modalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  rememberContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  rememberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
+    borderRadius: 4,
+    marginRight: 8,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
   },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
-    width: '100%',
-    maxWidth: 400,
-    alignItems: 'center',
+  checkedCheckbox: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
   },
-  modalHeader: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  modalSubtitle: {
-    fontSize: 16,
+  rememberText: {
+    fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 24,
   },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
+  forgotPasswordButton: {
+    alignItems: 'center',
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  forgotPasswordText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#3B82F6',
+  },
+  biometricSetup: {
+    backgroundColor: '#F0F9FF',
+    padding: 20,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
     width: '100%',
   },
-  skipButton: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#2D6A6F',
-    paddingVertical: 12,
-    borderRadius: 8,
+  biometricSetupTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
+    marginBottom: 8,
+    textAlign: 'center',
+    flexWrap: 'wrap',
+  },
+  biometricSetupText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#4B5563',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+    flexWrap: 'wrap',
+  },
+  biometricSetupButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
+    marginTop: 16,
+    width: '100%',
   },
-  skipButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#2D6A6F',
-  },
-  enableButton: {
+  biometricButton: {
     flex: 1,
-    backgroundColor: '#2D6A6F',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  enableButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
+    maxWidth: '48%',
   },
 });
