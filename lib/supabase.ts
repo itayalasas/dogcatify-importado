@@ -259,7 +259,7 @@ export const NotificationService = {
     messagePreview: string,
     conversationId: string
   ): Promise<void> => {
-    const subject = \`Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
+    const subject = `Nuevo mensaje sobre adopción de ${petName} - DogCatiFy`;
     const messageText = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -269,18 +269,9 @@ export const NotificationService = {
         <div style="padding: 20px; background-color: #f9f9f9;">
           <p>Hola,</p>
           <p><strong>${senderName}</strong> te ha enviado un mensaje sobre la adopción de <strong>${petName}</strong>:</p>
-          <div style="background-color: white; border-left: 4px solid #2D6A6F; padding: 15px; margin: 20px 0;">
-            <p style="margin: 0; font-style: italic;">"${messagePreview}"</p>
-          </div>
-          <p>Responde desde la app DogCatiFy para continuar la conversación sobre la adopción.</p>
-        </div>
-        <div style="background-color: #f0f0f0; padding: 10px; text-align: center; font-size: 12px; color: #666;">
-          <p>© 2025 DogCatiFy. Todos los derechos reservados.</p>
-        </div>
       </div>
-    const text = `${senderName} te ha enviado un mensaje sobre la adopción de ${petName}:\n\n"${messagePreview}"\n\nResponde desde la app DogCatiFy.`;
-    const html = EmailTemplates.chatMessage(senderName, petName, messagePreview, conversationId);
+    `;
     
-    await NotificationService.sendEmail(recipientEmail, subject, text, html);
+    await NotificationService.sendEmail(recipientEmail, subject, messageText, html);
   }
 };
