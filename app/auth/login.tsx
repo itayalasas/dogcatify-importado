@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Image, TextInput } from 'react-native';
 import { Link, router, useLocalSearchParams } from 'expo-router';
-import { Mail, Lock, Eye, EyeOff, Check } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Linking } from 'react-native';
+import { Mail, Lock, Eye, EyeOff, Check, Fingerprint } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useBiometric } from '../../contexts/BiometricContext'; 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function Login() {
   const { redirectTo } = useLocalSearchParams<{ redirectTo?: string }>();
@@ -15,10 +16,12 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [rememberPassword, setRememberPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [biometricLoading, setBiometricLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showBiometricOption, setShowBiometricOption] = useState(false);
   const { login } = useAuth();
   const { t } = useLanguage();
+  const { authError, clearAuthError } = useAuth();
   const { 
     isBiometricSupported, 
     isBiometricEnabled, 
@@ -27,6 +30,29 @@ export default function Login() {
     authenticateWithBiometric,
     checkBiometricStatus
   } = useBiometric();
+
+  // Check for biometric availability on component mount
+  React.useEffect(() => {
+    checkBiometricAvailability();
+    // Clear any previous auth errors when component mounts
+    clearAuthError();
+  }, []);
+
+  const checkBiometricAvailability = async () => {
+    try {
+      // Skip biometric check in Expo Go
+      if (__DEV__) {
+        console.log('Skipping biometric check in development');
+        return;
+      }
+
+      const compatible = await LocalAuthentication.hasHardwareAsync();
+      const enrolled = await LocalAuthentication.isEnrolledAsync();
+      console.log('Biometric availability:', { compatible, enrolled });
+    } catch (error) {
+      console.error('Error checking biometric availability:', error);
+    }
+  };
 
   // Cargar credenciales guardadas al iniciar
   React.useEffect(() => {
@@ -53,25 +79,37 @@ export default function Login() {
     checkBiometricStatus();
   }, [checkBiometricStatus]);
 
-  const handleLogin = async () => {
-    // If biometric is enabled and supported, try biometric first
-    if (isBiometricEnabled && isBiometricSupported) {
-      try {
-        console.log('Attempting biometric login first...');
-        const biometricResult = await handleBiometricLogin();
-        if (biometricResult) {
-          console.log('Biometric login successful');
-          return; // Biometric login successful
-        }
-      } catch (error) {
-        console.log('Biometric login failed, continuing with credentials');
-        // Continue with credential validation
-      }
+  // Show auth error if it exists
+  React.useEffect(() => {
+    if (authError) {
+      Alert.alert(
+        'Error de cuenta',
+        authError,
+        [
+          { 
+            text: 'Crear nueva cuenta', 
+            onPress: () => {
+              clearAuthError();
+              router.push('/auth/register');
+            }
+          },
+          { 
+            text: 'Entendido', 
+            onPress: () => clearAuthError(),
+            style: 'cancel'
+          }
+        ]
+      );
     }
+  }, [authError]);
 
+  const handleLogin = async () => {
+    // Clear any previous errors
+    clearAuthError();
+    
     // Validate credentials are provided
     if (!email || !password) {
-      Alert.alert(t('error'), 'Por favor completa el correo electrónico y la contraseña');
+      Alert.alert(t('error'), t('fillAllFields'));
       return;
     }
     
@@ -97,6 +135,54 @@ export default function Login() {
 
     // Proceed with credential login
     await handleCredentialLogin();
+  };
+
+  const handleBiometricButtonPress = async () => {
+    if (!isBiometricEnabled || !isBiometricSupported) {
+      Alert.alert('Biometría no disponible', 'La autenticación biométrica no está configurada o no está disponible en este dispositivo.');
+      return;
+    }
+
+    await handleBiometricLogin();
+  };
+
+  const handleBiometricLogin = async () => {
+    if (!isBiometricEnabled || !isBiometricSupported) {
+      Alert.alert('Biometría no disponible', 'La autenticación biométrica no está configurada o no está disponible en este dispositivo.');
+      return false;
+    }
+
+    setBiometricLoading(true);
+    try {
+      console.log('Starting biometric login...');
+      const credentials = await authenticateWithBiometric();
+      
+      if (credentials) {
+        console.log('Biometric authentication successful, logging in...');
+        const result = await login(credentials.email, credentials.password);
+        
+        if (result) {
+          const isAdmin = result?.email?.toLowerCase() === 'admin@dogcatify.com';
+          if (isAdmin) {
+            router.replace('/(admin-tabs)/requests');
+          } else {
+            if (redirectTo) {
+              router.replace(`/${redirectTo}` as any);
+            } else {
+              router.replace('/(tabs)');
+            }
+          }
+          return true;
+        }
+      }
+      return false;
+    } catch (error: any) {
+      console.error('Biometric login error:', error);
+      Alert.alert('Error', 'No se pudo autenticar con biometría. Intenta con tu correo y contraseña.');
+      return false;
+    } finally {
+      setBiometricLoading(false);
+    }
   };
 
   const handleCredentialLogin = async () => {
@@ -134,24 +220,84 @@ export default function Login() {
         // Manejar errores específicos de autenticación
         if (error.message.includes('confirma tu correo')) {
           Alert.alert(
-            'Correo no confirmado',
-            'Por favor confirma tu correo electrónico antes de iniciar sesión. Revisa tu bandeja de entrada.',
+            'Correo electrónico no confirmado',
+            'Debes confirmar tu correo electrónico antes de iniciar sesión. Revisa tu bandeja de entrada (y la carpeta de spam) y haz clic en el enlace de confirmación.',
             [
               { 
                 text: 'Reenviar correo', 
                 onPress: async () => {
+                  // Mostrar loading en el botón
+                  Alert.alert(
+                    'Reenviando correo...',
+                    'Por favor espera mientras enviamos un nuevo correo de confirmación.',
+                    [],
+                    { cancelable: false }
+                  );
+                  
                   try {
-                    await supabaseClient.auth.resend({
-                      type: 'signup',
-                      email: email,
-                      options: {
-                        emailRedirectTo: 'https://dogcatify.com/auth/login',
-                      }
-                    });
-                    Alert.alert('Correo enviado', 'Se ha enviado un nuevo correo de confirmación');
+                    const { resendConfirmationEmail } = await import('../../utils/emailConfirmation');
+                    const result = await resendConfirmationEmail(email);
+                    
+                    if (!result.success) {
+                      throw new Error(result.error || 'Error al reenviar confirmación');
+                    }
+                    
+                    // Cerrar el loading y mostrar éxito
+                    Alert.alert(
+                      '✅ Correo Reenviado', 
+                      `Se ha enviado un nuevo correo de confirmación a ${email}.\n\nPor favor revisa tu bandeja de entrada (y la carpeta de spam) y haz clic en el enlace de confirmación.\n\nEl enlace expira en 24 horas.`,
+                      [{ text: 'Entendido', style: 'default' }]
+                    );
                   } catch (resendError) {
                     console.error('Error resending confirmation email:', resendError);
-                    Alert.alert('Error', 'No se pudo reenviar el correo de confirmación');
+                    Alert.alert(
+                      '❌ Error al Reenviar', 
+                      resendError.message || 'No se pudo reenviar el correo de confirmación. Por favor verifica tu conexión e intenta más tarde.',
+                      [{ text: 'Entendido', style: 'default' }]
+                    );
+                  }
+                }
+              },
+              { text: 'Entendido', style: 'default' }
+            ]
+          );
+        } else if (error.message.includes('Email not confirmed')) {
+          Alert.alert(
+            'Correo electrónico no confirmado',
+            'Debes confirmar tu correo electrónico antes de iniciar sesión. Revisa tu bandeja de entrada y haz clic en el enlace de confirmación.',
+            [
+              { 
+                text: 'Reenviar correo', 
+                onPress: async () => {
+                  // Mostrar loading en el botón
+                  Alert.alert(
+                    'Reenviando correo...',
+                    'Por favor espera mientras enviamos un nuevo correo de confirmación.',
+                    [],
+                    { cancelable: false }
+                  );
+                  
+                  try {
+                    const { resendConfirmationEmail } = await import('../../utils/emailConfirmation');
+                    const result = await resendConfirmationEmail(email);
+                    
+                    if (!result.success) {
+                      throw new Error(result.error || 'Error al reenviar confirmación');
+                    }
+                    
+                    // Cerrar el loading y mostrar éxito
+                    Alert.alert(
+                      '✅ Correo Reenviado', 
+                      `Se ha enviado un nuevo correo de confirmación a ${email}.\n\nPor favor revisa tu bandeja de entrada (y la carpeta de spam) y haz clic en el enlace de confirmación.\n\nEl enlace expira en 24 horas.`,
+                      [{ text: 'Entendido', style: 'default' }]
+                    );
+                  } catch (resendError) {
+                    console.error('Error resending confirmation email:', resendError);
+                    Alert.alert(
+                      '❌ Error al Reenviar', 
+                      resendError.message || 'No se pudo reenviar el correo de confirmación. Por favor verifica tu conexión e intenta más tarde.',
+                      [{ text: 'Entendido', style: 'default' }]
+                    );
                   }
                 }
               },
@@ -166,11 +312,62 @@ export default function Login() {
             'El correo electrónico o la contraseña son incorrectos. Por favor verifica tus datos e intenta nuevamente.',
             [{ text: 'Entendido', style: 'default' }]
           );
+        } else if (error.message.includes('User not found') || 
+                   error.message.includes('user_not_found') ||
+                   error.message.includes('Invalid user')) {
+          Alert.alert(
+            'Usuario no encontrado',
+            'No existe una cuenta con este correo electrónico. ¿Deseas crear una cuenta nueva?',
+            [
+              { text: 'Cancelar', style: 'cancel' },
+              { 
+                text: 'Crear cuenta', 
+                onPress: () => router.push('/auth/register')
+              }
+            ]
+          );
         } else if (error.message.includes('Email not confirmed')) {
           Alert.alert(
-            'Correo no confirmado',
-            'Tu cuenta aún no ha sido confirmada. Por favor revisa tu correo electrónico y confirma tu cuenta.',
-            [{ text: 'Entendido', style: 'default' }]
+            'Correo electrónico no confirmado',
+            'Debes confirmar tu correo electrónico antes de iniciar sesión. Revisa tu bandeja de entrada y haz clic en el enlace de confirmación.',
+            [
+              { 
+                text: 'Reenviar correo', 
+                onPress: async () => {
+                  // Mostrar loading en el botón
+                  Alert.alert(
+                    'Reenviando correo...',
+                    'Por favor espera mientras enviamos un nuevo correo de confirmación.',
+                    [],
+                    { cancelable: false }
+                  );
+                  
+                  try {
+                    const { resendConfirmationEmail } = await import('../../utils/emailConfirmation');
+                    const result = await resendConfirmationEmail(email);
+                    
+                    if (!result.success) {
+                      throw new Error(result.error || 'Error al reenviar confirmación');
+                    }
+                    
+                    // Cerrar el loading y mostrar éxito
+                    Alert.alert(
+                      '✅ Correo Reenviado', 
+                      `Se ha enviado un nuevo correo de confirmación a ${email}.\n\nPor favor revisa tu bandeja de entrada (y la carpeta de spam) y haz clic en el enlace de confirmación.\n\nEl enlace expira en 24 horas.`,
+                      [{ text: 'Entendido', style: 'default' }]
+                    );
+                  } catch (resendError) {
+                    console.error('Error resending confirmation email:', resendError);
+                    Alert.alert(
+                      '❌ Error al Reenviar', 
+                      resendError.message || 'No se pudo reenviar el correo de confirmación. Por favor verifica tu conexión e intenta más tarde.',
+                      [{ text: 'Entendido', style: 'default' }]
+                    );
+                  }
+                }
+              },
+              { text: 'Entendido', style: 'default' }
+            ]
           );
         } else if (error.message.includes('Too many requests')) {
           Alert.alert(
@@ -201,40 +398,6 @@ export default function Login() {
       }
     } catch (error: any) {
       console.error('Login error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleBiometricLogin = async (): Promise<boolean> => {
-    try {
-      setLoading(true);
-      console.log('Starting biometric authentication process');
-      const credentials = await authenticateWithBiometric();
-      if (credentials) {
-        console.log('Got credentials from biometric, attempting login');
-        await login(credentials.email, credentials.password);
-        // Redirect based on user type after biometric login
-        const isAdmin = credentials.email.toLowerCase() === 'admin@dogcatify.com';
-        if (isAdmin) {
-          console.log('Admin biometric login, redirecting to admin tabs');
-          router.replace('/(admin-tabs)/requests');
-        } else {
-          console.log('Regular user biometric login, redirecting to regular tabs');
-          router.replace('/(tabs)');
-        }
-        return true;
-      }
-      console.log('No credentials returned from biometric authentication');
-      return false;
-    } catch (error: any) {
-      console.error('Biometric authentication error:', error);
-      Alert.alert(
-        'Error de autenticación biométrica',
-        'No pudimos verificar tu identidad. Por favor, intenta con tu correo y contraseña.',
-        [{ text: 'Entendido', style: 'default' }]
-      );
-      return false;
     } finally {
       setLoading(false);
     }
@@ -335,15 +498,42 @@ export default function Login() {
           </TouchableOpacity>
         </View>
 
-        <Button
-          title={t('signIn')}
-          onPress={handleLogin}
-          loading={loading}
-          size="large"
-        />
+        {/* Show biometric button if biometric is enabled, otherwise show regular login */}
+        {isBiometricSupported && isBiometricEnabled ? (
+          <TouchableOpacity
+            style={styles.biometricMainButton}
+            onPress={handleBiometricButtonPress}
+            disabled={biometricLoading}
+          >
+            <Fingerprint size={24} color="#FFFFFF" />
+            <Text style={styles.biometricMainButtonText}>
+              {biometricLoading ? 'Autenticando...' : `Iniciar con ${biometricType || 'Biometría'}`}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <Button
+            title={t('signIn')}
+            onPress={handleLogin}
+            loading={loading}
+            size="large"
+          />
+        )}
+
+        {/* Alternative login option when biometric is primary */}
+        {isBiometricSupported && isBiometricEnabled && (
+          <TouchableOpacity
+            style={styles.alternativeLoginButton}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            <Text style={styles.alternativeLoginText}>
+              Usar correo y contraseña
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Biometric Setup Option */}
-        {showBiometricOption && (
+        {showBiometricOption && isBiometricSupported && !isBiometricEnabled && (
           <View style={styles.biometricSetup}>
             <Text style={styles.biometricSetupTitle} numberOfLines={2}>
               🔒 Habilitar acceso rápido
@@ -390,18 +580,18 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    justifyContent: 'center',
     padding: 20,
+    paddingTop: 20,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 16,
   },
   logo: {
-    width: 180,
-    height: 180,
+    width: 140,
+    height: 140,
     resizeMode: 'contain',
-    marginBottom: 20,
+    marginBottom: 8,
   },
   title: {
     fontSize: 28,
@@ -423,7 +613,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     alignItems: 'center',
-    marginTop: 24,
+    marginTop: 8,
   },
   footerText: {
     fontSize: 16,
@@ -466,12 +656,77 @@ const styles = StyleSheet.create({
   forgotPasswordButton: {
     alignItems: 'center',
     marginTop: 12,
-    marginBottom: 12,
+    marginBottom: 4,
   },
   forgotPasswordText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     color: '#3B82F6',
+  },
+  biometricLoginSection: {
+    marginTop: 24,
+    marginBottom: 12,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  dividerText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    paddingHorizontal: 16,
+  },
+  biometricLoginButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  biometricLoginText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+  },
+  biometricMainButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2D6A6F',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    minHeight: 44,
+    gap: 8,
+    marginBottom: 12,
+  },
+  biometricMainButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
+  },
+  alternativeLoginButton: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginBottom: 12,
+  },
+  alternativeLoginText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#3B82F6',
+    textDecorationLine: 'underline',
   },
   biometricSetup: {
     backgroundColor: '#F0F9FF',

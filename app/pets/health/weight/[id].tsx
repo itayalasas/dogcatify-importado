@@ -62,11 +62,6 @@ export default function PetWeight() {
   }, [id]);
 
   useEffect(() => {
-    // Si no hay registros de peso y tenemos datos del pet, crear un registro inicial
-    if (weightRecords.length === 0 && pet && pet.weight) {
-      createInitialWeightRecord();
-    }
-    
     // Calculate ideal weight range when pet data is available
     if (pet) {
       calculateIdealWeightRange();
@@ -84,6 +79,27 @@ export default function PetWeight() {
     if (!pet || !pet.weight || !currentUser) return;
     
     try {
+      // Verificar si ya existe un registro de peso inicial para esta mascota
+      const { data: existingRecords, error: checkError } = await supabaseClient
+        .from('pet_health')
+        .select('id')
+        .eq('pet_id', id)
+        .eq('type', 'weight')
+        .eq('notes', 'Peso inicial al registrar la mascota');
+      
+      if (checkError) {
+        console.error('Error checking existing weight records:', checkError);
+        return;
+      }
+      
+      // Si ya existe un registro inicial, no crear otro
+      if (existingRecords && existingRecords.length > 0) {
+        console.log('Initial weight record already exists, skipping creation');
+        return;
+      }
+      
+      console.log('Creating initial weight record for pet:', pet.name);
+      
       // Crear un registro de peso inicial con la fecha de creación de la mascota
       const initialDate = pet.created_at ? new Date(pet.created_at) : new Date();
       const formattedDate = formatDate(initialDate);
@@ -104,8 +120,11 @@ export default function PetWeight() {
       if (error) {
         console.error('Error creating initial weight record:', error);
       } else {
-        // Actualizar la lista de registros
-        fetchWeightRecords();
+        console.log('Initial weight record created successfully');
+        // Actualizar la lista de registros después de un breve delay
+        setTimeout(() => {
+          fetchWeightRecords();
+        }, 500);
       }
     } catch (error) {
       console.error('Error creating initial weight record:', error);
@@ -113,7 +132,6 @@ export default function PetWeight() {
   };
 
   const fetchPetDetails = async () => {
-    fetchWeightRecords();
     try {
       const { data, error } = await supabaseClient
         .from('pets')
@@ -133,6 +151,25 @@ export default function PetWeight() {
       if (data.weightDisplay?.unit) {
         setWeightUnit(data.weightDisplay.unit);
       }
+      
+      // Fetch weight records after setting pet data
+      await fetchWeightRecords();
+      
+      // Check if we need to create initial weight record
+      // Only do this after we have both pet data and weight records
+      setTimeout(async () => {
+        const { data: existingRecords } = await supabaseClient
+          .from('pet_health')
+          .select('id')
+          .eq('pet_id', id)
+          .eq('type', 'weight');
+        
+        // Only create initial record if no weight records exist at all
+        if ((!existingRecords || existingRecords.length === 0) && data.weight) {
+          await createInitialWeightRecord();
+        }
+      }, 1000);
+      
     } catch (error) {
       console.error('Error fetching pet details:', error);
     }

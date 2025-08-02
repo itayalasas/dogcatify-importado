@@ -22,7 +22,7 @@ export default function ForgotPassword() {
     setLoading(true);
     try {
       const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
-        redirectTo: 'https://dogcatify.com/reset-password',
+        redirectTo: `${process.env.EXPO_PUBLIC_APP_URL || 'http://localhost:8081'}/auth/confirm`,
       });
 
       if (error) throw error;
@@ -48,7 +48,7 @@ export default function ForgotPassword() {
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Image 
-          source={require('../../assets/images/logo.jpg')} 
+          source={{ uri: 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100' }}
           style={styles.logo} 
         />
       </View>

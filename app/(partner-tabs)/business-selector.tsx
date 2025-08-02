@@ -164,12 +164,39 @@ export default function BusinessSelector() {
   };
 
   const handleConfigureBusiness = (business: Business) => {
-    // Navegar a la configuración del negocio
+    // Mostrar menú de opciones de configuración
+    Alert.alert(
+      'Configurar Negocio',
+      'Selecciona una opción:',
+      [
+        {
+          text: 'Editar Información',
+          onPress: () => router.push({
+            pathname: '/partner/edit-business',
+            params: { businessId: business.id }
+          })
+        },
+        {
+          text: 'Configurar Funcionalidades',
+          onPress: () => router.push({
+            pathname: '/partner/configure-business',
+            params: { businessId: business.id }
+          })
+        },
+        {
+          text: 'Cancelar',
+          style: 'cancel'
+        }
+      ]
+    );
+  };
+
+  const handleEditBusiness = (business: Business) => {
+    // Navegar directamente a la edición del negocio
     router.push({
-      pathname: '/partner/configure-business',  
+      pathname: '/partner/edit-business',  
       params: {  
-        businessId: business.id, 
-        businessType: business.businessType 
+        businessId: business.id
       }
     });
   };

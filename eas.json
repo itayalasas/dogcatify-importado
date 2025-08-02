@@ -5,7 +5,10 @@
   "build": {
     "default": {
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "env": {
+          "GOOGLE_SERVICES_JSON_BASE64": "${GOOGLE_SERVICES_JSON_BASE64}"
+        }
       }
     },
     "production": {

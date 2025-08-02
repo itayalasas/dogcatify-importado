@@ -598,4 +598,9 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
   },
+  paidBadge: {
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+    color: '#10B981',
+  },
 });

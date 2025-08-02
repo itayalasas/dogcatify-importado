@@ -10,6 +10,8 @@ interface AuthContextType {
   logout: () => Promise<void>;
   isEmailConfirmed: boolean;
   authInitialized: boolean;
+  authError: string | null;
+  clearAuthError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,6 +30,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<any | null>(null);
   const [isEmailConfirmed, setIsEmailConfirmed] = useState(false);
   const [authInitialized, setAuthInitialized] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -60,10 +63,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (session?.user) {
           try {
             // Check if email is confirmed
+            if (!session.user.email_confirmed_at && session.user.app_metadata?.provider !== 'email') {
+              console.log('AuthContext - Email not confirmed for user:', session.user.email);
+              setAuthError('Debes confirmar tu correo electrónico antes de acceder a la aplicación. Revisa tu bandeja de entrada.');
+              await supabaseClient.auth.signOut();
+              return;
+            }
+            
             setIsEmailConfirmed(session.user.email_confirmed_at !== null);
             
-            const profile = await getUserProfile(session.user.id);
-            
+            let profile;
+            try {
+              profile = await getUserProfile(session.user.id);
+            } catch (profileError: any) {
+              // Handle case where user exists in auth.users but not in profiles (deleted account)
+              if (profileError.code === 'PGRST116' && profileError.message?.includes('0 rows')) {
+                console.log('AuthContext - User exists in auth but not in profiles (deleted account)');
+                // Sign out the user and throw error
+                await supabaseClient.auth.signOut();
+                setAuthError('Esta cuenta fue eliminada previamente. Por favor crea una nueva cuenta o contacta con soporte.');
+                return;
+              }
+              throw profileError;
+            }
             if (profile) {
               if (!mounted) return;
               console.log('AuthContext - User profile loaded:', profile.display_name);
@@ -94,28 +116,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 isOwner: true,
                 isPartner: false,
                 createdAt: new Date(),
+                followers: [],
+                following: [],
+                followersCount: 0,
+                followingCount: 0,
               };
               
+              // Create the profile in the database
               await updateUserProfile(session.user.id, {
                 display_name: newUser.displayName,
                 photo_url: newUser.photoURL,
                 is_owner: newUser.isOwner,
                 is_partner: newUser.isPartner,
-                created_at: new Date(),
+                location: newUser.location,
+                bio: newUser.bio,
+                phone: newUser.phone,
               });
               
-              setCurrentUser({ id: session.user.id, ...newUser });
+              setCurrentUser({
+                id: session.user.id,
+                ...newUser,
+              });
             }
           } catch (error: any) {
-            if (!mounted) return;
-            console.error('Error processing user data:', error);
+            console.error('Error loading user profile after login:', error);
             
-            // If it's a session error, sign out the user
+            // Set auth error for display in UI
+            if (error.message?.includes('perfil válido') || error.message?.includes('eliminada')) {
+              setAuthError(error.message);
+            }
+            
             if (error.message?.includes('session_not_found') || error.message?.includes('JWT')) {
-              console.log('AuthContext - Session expired, signing out user');
+              console.log('AuthContext - Session error after login, signing out');
               await supabaseClient.auth.signOut();
-              setCurrentUser(null);
-              setSession(null);
             }
           }
         }
@@ -138,7 +171,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (session?.user) {
           try {
-            const profile = await getUserProfile(session.user.id);
+            let profile;
+            try {
+              profile = await getUserProfile(session.user.id);
+            } catch (profileError: any) {
+              // Handle case where user exists in auth.users but not in profiles (deleted account)
+              if (profileError.code === 'PGRST116' && profileError.message?.includes('0 rows')) {
+                console.log('AuthContext - Initial check: User exists in auth but not in profiles (deleted account)');
+                // Sign out the user and show error
+                await supabaseClient.auth.signOut();
+                setAuthError('Esta cuenta fue eliminada previamente. Por favor crea una nueva cuenta o contacta con soporte.');
+                return;
+              }
+              throw profileError;
+            }
             
             if (!mounted) return;
             if (profile) {
@@ -160,13 +206,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 followingCount: profile.following?.length || 0,
               });
             }
-          } catch (error: any) {
-            console.error('Error loading user profile:', error);
-            if (!mounted) return;
-            if (error.message?.includes('session_not_found') || error.message?.includes('JWT')) {
-              console.log('AuthContext - Session expired during profile load, signing out');
-              await supabaseClient.auth.signOut();
-            }
+          } catch (error) {
+            console.error('AuthContext - Error loading profile:', error);
           }
         } else {
           console.log('AuthContext - No initial session found');
@@ -222,45 +263,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       
       if (data.user) {
-        // Check if email is confirmed
-        if (data.user.email_confirmed_at === null) {
+        // Check email confirmation using our custom system
+        const { isEmailConfirmed: checkEmailConfirmed } = await import('../utils/emailConfirmation');
+        const emailConfirmed = await checkEmailConfirmed(data.user.id);
+        
+        if (!emailConfirmed) {
           console.warn('AuthContext - Email not confirmed for user:', email);
           setIsEmailConfirmed(false);
-          throw new Error('Por favor confirma tu correo electrónico antes de iniciar sesión. Revisa tu bandeja de entrada.');
+          throw new Error('Email not confirmed');
         }
         
-        setIsEmailConfirmed(true);
+        setIsEmailConfirmed(emailConfirmed);
         try {
+          // Check if user profile exists
           const profile = await getUserProfile(data.user.id);
           
-          if (profile) {
-            const user: User = {
-              id: data.user.id,
-              email: data.user.email!,
-              displayName: profile.display_name || '',
-              photoURL: profile.photo_url,
-              isOwner: profile.is_owner || true,
-              isPartner: profile.is_partner || false,
-              location: profile.location,
-              bio: profile.bio,
-              phone: profile.phone,
-              createdAt: new Date(profile.created_at),
-              followers: profile.followers,
-              following: profile.following,
-              followersCount: profile.followers?.length || 0,
-              followingCount: profile.following?.length || 0,
-            };
-            
-            console.log('AuthContext - Login successful, setting user:', user.email);
-            setCurrentUser(user);
-            return user;
-          }
-        } catch (error: any) {
-          console.error('Error loading user profile after login:', error);
-          if (error.message?.includes('session_not_found') || error.message?.includes('JWT')) {
-            console.log('AuthContext - Session error after login, signing out');
+          if (!profile) {
+            // Profile doesn't exist, sign out and throw error
             await supabaseClient.auth.signOut();
+            throw new Error('Esta cuenta fue eliminada previamente. Por favor crea una nueva cuenta o contacta con soporte.');
           }
+          
+          const user: User = {
+            id: data.user.id,
+            email: data.user.email!,
+            displayName: profile.display_name || '',
+            photoURL: profile.photo_url,
+            isOwner: profile.is_owner || true,
+            isPartner: profile.is_partner || false,
+            location: profile.location,
+            bio: profile.bio,
+            phone: profile.phone,
+            createdAt: new Date(profile.created_at),
+            followers: profile.followers,
+            following: profile.following,
+            followersCount: profile.followers?.length || 0,
+            followingCount: profile.following?.length || 0,
+          };
+          
+          console.log('AuthContext - Login successful, setting user:', user.email);
+          setCurrentUser(user);
+          return user;
+        } catch (error: any) {
+          // Handle case where user exists in auth.users but not in profiles
+          if (error.code === 'PGRST116' && error.message?.includes('0 rows')) {
+            console.log('AuthContext - Login: User exists in auth but not in profiles (deleted account)');
+            // Sign out the user and throw clear error message
+            await supabaseClient.auth.signOut();
+            throw new Error('Esta cuenta fue eliminada previamente. Por favor crea una nueva cuenta o contacta con soporte.');
+          }
+          throw error;
         }
       }
       
@@ -273,25 +325,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = async (email: string, password: string, displayName: string) => {
     try {
-      console.log('AuthContext - Starting registration for:', email);
+      console.log('AuthContext - Attempting registration for:', email);
       
+      // First create the user without email confirmation
       const { data, error } = await supabaseClient.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: 'https://dogcatify.com/auth/login',
           data: {
             display_name: displayName,
           },
-        },
+          // Disable automatic email confirmation
+          emailRedirectTo: undefined,
+        }
       });
       
       if (error) throw error;
       console.log('AuthContext - Registration successful, user created');
       
-      // Sign out after registration to force email confirmation
-      await supabaseClient.auth.signOut();
+      if (data.user) {
+        // Create our custom email confirmation token
+        const { createEmailConfirmationToken, generateConfirmationUrl } = await import('../utils/emailConfirmation');
+        const token = await createEmailConfirmationToken(data.user.id, email, 'signup');
+        const confirmationUrl = generateConfirmationUrl(token, 'signup');
+        
+        console.log('Custom confirmation token created:', token);
+        console.log('Confirmation URL:', confirmationUrl);
+        
+        // Send our custom confirmation email
+        const { NotificationService } = await import('../utils/notifications');
+        await NotificationService.sendCustomConfirmationEmail(
+          email,
+          displayName,
+          confirmationUrl
+        );
+        console.log('Custom confirmation email sent successfully');
+      }
+      
+      try {
+      } catch (emailError) {
+        console.error('Error sending custom confirmation email:', emailError);
+        // Don't throw error, registration was successful
+      }
+      
+      // Don't sign out, just set user to null and show confirmation message
       setCurrentUser(null);
+      setSession(null);
     } catch (error) {
       console.error('Register error:', error);
       throw error;
@@ -314,6 +393,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const clearAuthError = () => {
+    setAuthError(null);
+  };
+
   const value = {
     currentUser,
     loading,
@@ -322,6 +405,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     register,
     logout,
     isEmailConfirmed,
+    authError,
+    clearAuthError,
   };
 
   return (

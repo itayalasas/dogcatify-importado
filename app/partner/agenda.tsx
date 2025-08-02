@@ -284,7 +284,7 @@ export default function PartnerAgenda() {
           </View>
         )}
         
-        {booking.status === 'confirmed' && (
+        {(booking.status === 'confirmed' || booking.payment_status === 'paid') && (
           <View style={styles.confirmedActions}>
             <Button
               title="Cancelar"
@@ -657,6 +657,11 @@ const styles = StyleSheet.create({
     color: '#10B981',
     textAlign: 'center',
     marginBottom: 12,
+  },
+  paidBadge: {
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+    color: '#10B981',
   },
   bookingInfo: {
     flex: 1,

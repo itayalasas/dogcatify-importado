@@ -10,10 +10,22 @@ module.exports = function(api) {
           root: ['./'],
           alias: {
             '@': './',
-            'html2canvas': './src/mocks/html2canvas.js'
-          }
-        }
-      ]
+          },
+          extensions: [
+            '.ios.ts',
+            '.android.ts',
+            '.native.ts',
+            '.ts',
+            '.ios.tsx',
+            '.android.tsx',
+            '.native.tsx',
+            '.tsx',
+            '.js',
+            '.jsx',
+            '.json',
+          ],
+        },
+      ],
     ],
   };
 };
