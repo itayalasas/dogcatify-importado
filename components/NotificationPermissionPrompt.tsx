@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Alert } from 'react-native';
 import { Bell, X } from 'lucide-react-native';
 import Constants from 'expo-constants';
 import { Card } from './ui/Card';
@@ -42,41 +42,53 @@ export const NotificationPermissionPrompt: React.FC = () => {
 
   const handleEnableNotifications = async () => {
     try {
+      console.log('User clicked enable notifications');
       const token = await registerForPushNotifications();
+      
       if (token) {
+        console.log('Push token obtained successfully:', token);
         await AsyncStorage.setItem(NOTIFICATION_PROMPT_KEY, 'true');
         setShowPrompt(false);
+        Alert.alert(
+          'Notificaciones habilitadas',
+          'Ahora recibirás notificaciones importantes sobre tus reservas y pedidos.',
+          [{ text: 'Perfecto' }]
+        );
       } else {
+        console.log('No push token obtained');
         // Si no se pudo obtener token, marcar como mostrado para no volver a preguntar
         await AsyncStorage.setItem(NOTIFICATION_PROMPT_KEY, 'true');
         setShowPrompt(false);
+        
+        Alert.alert(
+          'Notificaciones no disponibles',
+          'No se pudieron habilitar las notificaciones push. Puedes intentar habilitarlas más tarde desde la configuración del dispositivo.',
+          [{ text: 'Entendido' }]
+        );
       }
     } catch (error) {
       console.error('Error enabling notifications:', error);
       
-      // Mostrar mensaje más amigable al usuario
+      // Marcar como mostrado para no volver a preguntar
+      await AsyncStorage.setItem(NOTIFICATION_PROMPT_KEY, 'true');
+      setShowPrompt(false);
+      
       Alert.alert(
-        'Notificaciones no disponibles',
-        'Las notificaciones push requieren una versión compilada de la aplicación. Por ahora puedes usar la app sin notificaciones.',
-        [
-          {
-            text: 'Entendido',
-            onPress: async () => {
-              await AsyncStorage.setItem(NOTIFICATION_PROMPT_KEY, 'true');
-              setShowPrompt(false);
-            }
-          }
-        ]
+        'Error al habilitar notificaciones',
+        'Hubo un problema al configurar las notificaciones. Puedes intentar habilitarlas más tarde desde la configuración del dispositivo.',
+        [{ text: 'Entendido' }]
       );
     }
   };
 
   const handleDismiss = async () => {
     try {
+      console.log('User dismissed notification prompt');
       await AsyncStorage.setItem(NOTIFICATION_PROMPT_KEY, 'true');
       setShowPrompt(false);
     } catch (error) {
       console.error('Error dismissing prompt:', error);
+      setShowPrompt(false);
     }
   };
 

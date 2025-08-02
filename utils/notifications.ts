@@ -72,9 +72,95 @@ export const NotificationService = {
   },
 
   sendWelcomeEmail: async (email: string, name: string, activationLink?: string): Promise<void> => {
-    const subject = '¡Bienvenido a DogCatiFy!';
-    const text = `Hola ${name},\n\nBienvenido a DogCatiFy, la plataforma para amantes de mascotas.\n\nGracias por unirte a nuestra comunidad.\n\nEl equipo de DogCatiFy`;
-    const html = EmailTemplates.welcome(name, activationLink);
+    const subject = '¡Confirma tu cuenta en DogCatiFy!';
+    const text = `Hola ${name},\n\n¡Bienvenido a DogCatiFy!\n\nPara completar tu registro, por favor confirma tu correo electrónico haciendo clic en el enlace que te enviamos por separado.\n\nSi no ves el correo, revisa tu carpeta de spam.\n\nGracias por unirte a nuestra comunidad.\n\nEl equipo de DogCatiFy`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #2D6A6F; padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 10px 0;">¡Bienvenido a DogCatiFy!</h1>
+        </div>
+        <div style="padding: 20px; background-color: #f9f9f9;">
+          <p>Hola <strong>${name}</strong>,</p>
+          <p>¡Gracias por registrarte en DogCatiFy!</p>
+          <p>Para completar tu registro y acceder a todas las funciones, necesitas confirmar tu correo electrónico haciendo clic en el enlace que Supabase te enviará automáticamente.</p>
+          <p>Una vez confirmado tu email, podrás:</p>
+          <ul>
+            <li>Crear perfiles para tus mascotas</li>
+            <li>Conectar con otros dueños de mascotas</li>
+            <li>Encontrar servicios para tus compañeros peludos</li>
+            <li>Compartir momentos especiales con la comunidad</li>
+          </ul>
+          <div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0;">
+            <p><strong>📧 Importante:</strong></p>
+            <p>Recibirás un correo separado de Supabase con el enlace de confirmación. Haz clic en ese enlace para activar tu cuenta.</p>
+            <p>Si no ves el correo, revisa tu carpeta de spam.</p>
+          </div>
+          <p>¡Esperamos verte pronto en DogCatiFy!</p>
+          <p>El equipo de DogCatiFy</p>
+        </div>
+        <div style="background-color: #f0f0f0; padding: 10px; text-align: center; font-size: 12px; color: #666;">
+          <p>© 2025 DogCatiFy. Todos los derechos reservados.</p>
+        </div>
+      </div>
+    `;
+
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+
+  /**
+   * Send custom email confirmation with our own token
+   */
+  sendCustomConfirmationEmail: async (
+    email: string, 
+    name: string, 
+    confirmationUrl: string
+  ): Promise<void> => {
+    const subject = '¡Confirma tu cuenta en DogCatiFy!';
+    const text = `Hola ${name},\n\n¡Bienvenido a DogCatiFy!\n\nPara completar tu registro, por favor confirma tu correo electrónico haciendo clic en el siguiente enlace:\n\n${confirmationUrl}\n\nEste enlace expira en 24 horas.\n\nSi no solicitaste esta cuenta, puedes ignorar este correo.\n\nGracias por unirte a nuestra comunidad.\n\nEl equipo de DogCatiFy`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #2D6A6F; padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 10px 0;">¡Confirma tu cuenta en DogCatiFy!</h1>
+        </div>
+        <div style="padding: 20px; background-color: #f9f9f9;">
+          <p>Hola <strong>${name}</strong>,</p>
+          <p>¡Gracias por registrarte en DogCatiFy!</p>
+          <p>Para completar tu registro y acceder a todas las funciones, necesitas confirmar tu correo electrónico.</p>
+          
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${confirmationUrl}" style="background-color: #2D6A6F; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block;">
+              ✅ Confirmar mi correo electrónico
+            </a>
+          </div>
+          
+          <div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0;">
+            <p><strong>📧 Importante:</strong></p>
+            <p>Debes hacer clic en el botón de arriba para activar tu cuenta.</p>
+            <p>Si el botón no funciona, copia y pega este enlace en tu navegador:</p>
+            <p style="word-break: break-all; font-family: monospace; background: #f5f5f5; padding: 10px; border-radius: 4px;">
+              ${confirmationUrl}
+            </p>
+            <p>Si no ves el correo, revisa tu carpeta de spam.</p>
+            <p><strong>Este enlace expira en 24 horas.</strong></p>
+          </div>
+          
+          <p>Una vez confirmado tu email, podrás:</p>
+          <ul>
+            <li>Crear perfiles para tus mascotas</li>
+            <li>Conectar con otros dueños de mascotas</li>
+            <li>Encontrar servicios para tus compañeros peludos</li>
+            <li>Compartir momentos especiales con la comunidad</li>
+          </ul>
+          
+          <p>¡Esperamos verte pronto en DogCatiFy!</p>
+          <p>El equipo de DogCatiFy</p>
+        </div>
+        <div style="background-color: #f0f0f0; padding: 10px; text-align: center; font-size: 12px; color: #666;">
+          <p>© 2025 DogCatiFy. Todos los derechos reservados.</p>
+          <p>Si no solicitaste esta cuenta, puedes ignorar este correo.</p>
+        </div>
+      </div>
+    `;
 
     await NotificationService.sendEmail(email, subject, text, html);
   },

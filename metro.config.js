@@ -8,24 +8,15 @@ config.resolver.platforms = ['ios', 'android', 'native', 'web'];
 
 // Ensure proper module resolution
 config.resolver.alias = {
-  '@': __dirname,
+  '@': path.resolve(__dirname, './'),
 };
 
 config.resolver.resolverMainFields = ['react-native', 'browser', 'main'];
 
-// Add specific resolution for Supabase modules
+// Add specific resolution for problematic modules
 config.resolver.nodeModulesPaths = [
   path.resolve(__dirname, 'node_modules'),
 ];
-
-// Configure jsPDF to use browser version
-config.resolver.alias = {
-  ...config.resolver.alias,
-  'html2canvas': path.resolve(__dirname, 'src/mocks/html2canvas.js'),
-};
-
-// Ensure Metro can find all dependencies
-config.watchFolders = [__dirname];
 
 // Configure transformer for better compatibility
 config.transformer = {
@@ -40,15 +31,35 @@ config.transformer = {
   assetPlugins: ['expo-asset/tools/hashAssetFiles'],
 };
 
-// Improve caching
-config.resetCache = true;
+// Improve resolver configuration
+config.resolver.sourceExts = [...config.resolver.sourceExts, 'mjs', 'cjs'];
 
-// Configure for better mobile performance
+// Configure watchFolders properly
+config.watchFolders = [path.resolve(__dirname)];
+
+// Ensure Metro can handle all file types
+config.resolver.assetExts = [
+  ...config.resolver.assetExts,
+  'bin',
+  'txt',
+  'jpg',
+  'png',
+  'json',
+];
+
+// Configure serializer to handle modules properly
 config.serializer = {
   ...config.serializer,
   getModulesRunBeforeMainModule: () => [
     require.resolve('react-native/Libraries/Core/InitializeCore'),
   ],
 };
+
+// Reset cache to ensure clean builds
+config.resetCache = true;
+
+// Configure resolver to handle undefined paths
+config.resolver.resolverMainFields = ['react-native', 'browser', 'main'];
+config.resolver.platforms = ['ios', 'android', 'native', 'web'];
 
 module.exports = config;

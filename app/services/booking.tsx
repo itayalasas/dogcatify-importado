@@ -8,8 +8,9 @@ import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { NotificationService } from '../../utils/notifications';
+import { PaymentModal } from '../../components/PaymentModal';
 
-export default function ServiceBooking() {
+const ServiceBooking = () => {
   const { serviceId, partnerId, petId } = useLocalSearchParams<{ 
     serviceId: string;
     partnerId: string;
@@ -28,6 +29,7 @@ export default function ServiceBooking() {
   const [loading, setLoading] = useState(true);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [notes, setNotes] = useState('');
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   useEffect(() => {
     if (!serviceId || !partnerId || !petId || !currentUser) {
@@ -294,6 +296,12 @@ export default function ServiceBooking() {
       return;
     }
     
+    // Show payment modal instead of direct booking
+    setShowPaymentModal(true);
+  };
+
+  const handlePaymentSuccess = async (paymentResult: any) => {
+    console.log('Payment successful:', paymentResult);
     setBookingLoading(true);
     try {
       // Create booking date by combining selected date and time
@@ -311,6 +319,15 @@ export default function ServiceBooking() {
         return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
       };
       
+      console.log('Creating booking with data:', {
+        partner_id: partnerId,
+        service_id: serviceId,
+        customer_id: currentUser.id,
+        pet_id: petId,
+        date: bookingDate.toISOString(),
+        time: formatTime(bookingDate)
+      });
+      
       const bookingData = {
         partner_id: partnerId,
         service_id: serviceId,
@@ -318,25 +335,38 @@ export default function ServiceBooking() {
         service_duration: service.duration || 60,
         partner_name: partnerInfo?.businessName || 'Proveedor',
         customer_id: currentUser.id,
-        customer_name: currentUser.displayName,
-        customer_phone: currentUser.phone || '',
+        customer_name: currentUser.displayName || 'Usuario',
+        customer_email: currentUser.email,
+        customer_phone: currentUser.phone || null,
         pet_id: petId,
         pet_name: pet.name,
-        date: bookingDate,
+        date: bookingDate.toISOString(),
         time: formatTime(bookingDate),
         end_time: formatTime(endDate),
-        status: 'pending',
+        status: 'confirmed', // Auto-confirm when payment is successful
         total_amount: service.price,
-        notes: notes,
+        payment_status: 'paid',
+        payment_method: 'credit_card',
+        payment_transaction_id: paymentResult.transactionId,
+        payment_confirmed_at: new Date().toISOString(),
+        notes: notes.trim() || null,
         created_at: new Date().toISOString(),
       };
+      
+      console.log('Final booking data:', bookingData);
       
       // Insert booking using Supabase
       const { error } = await supabaseClient
         .from('bookings')
         .insert([bookingData]);
       
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase booking insert error:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        throw new Error(`Error al crear la reserva: ${error.message || error.details || 'Error desconocido'}`);
+      }
+      
+      console.log('Booking created successfully');
       
       // Block the time slots in the bookedSlots state
       const dateString = selectedDate.toDateString();
@@ -357,7 +387,17 @@ export default function ServiceBooking() {
       
       // Send booking confirmation email
       try {
-        console.log('Booking confirmation email would be sent here');
+        console.log('Sending booking confirmation email...');
+        await NotificationService.sendBookingConfirmationEmail(
+          currentUser.email,
+          currentUser.displayName || 'Usuario',
+          service.name,
+          partnerInfo?.businessName || 'Proveedor',
+          selectedDate.toLocaleDateString(),
+          selectedTime,
+          pet.name
+        );
+        console.log('Booking confirmation email sent successfully');
       } catch (emailError) {
         console.error('Error sending booking confirmation email:', emailError);
         // Continue with booking process even if email fails
@@ -365,14 +405,30 @@ export default function ServiceBooking() {
       
       Alert.alert(
         'Reserva Exitosa',
-        'Tu reserva ha sido enviada al proveedor. Recibirás una notificación cuando sea confirmada.',
+        `¡Perfecto! Tu reserva ha sido confirmada automáticamente.\n\n📅 ${selectedDate.toLocaleDateString()} a las ${selectedTime}\n💰 Pago: ${formatPrice(service?.price || 0)}\n\nEl proveedor ha sido notificado y recibirás un correo de confirmación.`,
         [{ text: 'OK', onPress: () => router.push('/(tabs)') }]
       );
     } catch (error) {
       console.error('Error creating booking:', error);
-      Alert.alert('Error', 'No se pudo crear la reserva');
+      
+      let errorMessage = 'No se pudo crear la reserva';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      Alert.alert(
+        'Error al crear reserva', 
+        `${errorMessage}\n\nPor favor intenta nuevamente o contacta con soporte si el problema persiste.`,
+        [
+          { text: 'Reintentar', onPress: () => setShowPaymentModal(true) },
+          { text: 'Cancelar', style: 'cancel' }
+        ]
+      );
     } finally {
       setBookingLoading(false);
+      setShowPaymentModal(false);
     }
   };
 
@@ -582,9 +638,25 @@ export default function ServiceBooking() {
           />
         </View>
       </ScrollView>
+
+      {/* Payment Modal */}
+      <PaymentModal
+        visible={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        onPaymentSuccess={handlePaymentSuccess}
+        paymentData={{
+          serviceName: service?.name || 'Servicio',
+          providerName: partnerInfo?.businessName || 'Proveedor',
+          price: service?.price || 0,
+          hasShipping: false,
+          petName: pet?.name,
+          date: selectedDate?.toLocaleDateString(),
+          time: selectedTime || ''
+        }}
+      />
     </SafeAreaView>
   );
-}
+};
 
 const formatPrice = (price: number) => {
   return new Intl.NumberFormat('es-AR', {
@@ -830,3 +902,5 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
 });
+
+export default ServiceBooking;

@@ -2,7 +2,7 @@
   "expo": {
     "name": "DogCatiFy",
     "slug": "dogcatify",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.jpg",
     "scheme": "dogcatify",
@@ -23,6 +23,9 @@
     "plugins": [
       "expo-router"
     ],
+    "packagerOpts": {
+      "config": "metro.config.js"
+    },
     "experiments": {
       "typedRoutes": true
     },
@@ -40,6 +43,7 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Esta aplicación necesita acceso a la cámara para tomar fotos de mascotas.",
         "NSPhotoLibraryUsageDescription": "Esta aplicación necesita acceso a la galería para seleccionar fotos de mascotas.",
+        "NSFaceIDUsageDescription": "Esta aplicación usa Face ID para un acceso rápido y seguro.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -52,16 +56,15 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.USE_BIOMETRIC"
       ]
     },
     "web": {
       "favicon": "./assets/images/logo.jpg",
       "bundler": "metro",
       "output": "static"
-    },
-    "updates": {
-      "fallbackToCacheTimeout": 0
     },
     "runtimeVersion": {
       "policy": "sdkVersion"

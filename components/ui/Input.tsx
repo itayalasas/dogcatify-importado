@@ -6,6 +6,7 @@ interface InputProps extends TextInputProps {
   error?: string;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
+  onTouchStart?: () => void;
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -13,6 +14,7 @@ export const Input: React.FC<InputProps> = ({
   error,
   leftIcon,
   rightIcon,
+  onTouchStart,
   style,
   ...props
 }) => {
@@ -24,6 +26,7 @@ export const Input: React.FC<InputProps> = ({
         <TextInput
           style={[styles.input, leftIcon && styles.inputWithLeftIcon, style]}
           placeholderTextColor="#9CA3AF"
+          onTouchStart={onTouchStart}
           {...props}
         />
         {rightIcon && <View style={styles.icon}>{rightIcon}</View>}
