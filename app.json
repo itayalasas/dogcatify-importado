@@ -2,7 +2,7 @@
   "expo": {
     "name": "DogCatiFy",
     "slug": "dogcatify",
-    "version": "2.0.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.jpg",
     "scheme": "dogcatify",
@@ -23,9 +23,6 @@
     "plugins": [
       "expo-router"
     ],
-    "packagerOpts": {
-      "config": "metro.config.js"
-    },
     "experiments": {
       "typedRoutes": true
     },
@@ -64,7 +61,14 @@
     "web": {
       "favicon": "./assets/images/logo.jpg",
       "bundler": "metro",
-      "output": "static"
+      "output": "static",
+      "redirects": [
+        {
+          "source": "/((?!auth/confirm).*)",
+          "destination": "/auth/confirm",
+          "permanent": false
+        }
+      ]
     },
     "runtimeVersion": {
       "policy": "sdkVersion"

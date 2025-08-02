@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { CircleCheck as CheckCircle, Circle as XCircle, Mail } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
@@ -18,7 +18,20 @@ export default function ConfirmScreen() {
   
   const params = useLocalSearchParams();
 
+  // En web, mostrar mensaje informativo si no hay parámetros de confirmación
   useEffect(() => {
+    if (Platform.OS === 'web' && !params.token_hash) {
+      // Mostrar página informativa para acceso web sin token
+      setError('Esta aplicación está diseñada para dispositivos móviles. Para confirmar tu email, usa el enlace que recibiste en tu correo.');
+      setLoading(false);
+      return;
+    }
+  }, [params]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && !params.token_hash) {
+      return; // No procesar si es web sin token
+    }
     handleEmailConfirmation();
   }, []);
 
@@ -91,7 +104,7 @@ export default function ConfirmScreen() {
   };
 
   const handleGoToLogin = () => {
-    router.replace('/auth/login');
+    router.replace('/web-info');
   };
 
   if (loading) {
