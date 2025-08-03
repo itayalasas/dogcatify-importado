@@ -184,7 +184,7 @@ export const isEmailConfirmed = async (userId: string): Promise<boolean> => {
  * Generate confirmation URL
  */
 export const generateConfirmationUrl = (token: string, type: 'signup' | 'password_reset' = 'signup'): string => {
-  const baseUrl = process.env.EXPO_PUBLIC_APP_URL || 'http://localhost:8081';
+  const baseUrl = process.env.EXPO_PUBLIC_APP_DOMAIN ;
   return `${baseUrl}/auth/confirm?token_hash=${token}&type=${type}`;
 };
 

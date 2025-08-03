@@ -97,44 +97,38 @@ export default function AlbumDetail() {
 
   const uploadImageToStorage = async (imageAsset: ImagePicker.ImagePickerAsset) => {
     try {
-      console.log('Starting upload for image:', imageAsset.uri);
+      console.log('Starting upload for album image:', imageAsset.uri);
       
-      // Crear un nombre de archivo único
+      // Crear nombre de archivo único
       const timestamp = Date.now();
       const randomId = Math.random().toString(36).substring(7);
       const filename = `pets/albums/${album.pet_id}/${timestamp}-${randomId}.jpg`;
       
-      console.log('Upload filename:', filename);
+      console.log('Uploading to Supabase with filename:', filename);
       
-      // Obtener el blob directamente desde el URI
-      const response = await fetch(imageAsset.uri);
-      const blob = await response.blob();
+      // Usar FormData para React Native
+      const formData = new FormData();
+      formData.append('file', {
+        uri: imageAsset.uri,
+        type: 'image/jpeg',
+        name: filename,
+      } as any);
       
-      console.log('Blob created, size:', blob.size);
-      
-      // Subir usando el array de bytes
-      console.log('Uploading to Supabase Storage...');
       const { data, error } = await supabaseClient.storage
         .from('dogcatify')
-        .upload(filename, blob, {
+        .upload(filename, formData, {
           contentType: 'image/jpeg',
           cacheControl: '3600',
-          upsert: false
+          upsert: false,
         });
       
       if (error) {
-        console.error('Supabase upload error:', error);
         throw error;
       }
       
-      console.log('Upload successful, getting public URL...');
-      
-
       const { data: { publicUrl } } = supabaseClient.storage
         .from('dogcatify')
         .getPublicUrl(filename);
-        
-      console.log('Public URL generated:', publicUrl);
       
       return publicUrl;
     } catch (error) {
@@ -151,9 +145,46 @@ export default function AlbumDetail() {
 
     setUploadingImages(true);
     try {
-      // Upload all images to storage
-      const uploadPromises = selectedImages.map(image => uploadImageToStorage(image));
-      const imageUrls = await Promise.all(uploadPromises);
+      console.log('Starting to upload', selectedImages.length, 'images...');
+      
+      // Upload images sequentially to avoid connection issues
+      const imageUrls: string[] = [];
+      
+      for (let i = 0; i < selectedImages.length; i++) {
+        try {
+          console.log(`Uploading image ${i + 1} of ${selectedImages.length}...`);
+          const imageUrl = await uploadImageToStorage(selectedImages[i]);
+          imageUrls.push(imageUrl);
+          console.log(`Image ${i + 1} uploaded successfully`);
+          
+          // Small delay between uploads
+          if (i < selectedImages.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
+        } catch (uploadError) {
+          console.error(`Error uploading image ${i + 1}:`, uploadError);
+          
+          // Ask user if they want to continue
+          const shouldContinue = await new Promise<boolean>((resolve) => {
+            Alert.alert(
+              'Error al subir imagen',
+              `No se pudo subir la imagen ${i + 1}.\n\n¿Deseas continuar con las imágenes restantes?`,
+              [
+                { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
+                { text: 'Continuar', onPress: () => resolve(true) }
+              ]
+            );
+          });
+          
+          if (!shouldContinue) {
+            throw new Error('Subida cancelada por el usuario');
+          }
+        }
+      }
+      
+      if (imageUrls.length === 0) {
+        throw new Error('No se pudo subir ninguna imagen');
+      }
 
       // Get current images
       const currentImages = album.images || [];
@@ -175,10 +206,25 @@ export default function AlbumDetail() {
       });
       
       setSelectedImages([]);
-      Alert.alert('Éxito', 'Fotos agregadas correctamente');
+      
+      const successMessage = imageUrls.length === selectedImages.length 
+        ? 'Todas las fotos se agregaron correctamente'
+        : `Se agregaron ${imageUrls.length} de ${selectedImages.length} fotos`;
+      
+      Alert.alert('Éxito', successMessage);
     } catch (error) {
       console.error('Error adding photos:', error);
-      Alert.alert('Error', 'No se pudieron agregar las fotos');
+      
+      let errorMessage = 'No se pudieron agregar las fotos';
+      if (error.message?.includes('conexión')) {
+        errorMessage = 'Error de conexión. Verifica tu internet e intenta nuevamente.';
+      } else if (error.message?.includes('cancelada')) {
+        errorMessage = 'Subida cancelada.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert('Error', errorMessage);
     } finally {
       setUploadingImages(false);
     }
@@ -248,7 +294,7 @@ export default function AlbumDetail() {
     if (!imageToDelete) return;
     
     try {
-      // Filter out the image to delete
+      // Remove image from album's images array
       const updatedImages = album.images.filter((img: string) => img !== imageToDelete);
       
       // Update album with new images array
@@ -267,8 +313,8 @@ export default function AlbumDetail() {
         images: updatedImages
       });
       
-      setImageToDelete(null);
       setShowDeleteConfirm(false);
+      setImageToDelete(null);
       Alert.alert('Éxito', 'Imagen eliminada correctamente');
     } catch (error) {
       console.error('Error deleting image:', error);

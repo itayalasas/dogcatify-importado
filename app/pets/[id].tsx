@@ -33,6 +33,12 @@ export default function PetDetail() {
     fetchAlbums();
   }, [id]);
 
+  useEffect(() => {
+    // Refresh albums when returning from add album screen
+    if (refresh === 'true') {
+      fetchAlbums();
+    }
+  }, [refresh]);
   const fetchPetDetails = async () => {
     try {
       const { data: petData, error } = await supabaseClient

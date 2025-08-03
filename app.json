@@ -2,27 +2,19 @@
   "expo": {
     "name": "DogCatiFy",
     "slug": "dogcatify",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.jpg",
     "scheme": "dogcatify",
     "userInterfaceStyle": "automatic",
-    "platforms": [
-      "ios",
-      "android",
-      "web"
-    ],
+    "platforms": ["ios", "android", "web"],
     "splash": {
       "image": "./assets/images/logo.jpg",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
-    "plugins": [
-      "expo-router"
-    ],
+    "assetBundlePatterns": ["**/*"],
+    "plugins": ["expo-router"],
     "experiments": {
       "typedRoutes": true
     },
@@ -35,29 +27,36 @@
       }
     },
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.dogcatify.app",
-      "infoPlist": {
-        "NSCameraUsageDescription": "Esta aplicación necesita acceso a la cámara para tomar fotos de mascotas.",
-        "NSPhotoLibraryUsageDescription": "Esta aplicación necesita acceso a la galería para seleccionar fotos de mascotas.",
-        "NSFaceIDUsageDescription": "Esta aplicación usa Face ID para un acceso rápido y seguro.",
-        "ITSAppUsesNonExemptEncryption": false
-      }
-    },
+  "supportsTablet": true,
+  "bundleIdentifier": "com.dogcatify.app",
+  "infoPlist": {
+    "NSCameraUsageDescription": "Esta aplicación necesita acceso a la cámara para tomar fotos de mascotas.",
+    "NSPhotoLibraryUsageDescription": "Esta aplicación necesita acceso a la galería para seleccionar fotos de mascotas.",
+    "NSFaceIDUsageDescription": "Esta aplicación usa Face ID para un acceso rápido y seguro.",
+    "ITSAppUsesNonExemptEncryption": false,
+    "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para mostrar el mapa correctamente.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Usamos tu ubicación para ofrecerte una mejor experiencia con los mapas."
+  }
+},
     "android": {
-      "package": "com.dogcatify.app",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/logo.jpg",
-        "backgroundColor": "#FFFFFF"
-      },
-      "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.USE_FINGERPRINT",
-        "android.permission.USE_BIOMETRIC"
-      ]
-    },
+  "package": "com.dogcatify.app",
+  "versionCode": 2,
+  "adaptiveIcon": {
+    "foregroundImage": "./assets/images/logo.jpg",
+    "backgroundColor": "#FFFFFF"
+  },
+  "permissions": [
+    "android.permission.CAMERA",
+    "android.permission.READ_EXTERNAL_STORAGE",
+    "android.permission.WRITE_EXTERNAL_STORAGE",
+    "android.permission.USE_FINGERPRINT",
+    "android.permission.USE_BIOMETRIC",
+    "ACCESS_FINE_LOCATION",
+    "ACCESS_COARSE_LOCATION",
+    "android.permission.INTERNET",
+    "android.permission.ACCESS_NETWORK_STATE"
+  ]
+},
     "web": {
       "favicon": "./assets/images/logo.jpg",
       "bundler": "metro",
@@ -70,9 +69,7 @@
       "icon": "./assets/images/logo.jpg",
       "color": "#2D6A6F"
     },
-    "permissions": [
-      "NOTIFICATIONS"
-    ],
+    "permissions": ["NOTIFICATIONS"],
     "privacy": "public",
     "owner": "pedro86cu"
   }

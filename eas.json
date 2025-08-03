@@ -5,13 +5,13 @@
   "build": {
     "default": {
       "android": {
-        "buildType": "apk",
-        "env": {
-          "GOOGLE_SERVICES_JSON_BASE64": "${GOOGLE_SERVICES_JSON_BASE64}"
-        }
+        "buildType": "app-bundle"      
       }
     },
     "production": {
+      "android": {
+        "buildType": "app-bundle"
+      },
       "ios": {
         "resourceClass": "m-medium"
       }

@@ -1,7 +1,7 @@
 {
   "name": "dogcatify",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "scripts": {
     "start": "expo start",
@@ -48,7 +48,8 @@
     "react-native-screens": "~4.11.1",
     "react-native-super-grid": "^6.0.1",
     "react-native-svg": "15.11.2",
-    "react-native-web": "^0.20.0"
+    "react-native-web": "^0.20.0",
+    "expo-location": "~18.1.6"
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",

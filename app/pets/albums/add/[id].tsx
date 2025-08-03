@@ -170,42 +170,49 @@ export default function AddPhoto() {
       
       console.log('Upload filename:', filename);
       
-      // Usar fetch para obtener el blob directamente (compatible con RN)
-      const response = await fetch(imageAsset.uri);
-      const blob = await response.blob();
+      // Usar FormData para React Native (más compatible)
+      console.log('Creating FormData for upload...');
+      const formData = new FormData();
+      formData.append('file', {
+        uri: imageAsset.uri,
+        type: 'image/jpeg',
+        name: filename,
+      } as any);
       
-      console.log('File fetched as blob, size:', blob.size);
+      console.log('Uploading to Supabase Storage with FormData...');
       
-      // Subir usando el array de bytes
-      console.log('Uploading to Supabase Storage...');
+      // Upload using FormData
       const { data, error } = await supabaseClient.storage
         .from('dogcatify')
-        .upload(filename, blob, {
+        .upload(filename, formData, {
           contentType: 'image/jpeg',
           cacheControl: '3600',
           upsert: false
         });
       
-      console.log('Upload result:', { data, error });
-      
       if (error) {
         console.error('Supabase upload error:', error);
-        throw error;
+        throw new Error(`Storage upload failed: ${error.message}`);
       }
       
       console.log('Upload successful, getting public URL...');
-      // Get the public URL
-      const { data: urlData } = supabaseClient.storage
+      const { data: { publicUrl } } = supabaseClient.storage
         .from('dogcatify')
         .getPublicUrl(filename);
       
-      const publicUrl = urlData.publicUrl;
       console.log('Public URL generated:', publicUrl);
-      
       return publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
-      throw error;
+      
+      // Proporcionar un mensaje de error más específico
+      if (error.message?.includes('Network request failed')) {
+        throw new Error('Error de conexión. Verifica tu conexión a internet e intenta nuevamente.');
+      } else if (error.message?.includes('timeout')) {
+        throw new Error('La subida tardó demasiado. Intenta con imágenes más pequeñas.');
+      } else {
+        throw new Error(`Error al subir imagen: ${error.message || 'Error desconocido'}`);
+      }
     }
   };
 
@@ -253,18 +260,58 @@ export default function AddPhoto() {
     try {
       console.log('Starting to save photos, total images:', selectedImages.length);
       
-      // Upload all images to storage
-      const uploadPromises = selectedImages.map(image => uploadImageToStorage(image));
+      // Upload images one by one to avoid overwhelming the connection
+      const imageUrls: string[] = [];
       
-      console.log('Starting parallel uploads...');
-      let imageUrls;
-      try {
-        imageUrls = await Promise.all(uploadPromises);
-        console.log('All uploads completed, URLs:', imageUrls);
-      } catch (uploadError) {
-        console.error('Error during uploads:', uploadError);
-        throw new Error('Error al subir las imágenes: ' + uploadError.message);
+      console.log('Starting sequential uploads...');
+      for (let i = 0; i < selectedImages.length; i++) {
+        try {
+          console.log(`Uploading image ${i + 1} of ${selectedImages.length}...`);
+          const imageUrl = await uploadImageToStorage(selectedImages[i]);
+          imageUrls.push(imageUrl);
+          console.log(`Image ${i + 1} uploaded successfully:`, imageUrl);
+          
+          // Pequeña pausa entre subidas para evitar saturar la conexión
+          if (i < selectedImages.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        } catch (uploadError) {
+          console.error(`Error uploading image ${i + 1}:`, uploadError);
+          
+          // Mostrar opción de continuar o cancelar
+          const shouldContinue = await new Promise((resolve) => {
+            Alert.alert(
+              'Error al subir imagen',
+              `No se pudo subir la imagen ${i + 1} de ${selectedImages.length}.\n\nError: ${uploadError.message}\n\n¿Deseas continuar con las imágenes restantes?`,
+              [
+                {
+                  text: 'Cancelar todo',
+                  style: 'cancel',
+                  onPress: () => resolve(false)
+                },
+                {
+                  text: 'Continuar',
+                  onPress: () => resolve(true)
+                }
+              ]
+            );
+          });
+          
+          if (!shouldContinue) {
+            throw new Error('Subida cancelada por el usuario');
+          }
+          
+          // Continuar con la siguiente imagen
+          continue;
+        }
       }
+      
+      // Verificar que al menos una imagen se subió exitosamente
+      if (imageUrls.length === 0) {
+        throw new Error('No se pudo subir ninguna imagen. Verifica tu conexión e intenta nuevamente.');
+      }
+      
+      console.log(`Successfully uploaded ${imageUrls.length} of ${selectedImages.length} images`);
 
       console.log('Saving album to database...');
       // Save album to database
@@ -328,11 +375,28 @@ export default function AddPhoto() {
         }
       }
 
-      Alert.alert('¡Éxito!', 'Las fotos se han guardado correctamente');
-      router.back();
+      const successMessage = imageUrls.length === selectedImages.length 
+        ? 'Todas las fotos se han guardado correctamente'
+        : `Se guardaron ${imageUrls.length} de ${selectedImages.length} fotos seleccionadas`;
+      
+      Alert.alert('¡Éxito!', successMessage);
+      router.push({
+        pathname: `/pets/${id}`,
+        params: { refresh: 'true', activeTab: 'albums' }
+      });
     } catch (error) {
       console.error('Error saving photos:', error);
-      Alert.alert('Error', 'No se pudieron guardar las fotos');
+      
+      let errorMessage = 'No se pudieron guardar las fotos';
+      if (error.message?.includes('conexión')) {
+        errorMessage = 'Error de conexión. Verifica tu internet e intenta nuevamente.';
+      } else if (error.message?.includes('cancelada')) {
+        errorMessage = 'Subida cancelada por el usuario.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
