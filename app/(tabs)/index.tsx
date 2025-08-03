@@ -524,7 +524,7 @@ export default function Home() {
             if (item.type === 'promotion') {
               return (
                 <PromotionWrapper
-                  key={`promotion-${item.data.id}`}
+                  key={`promotion-${item.data.id}-${index}`}
                   promotion={item.data}
                   onPress={() => handlePromotionPress(item.data)}
                   onLike={handlePromotionLike}
@@ -533,7 +533,7 @@ export default function Home() {
             } else {
               return (
                 <PostCard
-                  key={`post-${item.data.id}`}
+                  key={`post-${item.data.id}-${index}`}
                   post={item.data}
                   onLike={handleLike}
                   onComment={handleComment}

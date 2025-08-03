@@ -12,16 +12,20 @@ import { Platform } from 'react-native';
 export default function RootLayout() {
   useFrameworkReady();
 
+  // Determine initial route based on platform
+  const initialRouteName = Platform.OS === 'web' ? 'web-info' : '(tabs)';
+
   return (
     <LanguageProvider>
       <AuthProvider>
         <BiometricProvider>
           <NotificationProvider>
             <CartProvider>
-              <Stack screenOptions={{ headerShown: false }}>
+              <Stack screenOptions={{ headerShown: false }} initialRouteName={initialRouteName}>
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen name="(admin-tabs)" />
                 <Stack.Screen name="(partner-tabs)" />
+                <Stack.Screen name="web-info" />
                 <Stack.Screen name="auth/login" />
                 <Stack.Screen name="auth/register" />
                 <Stack.Screen name="auth/forgot-password" />

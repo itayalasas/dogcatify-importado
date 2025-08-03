@@ -4,6 +4,7 @@ import { router, Stack } from 'expo-router';
 import { ArrowLeft, Mail } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { createEmailConfirmationToken, generateConfirmationUrl } from '../../utils/emailConfirmation';
 import { supabaseClient } from '../../lib/supabase';
 import { useLanguage } from '../../contexts/LanguageContext'; 
 
@@ -21,20 +22,48 @@ export default function ForgotPassword() {
 
     setLoading(true);
     try {
-      const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
-        redirectTo: `${process.env.EXPO_PUBLIC_APP_DOMAIN}/auth/confirm`,
-      });
+      // Verificar que el usuario existe
+      const { data: userData, error: userError } = await supabaseClient
+        .from('profiles')
+        .select('id, display_name, email')
+        .eq('email', email.toLowerCase().trim())
+        .single();
 
-      if (error) throw error;
+      if (userError) {
+        if (userError.code === 'PGRST116') {
+          Alert.alert('Usuario no encontrado', 'No existe una cuenta con este correo electrónico.');
+        } else {
+          throw userError;
+        }
+        return;
+      }
 
+      console.log('User found, creating custom password reset token...');
+      
+      // Crear token personalizado para reset de contraseña
+      const token = await createEmailConfirmationToken(userData.id, email.toLowerCase().trim(), 'password_reset');
+      const resetUrl = generateConfirmationUrl(token, 'password_reset');
+
+      console.log('Sending custom password reset email...');
+      
+      // Enviar email personalizado
+      const { NotificationService } = await import('../../utils/notifications');
+      await NotificationService.sendPasswordResetEmail(
+        email.toLowerCase().trim(),
+        userData.display_name || 'Usuario',
+        resetUrl
+      );
+
+      console.log('Custom password reset email sent successfully');
+      
       setResetSent(true);
       Alert.alert(
-        'Correo enviado',
-        'Se ha enviado un enlace para restablecer tu contraseña. Por favor revisa tu correo electrónico.'
+        '✅ Correo enviado',
+        `Se ha enviado un enlace para restablecer tu contraseña a ${email}.\n\nPor favor revisa tu bandeja de entrada (y la carpeta de spam) y haz clic en el enlace.\n\nEl enlace expira en 24 horas.`
       );
     } catch (error) {
       console.error('Error resetting password:', error);
-      Alert.alert('Error', 'No se pudo enviar el correo de restablecimiento. Verifica tu dirección de correo.');
+      Alert.alert('Error', 'No se pudo enviar el correo de restablecimiento. Por favor verifica tu dirección de correo e intenta nuevamente.');
     } finally {
       setLoading(false);
     }

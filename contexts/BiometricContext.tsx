@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { Platform } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { useAuth } from './AuthContext';
@@ -175,6 +176,12 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       console.log('Starting biometric setup...');
       
+      // Biometric authentication is not available on web
+      if (Platform.OS === 'web') {
+        console.log('Biometric authentication not available on web');
+        return false;
+      }
+
       // Check if running in Expo Go
       if (!LocalAuthentication || !SecureStore) {
         console.log('Biometric authentication not available in Expo Go');
@@ -264,6 +271,11 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const disableBiometric = async (): Promise<void> => {
     try {
+      // SecureStore is not available on web
+      if (Platform.OS === 'web') {
+        return;
+      }
+
       if (!currentUser) {
         throw new Error('User not authenticated');
       }
@@ -304,6 +316,11 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const authenticateWithBiometric = async (): Promise<{ email: string; password: string } | null> => {
     try {
+      // Biometric authentication is not available on web
+      if (Platform.OS === 'web') {
+        return null;
+      }
+
       if (!isBiometricAvailable || !isBiometricEnabled) {
         return null;
       }
@@ -327,6 +344,11 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const getStoredCredentials = async (): Promise<{ email: string; password: string } | null> => {
     try {
+      // SecureStore is not available on web
+      if (Platform.OS === 'web') {
+        return null;
+      }
+
       const email = await SecureStore.getItemAsync('biometric_email');
       const password = await SecureStore.getItemAsync('biometric_password');
 
