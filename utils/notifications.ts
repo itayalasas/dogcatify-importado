@@ -165,6 +165,99 @@ export const NotificationService = {
     await NotificationService.sendEmail(email, subject, text, html);
   },
 
+  sendPasswordResetEmail: async (
+    email: string,
+    name: string,
+    resetUrl: string
+  ): Promise<void> => {
+    const subject = 'Restablecer contraseña - DogCatiFy';
+    const text = `Hola ${name},\n\nHemos recibido una solicitud para restablecer la contraseña de tu cuenta en DogCatiFy.\n\nPara restablecer tu contraseña, haz clic en el siguiente enlace:\n\n${resetUrl}\n\nEste enlace expira en 24 horas.\n\nSi no solicitaste este cambio, puedes ignorar este correo.\n\nEl equipo de DogCatiFy`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #2D6A6F; padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 10px 0;">Restablecer contraseña</h1>
+        </div>
+        <div style="padding: 20px; background-color: #f9f9f9;">
+          <p>Hola <strong>${name}</strong>,</p>
+          <p>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta en DogCatiFy.</p>
+          
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetUrl}" style="background-color: #2D6A6F; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block;">
+              🔑 Restablecer mi contraseña
+            </a>
+          </div>
+          
+          <div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0;">
+            <p><strong>🔒 Importante:</strong></p>
+            <p>Debes hacer clic en el botón de arriba para restablecer tu contraseña.</p>
+            <p>Si el botón no funciona, copia y pega este enlace en tu navegador:</p>
+            <p style="word-break: break-all; font-family: monospace; background: #f5f5f5; padding: 10px; border-radius: 4px;">
+              ${resetUrl}
+            </p>
+            <p><strong>Este enlace expira en 24 horas.</strong></p>
+          </div>
+          
+          <p>Si no solicitaste este cambio, puedes ignorar este correo de forma segura.</p>
+          <p>El equipo de DogCatiFy</p>
+        </div>
+        <div style="background-color: #f0f0f0; padding: 10px; text-align: center; font-size: 12px; color: #666;">
+          <p>© 2025 DogCatiFy. Todos los derechos reservados.</p>
+          <p>Si no solicitaste este cambio, puedes ignorar este correo.</p>
+        </div>
+      </div>
+    `;
+
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+
+  /**
+   * Send password reset email with custom token
+   */
+  sendPasswordResetEmail: async (
+    email: string, 
+    name: string, 
+    resetUrl: string
+  ): Promise<void> => {
+    const subject = 'Restablecer contraseña - DogCatiFy';
+    const text = `Hola ${name},\n\nHemos recibido una solicitud para restablecer la contraseña de tu cuenta en DogCatiFy.\n\nPara restablecer tu contraseña, haz clic en el siguiente enlace:\n\n${resetUrl}\n\nEste enlace expira en 24 horas.\n\nSi no solicitaste este cambio, puedes ignorar este correo.\n\nEl equipo de DogCatiFy`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #2D6A6F; padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 10px 0;">Restablecer contraseña</h1>
+        </div>
+        <div style="padding: 20px; background-color: #f9f9f9;">
+          <p>Hola <strong>${name}</strong>,</p>
+          <p>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta en DogCatiFy.</p>
+          
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetUrl}" style="background-color: #2D6A6F; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block;">
+              🔑 Restablecer mi contraseña
+            </a>
+          </div>
+          
+          <div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0;">
+            <p><strong>🔒 Importante:</strong></p>
+            <p>Debes hacer clic en el botón de arriba para restablecer tu contraseña.</p>
+            <p>Si el botón no funciona, copia y pega este enlace en tu navegador:</p>
+            <p style="word-break: break-all; font-family: monospace; background: #f5f5f5; padding: 10px; border-radius: 4px;">
+              ${resetUrl}
+            </p>
+            <p><strong>Este enlace expira en 24 horas.</strong></p>
+          </div>
+          
+          <p>Si no solicitaste este cambio, puedes ignorar este correo de forma segura.</p>
+          <p>El equipo de DogCatiFy</p>
+        </div>
+        <div style="background-color: #f0f0f0; padding: 10px; text-align: center; font-size: 12px; color: #666;">
+          <p>© 2025 DogCatiFy. Todos los derechos reservados.</p>
+          <p>Si no solicitaste este cambio, puedes ignorar este correo.</p>
+        </div>
+      </div>
+    `;
+
+    await NotificationService.sendEmail(email, subject, text, html);
+  },
+
   sendBookingConfirmationEmail: async (
     email: string,
     name: string,

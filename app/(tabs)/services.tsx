@@ -4,7 +4,6 @@ import { Search } from 'lucide-react-native';
 import { ServiceCard } from '../../components/ServiceCard'; 
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { useLocation } from '../../contexts/LocationContext';
 import { supabaseClient } from '../../lib/supabase';
 import { router } from 'expo-router';
 
@@ -21,7 +20,6 @@ export default function Services() {
   const [loading, setLoading] = useState(true);
   const { t } = useLanguage();
   const { currentUser } = useAuth();
-  const { location, hasLocationPermission, getCurrentLocation } = useLocation();
   const [error, setError] = useState<string | null>(null);
 
   React.useEffect(() => {
@@ -33,10 +31,6 @@ export default function Services() {
     
     fetchPartners();
     
-    // Solicitar ubicación si tiene permisos
-    if (hasLocationPermission && !location) {
-      getCurrentLocation();
-    }
   }, []);
 
   const fetchPartners = async () => {
