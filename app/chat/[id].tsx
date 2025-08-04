@@ -44,7 +44,7 @@ export default function ChatScreen() {
     petName?: string; 
   }>();
   const { currentUser } = useAuth();
-  const { sendChatNotification } = useNotifications();
+  const { sendNotificationToUser } = useNotifications();
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -53,6 +53,71 @@ export default function ChatScreen() {
   const [recipientId, setRecipientId] = useState<string>('');
   const [recipientName, setRecipientName] = useState<string>('');
   const flatListRef = useRef<FlatList>(null);
+
+  // Helper function to format dates like WhatsApp
+  const formatDateSeparator = (date: Date): string => {
+    const now = new Date();
+    const messageDate = new Date(date);
+    
+    // Reset time to compare only dates
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const msgDate = new Date(messageDate.getFullYear(), messageDate.getMonth(), messageDate.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    // Calculate difference in days
+    const diffTime = today.getTime() - msgDate.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) {
+      return 'Hoy';
+    } else if (diffDays === 1) {
+      return 'Ayer';
+    } else if (diffDays <= 6) {
+      // Show day of week for current week
+      const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+      return days[messageDate.getDay()];
+    } else {
+      // Show date for older messages
+      return messageDate.toLocaleDateString('es-ES', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+    }
+  };
+
+  // Helper function to check if we need a date separator
+  const shouldShowDateSeparator = (currentMessage: Message, previousMessage?: Message): boolean => {
+    if (!previousMessage) return true;
+    
+    const currentDate = new Date(currentMessage.created_at);
+    const previousDate = new Date(previousMessage.created_at);
+    
+    // Show separator if messages are from different days
+    return currentDate.toDateString() !== previousDate.toDateString();
+  };
+
+  // Process messages to add date separators
+  const getMessagesWithSeparators = () => {
+    const messagesWithSeparators: (Message | { type: 'date'; date: string; id: string })[] = [];
+    
+    messages.forEach((message, index) => {
+      const previousMessage = index > 0 ? messages[index - 1] : undefined;
+      
+      if (shouldShowDateSeparator(message, previousMessage)) {
+        messagesWithSeparators.push({
+          type: 'date',
+          date: formatDateSeparator(new Date(message.created_at)),
+          id: `date-${message.id}`
+        });
+      }
+      
+      messagesWithSeparators.push(message);
+    });
+    
+    return messagesWithSeparators;
+  };
 
   useEffect(() => {
     if (!conversationId || !currentUser) {
@@ -246,12 +311,16 @@ export default function ChatScreen() {
       // Send push notification to recipient
       if (recipientId && recipientName) {
         try {
-          await sendChatNotification(
+          await sendNotificationToUser(
             recipientId,
-            currentUser.displayName || 'Usuario',
-            petName || 'mascota',
+            `Nuevo mensaje de ${currentUser.displayName || 'Usuario'}`,
             newMessage.trim(),
-            conversationId
+            {
+              type: 'chat_message',
+              conversationId: conversationId,
+              petName: petName || 'mascota',
+              senderName: currentUser.displayName || 'Usuario'
+            }
           );
           console.log('Push notification sent');
         } catch (notificationError) {
@@ -281,6 +350,18 @@ export default function ChatScreen() {
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
+    // Handle date separator
+    if ('type' in item && item.type === 'date') {
+      return (
+        <View style={styles.dateSeparatorContainer}>
+          <View style={styles.dateSeparator}>
+            <Text style={styles.dateSeparatorText}>{item.date}</Text>
+          </View>
+        </View>
+      );
+    }
+
+    // Handle regular message
     const isMyMessage = item.sender_id === currentUser?.id;
     
     return (
@@ -352,7 +433,7 @@ export default function ChatScreen() {
 
         <FlatList
           ref={flatListRef}
-          data={messages}
+          data={getMessagesWithSeparators()}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
           style={styles.messagesList}
@@ -530,5 +611,21 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: '#D1D5DB',
+  },
+  dateSeparatorContainer: {
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  dateSeparator: {
+    backgroundColor: '#E5E7EB',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  dateSeparatorText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    textAlign: 'center',
   },
 });
