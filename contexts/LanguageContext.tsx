@@ -13,7 +13,7 @@ const translations = {
   es: {
     // Navigation
     home: 'Inicio',
-    myPets: 'Mis Mascotas',
+    myPets: 'Mascotas',
     shop: 'Tienda',
     services: 'Servicios',
     petFriendly: 'Pet Friendly',

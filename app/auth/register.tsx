@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, Image, TouchableOpacity } from 'react-native';
 import { Link, router } from 'expo-router';
+import { Linking } from 'react-native';
 import { Mail, Lock, User, Check, ExternalLink } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button'; 

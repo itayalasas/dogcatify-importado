@@ -19,8 +19,14 @@ export default function ResetPasswordScreen() {
   const [passwordUpdated, setPasswordUpdated] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [resetToken, setResetToken] = useState<string | null>(null);
 
   useEffect(() => {
+    // Don't re-validate token if password was already updated
+    if (passwordUpdated) {
+      return;
+    }
+    
     const validateToken = async () => {
       const { token } = params;
       
@@ -29,6 +35,8 @@ export default function ResetPasswordScreen() {
         setLoading(false);
         return;
       }
+
+      setResetToken(token as string);
 
       try {
         console.log('Validating password reset token:', token);
@@ -74,9 +82,11 @@ export default function ResetPasswordScreen() {
     };
 
     validateToken();
-  }, [params]);
+  }, [params, passwordUpdated]);
 
   const handlePasswordReset = async () => {
+    console.log('handlePasswordReset called');
+    
     if (!newPassword || !confirmPassword) {
       Alert.alert('Error', 'Por favor completa ambos campos de contraseña');
       return;
@@ -92,38 +102,60 @@ export default function ResetPasswordScreen() {
       return;
     }
 
-    if (!userId || !params.token) {
+    if (!userId || !resetToken) {
+      console.log('Missing userId or token:', { userId, token: resetToken });
       Alert.alert('Error', 'Información de reset inválida');
       return;
     }
 
     setUpdatingPassword(true);
+    console.log('Starting password reset process...');
+    
     try {
       console.log('Calling reset-password function...');
       
       // Call our Edge Function to reset password securely
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      console.log('Supabase URL:', supabaseUrl);
+      
+      if (!supabaseUrl) {
+        throw new Error('Supabase URL not configured');
+      }
+      
       const response = await fetch(`${supabaseUrl}/functions/v1/reset-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
           userId,
           newPassword,
-          token: params.token
+          token: resetToken
         }),
       });
 
+      console.log('Response status:', response.status);
+      
       const result = await response.json();
       console.log('Reset password function result:', result);
 
       if (!response.ok || !result.success) {
+        console.error('Reset password failed:', result);
         throw new Error(result.error || 'Error al actualizar contraseña');
       }
 
       setPasswordUpdated(true);
       console.log('Password updated successfully');
+      
+      // Don't show alert immediately, let the UI update first
+      setTimeout(() => {
+        Alert.alert(
+          'Contraseña actualizada',
+          'Tu contraseña ha sido cambiada exitosamente. Ya puedes iniciar sesión con tu nueva contraseña.',
+          [{ text: 'OK', onPress: () => handleGoToLogin() }]
+        );
+      }, 500);
       
     } catch (error: any) {
       console.error('Error updating password:', error);
