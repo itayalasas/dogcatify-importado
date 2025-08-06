@@ -23,6 +23,9 @@ export default function PetDetail() {
   const [weightRecords, setWeightRecords] = useState<any[]>([]);
   const [albums, setAlbums] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initialWeightCreated, setInitialWeightCreated] = useState(false);
+  const [isCreatingInitialWeight, setIsCreatingInitialWeight] = useState(false);
+  const [medicalAlerts, setMedicalAlerts] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'basics' | 'health' | 'albums' | 'behavior' | 'appointments'>(
     initialTab as any || 'basics'
   );
@@ -31,7 +34,24 @@ export default function PetDetail() {
     fetchPetDetails();
     fetchHealthRecords();
     fetchAlbums();
+    fetchMedicalAlerts();
   }, [id]);
+
+  // Add effect to refetch health records when returning from health forms
+  useEffect(() => {
+    if (refresh === 'true' && activeTab === 'health') {
+      console.log('Refreshing health records due to refresh param');
+      fetchHealthRecords();
+    }
+  }, [refresh, activeTab]);
+
+  // Separate effect to create initial weight record after data is loaded
+  useEffect(() => {
+    if (pet && pet.weight && currentUser && weightRecords.length === 0 && !initialWeightCreated && !isCreatingInitialWeight) {
+      console.log('✅ Creating initial weight record for pet:', pet.name);
+      createInitialWeightRecord();
+    }
+  }, [pet, weightRecords, currentUser, initialWeightCreated, isCreatingInitialWeight]);
 
   useEffect(() => {
     // Refresh albums when returning from add album screen
@@ -39,6 +59,11 @@ export default function PetDetail() {
       fetchAlbums();
     }
   }, [refresh]);
+
+  const handleBackNavigation = () => {
+    router.push('/(tabs)/pets');
+  };
+  
   const fetchPetDetails = async () => {
     try {
       const { data: petData, error } = await supabaseClient
@@ -62,11 +87,15 @@ export default function PetDetail() {
 
   const fetchHealthRecords = async () => {
     try {
+      console.log('Fetching health records for pet:', id);
       const { data: healthRecords, error } = await supabaseClient
         .from('pet_health') 
         .select('*')
         .eq('pet_id', id)
         .order('created_at', { ascending: false });
+      
+      console.log('Health records fetched:', healthRecords?.length || 0);
+      console.log('Raw health records data:', healthRecords);
       
       if (healthRecords && !error) {
         const processedRecords = healthRecords.map(record => ({
@@ -84,15 +113,106 @@ export default function PetDetail() {
           status: record.status || 'active'
         }));
       
-        // Filter by type
-        setVaccines(processedRecords.filter(record => record.type === 'vaccine'));
-        setIllnesses(processedRecords.filter(record => record.type === 'illness'));
-        setAllergies(processedRecords.filter(record => record.type === 'allergy'));
-        setDewormings(processedRecords.filter(record => record.type === 'deworming'));
-        setWeightRecords(processedRecords.filter(record => record.type === 'weight'));
+        // Filter by type with debugging
+        const vaccinesFiltered = processedRecords.filter(record => record.type === 'vaccine');
+        const illnessesFiltered = processedRecords.filter(record => record.type === 'illness');
+        const allergiesFiltered = processedRecords.filter(record => record.type === 'allergy');
+        const dewormingsFiltered = processedRecords.filter(record => record.type === 'deworming');
+        const weightRecordsFiltered = processedRecords.filter(record => record.type === 'weight');
+        
+        console.log('Filtered records:', {
+          vaccines: vaccinesFiltered.length,
+          illnesses: illnessesFiltered.length,
+          allergies: allergiesFiltered.length,
+          dewormings: dewormingsFiltered.length,
+          weight: weightRecordsFiltered.length
+        });
+        
+        setVaccines(vaccinesFiltered);
+        setIllnesses(illnessesFiltered);
+        setAllergies(allergiesFiltered);
+        setDewormings(dewormingsFiltered);
+        
+        setWeightRecords(weightRecordsFiltered);
+        
+        // If no weight records exist but pet has weight, create initial record
+        if (weightRecordsFiltered.length === 0 && pet && pet.weight && currentUser) {
+          console.log('No weight records found, creating initial record...');
+          await createInitialWeightRecord();
+        }
+      } else if (error) {
+        console.error('Error fetching health records:', error);
+        Alert.alert('Error', 'No se pudieron cargar los registros de salud');
       }
     } catch (error) {
       console.error('Error fetching health records:', error);
+      Alert.alert('Error', 'Error al cargar los datos de salud');
+    }
+  };
+  
+  const createInitialWeightRecord = async () => {
+    if (!pet || !pet.weight || !currentUser || weightRecords.length > 0) {
+      console.log('Cannot create initial weight record - missing data');
+      return;
+    }
+    
+    // Double check - verify no existing weight records in database
+    try {
+      const { data: existingRecords, error: checkError } = await supabaseClient
+        .from('pet_health')
+        .select('id')
+        .eq('pet_id', id)
+        .eq('type', 'weight');
+      
+      if (checkError) {
+        console.error('Error checking existing weight records:', checkError);
+        return;
+      }
+      
+      if (existingRecords && existingRecords.length > 0) {
+        console.log('Weight records already exist in database, skipping creation');
+        return;
+      }
+    } catch (error) {
+      console.error('Error in duplicate check:', error);
+      return;
+    }
+    
+    try {
+      console.log('Creating initial weight record for:', pet.name, 'Weight:', pet.weight);
+      
+      const initialWeightData = {
+        pet_id: id,
+        user_id: currentUser.id,
+        type: 'weight',
+        weight: pet.weight,
+        weight_unit: pet.weight_display?.unit || 'kg',
+        date: new Date(pet.created_at).toLocaleDateString('es-ES', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        }),
+        notes: 'Peso inicial al registrar la mascota',
+        created_at: new Date().toISOString()
+      };
+      
+      console.log('Initial weight data:', initialWeightData);
+      
+      const { error } = await supabaseClient
+        .from('pet_health')
+        .insert(initialWeightData);
+      
+      if (error) {
+        console.error('Error creating initial weight record:', error);
+      } else {
+        console.log('Initial weight record created successfully');
+        // Refresh health records to show the new weight record
+        setTimeout(() => {
+          fetchHealthRecords();
+        }, 500);
+      }
+    } catch (error) {
+      console.error('Error in createInitialWeightRecord:', error);
     }
   };
 
@@ -134,6 +254,94 @@ export default function PetDetail() {
     }
   };
 
+  const fetchMedicalAlerts = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('medical_alerts')
+        .select('*')
+        .eq('pet_id', id)
+        .eq('status', 'pending')
+        .order('due_date', { ascending: true });
+      
+      if (error) throw error;
+      setMedicalAlerts(data || []);
+    } catch (error) {
+      console.error('Error fetching medical alerts:', error);
+    }
+  };
+
+  const handleCompleteAlert = async (alertId: string) => {
+    try {
+      const { error } = await supabaseClient
+        .from('medical_alerts')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', alertId);
+      
+      if (error) throw error;
+      
+      // Refresh alerts
+      fetchMedicalAlerts();
+    } catch (error) {
+      console.error('Error completing alert:', error);
+      Alert.alert('Error', 'No se pudo marcar la alerta como completada');
+    }
+  };
+
+  const handleDismissAlert = async (alertId: string) => {
+    try {
+      const { error } = await supabaseClient
+        .from('medical_alerts')
+        .update({
+          status: 'dismissed',
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', alertId);
+      
+      if (error) throw error;
+      
+      // Refresh alerts
+      fetchMedicalAlerts();
+    } catch (error) {
+      console.error('Error dismissing alert:', error);
+      Alert.alert('Error', 'No se pudo descartar la alerta');
+    }
+  };
+
+  const getAlertPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'urgent': return '#DC2626';
+      case 'high': return '#EF4444';
+      case 'medium': return '#F59E0B';
+      case 'low': return '#3B82F6';
+      default: return '#6B7280';
+    }
+  };
+
+  const getAlertIcon = (alertType: string) => {
+    switch (alertType) {
+      case 'vaccine': return <Syringe size={16} color="#3B82F6" />;
+      case 'deworming': return <Pill size={16} color="#10B981" />;
+      case 'checkup': return <Heart size={16} color="#EF4444" />;
+      default: return <Calendar size={16} color="#6B7280" />;
+    }
+  };
+
+  const formatAlertDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const today = new Date();
+    const diffTime = date.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) return 'Vencida';
+    if (diffDays === 0) return 'Hoy';
+    if (diffDays === 1) return 'Mañana';
+    if (diffDays <= 7) return `En ${diffDays} días`;
+    return date.toLocaleDateString();
+  };
+
   const handleAddVaccine = () => {
     router.push(`/pets/health/vaccines/${id}`);
   };
@@ -151,7 +359,10 @@ export default function PetDetail() {
   };
   
   const handleAddWeight = () => {
-    router.push(`/pets/health/weight/${id}`);
+    router.push({
+      pathname: `/pets/health/weight/${id}`,
+      params: { refresh: 'true' }
+    });
   };
 
   const handleAddPhoto = () => {
@@ -164,6 +375,89 @@ export default function PetDetail() {
 
   const handleViewAppointments = () => {
     router.push(`/pets/appointments/${id}`);
+  };
+
+  const handleGenerateMedicalHistory = async () => {
+    if (!currentUser || !pet) {
+      Alert.alert('Error', 'Información insuficiente para generar la historia clínica');
+      return;
+    }
+
+    Alert.alert(
+      'Generar Historia Clínica',
+      '¿Qué deseas hacer?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Generar PDF', 
+          onPress: () => generatePDF()
+        },
+        { 
+          text: 'Generar QR para Veterinario', 
+          onPress: () => generateQRForVet()
+        }
+      ]
+    );
+  };
+
+  const generatePDF = async () => {
+    try {
+      Alert.alert('Generando historia clínica', 'Por favor espera...');
+      
+      // Import and use the function
+      const { generateMedicalHistoryHTML } = await import('../../utils/medicalHistoryPDF');
+      const htmlContent = await generateMedicalHistoryHTML(pet.id, currentUser!.id);
+      
+      // Navigate to a preview screen where user can share or view
+      router.push({
+        pathname: '/pets/medical-history-preview',
+        params: {
+          petId: pet.id,
+          petName: pet.name,
+          htmlContent: btoa(unescape(encodeURIComponent(htmlContent)))
+        }
+      });
+    } catch (error) {
+      console.error('Error generating medical history:', error);
+      Alert.alert('Error', 'No se pudo generar la historia clínica');
+    }
+  };
+
+  const generateQRForVet = async () => {
+    try {
+      Alert.alert('Generando enlace seguro', 'Creando enlace temporal para veterinario...');
+      
+      // Generate secure token for medical history access
+      const { createMedicalHistoryToken } = await import('../../utils/medicalHistoryTokens');
+      const tokenResult = await createMedicalHistoryToken(pet.id, currentUser!.id, 2); // 2 hours
+      
+      if (!tokenResult.success || !tokenResult.token) {
+        throw new Error(tokenResult.error || 'No se pudo generar el enlace seguro');
+      }
+      
+      // Create URL with token parameter
+      const baseUrl = process.env.EXPO_PUBLIC_APP_DOMAIN || process.env.EXPO_PUBLIC_APP_URL || 'https://app-dogcatify.netlify.app';
+      const shareUrl = `${baseUrl}/medical-history/${pet.id}?token=${tokenResult.token}`;
+      const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(shareUrl)}&format=png&margin=20&ecc=M&color=2D6A6F&bgcolor=FFFFFF`;
+      const shortUrl = `dogcatify.com/vet/${tokenResult.token.slice(-8)}`;
+      
+      // Navigate to QR sharing screen
+      router.push({
+        pathname: '/pets/share-medical-history',
+        params: {
+          petId: pet.id,
+          petName: pet.name,
+          qrCodeUrl,
+          shareUrl,
+          shortUrl,
+          token: tokenResult.token,
+          expiresAt: tokenResult.expiresAt?.toISOString()
+        }
+      });
+    } catch (error) {
+      console.error('Error generating QR for vet:', error);
+      Alert.alert('Error', 'No se pudo generar el QR para veterinario');
+    }
   };
   
   const handleBookAppointment = () => {
@@ -180,6 +474,7 @@ export default function PetDetail() {
         return;
       }
 
+      // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -311,6 +606,15 @@ export default function PetDetail() {
 
   const renderHealthTab = () => (
     <View style={styles.healthContainer}>
+      {/* Debug info */}
+      {__DEV__ && (
+        <Card style={styles.debugCard}>
+          <Text style={styles.debugText}>
+            Debug: V:{vaccines.length} E:{illnesses.length} A:{allergies.length} D:{dewormings.length} P:{weightRecords.length}
+          </Text>
+        </Card>
+      )}
+      
       <View style={styles.healthSection}>
         <View style={styles.healthHeader}>
           <View style={styles.healthTitleContainer}>
@@ -334,6 +638,16 @@ export default function PetDetail() {
               {vaccine.nextDueDate && (
                 <Text style={styles.healthItemNextDate}>
                   Próxima: {vaccine.nextDueDate}
+                </Text>
+              )}
+              {vaccine.veterinarian && (
+                <Text style={styles.healthItemVet}>
+                  Veterinario: {vaccine.veterinarian}
+                </Text>
+              )}
+              {vaccine.notes && (
+                <Text style={styles.healthItemNotes}>
+                  {vaccine.notes}
                 </Text>
               )}
             </Card>
@@ -364,6 +678,28 @@ export default function PetDetail() {
               {illness.treatment && (
                 <Text style={styles.healthItemTreatment}>
                   Tratamiento: {illness.treatment}
+                </Text>
+              )}
+              {illness.veterinarian && (
+                <Text style={styles.healthItemVet}>
+                  Veterinario: {illness.veterinarian}
+                </Text>
+              )}
+              {illness.status && (
+                <View style={styles.statusContainer}>
+                  <Text style={[
+                    styles.statusText,
+                    illness.status === 'active' && styles.activeStatus,
+                    illness.status === 'recovered' && styles.recoveredStatus
+                  ]}>
+                    Estado: {illness.status === 'active' ? 'Activa' : 
+                            illness.status === 'recovered' ? 'Recuperada' : illness.status}
+                  </Text>
+                </View>
+              )}
+              {illness.notes && (
+                <Text style={styles.healthItemNotes}>
+                  {illness.notes}
                 </Text>
               )}
             </Card>
@@ -398,6 +734,16 @@ export default function PetDetail() {
                   Severidad: {allergy.severity}
                 </Text>
               )}
+              {allergy.treatment && (
+                <Text style={styles.healthItemTreatment}>
+                  Tratamiento: {allergy.treatment}
+                </Text>
+              )}
+              {allergy.notes && (
+                <Text style={styles.healthItemNotes}>
+                  {allergy.notes}
+                </Text>
+              )}
             </Card>
           ))
         )}
@@ -426,6 +772,16 @@ export default function PetDetail() {
               {deworming.nextDueDate && (
                 <Text style={styles.healthItemNextDate}>
                   Próxima: {deworming.nextDueDate}
+                </Text>
+              )}
+              {deworming.veterinarian && (
+                <Text style={styles.healthItemVet}>
+                  Veterinario: {deworming.veterinarian}
+                </Text>
+              )}
+              {deworming.notes && (
+                <Text style={styles.healthItemNotes}>
+                  {deworming.notes}
                 </Text>
               )}
             </Card>
@@ -543,6 +899,67 @@ export default function PetDetail() {
     </View>
   );
 
+  const renderMedicalAlerts = () => {
+    if (medicalAlerts.length === 0) return null;
+    
+    return (
+      <Card style={styles.alertsCard}>
+        <Text style={styles.alertsTitle}>🚨 Alertas Médicas</Text>
+        
+        {medicalAlerts.map((alert) => (
+          <View 
+            key={alert.id} 
+            style={[
+              styles.alertItem,
+              alert.priority === 'high' && styles.highPriorityAlert,
+              alert.priority === 'urgent' && styles.urgentAlert
+            ]}
+          >
+            <View style={styles.alertHeader}>
+              <View style={styles.alertTitleContainer}>
+                {getAlertIcon(alert.alert_type)}
+                <Text style={styles.alertTitle}>{alert.title}</Text>
+              </View>
+              <View style={styles.alertActions}>
+                <TouchableOpacity 
+                  style={styles.completeButton}
+                  onPress={() => handleCompleteAlert(alert.id)}
+                >
+                  <Text style={styles.completeButtonText}>✓</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.dismissButton}
+                  onPress={() => handleDismissAlert(alert.id)}
+                >
+                  <Text style={styles.dismissButtonText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            <Text style={styles.alertDescription}>{alert.description}</Text>
+            
+            <View style={styles.alertFooter}>
+              <Text style={styles.alertDueDate}>
+                📅 {formatAlertDate(alert.due_date)}
+              </Text>
+              <View style={[
+                styles.priorityBadge,
+                alert.priority === 'high' && styles.highPriorityBadge,
+                alert.priority === 'urgent' && styles.urgentPriorityBadge
+              ]}>
+                <Text style={styles.priorityText}>
+                  {alert.priority === 'urgent' ? 'URGENTE' :
+                   alert.priority === 'high' ? 'ALTA' :
+                   alert.priority === 'medium' ? 'MEDIA' : 'BAJA'}
+                </Text>
+              </View>
+            </View>
+          </View>
+        ))}
+      </Card>
+    );
+  };
+
   const renderBreedInfo = () => {
     if (!pet.breed_info && (!pet.breedInfo || Object.keys(pet.breedInfo).length === 0)) return null;
     
@@ -577,9 +994,6 @@ export default function PetDetail() {
         {breedInfoData.energy !== undefined && (
           <Text style={styles.infoValue}>
             Nivel de energía: {breedInfoData.energy}/5
-            {breedInfoData.energy >= 4 && (
-              <Text style={styles.breedHighlight}> (Alto - Necesitará mucho ejercicio)</Text>
-            )}
           </Text>
         )}
         
@@ -613,9 +1027,6 @@ export default function PetDetail() {
         {breedInfoData.protectiveness !== undefined && (
           <Text style={styles.infoValue}>
             Nivel de protección: {breedInfoData.protectiveness}/5
-            {breedInfoData.protectiveness >= 4 && (
-              <Text style={styles.breedHighlight}> (Alto - Puede ser territorial)</Text>
-            )}
           </Text>
         )}
       </Card>
@@ -625,7 +1036,7 @@ export default function PetDetail() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={handleBackNavigation} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>{pet.name}</Text>
@@ -721,9 +1132,26 @@ export default function PetDetail() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Medical Alerts - Show in all tabs */}
+        {renderMedicalAlerts()}
+        
         {activeTab === 'basics' && (
           <>
             {renderBasicsTab()}
+            
+            {/* Medical History Actions */}
+            <Card style={styles.medicalHistoryCard}>
+              <Text style={styles.medicalHistoryTitle}>📋 Historia Clínica</Text>
+              <Text style={styles.medicalHistoryDescription}>
+                Genera un PDF completo con toda la información médica de {pet.name} o crea un QR para compartir con veterinarios.
+              </Text>
+              <Button
+                title="Generar Historia Clínica"
+                onPress={handleGenerateMedicalHistory}
+                size="large"
+              />
+            </Card>
+            
             {renderBreedInfo()}
           </>
         )}
@@ -997,6 +1425,34 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontStyle: 'italic',
   },
+  healthItemVet: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#3B82F6',
+  },
+  statusContainer: {
+    marginTop: 4,
+  },
+  statusText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+  },
+  activeStatus: {
+    color: '#EF4444',
+  },
+  recoveredStatus: {
+    color: '#10B981',
+  },
+  debugCard: {
+    marginBottom: 8,
+    backgroundColor: '#FEF3C7',
+  },
+  debugText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#92400E',
+  },
   emptyText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
@@ -1121,5 +1577,133 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 16,
     paddingHorizontal: 16,
+  },
+  alertsCard: {
+    marginBottom: 16,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  alertsTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    color: '#92400E',
+    marginBottom: 12,
+  },
+  alertItem: {
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#F59E0B',
+  },
+  highPriorityAlert: {
+    borderLeftColor: '#EF4444',
+  },
+  urgentAlert: {
+    borderLeftColor: '#DC2626',
+    backgroundColor: '#FEF2F2',
+  },
+  alertHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  alertTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  alertTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginLeft: 6,
+    flex: 1,
+  },
+  alertActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  completeButton: {
+    backgroundColor: '#10B981',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+  },
+  dismissButton: {
+    backgroundColor: '#6B7280',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dismissButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+  },
+  alertDescription: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    marginBottom: 8,
+    lineHeight: 18,
+  },
+  alertFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  alertDueDate: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  priorityBadge: {
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  highPriorityBadge: {
+    backgroundColor: '#EF4444',
+  },
+  urgentPriorityBadge: {
+    backgroundColor: '#DC2626',
+  },
+  priorityText: {
+    fontSize: 10,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+  },
+  medicalHistoryCard: {
+    marginBottom: 16,
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  medicalHistoryTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0369A1',
+    marginBottom: 8,
+  },
+  medicalHistoryDescription: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#0369A1',
+    marginBottom: 16,
+    lineHeight: 20,
   },
 });

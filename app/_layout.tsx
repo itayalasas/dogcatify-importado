@@ -43,6 +43,12 @@ export default function RootLayout() {
                 <Stack.Screen name="pets/health/allergies/[id]" />
                 <Stack.Screen name="pets/health/deworming/[id]" />
                 <Stack.Screen name="pets/health/weight/[id]" />
+                <Stack.Screen name="pets/health/select-condition" />
+                <Stack.Screen name="pets/health/select-treatment" />
+                <Stack.Screen name="pets/health/select-veterinarian" />
+                <Stack.Screen name="pets/health/select-vaccine" />
+                <Stack.Screen name="pets/health/select-allergy" />
+                <Stack.Screen name="pets/health/select-dewormer" />
                 <Stack.Screen name="services/[id]" />
                 <Stack.Screen name="services/partner/[id]" />
                 <Stack.Screen name="services/shelter/[id]" />
@@ -73,11 +79,15 @@ export default function RootLayout() {
                 <Stack.Screen name="partner/edit-business" />
                 <Stack.Screen name="profile/edit" />
                 <Stack.Screen name="profile/mercadopago-config" />
+                <Stack.Screen name="profile/help-support" />
+                <Stack.Screen name="profile/delete-account" />
                 <Stack.Screen name="payment/success" />
                 <Stack.Screen name="payment/failure" />
                 <Stack.Screen name="payment/pending" />
                 <Stack.Screen name="test-adoption" />
-                <Stack.Screen name="index" />
+                <Stack.Screen name="medical-history/[id]" />
+                <Stack.Screen name="pets/medical-history-preview" />
+                <Stack.Screen name="pets/share-medical-history" />
                 <Stack.Screen name="+not-found" />
               </Stack>
               <StatusBar style="auto" />

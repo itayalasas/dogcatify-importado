@@ -34,10 +34,36 @@ export default function Profile() {
       fetchUserStats();
       fetchPartnerProfile();
     }
-  }, [currentUser]);
+  }, [currentUser?.id, currentUser?.displayName, currentUser?.photoURL]);
 
+  // Set up real-time subscription for profile updates
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    const subscription = supabaseClient
+      .channel('profile-updates')
+      .on('postgres_changes', 
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'profiles',
+          filter: `id=eq.${currentUser.id}`
+        }, 
+        (payload) => {
+          console.log('Profile updated, refreshing stats...');
+          fetchUserStats();
+        }
+      )
+      .subscribe();
+    
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [currentUser]);
   const fetchUserStats = async () => {
     try {
+      console.log('Fetching user stats for:', currentUser!.id);
+      
       // Fetch pets count
       const { count: petsCount } = await supabaseClient
         .from('pets')
@@ -50,11 +76,31 @@ export default function Profile() {
         .select('*', { count: 'exact', head: true })
         .eq('user_id', currentUser!.id);
 
+      // Fetch updated profile data to get current followers/following
+      const { data: profileData, error: profileError } = await supabaseClient
+        .from('profiles')
+        .select('followers, following')
+        .eq('id', currentUser!.id)
+        .single();
+      
+      if (profileError) {
+        console.error('Error fetching profile data:', profileError);
+      }
+      
+      const followersCount = profileData?.followers?.length || 0;
+      const followingCount = profileData?.following?.length || 0;
+      
+      console.log('Updated stats:', {
+        petsCount: petsCount || 0,
+        postsCount: postsCount || 0,
+        followersCount,
+        followingCount
+      });
       setUserStats({
         petsCount: petsCount || 0,
         postsCount: postsCount || 0,
-        followersCount: currentUser?.followersCount || 0,
-        followingCount: currentUser?.followingCount || 0
+        followersCount,
+        followingCount
       });
     } catch (error) {
       console.error('Error fetching user stats:', error);
@@ -468,9 +514,12 @@ export default function Profile() {
               </Text>
               <ChevronRight size={16} color="#6B7280" />
             </View>
-          </TouchableOpacity>
+          </TouchableOpacity>        
 
-          <TouchableOpacity style={styles.menuOption}>
+          <TouchableOpacity 
+            style={styles.menuOption} 
+            onPress={() => router.push('/profile/help-support')}
+          >
             <View style={styles.menuOptionLeft}>
               <HelpCircle size={20} color="#6B7280" />
               <Text style={styles.menuOptionText}>{t('helpSupport')}</Text>

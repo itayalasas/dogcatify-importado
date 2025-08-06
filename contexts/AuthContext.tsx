@@ -404,6 +404,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     login,
     register,
     logout,
+    updateCurrentUser: (updatedUser: User) => setCurrentUser(updatedUser),
     isEmailConfirmed,
     authError,
     clearAuthError,

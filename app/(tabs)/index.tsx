@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, Alert, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, Alert, RefreshControl, Image, Animated } from 'react-native';
 import { router } from 'expo-router';
 import { Platform, Linking } from 'react-native';
 import PostCard from '../../components/PostCard';
@@ -8,7 +8,73 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { NotificationPermissionPrompt } from '../../components/NotificationPermissionPrompt';
 import { LocationPermissionPrompt } from '../../components/LocationPermissionPrompt';
+import { MedicalAlertsWidget } from '../../components/MedicalAlertsWidget';
 import { supabaseClient } from '../../lib/supabase';
+
+// Loading component with app logo
+const FeedLoader = () => {
+  const fadeAnim = new Animated.Value(0.3);
+  const scaleAnim = new Animated.Value(0.8);
+
+  useEffect(() => {
+    const animate = () => {
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(fadeAnim, {
+            toValue: 0.3,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.sequence([
+          Animated.timing(scaleAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scaleAnim, {
+            toValue: 0.8,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start(() => animate());
+    };
+
+    animate();
+  }, []);
+
+  return (
+    <View style={styles.loaderContainer}>
+      <Animated.View
+        style={[
+          styles.logoContainer,
+          {
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }],
+          },
+        ]}
+      >
+        <Image
+          source={require('../../assets/images/logo.jpg')}
+          style={styles.loaderLogo}
+          resizeMode="contain"
+        />
+      </Animated.View>
+      <Text style={styles.loaderText}>Cargando tu feed...</Text>
+      <View style={styles.dotsContainer}>
+        <View style={[styles.dot, styles.dot1]} />
+        <View style={[styles.dot, styles.dot2]} />
+        <View style={[styles.dot, styles.dot3]} />
+      </View>
+    </View>
+  );
+};
 
 // Componente wrapper para manejar las vistas de promociones
 const PromotionWrapper = ({ promotion, onPress, onLike }: { promotion: any; onPress: () => void; onLike: (promotionId: string) => void }) => {
@@ -46,6 +112,7 @@ export default function Home() {
   const [promotions, setPromotions] = useState<any[]>([]);
   const [feedItems, setFeedItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const { t } = useLanguage();
   const { currentUser } = useAuth();
@@ -66,6 +133,9 @@ export default function Home() {
       console.error('Error fetching feed data:', error);
     } finally {
       setLoading(false);
+      setTimeout(() => {
+        setInitialLoading(false);
+      }, 1500);
     }
   };
 
@@ -442,7 +512,6 @@ export default function Home() {
               window.open(promotion.ctaUrl, '_blank');
             } else {
               console.log('Opening with Linking API');
-              const { Linking } = require('react-native');
               const supported = await Linking.canOpenURL(promotion.ctaUrl);
               if (supported) {
                 await Linking.openURL(promotion.ctaUrl);
@@ -452,34 +521,14 @@ export default function Home() {
               }
             }
           } catch (error) {
-            console.error('Error opening external link:', error);
+            console.error('Error opening URL:', error);
             Alert.alert('Error', 'No se pudo abrir el enlace');
           }
-        } else {
-          console.warn('Invalid URL format:', promotion.ctaUrl);
-          Alert.alert('Error', 'Formato de enlace inválido');
         }
-      } else if (promotion.partnerId) {
-        // Fallback: Navigate to partner profile if no CTA URL
-        console.log('No CTA URL, navigating to partner:', promotion.partnerId);
-        router.push(`/services/partner/${promotion.partnerId}`);
-      } else {
-        // No action defined
-        console.log('No action defined for promotion');
-        Alert.alert('Información', 'Esta promoción no tiene enlace configurado');
       }
-      
-      console.log('=== END PROMOTION CLICK DEBUG ===');
     } catch (error) {
       console.error('Error handling promotion press:', error);
-      Alert.alert('Error', `Error al procesar la promoción: ${error.message}`);
     }
-  };
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchFeedData();
-    setRefreshing(false);
   };
 
   // Manejar redirección cuando no hay usuario - FUERA del render condicional
@@ -493,6 +542,11 @@ export default function Home() {
     }
   }, [currentUser]);
 
+  // Show initial loader while feed is loading
+  if (initialLoading) {
+    return <FeedLoader />;
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <NotificationPermissionPrompt />
@@ -505,9 +559,16 @@ export default function Home() {
         style={styles.content} 
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={fetchFeedData}
+            colors={['#2D6A6F']}
+            tintColor="#2D6A6F"
+          />
         }
       >
+        <MedicalAlertsWidget />
+        
         {loading ? (
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingText}>Cargando feed...</Text>
@@ -538,6 +599,7 @@ export default function Home() {
                   onLike={handleLike}
                   onComment={handleComment}
                   onShare={handleShare}
+                  currentUserId={currentUser?.id}
                 />
               );
             }
@@ -620,5 +682,46 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 24,
+  },
+  // Loader styles
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingTop: 30,
+  },
+  logoContainer: {
+    marginBottom: 32,
+  },
+  loaderLogo: {
+    width: 120,
+    height: 120,
+  },
+  loaderText: {
+    fontSize: 18,
+    fontFamily: 'Inter-Medium',
+    color: '#2D6A6F',
+    marginBottom: 24,
+  },
+  dotsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#2D6A6F',
+  },
+  dot1: {
+    opacity: 0.4,
+  },
+  dot2: {
+    opacity: 0.7,
+  },
+  dot3: {
+    opacity: 1,
   },
 });

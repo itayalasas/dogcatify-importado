@@ -211,7 +211,71 @@ export default function AlbumDetail() {
         ? 'Todas las fotos se agregaron correctamente'
         : `Se agregaron ${imageUrls.length} de ${selectedImages.length} fotos`;
       
-      Alert.alert('Éxito', successMessage);
+      // If album is shared, create a new post in the feed
+      if (album.is_shared && imageUrls.length > 0) {
+        console.log('Album is shared, creating new post for added photos...');
+        
+        try {
+          // Get pet data
+          const { data: petData, error: petError } = await supabaseClient
+            .from('pets')
+            .select('*')
+            .eq('id', album.pet_id)
+            .single();
+          
+          if (petData && !petError) {
+            // Get current user data for author info
+            const { data: userData, error: userError } = await supabaseClient
+              .from('profiles')
+              .select('display_name, photo_url')
+              .eq('id', currentUser.id)
+              .single();
+            
+            // Create new post with the added photos
+            const postData = {
+              user_id: currentUser.id,
+              pet_id: album.pet_id,
+              content: `Nuevas fotos agregadas al álbum "${album.title}" 📸`,
+              image_url: imageUrls[0],
+              album_images: imageUrls,
+              type: 'album',
+              author: {
+                name: userData?.display_name || currentUser.displayName || 'Usuario',
+                avatar: userData?.photo_url || currentUser.photoURL || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100'
+              },
+              pet: {
+                name: petData.name,
+                species: petData.species === 'dog' ? 'Perro' : 'Gato'
+              },
+              likes: [],
+              created_at: new Date().toISOString()
+            };
+            
+            const { error: postError } = await supabaseClient
+              .from('posts')
+              .insert(postData);
+            
+            if (postError) {
+              console.error('Error creating feed post:', postError);
+              Alert.alert(
+                'Éxito',
+                `${successMessage}\n\nNota: Las fotos se guardaron pero no se pudieron compartir automáticamente en el feed.`
+              );
+            } else {
+              console.log('Feed post created successfully');
+              Alert.alert(
+                'Éxito',
+                `${successMessage}\n\n📸 Las nuevas fotos también se compartieron en el feed.`
+              );
+            }
+          }
+        } catch (feedError) {
+          console.error('Error creating feed post:', feedError);
+          Alert.alert('Éxito', successMessage);
+        }
+      } else {
+        Alert.alert('Éxito', successMessage);
+      }
     } catch (error) {
       console.error('Error adding photos:', error);
       
@@ -232,6 +296,9 @@ export default function AlbumDetail() {
 
   const handleUpdateAlbum = async () => {
     try {
+      const wasShared = album.is_shared;
+      const willBeShared = isShared;
+      
       const { error } = await supabaseClient
         .from('pet_albums')
         .update({
@@ -242,6 +309,21 @@ export default function AlbumDetail() {
         .eq('id', id);
 
       if (error) throw error;
+
+      // Handle sharing status change
+      if (!wasShared && willBeShared) {
+        // Album is now being shared - create post in feed
+        console.log('Album is now shared, creating feed post...');
+        await createFeedPostFromAlbum();
+      } else if (wasShared && !willBeShared) {
+        // Album is no longer shared - remove from feed
+        console.log('Album is no longer shared, removing from feed...');
+        await removeFeedPostFromAlbum();
+      } else if (wasShared && willBeShared) {
+        // Album was already shared and still is - update existing post
+        console.log('Album still shared, updating existing post...');
+        await updateExistingFeedPost();
+      }
 
       // Update local state
       setAlbum({
@@ -259,8 +341,111 @@ export default function AlbumDetail() {
     }
   };
 
+  const createFeedPostFromAlbum = async () => {
+    try {
+      // Get pet data
+      const { data: petData, error: petError } = await supabaseClient
+        .from('pets')
+        .select('*')
+        .eq('id', album.pet_id)
+        .single();
+      
+      if (petError || !petData) {
+        console.error('Error fetching pet data:', petError);
+        return;
+      }
+      
+      // Get user data for author info
+      const { data: userData, error: userError } = await supabaseClient
+        .from('profiles')
+        .select('display_name, photo_url')
+        .eq('id', currentUser.id)
+        .single();
+      
+      if (userError) {
+        console.error('Error fetching user data:', userError);
+      }
+      
+      // Create post from album
+      const postData = {
+        user_id: currentUser.id,
+        pet_id: album.pet_id,
+        content: description.trim() || `Álbum compartido: ${title.trim()} 📸`,
+        image_url: album.images?.[0] || null,
+        album_images: album.images || [],
+        type: 'album',
+        album_id: album.id, // Reference to the album
+        author: {
+          name: userData?.display_name || currentUser.displayName || 'Usuario',
+          avatar: userData?.photo_url || currentUser.photoURL || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100'
+        },
+        pet: {
+          name: petData.name,
+          species: petData.species === 'dog' ? 'Perro' : 'Gato'
+        },
+        likes: [],
+        created_at: new Date().toISOString()
+      };
+      
+      const { error: postError } = await supabaseClient
+        .from('posts')
+        .insert(postData);
+      
+      if (postError) {
+        console.error('Error creating feed post:', postError);
+      } else {
+        console.log('Feed post created successfully');
+      }
+    } catch (error) {
+      console.error('Error creating feed post from album:', error);
+    }
+  };
+
+  const removeFeedPostFromAlbum = async () => {
+    try {
+      // Delete posts related to this album using album_id
+      const { error } = await supabaseClient
+        .from('posts')
+        .delete()
+        .eq('album_id', album.id);
+      
+      if (error) {
+        console.error('Error removing feed post:', error);
+      } else {
+        console.log('Feed post removed successfully');
+      }
+    } catch (error) {
+      console.error('Error removing feed post from album:', error);
+    }
+  };
+
+  const updateExistingFeedPost = async () => {
+    try {
+      // Update existing post with new album info
+      const { error } = await supabaseClient
+        .from('posts')
+        .update({
+          content: description.trim() || `Álbum actualizado: ${title.trim()} 📸`,
+          album_images: album.images || [],
+          image_url: album.images?.[0] || null
+        })
+        .eq('album_id', album.id);
+      
+      if (error) {
+        console.error('Error updating feed post:', error);
+      } else {
+        console.log('Feed post updated successfully');
+      }
+    } catch (error) {
+      console.error('Error updating feed post from album:', error);
+    }
+  };
   const handleDeleteAlbum = async () => {
     try {
+      // First remove any related posts from feed
+      await removeFeedPostFromAlbum();
+      
+      // Then delete the album
       const { error } = await supabaseClient
         .from('pet_albums')
         .delete()
@@ -489,7 +674,7 @@ export default function AlbumDetail() {
         onRequestClose={() => setShowDeleteConfirm(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.confirmModalContent}>
+          <View style={styles.deleteConfirmModal}>
             <Text style={styles.confirmTitle}>Eliminar Imagen</Text>
             <Text style={styles.confirmText}>¿Estás seguro de que quieres eliminar esta imagen?</Text>
             
@@ -499,12 +684,13 @@ export default function AlbumDetail() {
                 onPress={() => setShowDeleteConfirm(false)}
                 variant="outline"
                 size="small"
+                style={styles.confirmButton}
               />
               <Button
                 title="Eliminar"
                 onPress={handleDeleteImage}
-                variant="primary"
                 size="small"
+                style={styles.confirmButton}
               />
             </View>
           </View>
@@ -667,16 +853,20 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     padding: 20,
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     padding: 20,
+    paddingBottom: 40,
     width: '100%',
-    maxWidth: 400,
+    maxHeight: '80%',
   },
   modalTitle: {
     fontSize: 18,
@@ -689,7 +879,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   shareOptionLabel: {
     fontSize: 15,
@@ -716,21 +906,24 @@ const styles = StyleSheet.create({
     transform: [{ translateX: 22 }],
   },
   modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
     gap: 12,
+    marginTop: 8,
   },
   confirmModalContent: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 20,
-    width: '80%',
+    width: '85%',
+    maxWidth: 400,
+    alignSelf: 'center',
+    maxHeight: '50%',
   },
   confirmTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
     color: '#111827',
-    marginBottom: 8,
+    marginBottom: 16,
     textAlign: 'center',
   },
   confirmText: {
@@ -739,10 +932,21 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginBottom: 20,
     textAlign: 'center',
+    lineHeight: 20,
   },
   confirmActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
     gap: 12,
+  },
+  deleteConfirmModal: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    width: '80%',
+    maxWidth: 320,
+    alignSelf: 'center',
+  },
+  confirmButton: {
+    width: '100%',
   },
 });

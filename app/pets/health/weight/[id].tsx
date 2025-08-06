@@ -53,13 +53,19 @@ export default function PetWeight() {
   const [weightStatus, setWeightStatus] = useState<'underweight' | 'ideal' | 'overweight' | 'unknown'>('unknown');
 
   useEffect(() => {
-    const loadPetData = async () => {
-      await fetchPetDetails();
-      await fetchWeightRecords();
-    };
-    
-    loadPetData();
+    if (id && currentUser) {
+      fetchPetDetails();
+      fetchWeightRecords();
+    }
   }, [id]);
+
+  // Separate effect to create initial weight record after pet data is loaded
+  useEffect(() => {
+    if (pet && currentUser && weightRecords.length === 0 && pet.weight) {
+      console.log('Pet loaded and no weight records found, creating initial record...');
+      createInitialWeightRecord();
+    }
+  }, [pet, weightRecords, currentUser]);
 
   useEffect(() => {
     // Calculate ideal weight range when pet data is available
@@ -76,56 +82,75 @@ export default function PetWeight() {
   }, [weightRecords, idealWeightRange]);
 
   const createInitialWeightRecord = async () => {
-    if (!pet || !pet.weight || !currentUser) return;
+    if (!pet || !pet.weight || !currentUser || weightRecords.length > 0) {
+      console.log('Cannot create initial weight record - missing data or records already exist', {
+        hasPet: !!pet,
+        hasWeight: !!pet?.weight,
+        hasUser: !!currentUser,
+        existingRecords: weightRecords.length
+      });
+      return;
+    }
     
+    // Double check - verify no existing weight records in database
     try {
-      // Verificar si ya existe un registro de peso inicial para esta mascota
       const { data: existingRecords, error: checkError } = await supabaseClient
         .from('pet_health')
         .select('id')
         .eq('pet_id', id)
-        .eq('type', 'weight')
-        .eq('notes', 'Peso inicial al registrar la mascota');
+        .eq('type', 'weight');
       
       if (checkError) {
         console.error('Error checking existing weight records:', checkError);
         return;
       }
       
-      // Si ya existe un registro inicial, no crear otro
       if (existingRecords && existingRecords.length > 0) {
-        console.log('Initial weight record already exists, skipping creation');
+        console.log('Weight records already exist in database, skipping creation');
         return;
       }
-      
-      console.log('Creating initial weight record for pet:', pet.name);
+    } catch (error) {
+      console.error('Error in duplicate check:', error);
+      return;
+    }
+    
+    try {
+      console.log('Creating initial weight record for pet:', pet.name, 'Weight:', pet.weight);
       
       // Crear un registro de peso inicial con la fecha de creación de la mascota
       const initialDate = pet.created_at ? new Date(pet.created_at) : new Date();
-      const formattedDate = formatDate(initialDate);
       
       const initialWeightData = {
         pet_id: id,
         user_id: currentUser.id,
         type: 'weight',
         weight: pet.weight,
-        weight_unit: pet.weightDisplay?.unit || 'kg',
-        date: formattedDate,
+        weight_unit: pet.weight_display?.unit || 'kg',
+        date: initialDate.toLocaleDateString('es-ES', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        }),
         notes: 'Peso inicial al registrar la mascota',
         created_at: new Date().toISOString()
       };
+      
+      console.log('Initial weight data to insert:', initialWeightData);
       
       const { error } = await supabaseClient.from('pet_health').insert(initialWeightData);
       
       if (error) {
         console.error('Error creating initial weight record:', error);
+        return;
       } else {
         console.log('Initial weight record created successfully');
-        // Actualizar la lista de registros después de un breve delay
-        setTimeout(() => {
-          fetchWeightRecords();
-        }, 500);
       }
+      
+      // Refrescar los registros después de crear el inicial
+      setTimeout(() => {
+        fetchWeightRecords();
+      }, 500);
+      
     } catch (error) {
       console.error('Error creating initial weight record:', error);
     }
@@ -148,28 +173,11 @@ export default function PetWeight() {
       }
       
       // Set initial weight unit from pet data
-      if (data.weightDisplay?.unit) {
+      if (data.weight_display?.unit) {
+        setWeightUnit(data.weight_display.unit);
+      } else if (data.weightDisplay?.unit) {
         setWeightUnit(data.weightDisplay.unit);
       }
-      
-      // Fetch weight records after setting pet data
-      await fetchWeightRecords();
-      
-      // Check if we need to create initial weight record
-      // Only do this after we have both pet data and weight records
-      setTimeout(async () => {
-        const { data: existingRecords } = await supabaseClient
-          .from('pet_health')
-          .select('id')
-          .eq('pet_id', id)
-          .eq('type', 'weight');
-        
-        // Only create initial record if no weight records exist at all
-        if ((!existingRecords || existingRecords.length === 0) && data.weight) {
-          await createInitialWeightRecord();
-        }
-      }, 1000);
-      
     } catch (error) {
       console.error('Error fetching pet details:', error);
     }
@@ -177,6 +185,9 @@ export default function PetWeight() {
 
   const fetchWeightRecords = async () => {
     try {
+      console.log('=== FETCH WEIGHT RECORDS DEBUG ===');
+      console.log('Fetching weight records for pet:', id);
+      
       const { data, error } = await supabaseClient
         .from('pet_health')
         .select('*')
@@ -184,7 +195,15 @@ export default function PetWeight() {
         .eq('type', 'weight')
         .order('created_at', { ascending: true });
       
-      if (error) throw error;
+      console.log('Query result:', data);
+      console.log('Query error:', error);
+      
+      if (error) {
+        console.error('❌ Error fetching weight records:', error);
+        throw error;
+      }
+      
+      console.log('✅ Weight records fetched:', data?.length || 0);
       
       const formattedRecords = data.map(record => ({
         id: record.id,
@@ -197,7 +216,9 @@ export default function PetWeight() {
         created_at: record.created_at
       }));
       
+      console.log('Formatted weight records:', formattedRecords);
       setWeightRecords(formattedRecords);
+      console.log('=== END FETCH WEIGHT RECORDS DEBUG ===');
     } catch (error) {
       console.error('Error fetching weight records:', error);
     }
@@ -331,8 +352,13 @@ export default function PetWeight() {
       Alert.alert('Éxito', 'Peso registrado correctamente');
       setShowAddForm(false);
       setNotes('');
-      fetchWeightRecords();
-      fetchPetDetails();
+      
+      // Refresh data after adding new weight
+      await Promise.all([
+        fetchWeightRecords(),
+        fetchPetDetails()
+      ]);
+      
     } catch (error) {
       console.error('Error saving weight:', error);
       Alert.alert('Error', 'No se pudo registrar el peso');
@@ -656,40 +682,38 @@ export default function PetWeight() {
             
             return (
               <View key={index} style={styles.weightBarContainer}>
-                <>
-                  <View style={styles.weightBarBackground}>
-                    {/* Ideal range indicator */}
-                    {idealWeightRange && (
-                      <View
-                        style={[
-                          styles.idealRangeIndicator,
-                          {
-                            bottom: Math.max(((idealWeightRange.min - minWeight) / weightRange) * 120, 0),
-                            height: Math.min(((idealWeightRange.max - idealWeightRange.min) / weightRange) * 120, 120),
-                          }
-                        ]}
-                      />
-                    )}
-                    
+                <View style={styles.weightBarBackground}>
+                  {/* Ideal range indicator */}
+                  {idealWeightRange && (
                     <View
                       style={[
-                        styles.weightBar,
+                        styles.idealRangeIndicator,
                         {
-                          height: barHeight,
-                          backgroundColor: record.isInRange ? '#10B981' : 
-                            record.status === 'underweight' ? '#F59E0B' : '#EF4444'
+                          bottom: Math.max(((idealWeightRange.min - minWeight) / weightRange) * 120, 0),
+                          height: Math.min(((idealWeightRange.max - idealWeightRange.min) / weightRange) * 120, 120),
                         }
                       ]}
                     />
-                  </View>
+                  )}
                   
-                  <Text style={styles.weightBarLabel}>
-                    {weightInKg.toFixed(1)}kg
-                  </Text>
-                  <Text style={styles.weightBarDate}>
-                    {record.date.split('/').slice(0, 2).join('/')}
-                  </Text>
-                </>
+                  <View
+                    style={[
+                      styles.weightBar,
+                      {
+                        height: barHeight,
+                        backgroundColor: record.isInRange ? '#10B981' : 
+                          record.status === 'underweight' ? '#F59E0B' : '#EF4444'
+                      }
+                    ]}
+                  />
+                </View>
+                
+                <Text style={styles.weightBarLabel}>
+                  {weightInKg.toFixed(1)}kg
+                </Text>
+                <Text style={styles.weightBarDate}>
+                  {record.date.split('/').slice(0, 2).join('/')}
+                </Text>
               </View>
             );
           })}
@@ -1302,13 +1326,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     position: 'relative',
     justifyContent: 'flex-end',
-  },
-  idealRangeIndicator: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderRadius: 4,
   },
   weightBar: {
     width: '100%',

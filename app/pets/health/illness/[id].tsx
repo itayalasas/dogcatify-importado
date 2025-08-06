@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Calendar, Heart } from 'lucide-react-native';
+import { ArrowLeft, Calendar, Heart, ChevronDown } from 'lucide-react-native';
 import { Input } from '../../../../components/ui/Input';
 import { Button } from '../../../../components/ui/Button';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -11,8 +11,13 @@ import { useAuth } from '../../../../contexts/AuthContext';
 
 export default function AddIllness() {
   const { id, recordId, refresh } = useLocalSearchParams<{ id: string; recordId?: string; refresh?: string }>();
+  const params = useLocalSearchParams();
   const { currentUser } = useAuth();
   
+  // Pet data
+  const [pet, setPet] = useState<any>(null);
+  
+  // Form data
   const [illnessName, setIllnessName] = useState('');
   const [diagnosisDate, setDiagnosisDate] = useState(new Date());
   const [treatment, setTreatment] = useState('');
@@ -22,14 +27,88 @@ export default function AddIllness() {
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
+  // UI state
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  const handleBackNavigation = () => {
+    router.push({
+      pathname: `/pets/${id}`,
+      params: { activeTab: 'health' }
+    });
+  };
+  // Handle return parameters from selection screens
   useEffect(() => {
+    // Handle preserved diagnosis date
+    if (params.currentDiagnosisDate && typeof params.currentDiagnosisDate === 'string') {
+      try {
+        setDiagnosisDate(new Date(params.currentDiagnosisDate));
+      } catch (error) {
+        console.error('Error parsing diagnosis date:', error);
+      }
+    }
+    
+    // Handle selected condition
+    if (params.selectedCondition) {
+      try {
+        const condition = JSON.parse(params.selectedCondition as string);
+        setIllnessName(condition.name);
+        console.log('Selected condition:', condition.name);
+      } catch (error) {
+        console.error('Error parsing selected condition:', error);
+      }
+    }
+    
+    // Handle selected treatment
+    if (params.selectedTreatment) {
+      try {
+        const treatmentData = JSON.parse(params.selectedTreatment as string);
+        setTreatment(treatmentData.name);
+        console.log('Selected treatment:', treatmentData.name);
+      } catch (error) {
+        console.error('Error parsing selected treatment:', error);
+      }
+    }
+    
+    // Handle selected veterinarian
+    if (params.selectedVeterinarian) {
+      try {
+        const vetData = JSON.parse(params.selectedVeterinarian as string);
+        setVeterinarian(vetData.name);
+        console.log('Selected veterinarian:', vetData.name);
+      } catch (error) {
+        console.error('Error parsing selected veterinarian:', error);
+      }
+    }
+    
+    // Handle preserved notes
+    if (params.currentNotes && typeof params.currentNotes === 'string') {
+      setNotes(params.currentNotes);
+      console.log('Restored notes:', params.currentNotes);
+    }
+  }, [params.selectedCondition, params.selectedTreatment, params.selectedVeterinarian]);
+  useEffect(() => {
+    fetchPetData();
+    
     if (recordId) {
       setIsEditing(true);
       fetchIllnessDetails();
     }
   }, [recordId]);
+
+  const fetchPetData = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('pets')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error) throw error;
+      setPet(data);
+    } catch (error) {
+      console.error('Error fetching pet data:', error);
+    }
+  };
 
   const fetchIllnessDetails = async () => {
     try {
@@ -63,8 +142,61 @@ export default function AddIllness() {
     }
   };
 
+  const handleSelectCondition = () => {
+    router.push({
+      pathname: '/pets/health/select-condition',
+      params: { 
+        petId: id,
+        species: pet?.species || 'dog',
+        returnPath: `/pets/health/illness/${id}`,
+        currentValue: illnessName,
+        // Preserve current form values
+        currentTreatment: treatment,
+        currentVeterinarian: veterinarian,
+        currentNotes: notes,
+        currentDiagnosisDate: diagnosisDate.toISOString()
+      }
+    });
+  };
+
+  const handleSelectTreatment = () => {
+    router.push({
+      pathname: '/pets/health/select-treatment',
+      params: { 
+        petId: id,
+        returnPath: `/pets/health/illness/${id}`,
+        currentValue: treatment,
+        // Preserve current form values
+        currentCondition: illnessName,
+        currentVeterinarian: veterinarian,
+        currentNotes: notes,
+        currentDiagnosisDate: diagnosisDate.toISOString()
+      }
+    });
+  };
+
+  const handleSelectVeterinarian = () => {
+    router.push({
+      pathname: '/pets/health/select-veterinarian',
+      params: { 
+        petId: id,
+        returnPath: `/pets/health/illness/${id}`,
+        currentValue: veterinarian,
+        // Preserve current form values
+        currentCondition: illnessName,
+        currentTreatment: treatment,
+        currentNotes: notes,
+        currentDiagnosisDate: diagnosisDate.toISOString()
+      }
+    });
+  };
+
   const formatDate = (date: Date) => {
-    return date.toLocaleDateString();
+    return date.toLocaleDateString('es-ES', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
   };
 
   const onDateChange = (event: any, selectedDate?: Date) => {
@@ -75,8 +207,8 @@ export default function AddIllness() {
   };
 
   const handleSubmit = async () => {
-    if (!illnessName.trim() || !diagnosisDate) {
-      Alert.alert('Error', 'Por favor completa los campos obligatorios');
+    if (!illnessName.trim()) {
+      Alert.alert('Error', 'Por favor selecciona una enfermedad');
       return;
     }
 
@@ -127,8 +259,42 @@ export default function AddIllness() {
         throw error;
       }
 
+      // Generate checkup alert for chronic conditions
+      if (status === 'active' && !isEditing) {
+        try {
+          const checkupDate = new Date();
+          checkupDate.setMonth(checkupDate.getMonth() + 3); // 3 months from now
+          
+          const { error: alertError } = await supabaseClient
+            .from('medical_alerts')
+            .insert({
+              pet_id: id,
+              user_id: currentUser.id,
+              alert_type: 'checkup',
+              title: `Revisión médica: ${illnessName.trim()}`,
+              description: `Revisión de seguimiento para ${illnessName.trim()} de ${pet?.name}`,
+              due_date: checkupDate.toISOString().split('T')[0],
+              priority: 'medium',
+              status: 'pending',
+              metadata: {
+                condition_name: illnessName.trim(),
+                diagnosis_date: formatDate(diagnosisDate),
+                veterinarian: veterinarian.trim() || null
+              }
+            });
+          
+          if (alertError) {
+            console.warn('Could not create medical alert:', alertError);
+          } else {
+            console.log('Medical alert created for illness checkup');
+          }
+        } catch (alertError) {
+          console.warn('Error creating medical alert:', alertError);
+        }
+      }
+
       Alert.alert('Éxito', isEditing ? 'Enfermedad actualizada correctamente' : 'Enfermedad registrada correctamente', [
-        { text: 'OK', onPress: () => router.back() }
+        { text: 'OK', onPress: handleBackNavigation }
       ]);
     } catch (error) {
       console.error('Error saving illness:', error);
@@ -141,7 +307,7 @@ export default function AddIllness() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={handleBackNavigation} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>{isEditing ? 'Editar Enfermedad' : 'Agregar Enfermedad'}</Text>
@@ -154,13 +320,36 @@ export default function AddIllness() {
             <Heart size={40} color="#EF4444" />
           </View>
 
-          {/* Illness Name */}
-          <Input
-            label="Nombre de la enfermedad *"
-            placeholder="Ej: Otitis, Dermatitis, Gastritis..."
-            value={illnessName}
-            onChangeText={setIllnessName}
-          />
+          {pet && (
+            <View style={styles.petInfoContainer}>
+              <Text style={styles.petInfoText}>
+                {pet.species === 'dog' ? '🐕' : '🐱'} {pet.name} - {pet.breed}
+              </Text>
+              <Text style={styles.petInfoSubtext}>
+                Enfermedades específicas para {pet.species === 'dog' ? 'perros' : 'gatos'}
+              </Text>
+            </View>
+          )}
+
+          {/* Illness Name - Navigable */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Nombre de la enfermedad *</Text>
+            <TouchableOpacity 
+              style={styles.selectableInput}
+              onPress={handleSelectCondition}
+            >
+              <Text style={[
+                styles.selectableInputText,
+                !illnessName && styles.placeholderText
+              ]}>
+                {illnessName || (pet?.species === 'dog' ? 
+                  "Seleccionar enfermedad para perros..." : 
+                  "Seleccionar enfermedad para gatos..."
+                )}
+              </Text>
+              <ChevronDown size={20} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
 
           {/* Diagnosis Date */}
           <View style={styles.dateInputContainer}>
@@ -184,22 +373,41 @@ export default function AddIllness() {
             )}
           </View>
 
-          <Input
-            label="Tratamiento"
-            placeholder="Medicamentos, terapias, etc."
-            value={treatment}
-            onChangeText={setTreatment}
-            multiline
-            numberOfLines={2}
-          />
+          {/* Treatment - Navigable */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Tratamiento</Text>
+            <TouchableOpacity 
+              style={styles.selectableInput}
+              onPress={handleSelectTreatment}
+            >
+              <Text style={[
+                styles.selectableInputText,
+                !treatment && styles.placeholderText
+              ]}>
+                {treatment || "Seleccionar tratamiento..."}
+              </Text>
+              <ChevronDown size={20} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
 
-          <Input
-            label="Veterinario"
-            placeholder="Nombre del veterinario o clínica"
-            value={veterinarian}
-            onChangeText={setVeterinarian}
-          />
+          {/* Veterinarian - Navigable */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Veterinario</Text>
+            <TouchableOpacity 
+              style={styles.selectableInput}
+              onPress={handleSelectVeterinarian}
+            >
+              <Text style={[
+                styles.selectableInputText,
+                !veterinarian && styles.placeholderText
+              ]}>
+                {veterinarian || "Seleccionar veterinario..."}
+              </Text>
+              <ChevronDown size={20} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
 
+          {/* Notes */}
           <Input
             label="Notas adicionales"
             placeholder="Síntomas, evolución, observaciones..."
@@ -210,7 +418,7 @@ export default function AddIllness() {
           />
 
           <Button
-            title={isEditing ? "Actualizar Enfermedad" : "Guardar Enfermedad"}
+            title={isEditing ? 'Actualizar Enfermedad' : 'Guardar Enfermedad'}
             onPress={handleSubmit}
             loading={loading}
             size="large"
@@ -258,8 +466,56 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
+  petInfoContainer: {
+    backgroundColor: '#F0F9FF',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  petInfoText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0369A1',
+    marginBottom: 4,
+  },
+  petInfoSubtext: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#0369A1',
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  selectableInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 50,
+  },
+  selectableInputText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    flex: 1,
+  },
+  placeholderText: {
+    color: '#9CA3AF',
+  },
   dateInputContainer: {
-    marginBottom: 14,
+    marginBottom: 20,
   },
   dateInputLabel: {
     fontSize: 15,
@@ -270,13 +526,13 @@ const styles = StyleSheet.create({
   dateInput: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#D1D5DB',
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     backgroundColor: '#FFFFFF',
-    minHeight: 44,
+    minHeight: 50,
   },
   dateInputText: {
     fontSize: 15,

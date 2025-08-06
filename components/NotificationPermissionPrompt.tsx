@@ -19,10 +19,10 @@ export const NotificationPermissionPrompt: React.FC = () => {
 
   const checkShouldShowPrompt = async () => {
     try {
-      // Don't show prompt in Expo Go
-      const isExpoGo = Constants.appOwnership === 'expo';
+      // Don't show prompt in Expo Go or development
+      const isExpoGo = Constants.appOwnership === 'expo' || __DEV__;
       if (isExpoGo) {
-        console.log('Skipping notification prompt in Expo Go');
+        console.log('Skipping notification prompt in development/Expo Go');
         return;
       }
 

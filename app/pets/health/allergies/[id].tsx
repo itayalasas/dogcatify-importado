@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Calendar, TriangleAlert as AlertTriangle } from 'lucide-react-native';
+import { ArrowLeft, Calendar, TriangleAlert as AlertTriangle, ChevronDown } from 'lucide-react-native';
 import { Input } from '../../../../components/ui/Input';
 import { Button } from '../../../../components/ui/Button';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -11,23 +11,148 @@ import { useAuth } from '../../../../contexts/AuthContext';
 
 export default function AddAllergy() {
   const { id, recordId, refresh } = useLocalSearchParams<{ id: string; recordId?: string; refresh?: string }>();
+  const params = useLocalSearchParams();
   const { currentUser } = useAuth();
+  
+  // Pet data
+  const [pet, setPet] = useState<any>(null);
+  
+  // Form data
   const [allergyName, setAllergyName] = useState('');
   const [allergyType, setAllergyType] = useState('');
   const [symptoms, setSymptoms] = useState('');
   const [severity, setSeverity] = useState('');
   const [treatment, setTreatment] = useState('');
+  const [selectedVeterinarian, setSelectedVeterinarian] = useState<any>(null);
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showAddVetModal, setShowAddVetModal] = useState(false);
+  const [tempVetName, setTempVetName] = useState('');
+
+  // Handle return parameters from selection screens
+  useEffect(() => {
+    // Handle preserved allergy type
+    if (params.currentAllergyType && typeof params.currentAllergyType === 'string') {
+      setAllergyType(params.currentAllergyType);
+    }
+    
+    // Handle selected allergy
+    if (params.selectedAllergy) {
+      try {
+        const allergy = JSON.parse(params.selectedAllergy as string);
+        setAllergyName(allergy.name);
+        setAllergyType(allergy.category);
+        // Pre-fill symptoms if available
+        if (allergy.common_symptoms && allergy.common_symptoms.length > 0) {
+          setSymptoms(allergy.common_symptoms.join(', '));
+        }
+        console.log('Selected allergy:', allergy.name);
+      } catch (error) {
+        console.error('Error parsing selected allergy:', error);
+      }
+    }
+    
+    // Handle selected veterinarian
+    if (params.selectedVeterinarian) {
+      try {
+        const vet = JSON.parse(params.selectedVeterinarian as string);
+        setTreatment(vet.name); // For allergies, veterinarian info goes in treatment
+        setSelectedVeterinarian(vet);
+        console.log('Selected veterinarian:', vet.name);
+      } catch (error) {
+        console.error('Error parsing selected veterinarian:', error);
+      }
+    }
+    
+    // Handle preserved values
+    if (params.currentSymptoms && typeof params.currentSymptoms === 'string') {
+      setSymptoms(params.currentSymptoms);
+    }
+    
+    if (params.currentSeverity && typeof params.currentSeverity === 'string') {
+      setSeverity(params.currentSeverity);
+    }
+    
+    if (params.currentTreatment && typeof params.currentTreatment === 'string') {
+      setTreatment(params.currentTreatment);
+    }
+    
+    if (params.currentNotes && typeof params.currentNotes === 'string') {
+      setNotes(params.currentNotes);
+    }
+  }, [params.selectedAllergy, params.currentSymptoms, params.currentSeverity, params.currentTreatment, params.currentNotes]);
 
   useEffect(() => {
+    fetchPetData();
+    
     if (recordId) {
       setIsEditing(true);
       fetchAllergyDetails();
     }
   }, [recordId]);
 
+  const fetchPetData = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('pets')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error) throw error;
+      setPet(data);
+    } catch (error) {
+      console.error('Error fetching pet data:', error);
+    }
+  };
+
+  const handleSelectAllergy = () => {
+    router.push({
+      pathname: '/pets/health/select-allergy',
+      params: { 
+        petId: id,
+        species: pet?.species || 'dog',
+        returnPath: `/pets/health/allergies/${id}`,
+        currentValue: allergyName,
+        // Preserve current form values
+        currentSymptoms: symptoms,
+        currentSeverity: severity,
+        currentTreatment: treatment,
+        currentNotes: notes,
+        currentAllergyType: allergyType
+      }
+    });
+  };
+
+  const handleSelectVeterinarian = () => {
+    router.push({
+      pathname: '/pets/health/select-veterinarian',
+      params: { 
+        petId: id,
+        returnPath: `/pets/health/allergies/${id}`,
+        currentValue: treatment,
+        // Preserve current form values
+        currentCondition: allergyName,
+        currentNotes: notes,
+        currentSymptoms: symptoms,
+        currentSeverity: severity,
+        currentAllergyType: allergyType
+      }
+    });
+  };
+
+  const handleAddTemporaryVet = async () => {
+    if (!tempVetName.trim()) {
+      Alert.alert('Error', 'Por favor ingresa el nombre del veterinario');
+      return;
+    }
+    
+    setTreatment(tempVetName.trim());
+    setTempVetName('');
+    setShowAddVetModal(false);
+    Alert.alert('Veterinario agregado', `${tempVetName.trim()} ha sido agregado temporalmente`);
+  };
   const fetchAllergyDetails = async () => {
     try {
       const { data, error } = await supabaseClient
@@ -40,7 +165,6 @@ export default function AddAllergy() {
       
       if (data) {
         setAllergyName(data.name || '');
-        setAllergyType(data.allergy_type || '');
         setSymptoms(data.symptoms || '');
         setSeverity(data.severity || '');
         setTreatment(data.treatment || '');
@@ -70,7 +194,6 @@ export default function AddAllergy() {
         user_id: currentUser.id,
         type: 'allergy',
         name: allergyName.trim(),
-        allergy_type: allergyType.trim() || null,
         symptoms: symptoms.trim(),
         severity: severity.trim() || null,
         treatment: treatment.trim() || null,
@@ -86,7 +209,6 @@ export default function AddAllergy() {
           .from('pet_health')
           .update({
             name: allergyName.trim(),
-            allergy_type: allergyType.trim() || null,
             symptoms: symptoms.trim(),
             severity: severity.trim() || null,
             treatment: treatment.trim() || null,
@@ -106,7 +228,10 @@ export default function AddAllergy() {
       }
 
       Alert.alert('Éxito', isEditing ? 'Alergia actualizada correctamente' : 'Alergia registrada correctamente', [
-        { text: 'OK', onPress: () => router.back() }
+        { text: 'OK', onPress: () => router.push({
+          pathname: `/pets/${id}`,
+          params: { activeTab: 'health' }
+        }) }
       ]);
     } catch (error) {
       console.error('Error saving allergy:', error);
@@ -116,10 +241,16 @@ export default function AddAllergy() {
     }
   };
 
+  const handleBackNavigation = () => {
+    router.push({
+      pathname: `/pets/${id}`,
+      params: { activeTab: 'health' }
+    });
+  };
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={handleBackNavigation} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>{isEditing ? 'Editar Alergia' : 'Agregar Alergia'}</Text>
@@ -132,12 +263,36 @@ export default function AddAllergy() {
             <AlertTriangle size={40} color="#F59E0B" />
           </View>
 
-          <Input
-            label="Alérgeno *"
-            placeholder="Ej: Polen, ácaros, pollo, salmón..."
-            value={allergyName}
-            onChangeText={setAllergyName}
-          />
+          {pet && (
+            <View style={styles.petInfoContainer}>
+              <Text style={styles.petInfoText}>
+                {pet.species === 'dog' ? '🐕' : '🐱'} {pet.name} - {pet.breed}
+              </Text>
+              <Text style={styles.petInfoSubtext}>
+                Alergias comunes en {pet.species === 'dog' ? 'perros' : 'gatos'}
+              </Text>
+            </View>
+          )}
+
+          {/* Allergy Name - Navigable */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Alérgeno *</Text>
+            <TouchableOpacity 
+              style={styles.selectableInput}
+              onPress={handleSelectAllergy}
+            >
+              <Text style={[
+                styles.selectableInputText,
+                !allergyName && styles.placeholderText
+              ]}>
+                {allergyName || (pet?.species === 'dog' ? 
+                  "Seleccionar alergia para perros..." : 
+                  "Seleccionar alergia para gatos..."
+                )}
+              </Text>
+              <ChevronDown size={20} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
 
           <Input
             label="Tipo de alergia"
@@ -162,14 +317,37 @@ export default function AddAllergy() {
             onChangeText={setSeverity}
           />
 
-          <Input
-            label="Tratamiento"
-            placeholder="Medicamentos, dieta especial, etc."
-            value={treatment}
-            onChangeText={setTreatment}
-            multiline
-            numberOfLines={2}
-          />
+          {/* Treatment/Veterinarian - Navigable */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Tratamiento / Veterinario</Text>
+            <TouchableOpacity 
+              style={styles.selectableInput}
+              onPress={handleSelectVeterinarian}
+            >
+              <Text style={[
+                styles.selectableInputText,
+                !treatment && styles.placeholderText
+              ]}>
+                {treatment || "Seleccionar veterinario o escribir tratamiento..."}
+              </Text>
+              <ChevronDown size={20} color="#6B7280" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.addTempVetButton}
+              onPress={() => setShowAddVetModal(true)}
+            >
+              <Text style={styles.addTempVetText}>+ Agregar veterinario temporal</Text>
+            </TouchableOpacity>
+            
+            <Input
+              placeholder="O escribe el tratamiento manualmente..."
+              value={treatment}
+              onChangeText={setTreatment}
+              multiline
+              numberOfLines={2}
+            />
+          </View>
 
           <Input
             label="Notas adicionales"
@@ -188,6 +366,49 @@ export default function AddAllergy() {
           />
         </Card>
       </ScrollView>
+
+      {/* Add Temporary Veterinarian Modal */}
+      <Modal
+        visible={showAddVetModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAddVetModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Agregar Veterinario Temporal</Text>
+            <Text style={styles.modalSubtitle}>
+              Si el veterinario no está en la lista, puedes agregarlo temporalmente
+            </Text>
+            
+            <Input
+              label="Nombre del veterinario o clínica"
+              placeholder="Ej: Dr. García, Clínica San Martín"
+              value={tempVetName}
+              onChangeText={setTempVetName}
+            />
+            
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancelar"
+                onPress={() => {
+                  setShowAddVetModal(false);
+                  setTempVetName('');
+                }}
+                variant="outline"
+                size="large"
+                style={styles.modalButton}
+              />
+              <Button
+                title="Agregar"
+                onPress={handleAddTemporaryVet}
+                size="large"
+                style={styles.modalButton}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -228,5 +449,102 @@ const styles = StyleSheet.create({
   iconContainer: {
     alignItems: 'center',
     marginBottom: 24,
+  },
+  petInfoContainer: {
+    backgroundColor: '#F0F9FF',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  petInfoText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0369A1',
+    marginBottom: 4,
+  },
+  petInfoSubtext: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#0369A1',
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  selectableInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 50,
+  },
+  selectableInputText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    flex: 1,
+  },
+  placeholderText: {
+    color: '#9CA3AF',
+  },
+  addTempVetButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+  },
+  addTempVetText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#3B82F6',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingBottom: 0,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 40,
+    width: '100%',
+    maxHeight: '60%',
+    minHeight: 300,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  modalActions: {
+    flexDirection: 'column',
+    gap: 16,
+    marginTop: 24,
+  },
+  modalButton: {
+    width: '100%',
   },
 });
