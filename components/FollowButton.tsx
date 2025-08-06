@@ -69,79 +69,14 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
     try {
       if (isFollowing) {
         // Unfollow
-        // Get current following list
-        const { data: currentUserData, error: currentUserError } = await supabaseClient
-          .from('profiles')
-          .select('following')
-          .eq('id', currentUser.id)
-          .single();
-        
-        if (currentUserError) throw currentUserError;
-        
-        // Get target user followers list
-        const { data: targetUserData, error: targetUserError } = await supabaseClient
-          .from('profiles')
-          .select('followers')
-          .eq('id', userId)
-          .single();
-        
-        if (targetUserError) throw targetUserError;
-        
-        // Update current user following list
-        const newFollowing = (currentUserData.following || []).filter((id: string) => id !== userId);
-        const { error: updateCurrentError } = await supabaseClient
-          .from('profiles')
-          .update({ following: newFollowing })
-          .eq('id', currentUser.id);
-        
-        if (updateCurrentError) throw updateCurrentError;
-        
-        // Update target user followers list
-        const newFollowers = (targetUserData.followers || []).filter((id: string) => id !== currentUser.id);
-        const { error: updateTargetError } = await supabaseClient
-          .from('profiles')
-          .update({ followers: newFollowers })
-          .eq('id', userId);
-        
-        if (updateTargetError) throw updateTargetError;
+        await unfollowUser(currentUser.id, userId);
       } else {
         // Follow
-        // Get current following list
-        const { data: currentUserData, error: currentUserError } = await supabaseClient
-          .from('profiles')
-          .select('following')
-          .eq('id', currentUser.id)
-          .single();
-        
-        if (currentUserError) throw currentUserError;
-        
-        // Get target user followers list
-        const { data: targetUserData, error: targetUserError } = await supabaseClient
-          .from('profiles')
-          .select('followers')
-          .eq('id', userId)
-          .single();
-        
-        if (targetUserError) throw targetUserError;
-        
-        // Update current user following list
-        const newFollowing = [...(currentUserData.following || []), userId];
-        const { error: updateCurrentError } = await supabaseClient
-          .from('profiles')
-          .update({ following: newFollowing })
-          .eq('id', currentUser.id);
-        
-        if (updateCurrentError) throw updateCurrentError;
-        
-        // Update target user followers list
-        const newFollowers = [...(targetUserData.followers || []), currentUser.id];
-        const { error: updateTargetError } = await supabaseClient
-          .from('profiles')
-          .update({ followers: newFollowers })
-          .eq('id', userId);
-        
-        if (updateTargetError) throw updateTargetError;
+        await followUser(currentUser.id, userId);
       }
+      
+      // Update local state immediately
+      setIsFollowing(!isFollowing);
     } catch (error) {
       console.error('Error updating follow status:', error);
       Alert.alert('Error', 'No se pudo actualizar el estado de seguimiento');
@@ -150,6 +85,97 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
     }
   };
 
+  const followUser = async (followerId: string, followingId: string) => {
+    // Get current data for both users
+    const [currentUserResult, targetUserResult] = await Promise.all([
+      supabaseClient
+        .from('profiles')
+        .select('following')
+        .eq('id', followerId)
+        .single(),
+      supabaseClient
+        .from('profiles')
+        .select('followers')
+        .eq('id', followingId)
+        .single()
+    ]);
+    
+    if (currentUserResult.error) throw currentUserResult.error;
+    if (targetUserResult.error) throw targetUserResult.error;
+    
+    // Update following list for current user
+    const newFollowing = [...(currentUserResult.data.following || []), followingId];
+    
+    // Update followers list for target user
+    const newFollowers = [...(targetUserResult.data.followers || []), followerId];
+    
+    // Update both users simultaneously
+    const [updateCurrentResult, updateTargetResult] = await Promise.all([
+      supabaseClient
+        .from('profiles')
+        .update({ 
+          following: newFollowing,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', followerId),
+      supabaseClient
+        .from('profiles')
+        .update({ 
+          followers: newFollowers,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', followingId)
+    ]);
+    
+    if (updateCurrentResult.error) throw updateCurrentResult.error;
+    if (updateTargetResult.error) throw updateTargetResult.error;
+  };
+
+  const unfollowUser = async (followerId: string, followingId: string) => {
+    // Get current data for both users
+    const [currentUserResult, targetUserResult] = await Promise.all([
+      supabaseClient
+        .from('profiles')
+        .select('following')
+        .eq('id', followerId)
+        .single(),
+      supabaseClient
+        .from('profiles')
+        .select('followers')
+        .eq('id', followingId)
+        .single()
+    ]);
+    
+    if (currentUserResult.error) throw currentUserResult.error;
+    if (targetUserResult.error) throw targetUserResult.error;
+    
+    // Remove from following list for current user
+    const newFollowing = (currentUserResult.data.following || []).filter((id: string) => id !== followingId);
+    
+    // Remove from followers list for target user
+    const newFollowers = (targetUserResult.data.followers || []).filter((id: string) => id !== followerId);
+    
+    // Update both users simultaneously
+    const [updateCurrentResult, updateTargetResult] = await Promise.all([
+      supabaseClient
+        .from('profiles')
+        .update({ 
+          following: newFollowing,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', followerId),
+      supabaseClient
+        .from('profiles')
+        .update({ 
+          followers: newFollowers,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', followingId)
+    ]);
+    
+    if (updateCurrentResult.error) throw updateCurrentResult.error;
+    if (updateTargetResult.error) throw updateTargetResult.error;
+  };
   // Don't show button for own posts
   if (!currentUser || userId === currentUser.id) {
     return null;

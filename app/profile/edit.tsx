@@ -11,7 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { supabaseClient } from '../../lib/supabase';
 
 export default function EditProfile() {
-  const { currentUser } = useAuth();
+  const { currentUser, updateCurrentUser } = useAuth();
   const { t } = useLanguage();
   
   // Form state
@@ -495,73 +495,104 @@ export default function EditProfile() {
       // Upload new image if selected
       if (selectedImage) {
         console.log('Uploading new image...');
-        photoURL = await uploadImageToStorage(selectedImage);
-        console.log('Image uploaded successfully:', photoURL);
+        try {
+          photoURL = await uploadImageToStorage(selectedImage);
+          console.log('Image uploaded successfully:', photoURL);
+        } catch (uploadError) {
+          console.error('Error uploading image:', uploadError);
+          setLoading(false);
+          Alert.alert('Error', 'No se pudo subir la imagen. ¿Deseas continuar sin cambiar la foto?', [
+            { text: 'Cancelar', style: 'cancel' },
+            { text: 'Continuar', onPress: () => {
+              setLoading(true);
+              proceedWithoutImageUpload();
+            }}
+          ]);
+          return;
+        }
       }
 
+      await saveProfileData(photoURL);
+    } catch (error) {
+      console.error('Error in handleSaveProfile:', error);
+      Alert.alert('Error', `No se pudo actualizar el perfil: ${error.message || error}`);
+    } finally {
+      // ALWAYS clear loading state
+      setLoading(false);
+    }
+  };
+
+  const proceedWithoutImageUpload = async () => {
+    try {
+      await saveProfileData(profileImage);
+    } catch (error) {
+      console.error('Error saving profile without image:', error);
+      Alert.alert('Error', `No se pudo actualizar el perfil: ${error.message || error}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveProfileData = async (photoURL: string | null) => {
+    try {
       console.log('Updating Supabase profile...');
+      
+      // Prepare update data
+      const updateData = {
+        display_name: displayName.trim(),
+        photo_url: photoURL || null,
+        phone: phone.trim() || null,
+        location: address.trim() || null, // Mantener para compatibilidad
+        bio: bio.trim() || null,
+        // Nuevos campos de dirección
+        country_id: selectedCountry?.id || null,
+        department_id: selectedDepartment?.id || null,
+        calle: calle.trim() || null,
+        numero: numero.trim() || null,
+        barrio: barrio.trim() || null,
+        codigo_postal: codigoPostal.trim() || null,
+        latitud: latitud.trim() || null,
+        longitud: longitud.trim() || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      console.log('Update data:', updateData);
+
       // Update Supabase user profile
       const { error } = await supabaseClient
         .from('profiles')
-        .update({
-          display_name: displayName.trim(),
-          photo_url: photoURL || null,
-          phone: phone.trim() || null,
-          location: address.trim() || null, // Mantener para compatibilidad
-          bio: bio.trim() || null,
-          // Nuevos campos de dirección
-          country_id: selectedCountry?.id || null,
-          department_id: selectedDepartment?.id || null,
-          calle: calle.trim() || null,
-          numero: numero.trim() || null,
-          barrio: barrio.trim() || null,
-          codigo_postal: codigoPostal.trim() || null,
-          latitud: latitud.trim() || null,
-          longitud: longitud.trim() || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', currentUser.id);
+        .update(updateData)
+        .eq('id', currentUser!.id);
 
       if (error) {
         console.error('Supabase profile update error:', error);
-        throw error;
+        throw new Error(`Error de base de datos: ${error.message}`);
       }
       console.log('Supabase profile updated successfully');
 
-      console.log('Updating auth user metadata...');
-      // Update auth user metadata
-      const { error: authError } = await supabaseClient.auth.updateUser({
-        data: {
-          display_name: displayName.trim(),
-          photo_url: photoURL || null,
-        }
-      });
+      // Update the current user in the auth context immediately
+      const updatedUser = {
+        ...currentUser!,
+        displayName: displayName.trim(),
+        photoURL: photoURL || currentUser!.photoURL,
+        phone: phone.trim() || currentUser!.phone,
+        location: address.trim() || currentUser!.location,
+        bio: bio.trim() || currentUser!.bio,
+      };
       
-      if (authError) {
-        console.error('Auth user update error:', authError);
-        // Don't throw error here as profile was already updated
-      } else {
-        console.log('Auth user updated successfully');
-      }
-
-      // Since posts, comments, and albums use user_id references,
-      // they will automatically show updated profile info via joins
-      console.log('Profile references will be updated automatically via joins');
+      console.log('Updating current user in context...');
+      updateCurrentUser(updatedUser);
 
       console.log('Profile save completed successfully');
       
-      // Clear loading state BEFORE showing alert
-      setLoading(false);
-      
-      // Show success message and navigate back
+      // Success - navigate immediately
       Alert.alert('Éxito', 'Perfil actualizado correctamente', [
-        { text: 'OK', onPress: () => router.back() }
+        { text: 'OK', onPress: () => router.replace('/(tabs)/profile') }
       ]);
       
     } catch (error) {
-      console.error('Error updating profile:', error);
-      setLoading(false);
-      Alert.alert('Error', `No se pudo actualizar el perfil: ${error.message || error}`);
+      console.error('Error in saveProfileData:', error);
+      throw error;
     }
   };
 

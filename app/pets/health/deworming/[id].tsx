@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Calendar, Pill } from 'lucide-react-native';
+import { ArrowLeft, Calendar, Pill, ChevronDown } from 'lucide-react-native';
 import { Input } from '../../../../components/ui/Input';
 import { Button } from '../../../../components/ui/Button';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -11,26 +11,227 @@ import { useAuth } from '../../../../contexts/AuthContext';
 
 export default function AddDeworming() {
   const { id, recordId, refresh } = useLocalSearchParams<{ id: string; recordId?: string; refresh?: string }>();
+  const params = useLocalSearchParams();
   const { currentUser } = useAuth();
   
+  // Pet data
+  const [pet, setPet] = useState<any>(null);
+  
+  // Form data
   const [productName, setProductName] = useState('');
   const [applicationDate, setApplicationDate] = useState(new Date());
   const [nextDueDate, setNextDueDate] = useState<Date | null>(null);
   const [veterinarian, setVeterinarian] = useState('');
+  const [selectedDewormer, setSelectedDewormer] = useState<any>(null);
+  const [selectedVeterinarian, setSelectedVeterinarian] = useState<any>(null);
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
   const [showApplicationDatePicker, setShowApplicationDatePicker] = useState(false);
   const [showNextDueDatePicker, setShowNextDueDatePicker] = useState(false);
+  const [showAddVetModal, setShowAddVetModal] = useState(false);
+  const [tempVetName, setTempVetName] = useState('');
 
+  // Handle return parameters from selection screens
   useEffect(() => {
+    // Handle preserved application date
+    if (params.currentApplicationDate && typeof params.currentApplicationDate === 'string') {
+      try {
+        setApplicationDate(new Date(params.currentApplicationDate));
+      } catch (error) {
+        console.error('Error parsing application date:', error);
+      }
+    }
+    
+    // Handle selected dewormer
+    if (params.selectedDewormer) {
+      try {
+        const dewormer = JSON.parse(params.selectedDewormer as string);
+        setProductName(dewormer.name);
+        setSelectedDewormer(dewormer);
+        console.log('Selected dewormer:', dewormer.name);
+      } catch (error) {
+        console.error('Error parsing selected dewormer:', error);
+      }
+    }
+    
+    // Handle selected veterinarian
+    if (params.selectedVeterinarian) {
+      try {
+        const vet = JSON.parse(params.selectedVeterinarian as string);
+        setVeterinarian(vet.name);
+        setSelectedVeterinarian(vet);
+        console.log('Selected veterinarian:', vet.name);
+      } catch (error) {
+        console.error('Error parsing selected veterinarian:', error);
+      }
+    }
+    
+    // Handle preserved values
+    if (params.currentVeterinarian && typeof params.currentVeterinarian === 'string') {
+      setVeterinarian(params.currentVeterinarian);
+    }
+    
+    if (params.currentNotes && typeof params.currentNotes === 'string') {
+      setNotes(params.currentNotes);
+    }
+    
+    if (params.currentNextDueDate && typeof params.currentNextDueDate === 'string') {
+      try {
+        setNextDueDate(new Date(params.currentNextDueDate));
+      } catch (error) {
+        console.error('Error parsing next due date:', error);
+      }
+    }
+  }, [params.selectedDewormer, params.currentVeterinarian, params.currentNotes, params.currentNextDueDate]);
+
+  // Calculate next due date when dewormer or application date changes
+  useEffect(() => {
+    if (selectedDewormer && applicationDate) {
+      calculateNextDueDate();
+    }
+  }, [selectedDewormer, applicationDate]);
+
+  const calculateNextDueDate = () => {
+    if (!selectedDewormer || !applicationDate || !pet) return;
+    
+    const nextDate = new Date(applicationDate);
+    
+    // Logic based on dewormer frequency and pet age
+    if (selectedDewormer.frequency) {
+      const frequency = selectedDewormer.frequency.toLowerCase();
+      
+      if (frequency.includes('cada 3 meses') || frequency.includes('quarterly')) {
+        nextDate.setMonth(nextDate.getMonth() + 3);
+      } else if (frequency.includes('cada 2 meses') || frequency.includes('bi-monthly')) {
+        nextDate.setMonth(nextDate.getMonth() + 2);
+      } else if (frequency.includes('mensual') || frequency.includes('monthly')) {
+        nextDate.setMonth(nextDate.getMonth() + 1);
+      } else if (frequency.includes('cada 2 semanas') || frequency.includes('bi-weekly')) {
+        nextDate.setDate(nextDate.getDate() + 14);
+      } else if (frequency.includes('semanal') || frequency.includes('weekly')) {
+        nextDate.setDate(nextDate.getDate() + 7);
+      } else {
+        // Default frequency based on age
+        const ageInWeeks = calculateAgeInWeeks(pet);
+        if (ageInWeeks < 16) {
+          nextDate.setDate(nextDate.getDate() + 14); // Every 2 weeks for puppies
+        } else {
+          nextDate.setMonth(nextDate.getMonth() + 3); // Every 3 months for adults
+        }
+      }
+    } else {
+      // Default frequency based on age
+      const ageInWeeks = calculateAgeInWeeks(pet);
+      if (ageInWeeks < 16) {
+        // Puppies/kittens - every 2 weeks
+        nextDate.setDate(nextDate.getDate() + 14);
+      } else if (ageInWeeks < 52) {
+        // Young adults - every month
+        nextDate.setMonth(nextDate.getMonth() + 1);
+      } else {
+        // Adults - every 3 months
+        nextDate.setMonth(nextDate.getMonth() + 3);
+      }
+    }
+    
+    setNextDueDate(nextDate);
+  };
+
+  const calculateAgeInWeeks = (petData: any) => {
+    if (!petData.age_display && petData.age) {
+      return petData.age * 52; // Default to years
+    }
+    
+    if (!petData.age_display) {
+      return 52; // Default to 1 year if no age data
+    }
+    
+    const { value, unit } = petData.age_display;
+    
+    if (!value || !unit) {
+      return petData.age ? petData.age * 52 : 52;
+    }
+    
+    switch (unit) {
+      case 'days':
+        return value / 7;
+      case 'months':
+        return value * 4.33; // Average weeks per month
+      case 'years':
+      default:
+        return value * 52;
+    }
+  };
+  useEffect(() => {
+    fetchPetData();
+    
     if (recordId) {
       setIsEditing(true);
       fetchDewormingDetails();
     }
   }, [recordId]);
 
+  const fetchPetData = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('pets')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error) throw error;
+      setPet(data);
+    } catch (error) {
+      console.error('Error fetching pet data:', error);
+    }
+  };
+
+  const handleSelectDewormer = () => {
+    router.push({
+      pathname: '/pets/health/select-dewormer',
+      params: { 
+        petId: id,
+        species: pet?.species || 'dog',
+        returnPath: `/pets/health/deworming/${id}`,
+        currentValue: productName,
+        // Preserve current form values
+        currentVeterinarian: veterinarian,
+        currentNotes: notes,
+        currentNextDueDate: nextDueDate?.toISOString(),
+        currentApplicationDate: applicationDate.toISOString()
+      }
+    });
+  };
+
+  const handleSelectVeterinarian = () => {
+    router.push({
+      pathname: '/pets/health/select-veterinarian',
+      params: { 
+        petId: id,
+        returnPath: `/pets/health/deworming/${id}`,
+        currentValue: veterinarian,
+        // Preserve current form values
+        currentCondition: productName,
+        currentNotes: notes,
+        currentApplicationDate: applicationDate.toISOString(),
+        currentNextDueDate: nextDueDate?.toISOString()
+      }
+    });
+  };
+
+  const handleAddTemporaryVet = async () => {
+    if (!tempVetName.trim()) {
+      Alert.alert('Error', 'Por favor ingresa el nombre del veterinario');
+      return;
+    }
+    
+    setVeterinarian(tempVetName.trim());
+    setTempVetName('');
+    setShowAddVetModal(false);
+    Alert.alert('Veterinario agregado', `${tempVetName.trim()} ha sido agregado temporalmente`);
+  };
   const fetchDewormingDetails = async () => {
     try {
       const { data, error } = await supabaseClient
@@ -71,7 +272,11 @@ export default function AddDeworming() {
 
   const formatDate = (date: Date | null) => {
     if (!date) return '';
-    return date.toLocaleDateString();
+    return date.toLocaleDateString('es-ES', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
   };
 
   const onApplicationDateChange = (event: any, selectedDate?: Date) => {
@@ -139,8 +344,47 @@ export default function AddDeworming() {
         throw error;
       }
 
+      // Try to generate medical alert for next deworming
+      if (nextDueDate) {
+        try {
+          const alertDate = new Date(nextDueDate);
+          alertDate.setDate(alertDate.getDate() - 3); // 3 days before for deworming
+          
+          if (alertDate > new Date()) {
+            const { error: alertError } = await supabaseClient
+              .from('medical_alerts')
+              .insert({
+                pet_id: id,
+                user_id: currentUser.id,
+                alert_type: 'deworming',
+                title: 'Desparasitación pendiente',
+                description: `Es hora de desparasitar a ${pet?.name}`,
+                due_date: alertDate.toISOString().split('T')[0],
+                priority: 'medium',
+                status: 'pending',
+                metadata: {
+                  product_name: productName.trim(),
+                  last_application: formatDate(applicationDate),
+                  veterinarian: veterinarian.trim() || null
+                }
+              });
+            
+            if (alertError) {
+              console.warn('Could not create medical alert:', alertError);
+            } else {
+              console.log('Medical alert created for next deworming');
+            }
+          }
+        } catch (alertError) {
+          console.warn('Error creating medical alert:', alertError);
+        }
+      }
+
       Alert.alert('Éxito', 'Desparasitación guardada correctamente', [
-        { text: 'OK', onPress: () => router.back() }
+        { text: 'OK', onPress: () => router.push({
+          pathname: `/pets/${id}`,
+          params: { activeTab: 'health' }
+        }) }
       ]);
     } catch (error) {
       console.error('Error saving deworming:', error);
@@ -150,10 +394,16 @@ export default function AddDeworming() {
     }
   };
 
+  const handleBackNavigation = () => {
+    router.push({
+      pathname: `/pets/${id}`,
+      params: { activeTab: 'health' }
+    });
+  };
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={handleBackNavigation} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>{isEditing ? 'Editar Desparasitación' : 'Agregar Desparasitación'}</Text>
@@ -166,13 +416,36 @@ export default function AddDeworming() {
             <Pill size={40} color="#10B981" />
           </View>
 
-          {/* Product Name */}
-          <Input
-            label="Producto utilizado *"
-            placeholder="Ej: Drontal, Milbemax, Revolution..."
-            value={productName}
-            onChangeText={setProductName}
-          />
+          {pet && (
+            <View style={styles.petInfoContainer}>
+              <Text style={styles.petInfoText}>
+                {pet.species === 'dog' ? '🐕' : '🐱'} {pet.name} - {pet.breed}
+              </Text>
+              <Text style={styles.petInfoSubtext}>
+                Desparasitantes para {pet.species === 'dog' ? 'perros' : 'gatos'}
+              </Text>
+            </View>
+          )}
+
+          {/* Product Name - Navigable */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Producto utilizado *</Text>
+            <TouchableOpacity 
+              style={styles.selectableInput}
+              onPress={handleSelectDewormer}
+            >
+              <Text style={[
+                styles.selectableInputText,
+                !productName && styles.placeholderText
+              ]}>
+                {productName || (pet?.species === 'dog' ? 
+                  "Seleccionar desparasitante para perros..." : 
+                  "Seleccionar desparasitante para gatos..."
+                )}
+              </Text>
+              <ChevronDown size={20} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
 
           {/* Application Date */}
           <View style={styles.dateInputContainer}>
@@ -218,12 +491,29 @@ export default function AddDeworming() {
             )}
           </View>
 
-          <Input
-            label="Veterinario"
-            placeholder="Nombre del veterinario o clínica"
-            value={veterinarian}
-            onChangeText={setVeterinarian}
-          />
+          {/* Veterinarian - Navigable */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Veterinario</Text>
+            <TouchableOpacity 
+              style={styles.selectableInput}
+              onPress={handleSelectVeterinarian}
+            >
+              <Text style={[
+                styles.selectableInputText,
+                !veterinarian && styles.placeholderText
+              ]}>
+                {veterinarian || "Seleccionar veterinario..."}
+              </Text>
+              <ChevronDown size={20} color="#6B7280" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.addTempVetButton}
+              onPress={() => setShowAddVetModal(true)}
+            >
+              <Text style={styles.addTempVetText}>+ Agregar veterinario temporal</Text>
+            </TouchableOpacity>
+          </View>
 
           <Input
             label="Notas adicionales"
@@ -242,6 +532,49 @@ export default function AddDeworming() {
           />
         </Card>
       </ScrollView>
+
+      {/* Add Temporary Veterinarian Modal */}
+      <Modal
+        visible={showAddVetModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAddVetModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Agregar Veterinario Temporal</Text>
+            <Text style={styles.modalSubtitle}>
+              Si el veterinario no está en la lista, puedes agregarlo temporalmente
+            </Text>
+            
+            <Input
+              label="Nombre del veterinario o clínica"
+              placeholder="Ej: Dr. García, Clínica San Martín"
+              value={tempVetName}
+              onChangeText={setTempVetName}
+            />
+            
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancelar"
+                onPress={() => {
+                  setShowAddVetModal(false);
+                  setTempVetName('');
+                }}
+                variant="outline"
+                size="large"
+                style={styles.modalButton}
+              />
+              <Button
+                title="Agregar"
+                onPress={handleAddTemporaryVet}
+                size="large"
+                style={styles.modalButton}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -283,6 +616,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
+  petInfoContainer: {
+    backgroundColor: '#F0F9FF',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  petInfoText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0369A1',
+    marginBottom: 4,
+  },
+  petInfoSubtext: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#0369A1',
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  selectableInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 50,
+  },
+  selectableInputText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    flex: 1,
+  },
+  placeholderText: {
+    color: '#9CA3AF',
+  },
   dateInputContainer: {
     marginBottom: 14,
   },
@@ -308,5 +689,85 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#111827',
     marginLeft: 10,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  selectableInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 50,
+    marginBottom: 8,
+  },
+  selectableInputText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    flex: 1,
+  },
+  placeholderText: {
+    color: '#9CA3AF',
+  },
+  addTempVetButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+  },
+  addTempVetText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#3B82F6',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingBottom: 0,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 40,
+    width: '100%',
+    maxHeight: '60%',
+    minHeight: 300,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  modalActions: {
+    flexDirection: 'column',
+    gap: 16,
+    marginTop: 24,
+  },
+  modalButton: {
+    width: '100%',
   },
 });

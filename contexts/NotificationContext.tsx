@@ -40,9 +40,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // Auto-register push token when user is authenticated
   useEffect(() => {
-    if (currentUser && !expoPushToken) {
+    // Don't auto-register in Expo Go or if notifications are not supported
+    const isExpoGo = Constants.appOwnership === 'expo' || __DEV__;
+    if (currentUser && !expoPushToken && !isExpoGo) {
       console.log('User authenticated, auto-registering push notifications...');
       registerForPushNotifications();
+    } else if (isExpoGo) {
+      console.log('Skipping auto-registration in development/Expo Go - notifications not supported');
     }
   }, [currentUser]);
   useEffect(() => {
@@ -67,11 +71,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       console.log('Starting push notification registration...');
       
-      // Check if running in Expo Go
-      const isExpoGo = Constants.appOwnership === 'expo';
+      // Check if running in Expo Go or development
+      const isExpoGo = Constants.appOwnership === 'expo' || __DEV__;
       if (isExpoGo) {
-        console.log('Running in Expo Go - push notifications may have limitations');
-        // Don't return null immediately, try to register anyway
+        console.log('Running in development/Expo Go - push notifications not supported');
+        return null;
       }
       
       // For web, skip push notifications

@@ -34,8 +34,16 @@ const behaviorTraits = [
   { name: 'Agresividad', description: 'Tendencia a mostrar comportamiento agresivo' },
   { name: 'Ansiedad', description: 'Nivel de estrés y ansiedad' },
   { name: 'Protección', description: 'Instinto protector hacia la familia' },
-  { name: 'Ladrido', description: 'Frecuencia e intensidad de ladridos' },
   { name: 'Independencia', description: 'Capacidad de estar solo' },
+];
+
+const dogSpecificTraits = [
+  { name: 'Ladrido', description: 'Frecuencia e intensidad de ladridos' },
+];
+
+const catSpecificTraits = [
+  { name: 'Maullido', description: 'Frecuencia e intensidad de maullidos' },
+  { name: 'Arañado', description: 'Tendencia a arañar muebles u objetos' },
 ];
 
 export default function PetBehaviorAssessment() {
@@ -74,8 +82,12 @@ export default function PetBehaviorAssessment() {
         throw behaviorError;
       }
 
+      // Get species-specific traits
+      const speciesSpecificTraits = petData.species === 'cat' ? catSpecificTraits : dogSpecificTraits;
+      const allTraits = [...behaviorTraits, ...speciesSpecificTraits];
+
       // Initialize traits with breed info if available
-      const initialTraits = behaviorTraits.map(trait => {
+      const initialTraits = allTraits.map(trait => {
         let score = 3; // Default score
         
         // Pre-fill based on breed info if available
@@ -105,7 +117,21 @@ export default function PetBehaviorAssessment() {
               if (breedInfo.protectiveness) score = normalizeValue(breedInfo.protectiveness);
               break;
             case 'Ladrido':
-              if (breedInfo.barking_level) score = normalizeValue(breedInfo.barking_level);
+              if (petData.species === 'dog' && breedInfo.barking_level) {
+                score = normalizeValue(breedInfo.barking_level);
+              }
+              break;
+            case 'Maullido':
+              // For cats, use a moderate default since breed info usually doesn't include meowing
+              if (petData.species === 'cat') {
+                score = 3; // Default moderate level for cats
+              }
+              break;
+            case 'Arañado':
+              // For cats, use breed-specific scratching tendency if available
+              if (petData.species === 'cat') {
+                score = 3; // Default moderate level for cats
+              }
               break;
           }
         }
@@ -143,19 +169,33 @@ export default function PetBehaviorAssessment() {
   const getRecommendations = () => {
     const recommendations = [];
     const breedInfo = pet?.breed_info;
+    const iscat = pet?.species === 'cat';
+    const isDog = pet?.species === 'dog';
 
     // Energy level recommendations
     const energyTrait = traits.find(t => t.name === 'Energía');
     if (energyTrait && energyTrait.score >= 4) {
-      recommendations.push('Necesita ejercicio diario intenso y actividades estimulantes');
+      recommendations.push(
+        iscat 
+          ? 'Necesita juegos interactivos diarios y actividades estimulantes'
+          : 'Necesita ejercicio diario intenso y actividades estimulantes'
+      );
     } else if (energyTrait && energyTrait.score <= 2) {
-      recommendations.push('Prefiere actividades tranquilas y paseos cortos');
+      recommendations.push(
+        iscat
+          ? 'Prefiere actividades tranquilas y sesiones de juego cortas'
+          : 'Prefiere actividades tranquilas y paseos cortos'
+      );
     }
 
     // Sociability recommendations
     const socialTrait = traits.find(t => t.name === 'Sociabilidad');
     if (socialTrait && socialTrait.score >= 4) {
-      recommendations.push('Excelente para familias y socialización con otros animales');
+      recommendations.push(
+        iscat
+          ? 'Excelente para familias y socialización con otros gatos'
+          : 'Excelente para familias y socialización con otros animales'
+      );
     } else if (socialTrait && socialTrait.score <= 2) {
       recommendations.push('Requiere socialización gradual y supervisada');
     }
@@ -163,18 +203,52 @@ export default function PetBehaviorAssessment() {
     // Training recommendations
     const trainTrait = traits.find(t => t.name === 'Entrenabilidad');
     if (trainTrait && trainTrait.score >= 4) {
-      recommendations.push('Ideal para entrenamientos avanzados y trucos complejos');
+      recommendations.push(
+        iscat
+          ? 'Ideal para entrenamientos con clicker y trucos simples'
+          : 'Ideal para entrenamientos avanzados y trucos complejos'
+      );
     } else if (trainTrait && trainTrait.score <= 2) {
-      recommendations.push('Requiere paciencia y métodos de entrenamiento positivos');
+      recommendations.push(
+        iscat
+          ? 'Requiere paciencia y refuerzo positivo con premios'
+          : 'Requiere paciencia y métodos de entrenamiento positivos'
+      );
+    }
+
+    // Species-specific recommendations
+    if (iscat) {
+      const meowTrait = traits.find(t => t.name === 'Maullido');
+      if (meowTrait && meowTrait.score >= 4) {
+        recommendations.push('Muy vocal - puede necesitar más atención e interacción');
+      }
+
+      const scratchTrait = traits.find(t => t.name === 'Arañado');
+      if (scratchTrait && scratchTrait.score >= 4) {
+        recommendations.push('Necesita múltiples rascadores y superficies apropiadas para arañar');
+      }
+    } else if (isDog) {
+      const barkTrait = traits.find(t => t.name === 'Ladrido');
+      if (barkTrait && barkTrait.score >= 4) {
+        recommendations.push('Puede necesitar entrenamiento para controlar ladridos excesivos');
+      }
     }
 
     // Breed-specific recommendations
     if (breedInfo) {
       if (breedInfo.shedding_level && breedInfo.shedding_level >= 4) {
-        recommendations.push('Requiere cepillado frecuente debido a alta muda');
+        recommendations.push(
+          iscat
+            ? 'Requiere cepillado diario debido a alta muda de pelo'
+            : 'Requiere cepillado frecuente debido a alta muda'
+        );
       }
       if (breedInfo.grooming_frequency && breedInfo.grooming_frequency >= 4) {
-        recommendations.push('Necesita cuidado profesional regular del pelaje');
+        recommendations.push(
+          iscat
+            ? 'Necesita cuidado regular del pelaje y posible grooming profesional'
+            : 'Necesita cuidado profesional regular del pelaje'
+        );
       }
     }
 
