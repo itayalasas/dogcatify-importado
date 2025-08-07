@@ -38,6 +38,12 @@ export const createMedicalHistoryToken = async (
   expirationHours: number = 2
 ): Promise<{ success: boolean; token?: string; expiresAt?: Date; error?: string }> => {
   try {
+    // Check session validity before creating token
+    const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
+    if (sessionError || !session) {
+      return { success: false, error: 'Sesión no válida. Por favor inicia sesión nuevamente.' };
+    }
+
     // Verify user owns the pet
     const { data: petData, error: petError } = await supabaseClient
       .from('pets')
@@ -73,6 +79,9 @@ export const createMedicalHistoryToken = async (
 
     if (tokenError) {
       console.error('Error creating medical history token:', tokenError);
+      if (tokenError?.message?.includes('JWT') || tokenError?.message?.includes('expired')) {
+        return { success: false, error: 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.' };
+      }
       return { success: false, error: 'Failed to create access token' };
     }
 
@@ -89,6 +98,12 @@ export const createMedicalHistoryToken = async (
     };
   } catch (error) {
     console.error('Error in createMedicalHistoryToken:', error);
+    
+    // Check if this is a session error
+    if (error?.message?.includes('JWT') || error?.message?.includes('expired') || error?.message?.includes('session')) {
+      return { success: false, error: 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.' };
+    }
+    
     return { success: false, error: 'Internal error creating token' };
   }
 };
@@ -196,6 +211,12 @@ export const generateSecureMedicalHistoryUrl = async (
   userId: string
 ): Promise<{ success: boolean; url?: string; token?: string; expiresAt?: Date; error?: string }> => {
   try {
+    // Check session validity before starting
+    const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
+    if (sessionError || !session) {
+      return { success: false, error: 'Sesión no válida. Por favor inicia sesión nuevamente.' };
+    }
+
     const tokenResult = await createMedicalHistoryToken(petId, userId);
     
     if (!tokenResult.success || !tokenResult.token) {
@@ -214,6 +235,12 @@ export const generateSecureMedicalHistoryUrl = async (
       expiresAt: tokenResult.expiresAt
     };
   } catch (error) {
+    
+    // Check if this is a session error
+    if (error?.message?.includes('JWT') || error?.message?.includes('expired') || error?.message?.includes('session')) {
+      return { success: false, error: 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.' };
+    }
+    
     console.error('Error generating secure medical history URL:', error);
     return { success: false, error: 'Failed to generate secure URL' };
   }

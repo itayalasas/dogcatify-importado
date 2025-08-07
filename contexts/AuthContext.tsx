@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Alert } from 'react-native';
+import { router } from 'expo-router';
 import { supabaseClient, getUserProfile, updateUserProfile, signIn as supabaseSignIn, signUp as supabaseSignUp, signOut as supabaseSignOut } from '../lib/supabase';
 import { User } from '../types';
 
@@ -12,6 +14,7 @@ interface AuthContextType {
   authInitialized: boolean;
   authError: string | null;
   clearAuthError: () => void;
+  checkTokenValidity: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,6 +34,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isEmailConfirmed, setIsEmailConfirmed] = useState(false);
   const [authInitialized, setAuthInitialized] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [tokenCheckInterval, setTokenCheckInterval] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -224,12 +228,158 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     return () => {
       mounted = false;
+      // Clear token check interval
+      if (tokenCheckInterval) {
+        clearInterval(tokenCheckInterval);
+      }
       if (subscription && typeof subscription.unsubscribe === 'function') {
         subscription.unsubscribe();
       }
     };
   }, []);
 
+  // Set up periodic token validation when user is authenticated
+  useEffect(() => {
+    if (currentUser && session) {
+      console.log('Setting up token validation interval for user:', currentUser.email);
+      
+      // Clear any existing interval
+      if (tokenCheckInterval) {
+        clearInterval(tokenCheckInterval);
+      }
+      
+      // Check token validity every 5 minutes
+      const interval = setInterval(async () => {
+        const isValid = await checkTokenValidity();
+        if (!isValid) {
+          console.log('Token expired, redirecting to login...');
+          await handleTokenExpiration();
+        }
+      }, 5 * 60 * 1000); // 5 minutes
+      
+      setTokenCheckInterval(interval);
+    } else {
+      // Clear interval when user logs out
+      if (tokenCheckInterval) {
+        clearInterval(tokenCheckInterval);
+        setTokenCheckInterval(null);
+      }
+    }
+    
+    return () => {
+      if (tokenCheckInterval) {
+        clearInterval(tokenCheckInterval);
+      }
+    };
+  }, [currentUser, session]);
+
+  const checkTokenValidity = async (): Promise<boolean> => {
+    try {
+      // Get current session
+      const { data: { session }, error } = await supabaseClient.auth.getSession();
+      
+      if (error) {
+        console.error('Error checking session:', error);
+        return false;
+      }
+      
+      if (!session) {
+        console.log('No active session found');
+        return false;
+      }
+      
+      // Check if token is expired
+      const now = Math.floor(Date.now() / 1000);
+      const tokenExp = session.expires_at || 0;
+      
+      console.log('Token validation:', {
+        now,
+        expires_at: tokenExp,
+        isExpired: now >= tokenExp,
+        timeUntilExpiry: tokenExp - now
+      });
+      
+      if (now >= tokenExp) {
+        console.log('Token has expired');
+        return false;
+      }
+      
+      // Try to make a simple API call to verify token works
+      const { data, error: testError } = await supabaseClient
+        .from('profiles')
+        .select('id')
+        .eq('id', session.user.id)
+        .limit(1);
+      
+      if (testError) {
+        console.error('Token validation API call failed:', testError);
+        
+        // Check for specific JWT errors
+        if (testError.message?.includes('JWT') || 
+            testError.message?.includes('expired') ||
+            testError.message?.includes('invalid')) {
+          console.log('JWT error detected, token is invalid');
+          return false;
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error in checkTokenValidity:', error);
+      return false;
+    }
+  };
+
+  const handleTokenExpiration = async () => {
+    try {
+      console.log('Handling token expiration...');
+      
+      // Clear local state
+      setCurrentUser(null);
+      setSession(null);
+      setIsEmailConfirmed(false);
+      
+      // Clear token check interval
+      if (tokenCheckInterval) {
+        clearInterval(tokenCheckInterval);
+        setTokenCheckInterval(null);
+      }
+      
+      // Sign out from Supabase
+      await supabaseClient.auth.signOut();
+      
+      // Show alert and redirect to login
+      Alert.alert(
+        'Sesión expirada',
+        'Tu sesión ha expirado por seguridad. Por favor inicia sesión nuevamente.',
+        [
+          {
+            text: 'Iniciar sesión',
+            onPress: () => {
+              try {
+                router.replace('/auth/login');
+              } catch (routerError) {
+                console.error('Error navigating to login:', routerError);
+                // Fallback navigation
+                setTimeout(() => {
+                  router.replace('/auth/login');
+                }, 100);
+              }
+            }
+          }
+        ],
+        { cancelable: false }
+      );
+    } catch (error) {
+      console.error('Error handling token expiration:', error);
+      // Force navigation to login even if there's an error
+      try {
+        router.replace('/auth/login');
+      } catch (routerError) {
+        console.error('Error in fallback navigation:', routerError);
+      }
+    }
+  };
   const login = async (email: string, password: string): Promise<User | null> => {
     try {
       console.log('AuthContext - Attempting login with Supabase for:', email);
@@ -408,6 +558,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isEmailConfirmed,
     authError,
     clearAuthError,
+    checkTokenValidity,
   };
 
   return (

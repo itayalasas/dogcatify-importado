@@ -659,6 +659,12 @@ const generateHTMLContent = (pet: Pet, owner: Owner, records: MedicalRecord[]): 
 // Export the main function
 export const generateMedicalHistoryHTML = async (petId: string, ownerId: string): Promise<string> => {
   try {
+    // Check session validity before starting
+    const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
+    if (sessionError || !session) {
+      throw new Error('Sesión no válida. Por favor inicia sesión nuevamente.');
+    }
+
     // Fetch pet data
     const { data: petData, error: petError } = await supabaseClient
       .from('pets')
@@ -667,6 +673,10 @@ export const generateMedicalHistoryHTML = async (petId: string, ownerId: string)
       .single();
 
     if (petError || !petData) {
+      console.error('Error fetching pet data:', petError);
+      if (petError?.message?.includes('JWT') || petError?.message?.includes('expired')) {
+        throw new Error('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
+      }
       throw new Error('No se pudo obtener la información de la mascota');
     }
 
@@ -678,6 +688,10 @@ export const generateMedicalHistoryHTML = async (petId: string, ownerId: string)
       .single();
 
     if (ownerError || !ownerData) {
+      console.error('Error fetching owner data:', ownerError);
+      if (ownerError?.message?.includes('JWT') || ownerError?.message?.includes('expired')) {
+        throw new Error('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
+      }
       throw new Error('No se pudo obtener la información del propietario');
     }
 
@@ -689,6 +703,10 @@ export const generateMedicalHistoryHTML = async (petId: string, ownerId: string)
       .order('created_at', { ascending: false });
 
     if (recordsError) {
+      console.error('Error fetching medical records:', recordsError);
+      if (recordsError?.message?.includes('JWT') || recordsError?.message?.includes('expired')) {
+        throw new Error('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
+      }
       throw new Error('No se pudieron obtener los registros médicos');
     }
 
