@@ -526,6 +526,7 @@ export default function Profile() {
             </View>
             <ChevronRight size={16} color="#6B7280" />
           </TouchableOpacity>
+
         </Card>
 
         {/* Advanced Settings */}

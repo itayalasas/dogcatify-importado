@@ -40,38 +40,87 @@ export default function HelpSupport() {
     try {
       const phoneNumber = '59892519111';
       const message = 'Hola, necesito ayuda con DogCatiFy';
-      const whatsappUrl = `whatsapp://send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
       
-      const canOpen = await Linking.canOpenURL(whatsappUrl);
+      // Try multiple WhatsApp URL schemes for better compatibility
+      const whatsappUrls = [
+        `whatsapp://send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`,
+        `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`,
+        `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`
+      ];
       
-      if (canOpen) {
-        await Linking.openURL(whatsappUrl);
-      } else {
-        // Fallback: intentar abrir en navegador web
-        const webWhatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
-        const canOpenWeb = await Linking.canOpenURL(webWhatsappUrl);
-        
-        if (canOpenWeb) {
-          await Linking.openURL(webWhatsappUrl);
-        } else {
-          Alert.alert(
-            'WhatsApp no disponible',
-            `Puedes contactarnos directamente al número:\n+${phoneNumber}`,
-            [
-              {
-                text: 'Llamar',
-                onPress: () => Linking.openURL(`tel:+${phoneNumber}`)
-              },
-              { text: 'Cerrar' }
-            ]
-          );
+      let opened = false;
+      
+      // Try each URL scheme until one works
+      for (const url of whatsappUrls) {
+        try {
+          const canOpen = await Linking.canOpenURL(url);
+          if (canOpen) {
+            await Linking.openURL(url);
+            opened = true;
+            break;
+          }
+        } catch (urlError) {
+          console.log(`Failed to open ${url}:`, urlError);
+          continue;
         }
       }
+      
+      if (!opened) {
+        // Enhanced fallback with multiple options
+        Alert.alert(
+          'Contactar por WhatsApp',
+          `WhatsApp no está disponible en este dispositivo.\n\n📱 Número: +${phoneNumber}\n💬 Mensaje: "${message}"\n\n¿Cómo prefieres contactarnos?`,
+          [
+            {
+              text: 'Llamar',
+              onPress: async () => {
+                try {
+                  const phoneUrl = `tel:+${phoneNumber}`;
+                  const canCall = await Linking.canOpenURL(phoneUrl);
+                  if (canCall) {
+                    await Linking.openURL(phoneUrl);
+                  } else {
+                    Alert.alert('Número de contacto', `+${phoneNumber}\n\nPuedes llamar desde tu aplicación de teléfono.`);
+                  }
+                } catch (error) {
+                  Alert.alert('Número de contacto', `+${phoneNumber}`);
+                }
+              }
+            },
+            {
+              text: 'Copiar número',
+              onPress: () => {
+                Alert.alert(
+                  'Número copiado',
+                  `+${phoneNumber}\n\nPuedes pegarlo en WhatsApp Web o en tu aplicación de mensajes.`
+                );
+              }
+            },
+            {
+              text: 'WhatsApp Web',
+              onPress: async () => {
+                try {
+                  const webUrl = `https://web.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
+                  await Linking.openURL(webUrl);
+                } catch (error) {
+                  Alert.alert(
+                    'WhatsApp Web',
+                    `Visita: https://web.whatsapp.com\n\nNúmero: +${phoneNumber}\nMensaje: ${message}`
+                  );
+                }
+              }
+            },
+            { text: 'Cerrar', style: 'cancel' }
+          ]
+        );
+      }
     } catch (error) {
-      console.error('Error opening WhatsApp:', error);
-      Alert.alert('Error', 'No se pudo abrir WhatsApp');
+      Alert.alert(
+        'Contacto por WhatsApp',
+        `Hubo un problema al abrir WhatsApp.\n\n📱 Puedes contactarnos directamente:\n+${phoneNumber}\n\n💬 Mensaje sugerido:\n"${message}"`
+      );
     }
-  };
+  }
 
   const handleReportBug = () => {
     Alert.alert(
