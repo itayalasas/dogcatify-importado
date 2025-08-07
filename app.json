@@ -2,7 +2,7 @@
   "expo": {
     "name": "DogCatiFy",
     "slug": "dogcatify",
-    "version": "5.0.0",
+    "version": "6.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.jpg",
     "scheme": "dogcatify",
@@ -40,7 +40,7 @@
 },
     "android": {
   "package": "com.dogcatify.app",
-  "versionCode": 5,
+  "versionCode": 6,
   "adaptiveIcon": {
     "foregroundImage": "./assets/images/logo.jpg",
     "backgroundColor": "#FFFFFF"
@@ -57,10 +57,15 @@
     "android.permission.ACCESS_NETWORK_STATE"
   ]
 },
-    "web": {
+       "web": {
       "favicon": "./assets/images/logo.jpg",
       "bundler": "metro",
-      "output": "static"
+      "output": "static",
+      "build": {
+        "babel": {
+          "include": ["@expo/vector-icons"]
+        }
+      }
     },
     "runtimeVersion": {
       "policy": "sdkVersion"

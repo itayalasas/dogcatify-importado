@@ -65,6 +65,8 @@ export default function MedicalHistoryShared() {
   const [tokenExpired, setTokenExpired] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [isWebView, setIsWebView] = useState(false);
+  const [htmlContent, setHtmlContent] = useState<string>('');
   
   // Derived state for different record types
   const vaccineRecords = medicalRecords.filter(record => record.type === 'vaccine');
@@ -361,11 +363,68 @@ export default function MedicalHistoryShared() {
   const [loadingDewormers, setLoadingDewormers] = useState(false);
   const [loadingVeterinarians, setLoadingVeterinarians] = useState(false);
 
+  // Check if this is being accessed from web without authentication
   useEffect(() => {
-    if (id) {
+    if (Platform.OS === 'web') {
+      setIsWebView(true);
+      loadMedicalHistoryForWeb();
+    } else if (id) {
       verifyTokenAndFetchData();
     }
   }, [id, token]);
+
+  const loadMedicalHistoryForWeb = async () => {
+    try {
+      console.log('Loading medical history for web view...');
+      
+      // Call the Edge Function directly for web access
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      const apiUrl = `${supabaseUrl}/functions/v1/medical-history/${id}${token ? `?token=${token}` : ''}`;
+      
+      console.log('Fetching from Edge Function:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'apikey': supabaseAnonKey,
+        },
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Edge Function error:', response.status, errorText);
+        
+        if (response.status === 400) {
+          setError('Enlace inválido o token no válido');
+        } else if (response.status === 410) {
+          setError('Este enlace ha expirado por seguridad');
+        } else if (response.status === 404) {
+          setError('Mascota no encontrada');
+        } else {
+          setError('Error al cargar la historia clínica');
+        }
+        setLoading(false);
+        return;
+      }
+      
+      const htmlContent = await response.text();
+      setHtmlContent(htmlContent);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error loading medical history for web:', error);
+      setError('Error de conexión al cargar la historia clínica');
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (id && !isWebView) {
+      verifyTokenAndFetchData();
+    }
+  }, [id, token, isWebView]);
 
   // Fetch nomenclators after pet data is available
   useEffect(() => {
@@ -1243,6 +1302,75 @@ export default function MedicalHistoryShared() {
       </View>
     </View>
   );
+
+  // Web view rendering for veterinarians
+  if (isWebView && Platform.OS === 'web') {
+    if (loading) {
+      return (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+          fontFamily: 'Arial, sans-serif'
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '24px', marginBottom: '16px' }}>🐾</div>
+            <div style={{ fontSize: '18px', color: '#2D6A6F' }}>Cargando historia clínica...</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+          fontFamily: 'Arial, sans-serif',
+          padding: '20px'
+        }}>
+          <div style={{ 
+            textAlign: 'center',
+            maxWidth: '500px',
+            padding: '40px',
+            backgroundColor: '#FEF2F2',
+            borderRadius: '12px',
+            border: '1px solid #FECACA'
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>❌</div>
+            <div style={{ fontSize: '24px', color: '#DC2626', marginBottom: '16px' }}>Error</div>
+            <div style={{ fontSize: '16px', color: '#991B1B', lineHeight: '1.5' }}>{error}</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (htmlContent) {
+      return (
+        <div style={{ height: '100vh', width: '100%' }}>
+          <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
+        </div>
+      );
+    }
+
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        fontFamily: 'Arial, sans-serif'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🐾</div>
+          <div style={{ fontSize: '18px', color: '#6B7280' }}>Historia clínica no disponible</div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
