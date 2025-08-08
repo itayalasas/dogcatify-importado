@@ -3,15 +3,10 @@ const createExpoWebpackConfigAsync = require('@expo/webpack-config');
 module.exports = async function (env, argv) {
   const config = await createExpoWebpackConfigAsync(env, argv);
 
-  // Remove Supabase from webpack processing since we're using custom implementation
+  // Keep html2canvas disabled for web
   config.resolve.alias = {
     ...config.resolve.alias,
     'html2canvas': false,
-    '@supabase/supabase-js': false,
-    '@supabase/postgrest-js': false,
-    '@supabase/realtime-js': false,
-    '@supabase/storage-js': false,
-    '@supabase/gotrue-js': false,
   };
 
   // Add fallbacks for Node.js modules

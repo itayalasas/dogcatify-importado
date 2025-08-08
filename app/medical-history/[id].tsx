@@ -1350,7 +1350,7 @@ export default function MedicalHistoryShared() {
 
     if (htmlContent) {
       return (
-        <div style={{ height: '100vh', width: '100%' }}>
+        <div style={{ height: '100vh', width: '100%', overflow: 'auto' }}>
           <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
         </div>
       );
@@ -3584,5 +3584,15 @@ const styles = StyleSheet.create({
     color: '#166534',
     textAlign: 'center',
     lineHeight: 16,
+  },
+  webViewContainer: {
+    flex: 1,
+    height: '100vh',
+    overflow: 'auto',
+  },
+  webView: {
+    flex: 1,
+    height: '100%',
+    width: '100%',
   },
 });

@@ -1,9 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
 import { supabaseClient } from '../lib/supabase';
+
+const SAVED_CREDENTIALS_KEY = '@saved_credentials';
 
 interface BiometricContextType {
   isBiometricAvailable: boolean;
@@ -189,20 +192,41 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
 
       if (!isBiometricAvailable) {
-        throw new Error('Biometric authentication is not available');
+        Alert.alert('No disponible', 'La autenticación biométrica no está disponible en este dispositivo');
+        return false;
       }
 
       if (!email || !password) {
-        throw new Error('Email and password are required');
+        // Try to get credentials from saved credentials
+        try {
+          const savedCredentials = await AsyncStorage.getItem(SAVED_CREDENTIALS_KEY);
+          if (savedCredentials) {
+            const { email: savedEmail, password: savedPassword } = JSON.parse(savedCredentials);
+            if (savedEmail && savedPassword) {
+              email = savedEmail;
+              password = savedPassword;
+            } else {
+              Alert.alert('Error', 'No se encontraron credenciales guardadas. Inicia sesión primero.');
+              return false;
+            }
+          } else {
+            Alert.alert('Error', 'No se encontraron credenciales guardadas. Inicia sesión primero.');
+            return false;
+          }
+        } catch (storageError) {
+          Alert.alert('Error', 'No se pudieron obtener las credenciales guardadas.');
+          return false;
+        }
       }
 
       if (!currentUser) {
-        throw new Error('User not authenticated');
+        Alert.alert('Error', 'Usuario no autenticado');
+        return false;
       }
 
       // Authenticate with biometric first
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Configura tu autenticación biométrica',
+        promptMessage: `Configura tu ${biometricType || 'autenticación biométrica'}`,
         cancelLabel: 'Cancelar',
         fallbackLabel: 'Usar contraseña',
       });
@@ -242,7 +266,8 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           // Clean up stored credentials if database update fails
           await SecureStore.deleteItemAsync('biometric_email');
           await SecureStore.deleteItemAsync('biometric_password');
-          throw error;
+          Alert.alert('Error', 'No se pudo actualizar la configuración biométrica');
+          return false;
         }
         
         console.log('Biometric status updated in database successfully');
@@ -265,7 +290,8 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       } catch (cleanupError) {
         console.error('Error cleaning up credentials:', cleanupError);
       }
-      throw error;
+      Alert.alert('Error', 'No se pudo configurar la autenticación biométrica');
+      return false;
     }
   };
 

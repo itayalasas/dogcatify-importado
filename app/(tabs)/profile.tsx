@@ -473,6 +473,32 @@ export default function Profile() {
 
         {/* Settings */}
         <Card style={styles.menuCard}>
+          {/* Biometric Authentication Setup */}
+          {isBiometricSupported && (
+            <View style={styles.menuOption}>
+              <View style={styles.menuOptionLeft}>
+                <Fingerprint size={20} color="#6B7280" />
+                <View style={styles.biometricTextContainer}>
+                  <Text style={styles.menuOptionText}>
+                    Autenticación {biometricType || 'Biométrica'}
+                  </Text>
+                  <Text style={styles.biometricSubtext}>
+                    {isBiometricEnabled ? 
+                      `Acceso rápido habilitado` :
+                      `Habilita para acceso rápido`
+                    }
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={isBiometricEnabled}
+                onValueChange={handleToggleBiometric}
+                trackColor={{ false: '#E5E7EB', true: '#2D6A6F' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+          )}
+
           <View style={styles.menuOption}>
             <View style={styles.menuOptionLeft}>
               <Bell size={20} color="#6B7280" />
@@ -485,23 +511,6 @@ export default function Profile() {
               thumbColor="#FFFFFF"
             />
           </View>
-
-          {isBiometricSupported && (
-            <View style={styles.menuOption}>
-              <View style={styles.menuOptionLeft}>
-                <Fingerprint size={20} color="#6B7280" />
-                <Text style={styles.menuOptionText}>
-                  {biometricType || t('biometricAuth')}
-                </Text>
-              </View>
-              <Switch
-                value={isBiometricEnabled}
-                onValueChange={handleToggleBiometric}
-                trackColor={{ false: '#E5E7EB', true: '#2D6A6F' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-          )}
 
           <TouchableOpacity style={styles.menuOption} onPress={handleLanguageChange}>
             <View style={styles.menuOptionLeft}>
@@ -801,5 +810,15 @@ const styles = StyleSheet.create({
   },
   dangerText: {
     color: '#EF4444',
+  },
+  biometricTextContainer: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  biometricSubtext: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    marginTop: 2,
   },
 });

@@ -181,7 +181,7 @@ export default function ConfirmScreen() {
       Alert.alert(
         'Contraseña actualizada',
         'Tu contraseña ha sido cambiada exitosamente. Ya puedes iniciar sesión con tu nueva contraseña.',
-        [{ text: 'OK', onPress: () => router.replace('/auth/login') }]
+        [{ text: 'OK', onPress: () => router.replace('/web-info') }]
       );
 
     } catch (error: any) {
@@ -227,7 +227,7 @@ export default function ConfirmScreen() {
           )}
           <Button
             title="Ir a Iniciar Sesión"
-            onPress={() => router.replace('/auth/login')}
+            onPress={() => router.replace('/web-info')}
             size="large"
           />
         </Card>
