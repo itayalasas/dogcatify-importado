@@ -32,6 +32,7 @@ export default function RootLayout() {
                   <Stack.Screen name="auth/register" />
                   <Stack.Screen name="auth/forgot-password" />
                   <Stack.Screen name="auth/confirm" />
+                  <Stack.Screen name="auth/biometric-setup" />
                   <Stack.Screen name="auth/mercadopago/callback" />
                   <Stack.Screen name="pets/add" />
                   <Stack.Screen name="pets/breed-selector" />
