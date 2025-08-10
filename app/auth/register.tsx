@@ -1,119 +1,114 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, Image, TouchableOpacity } from 'react-native';
-import { Link, router } from 'expo-router';
-import { Linking } from 'react-native';
-import { Mail, Lock, User, Check, ExternalLink } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
+import { router, Stack } from 'expo-router';
+import { ArrowLeft, User, Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
-import { Button } from '../../components/ui/Button'; 
+import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 
 export default function Register() {
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [acceptedPolicies, setAcceptedPolicies] = useState(false);
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  
   const { register } = useAuth();
   const { t } = useLanguage();
 
   const handleRegister = async () => {
-    if (!email || !password || !displayName || !confirmPassword) {
-      Alert.alert(t('error'), t('fillAllFields'));
-      return;
-    }
-
-    if (!acceptedPolicies) {
-      Alert.alert('Error', 'Debes aceptar las políticas de privacidad y términos de servicio para continuar');
+    if (!fullName || !email || !password || !confirmPassword) {
+      Alert.alert('Error', t('fillAllFields'));
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert(t('error'), t('passwordsDontMatch'));
+      Alert.alert('Error', t('passwordsDontMatch'));
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert(t('error'), t('passwordTooShort'));
+      Alert.alert('Error', t('passwordTooShort'));
+      return;
+    }
+
+    if (!acceptTerms) {
+      Alert.alert('Error', 'Debes aceptar los términos y condiciones');
       return;
     }
 
     setLoading(true);
     try {
-      console.log('Registering user:', email, displayName);
-      await register(email, password, displayName);
-      console.log('User registered successfully');
+      // Llamar a nuestra función personalizada de creación de usuario
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const response = await fetch(`${supabaseUrl}/functions/v1/create-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          email: email.toLowerCase().trim(),
+          password: password,
+          displayName: fullName.trim()
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Error creating account');
+      }
+
+      console.log('Account created successfully:', result.userId);
+      
+      // Mostrar mensaje de éxito como en la imagen
       Alert.alert(
-        '¡Registro exitoso!',
-        `Tu cuenta ha sido creada. Hemos enviado un correo de confirmación a ${email}.\n\nPor favor revisa tu bandeja de entrada (y la carpeta de spam) y haz clic en el enlace de confirmación antes de iniciar sesión.\n\nEl enlace expira en 24 horas.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => router.replace('/auth/login')
-          }
-        ]
+        '¡Registro exitoso! 🎉',
+        `Tu cuenta ha sido creada exitosamente.\n\n📧 Hemos enviado un correo de confirmación a:\n${email}\n\nPor favor revisa tu bandeja de entrada (y la carpeta de spam) y haz clic en el enlace de confirmación.\n\n⏰ El enlace expira en 24 horas.`,
+        [{ text: 'ENTENDIDO', onPress: () => router.replace('/auth/login') }]
       );
     } catch (error: any) {
+      // Solo mostrar errores reales de registro
       console.error('Registration error:', error);
-      Alert.alert(t('error'), error.message);
+      Alert.alert('Error', error.message || 'Error al crear la cuenta');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOpenPrivacyPolicy = async () => {
-    try {
-      const url = process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL || 'https://dogcatify.com/privacy-policy';
-      const canOpen = await Linking.canOpenURL(url);
-      if (canOpen) {
-        await Linking.openURL(url);
-      } else {
-        Alert.alert('Error', 'No se pudo abrir el enlace de políticas de privacidad');
-      }
-    } catch (error) {
-      console.error('Error opening privacy policy:', error);
-      Alert.alert('Error', 'No se pudo abrir el enlace de políticas de privacidad');
-    }
-  };
-
-  const handleOpenTermsOfService = async () => {
-    try {
-      const url = process.env.EXPO_PUBLIC_TERMS_OF_SERVICE_URL || 'https://dogcatify.com/terms-of-service';
-      const canOpen = await Linking.canOpenURL(url);
-      if (canOpen) {
-        await Linking.openURL(url);
-      } else {
-        Alert.alert('Error', 'No se pudo abrir el enlace de términos de servicio');
-      }
-    } catch (error) {
-      console.error('Error opening terms of service:', error);
-      Alert.alert('Error', 'No se pudo abrir el enlace de términos de servicio');
-    }
-  };
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <ArrowLeft size={24} color="#111827" />
+        </TouchableOpacity>
         <Image 
           source={require('../../assets/images/logo.jpg')} 
           style={styles.logo} 
         />
-        <Text style={styles.title}>Únete a nosotros</Text>
-        <Text style={styles.subtitle}>{t('createAccountSubtitle')}</Text>
       </View>
 
       <View style={styles.form}>
+        <Text style={styles.title}>{t('joinPatitas')}</Text>
+        <Text style={styles.subtitle}>{t('createAccountSubtitle')}</Text>
+
         <Input
           label={t('fullName')}
-          placeholder={t('fullName')}
-          value={displayName}
-          onChangeText={setDisplayName}
+          placeholder="Tu nombre completo"
+          value={fullName}
+          onChangeText={setFullName}
           leftIcon={<User size={20} color="#6B7280" />}
         />
 
         <Input
           label={t('email')}
-          placeholder={t('email')}
+          placeholder="tu@email.com"
           value={email}
           onChangeText={setEmail}
           keyboardType="email-address"
@@ -123,62 +118,60 @@ export default function Register() {
 
         <Input
           label={t('password')}
-          placeholder={t('password')}
+          placeholder="Mínimo 6 caracteres"
           value={password}
           onChangeText={setPassword}
-          secureTextEntry
+          secureTextEntry={!showPassword}
           leftIcon={<Lock size={20} color="#6B7280" />}
+          showPasswordToggle={true}
+          isPasswordVisible={showPassword}
+          onTogglePasswordVisibility={() => setShowPassword(!showPassword)}
         />
 
         <Input
           label={t('confirmPassword')}
-          placeholder={t('confirmPassword')}
+          placeholder="Repite tu contraseña"
           value={confirmPassword}
           onChangeText={setConfirmPassword}
-          secureTextEntry
+          secureTextEntry={!showConfirmPassword}
           leftIcon={<Lock size={20} color="#6B7280" />}
+          showPasswordToggle={true}
+          isPasswordVisible={showConfirmPassword}
+          onTogglePasswordVisibility={() => setShowConfirmPassword(!showConfirmPassword)}
         />
 
-        <View style={styles.policiesContainer}>
+        <View style={styles.termsContainer}>
           <TouchableOpacity 
-            style={styles.policiesRow} 
-            onPress={() => setAcceptedPolicies(!acceptedPolicies)}
+            style={styles.checkbox}
+            onPress={() => setAcceptTerms(!acceptTerms)}
           >
-            <View style={[styles.checkbox, acceptedPolicies && styles.checkedCheckbox]}>
-              {acceptedPolicies && <Check size={16} color="#FFFFFF" />}
+            <View style={[styles.checkboxBox, acceptTerms && styles.checkboxChecked]}>
+              {acceptTerms && <Text style={styles.checkmark}>✓</Text>}
             </View>
-            <View style={styles.policiesTextContainer}>
-              <Text style={styles.policiesText}>
-                Acepto las{' '}
-                <TouchableOpacity onPress={handleOpenPrivacyPolicy}>
-                  <Text style={styles.linkText}>políticas de privacidad</Text>
-                </TouchableOpacity>
-                {' '}y los{' '}
-                <TouchableOpacity onPress={handleOpenTermsOfService}>
-                  <Text style={styles.linkText}>términos de servicio</Text>
-                </TouchableOpacity>
-              </Text>
-            </View>
+            <Text style={styles.termsText}>
+              Acepto las{' '}
+              <Text style={styles.termsLink}>políticas de privacidad</Text>
+              {' '}y los{' '}
+              <Text style={styles.termsLink}>términos de servicio</Text>
+            </Text>
           </TouchableOpacity>
-          
-         
         </View>
+
         <Button
-          title={t('createAccount')}
+          title={loading ? "Creando cuenta..." : t('createAccount')}
           onPress={handleRegister}
           loading={loading}
-          disabled={loading || !acceptedPolicies}
           size="large"
         />
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            {t('alreadyHaveAccount')}{' '}
-            <Link href="/auth/login" style={styles.link}>
-              {t('signIn')}
-            </Link>
+        <TouchableOpacity 
+          style={styles.loginButton}
+          onPress={() => router.replace('/auth/login')}
+        >
+          <Text style={styles.loginText}>
+            {t('alreadyHaveAccount')} <Text style={styles.loginLink}>{t('signIn')}</Text>
           </Text>
-        </View>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -188,50 +181,52 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    paddingTop: 30, // Add padding at the top to show status bar
+    paddingTop: 30,
   },
   content: {
     flexGrow: 1,
     padding: 20,
-    paddingTop: 20,
   },
   header: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 40,
+  },
+  backButton: {
+    padding: 8,
+    marginRight: 16,
   },
   logo: {
-    width: 140,
-    height: 140,
+    width: 120,
+    height: 120,
     resizeMode: 'contain',
-    marginBottom: 4,
-  },
-  title: {
-    fontSize: 28,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    textAlign: 'center',
-    fontFamily: 'Inter-Regular',
   },
   form: {
     width: '100%',
     maxWidth: 400,
     alignSelf: 'center',
   },
-  policiesContainer: {
-    marginBottom: 20,
-  },
-  policiesRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+  title: {
+    fontSize: 24,
+    fontFamily: 'Inter-Bold',
+    color: '#2D6A6F',
     marginBottom: 12,
   },
+  subtitle: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginBottom: 24,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 22,
+  },
+  termsContainer: {
+    marginBottom: 24,
+  },
   checkbox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  checkboxBox: {
     width: 20,
     height: 20,
     borderWidth: 2,
@@ -242,58 +237,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkedCheckbox: {
+  checkboxChecked: {
     backgroundColor: '#2D6A6F',
     borderColor: '#2D6A6F',
   },
-  policiesTextContainer: {
-    flex: 1,
+  checkmark: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
-  policiesText: {
+  termsText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#374151',
+    flex: 1,
     lineHeight: 20,
   },
-  linkText: {
+  termsLink: {
     color: '#3B82F6',
-    fontFamily: 'Inter-SemiBold',
     textDecorationLine: 'underline',
   },
-  policiesLinks: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  policyLinkButton: {
-    flexDirection: 'row',
+  loginButton: {
+    marginTop: 24,
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    flex: 1,
-    justifyContent: 'center',
   },
-  policyLinkText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-    marginLeft: 4,
-  },
-  footer: {
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  footerText: {
+  loginText: {
     fontSize: 16,
-    color: '#6B7280',
     fontFamily: 'Inter-Regular',
+    color: '#6B7280',
   },
-  link: {
+  loginLink: {
     color: '#3B82F6',
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Medium',
   },
 });

@@ -87,8 +87,9 @@ export const confirmEmailCustom = async (
   try {
     console.log('Verifying token:', token, 'type:', type);
 
-    // Find the token in database
-    const { data: tokenData, error } = await supabaseClient
+    // Find the token in database using service client to bypass RLS
+    const serviceClient = getServiceClient();
+    const { data: tokenData, error } = await serviceClient
       .from('email_confirmations')
       .select('*')
       .eq('token_hash', token)
@@ -98,6 +99,29 @@ export const confirmEmailCustom = async (
 
     if (error) {
       console.error('Error finding token:', error);
+      
+      // If token not found, try without the is_confirmed filter (maybe it was already confirmed)
+      const { data: anyTokenData, error: anyTokenError } = await serviceClient
+        .from('email_confirmations')
+        .select('*')
+        .eq('token_hash', token)
+        .eq('type', type)
+        .single();
+      
+      if (anyTokenError) {
+        console.error('Token not found at all:', anyTokenError);
+        return { success: false, error: 'Token no encontrado' };
+      }
+      
+      if (anyTokenData && anyTokenData.is_confirmed) {
+        console.log('Token already confirmed, treating as success');
+        return {
+          success: true,
+          userId: anyTokenData.user_id,
+          email: anyTokenData.email
+        };
+      }
+      
       return { success: false, error: 'Token no encontrado o ya utilizado' };
     }
 
@@ -114,8 +138,6 @@ export const confirmEmailCustom = async (
     }
 
     // Mark token as confirmed
-    // Use service client to bypass RLS for token verification
-    const serviceClient = getServiceClient();
     const { error: updateError } = await serviceClient
       .from('email_confirmations')
       .update({
@@ -129,6 +151,26 @@ export const confirmEmailCustom = async (
       return { success: false, error: 'Error al confirmar token' };
     }
 
+    // CRITICAL: Update user in auth.users to mark email as confirmed
+    console.log('Updating user in auth.users to mark email as confirmed...');
+    const { error: authUpdateError } = await serviceClient.auth.admin.updateUserById(
+      tokenData.user_id,
+      { 
+        email_confirm: true,
+        user_metadata: {
+          email_confirmed: true,
+          email_confirmed_at: new Date().toISOString()
+        }
+      }
+    );
+
+    if (authUpdateError) {
+      console.error('Error updating user in auth.users:', authUpdateError);
+      // Don't fail the confirmation if auth update fails, but log it
+      console.warn('Email confirmed in our system but not in auth.users');
+    } else {
+      console.log('✅ User email confirmed in auth.users successfully');
+    }
     // Update user profile to mark email as confirmed
     const { error: profileError } = await serviceClient
       .from('profiles')
@@ -181,10 +223,61 @@ export const isEmailConfirmed = async (userId: string): Promise<boolean> => {
 };
 
 /**
+ * Complete user registration after email confirmation
+ * This creates the user profile and all necessary records
+ */
+export const completeUserRegistration = async (
+  userId: string,
+  email: string,
+  displayName: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    console.log('Completing user registration for:', userId);
+    
+    // Use service client to create profile
+    const serviceClient = getServiceClient();
+    
+    // Create user profile
+    const { error: profileError } = await serviceClient
+      .from('profiles')
+      .insert({
+        id: userId,
+        email: email,
+        display_name: displayName,
+        is_owner: true,
+        is_partner: false,
+        email_confirmed: true,
+        email_confirmed_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        followers: [],
+        following: []
+      });
+
+    if (profileError) {
+      console.error('Error creating user profile:', profileError);
+      return { success: false, error: 'Error creating user profile' };
+    }
+
+    console.log('User profile created successfully');
+    
+    // Here you can add other initial records if needed
+    // For example: default settings, welcome notifications, etc.
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error completing user registration:', error);
+    return { success: false, error: 'Internal error completing registration' };
+  }
+};
+/**
  * Generate confirmation URL
  */
 export const generateConfirmationUrl = (token: string, type: 'signup' | 'password_reset' = 'signup'): string => {
-  const baseUrl = process.env.EXPO_PUBLIC_APP_DOMAIN || 'https://app-dogcatify.netlify.app';
+  const baseUrl = process.env.EXPO_PUBLIC_APP_DOMAIN || 
+                  process.env.EXPO_PUBLIC_APP_URL || 
+                  process.env.EXPO_PUBLIC_SUPABASE_URL?.replace('/v1', '') ||
+                  'https://app-dogcatify.netlify.app';
   
   if (type === 'password_reset') {
     // Password reset goes to a SEPARATE reset password page

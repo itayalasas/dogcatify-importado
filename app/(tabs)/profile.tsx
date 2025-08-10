@@ -475,28 +475,40 @@ export default function Profile() {
         <Card style={styles.menuCard}>
           {/* Biometric Authentication Setup */}
           {isBiometricSupported && (
-            <View style={styles.menuOption}>
-              <View style={styles.menuOptionLeft}>
-                <Fingerprint size={20} color="#6B7280" />
-                <View style={styles.biometricTextContainer}>
-                  <Text style={styles.menuOptionText}>
+            <Card style={styles.biometricCard}>
+              <View style={styles.biometricHeader}>
+                <View style={styles.biometricIconContainer}>
+                  <Fingerprint size={24} color="#2D6A6F" />
+                </View>
+                <View style={styles.biometricInfo}>
+                  <Text style={styles.biometricTitle}>
                     Autenticación {biometricType || 'Biométrica'}
                   </Text>
-                  <Text style={styles.biometricSubtext}>
+                  <Text style={styles.biometricDescription}>
                     {isBiometricEnabled ? 
-                      `Acceso rápido habilitado` :
-                      `Habilita para acceso rápido`
+                      '✅ Acceso rápido y seguro habilitado' :
+                      '🔒 Habilita para acceso instantáneo'
                     }
                   </Text>
                 </View>
+                <Switch
+                  value={isBiometricEnabled}
+                  onValueChange={handleToggleBiometric}
+                  trackColor={{ false: '#E5E7EB', true: '#2D6A6F' }}
+                  thumbColor="#FFFFFF"
+                  style={styles.biometricSwitch}
+                />
               </View>
-              <Switch
-                value={isBiometricEnabled}
-                onValueChange={handleToggleBiometric}
-                trackColor={{ false: '#E5E7EB', true: '#2D6A6F' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
+              
+              {!isBiometricEnabled && (
+                <View style={styles.biometricBenefits}>
+                  <Text style={styles.benefitsTitle}>Beneficios:</Text>
+                  <Text style={styles.benefitItem}>• Acceso instantáneo sin contraseñas</Text>
+                  <Text style={styles.benefitItem}>• Máxima seguridad con tu {biometricType?.toLowerCase() || 'biometría'}</Text>
+                  <Text style={styles.benefitItem}>• Credenciales protegidas en tu dispositivo</Text>
+                </View>
+              )}
+            </Card>
           )}
 
           <View style={styles.menuOption}>
@@ -820,5 +832,62 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#9CA3AF',
     marginTop: 2,
+  },
+  biometricCard: {
+    marginBottom: 16,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  biometricHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  biometricIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F0F9FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  biometricInfo: {
+    flex: 1,
+  },
+  biometricTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  biometricDescription: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  biometricSwitch: {
+    transform: [{ scaleX: 1.1 }, { scaleY: 1.1 }],
+  },
+  biometricBenefits: {
+    backgroundColor: '#F0F9FF',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  benefitsTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0369A1',
+    marginBottom: 8,
+  },
+  benefitItem: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#0369A1',
+    marginBottom: 4,
+    lineHeight: 18,
   },
 });

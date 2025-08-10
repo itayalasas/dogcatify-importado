@@ -9,9 +9,32 @@ import { NotificationProvider } from '../contexts/NotificationContext';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { Platform } from 'react-native';
+import { supabaseClient } from '../lib/supabase';
 
 export default function RootLayout() {
   useFrameworkReady();
+
+  // Prevent Supabase from showing automatic modals
+  useEffect(() => {
+    // Prevent only signup confirmation modals
+    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
+      (event, session) => {
+        console.log('Auth event intercepted:', event);
+        
+        // Only block SIGNED_UP events to prevent confirmation modal
+        if (event === 'SIGNED_UP') {
+          console.log('Blocking SIGNED_UP event to prevent confirmation modal');
+          supabaseClient.auth.signOut();
+          return;
+        }
+        // Allow other events to process normally
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   // Determine initial route based on platform
   const initialRouteName = Platform.OS === 'web' ? 'web-info' : '(tabs)';
