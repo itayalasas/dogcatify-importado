@@ -50,9 +50,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         console.log('AuthContext - Auth state changed:', event, session?.user?.email || 'No user');
         
-        // Handle session expiration
-        if (event === 'TOKEN_REFRESHED') {
-          console.log('AuthContext - Token refreshed successfully');
+        // Handle different auth events
+        if (event === 'SIGNED_UP') {
+          console.log('AuthContext - SIGNED_UP event detected, signing out immediately');
+          // Since we're not using signUp anymore, this shouldn't happen
+          // But if it does, just ignore it
+          console.log('Ignoring SIGNED_UP event - using custom registration');
+          return;
         }
         
         if (event === 'SIGNED_OUT' || !session) {
@@ -67,8 +71,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         setSession(session);
         
-        if (!mounted || !session?.user) return;
-        if (session?.user) {
+        // Only validate email confirmation for SIGNED_IN events (login)
+        if (event === 'SIGNED_IN' && session?.user) {
           try {
             // Check email confirmation strictly
             console.log('AuthContext - Checking email confirmation for user:', session.user.email);
@@ -78,13 +82,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log('User ID:', session.user.id);
             console.log('User email:', session.user.email);
             
-            // Check our custom confirmation system ONLY
+            // Check both our custom confirmation system AND profiles table
+            console.log('Checking email_confirmations table...');
             const { data: confirmationData, error: confirmationError } = await supabaseClient
               .from('email_confirmations')
               .select('*')
               .eq('type', 'signup')
               .eq('user_id', session.user.id)
-              .single();
+              .eq('is_confirmed', true)
+              .maybeSingle();
             
             console.log('Confirmation query result:', {
               hasData: !!confirmationData,
@@ -102,20 +108,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               });
             }
             
-           // STRICT VALIDATION: Must have confirmed record for THIS specific user
-           if (!confirmationData || 
-               confirmationError || 
-               confirmationData.user_id !== session.user.id || 
-               confirmationData.is_confirmed !== true) {
+            // Also check profiles table for email_confirmed
+            console.log('Checking profiles table for email_confirmed...');
+            const { data: profileData, error: profileError } = await supabaseClient
+              .from('profiles')
+              .select('email_confirmed, email_confirmed_at')
+              .eq('id', session.user.id)
+              .maybeSingle();
+            
+            console.log('Profile email confirmation status:', {
+              hasData: !!profileData,
+              error: profileError?.message,
+              emailConfirmed: profileData?.email_confirmed,
+              confirmedAt: profileData?.email_confirmed_at
+            });
+            
+            // VALIDATION: Check both systems
+            const isConfirmedInEmailTable = confirmationData && 
+                                          confirmationData.user_id === session.user.id && 
+                                          confirmationData.is_confirmed === true;
+            
+            const isConfirmedInProfile = profileData && 
+                                       profileData.email_confirmed === true;
+            
+            // Also check Supabase Auth confirmation status
+            const isConfirmedInAuth = session.user.email_confirmed_at !== null;
+            
+            // User is confirmed if ANY system shows confirmation
+            const isEmailConfirmed = isConfirmedInEmailTable || isConfirmedInProfile || isConfirmedInAuth;
+            
+            console.log('Final confirmation status:', {
+              emailTableConfirmed: isConfirmedInEmailTable,
+              profileTableConfirmed: isConfirmedInProfile,
+              authTableConfirmed: isConfirmedInAuth,
+              finalResult: isEmailConfirmed
+            });
+            
+            if (!isEmailConfirmed) {
               
               console.log('=== EMAIL NOT CONFIRMED - BLOCKING ACCESS ===');
-              console.log('Reason:', {
-                noData: !confirmationData,
-                hasError: !!confirmationError,
-                userIdMismatch: confirmationData?.user_id !== session.user.id,
-               notConfirmed: confirmationData?.is_confirmed !== true,
-               actualValue: confirmationData?.is_confirmed
-              });
+              console.log('Neither email_confirmations nor profiles show confirmed status');
               
               setIsEmailConfirmed(false);
               setAuthError(`EMAIL_NOT_CONFIRMED:${session.user.email}`);
@@ -144,6 +176,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           }
         }
+        else if (session?.user && event !== 'SIGNED_UP') {
+          // For other events, load profile without email validation
+          try {
+            await loadUserProfile(session.user.id, session.user.email!);
+          } catch (error: any) {
+            console.error('Error loading user profile:', error);
+          }
+        }
+        
         if (!mounted) return;
         setLoading(false);
         setAuthInitialized(true);
@@ -242,6 +283,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Check email confirmation for initial session
             console.log('AuthContext - Initial session: Checking email confirmation for user:', session.user.email);
             
+            // Check both confirmation systems
             const { data: confirmationData, error: confirmationError } = await supabaseClient
               .from('email_confirmations')
               .select('*')
@@ -249,10 +291,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               .eq('user_id', session.user.id)
               .single();
             
-            if (!confirmationData || 
-                confirmationError || 
-                confirmationData.user_id !== session.user.id || 
-                confirmationData.is_confirmed !== true) {
+            const { data: profileData, error: profileError } = await supabaseClient
+              .from('profiles')
+              .select('email_confirmed')
+              .eq('id', session.user.id)
+              .single();
+            
+            const isConfirmedInEmailTable = confirmationData && 
+                                          !confirmationError && 
+                                          confirmationData.user_id === session.user.id && 
+                                          confirmationData.is_confirmed === true;
+            
+            const isConfirmedInProfile = profileData && 
+                                       !profileError && 
+                                       profileData.email_confirmed === true;
+            
+            const isEmailConfirmed = isConfirmedInEmailTable || isConfirmedInProfile;
+            
+            if (!isEmailConfirmed) {
               
               console.log('AuthContext - Initial session: Email not confirmed, signing out');
               setIsEmailConfirmed(false);
@@ -472,12 +528,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('User ID:', data.user.id);
         console.log('User email:', data.user.email);
         
-        // Check ONLY our custom confirmation system
+        // Check both confirmation systems
         const { data: confirmationData, error: confirmationError } = await supabaseClient
           .from('email_confirmations')
           .select('*')
           .eq('user_id', data.user.id)
           .eq('type', 'signup')
+          .single();
+        
+        const { data: profileData, error: profileError } = await supabaseClient
+          .from('profiles')
+          .select('email_confirmed')
+          .eq('id', data.user.id)
           .single();
         
         console.log('Confirmation query result:', {
@@ -487,20 +549,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isConfirmed: confirmationData?.is_confirmed
         });
         
-        // STRICT VALIDATION: Must have confirmed record in our system
-        if (confirmationError || 
-            !confirmationData || 
-            confirmationData.user_id !== data.user.id || 
-            confirmationData.is_confirmed !== true) {
+        console.log('Profile confirmation result:', {
+          hasData: !!profileData,
+          error: profileError?.message,
+          emailConfirmed: profileData?.email_confirmed
+        });
+        
+        // Check both systems for confirmation
+        const isConfirmedInEmailTable = confirmationData && 
+                                      !confirmationError && 
+                                      confirmationData.user_id === data.user.id && 
+                                      confirmationData.is_confirmed === true;
+        
+        const isConfirmedInProfile = profileData && 
+                                   !profileError && 
+                                   profileData.email_confirmed === true;
+        
+        const isEmailConfirmed = isConfirmedInEmailTable || isConfirmedInProfile;
+        
+        if (!isEmailConfirmed) {
           
           console.log('=== EMAIL NOT CONFIRMED - BLOCKING LOGIN ===');
-          console.log('Blocking reason:', {
-            hasError: !!confirmationError,
-            noData: !confirmationData,
-            userIdMismatch: confirmationData?.user_id !== data.user.id,
-            notConfirmed: confirmationData?.is_confirmed !== true,
-            actualConfirmedValue: confirmationData?.is_confirmed
-          });
+          console.log('Neither system shows email as confirmed');
           
           setIsEmailConfirmed(false);
           setAuthError(`EMAIL_NOT_CONFIRMED:${data.user.email}`);
@@ -566,30 +636,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('AuthContext - Attempting registration for:', email);
       
-      // First create the user without email confirmation
+      // Simplificar signUp para evitar comportamientos automáticos
       const { data, error } = await supabaseClient.auth.signUp({
         email,
-        password,
-        options: {
-          data: {
-            display_name: displayName,
-          },
-          // Disable automatic email confirmation
-          emailRedirectTo: undefined,
-        }
+        password
       });
       
-      if (error) throw error;
-      console.log('AuthContext - Registration successful, user created');
+      if (error) {
+        console.error('Registration error:', error);
+        throw error;
+      }
+      
+      console.log('AuthContext - Registration successful');
       
       if (data.user) {
+        // Crear perfil manualmente después del registro
+        try {
+          await updateUserProfile(data.user.id, {
+            display_name: displayName,
+            email: email,
+            is_owner: true,
+            is_partner: false,
+            email_confirmed: false,
+            created_at: new Date().toISOString()
+          });
+          console.log('User profile created successfully');
+        } catch (profileError) {
+          console.error('Error creating user profile:', profileError);
+          // Continue with registration even if profile creation fails
+        }
+        
+        console.log('Creating custom email confirmation token for user:', data.user.id);
+        
         // Create our custom email confirmation token
         const { createEmailConfirmationToken, generateConfirmationUrl } = await import('../utils/emailConfirmation');
         const token = await createEmailConfirmationToken(data.user.id, email, 'signup');
         const confirmationUrl = generateConfirmationUrl(token, 'signup');
         
         console.log('Custom confirmation token created:', token);
-        console.log('Confirmation URL:', confirmationUrl);
         
         // Send our custom confirmation email
         const { NotificationService } = await import('../utils/notifications');
@@ -601,15 +685,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('Custom confirmation email sent successfully');
       }
       
-      try {
-      } catch (emailError) {
-        console.error('Error sending custom confirmation email:', emailError);
-        // Don't throw error, registration was successful
-      }
+      // Sign out inmediatamente para evitar cualquier modal automático
+      await supabaseClient.auth.signOut();
       
-      // Don't sign out, just set user to null and show confirmation message
-      setCurrentUser(null);
-      setSession(null);
+      console.log('Registration completed successfully, user needs to confirm email');
     } catch (error) {
       console.error('Register error:', error);
       throw error;

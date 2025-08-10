@@ -606,15 +606,6 @@ export default function PetDetail() {
 
   const renderHealthTab = () => (
     <View style={styles.healthContainer}>
-      {/* Debug info */}
-      {__DEV__ && (
-        <Card style={styles.debugCard}>
-          <Text style={styles.debugText}>
-            Debug: V:{vaccines.length} E:{illnesses.length} A:{allergies.length} D:{dewormings.length} P:{weightRecords.length}
-          </Text>
-        </Card>
-      )}
-      
       <View style={styles.healthSection}>
         <View style={styles.healthHeader}>
           <View style={styles.healthTitleContainer}>

@@ -1,108 +1,62 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Alert, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { CircleCheck as CheckCircle, Circle as XCircle, Mail } from 'lucide-react-native';
-import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { resendConfirmationEmail } from '../../utils/emailConfirmation';
-import { supabaseClient } from '../../lib/supabase';
+import { CircleCheck as CheckCircle, CircleX as XCircle, Mail } from 'lucide-react-native';
+import { Card } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import { confirmEmailCustom } from '../../utils/emailConfirmation';
 
-export default function ConfirmScreen() {
+export default function EmailConfirmationScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showResendForm, setShowResendForm] = useState(false);
-  const [email, setEmail] = useState('');
-  const [resending, setResending] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
   useEffect(() => {
     const confirmEmail = async () => {
-      const { token_hash, type = 'signup' } = params;
+      const { token_hash, type } = params;
+      
+      console.log('Email confirmation page loaded with params:', { token_hash, type });
       
       if (!token_hash) {
         setError('Token de confirmación no encontrado');
         setLoading(false);
-        setShowResendForm(true);
         return;
       }
 
-      // ONLY handle signup confirmations here
-      if (type !== 'signup') {
-        setError('Esta página es solo para confirmación de registro. Para recuperar contraseña, usa el enlace correcto.');
-        setLoading(false);
-        return;
-      }
       try {
-        // Find and verify the signup confirmation token
-        const { data: tokenData, error } = await supabaseClient
-          .from('email_confirmations')
-          .select('*')
-          .eq('token_hash', token_hash)
-          .eq('type', 'signup')
-          .eq('is_confirmed', false)
-          .single();
-
-        if (error || !tokenData) {
-          setError('Token no encontrado o ya utilizado');
-          setLoading(false);
-          setShowResendForm(true);
-          return;
-        }
-
-        // Check if token has expired
-        const now = new Date();
-        const expiresAt = new Date(tokenData.expires_at);
+        console.log('Attempting to confirm email with token:', token_hash);
         
-        if (now > expiresAt) {
-          setError('Token expirado. Solicita un nuevo enlace de confirmación.');
-          setLoading(false);
-          setShowResendForm(true);
-          return;
-        }
-
-        // Mark token as confirmed
-        const { error: updateError } = await supabaseClient
-          .from('email_confirmations')
-          .update({
-            is_confirmed: true,
-            confirmed_at: new Date().toISOString()
-          })
-          .eq('id', tokenData.id);
-
-        if (updateError) {
-          console.error('Error updating token:', updateError);
-          setError('Error al confirmar token');
-          setLoading(false);
-          return;
-        }
-
-        // Update user profile to mark email as confirmed
-        const { error: profileError } = await supabaseClient
-          .from('profiles')
-          .update({
-            email_confirmed: true,
-            email_confirmed_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', tokenData.user_id);
-
-        if (profileError) {
-          console.error('Error updating profile:', profileError);
-          // Don't fail the confirmation if profile update fails
-        }
+        // Add a small delay to ensure database is ready
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
-        console.log('Email confirmation successful for:', tokenData.email);
-        setUserEmail(tokenData.email);
-        setConfirmed(true);
+        const result = await confirmEmailCustom(
+          token_hash as string, 
+          (type as 'signup' | 'password_reset') || 'signup'
+        );
+        
+        console.log('Email confirmation result:', result);
+
+        if (result.success) {
+          console.log('✅ Email confirmed successfully for user:', result.userId);
+          
+          // Solo marcar como confirmado - el perfil ya se creó en el registro
+          console.log('Email confirmed, profile already exists from registration');
+          
+          setConfirmed(true);
+          setUserEmail(result.email || null);
+          setError(null);
+        } else {
+          console.error('❌ Email confirmation failed:', result.error);
+          setError(result.error || 'Error al confirmar el email');
+          setConfirmed(false);
+        }
       } catch (error) {
-        console.error('Email confirmation error:', error);
-        setError('Error al procesar la confirmación');
-        setLoading(false);
-        setShowResendForm(true);
+        console.error('❌ Error in email confirmation:', error);
+        setError('Error interno del servidor');
+        setConfirmed(false);
       } finally {
         setLoading(false);
       }
@@ -111,93 +65,16 @@ export default function ConfirmScreen() {
     confirmEmail();
   }, [params]);
 
-  const handleResendConfirmation = async () => {
-    if (!email.trim()) {
-      Alert.alert('Error', 'Por favor ingresa tu email');
-      return;
-    }
-
-    try {
-      setResending(true);
-      const result = await resendConfirmationEmail(email.trim());
-
-      if (!result.success) {
-        Alert.alert('Error', result.error || 'No se pudo reenviar el email de confirmación');
-      } else {
-        Alert.alert('Éxito', 'Email de confirmación reenviado. Revisa tu bandeja de entrada.');
-        setShowResendForm(false);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Ocurrió un error al reenviar el email');
-    } finally {
-      setResending(false);
-    }
-  };
-
-  const handlePasswordReset = async () => {
-    if (!newPassword || !confirmPassword) {
-      Alert.alert('Error', 'Por favor completa ambos campos de contraseña');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'Las contraseñas no coinciden');
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres');
-      return;
-    }
-
-    if (!userId || !resetToken) {
-      Alert.alert('Error', 'Información de reset inválida');
-      return;
-    }
-
-    setUpdatingPassword(true);
-    try {
-      // Call our Edge Function to reset password securely
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      const response = await fetch(`${supabaseUrl}/functions/v1/reset-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId,
-          newPassword,
-          token: resetToken
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Error al actualizar contraseña');
-      }
-
-      setPasswordUpdated(true);
-      Alert.alert(
-        'Contraseña actualizada',
-        'Tu contraseña ha sido cambiada exitosamente. Ya puedes iniciar sesión con tu nueva contraseña.',
-        [{ text: 'OK', onPress: () => router.replace('/web-info') }]
-      );
-
-    } catch (error: any) {
-      console.error('Error updating password:', error);
-      Alert.alert('Error', error.message || 'No se pudo actualizar la contraseña');
-    } finally {
-      setUpdatingPassword(false);
-    }
-  };
-
   const handleGoToLogin = () => {
     if (Platform.OS === 'web') {
       router.replace('/web-info');
     } else {
       router.replace('/auth/login');
     }
+  };
+
+  const handleResendEmail = () => {
+    router.replace('/auth/forgot-password');
   };
 
   if (loading) {
@@ -211,23 +88,49 @@ export default function ConfirmScreen() {
     );
   }
 
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Card style={styles.errorCard}>
+          <XCircle size={64} color="#EF4444" />
+          <Text style={styles.errorTitle}>Error de Confirmación</Text>
+          <Text style={styles.errorMessage}>{error}</Text>
+          
+          <View style={styles.errorActions}>
+            <Button
+              title="Ir al Login"
+              onPress={handleGoToLogin}
+              size="large"
+            />
+            <Button
+              title="Solicitar Nuevo Enlace"
+              onPress={handleResendEmail}
+              variant="outline"
+              size="large"
+            />
+          </View>
+        </Card>
+      </View>
+    );
+  }
+
   if (confirmed) {
     return (
       <View style={styles.container}>
         <Card style={styles.successCard}>
           <CheckCircle size={64} color="#10B981" />
           <Text style={styles.successTitle}>¡Email Confirmado!</Text>
-          <Text style={styles.successText}>
-            Tu cuenta ha sido activada exitosamente. Ya puedes iniciar sesión y disfrutar de todas las funciones de DogCatiFy.
+          <Text style={styles.successMessage}>
+            Tu correo electrónico ha sido confirmado exitosamente. Ya puedes iniciar sesión en DogCatiFy.
           </Text>
           {userEmail && (
             <Text style={styles.emailText}>
-              Email confirmado: {userEmail}
+              Cuenta confirmada: {userEmail}
             </Text>
           )}
           <Button
             title="Ir a Iniciar Sesión"
-            onPress={() => router.replace('/web-info')}
+            onPress={handleGoToLogin}
             size="large"
           />
         </Card>
@@ -235,62 +138,7 @@ export default function ConfirmScreen() {
     );
   }
 
-  if (error && showResendForm) {
-    return (
-      <View style={styles.container}>
-        <Card style={styles.errorCard}>
-          <XCircle size={64} color="#EF4444" />
-          <Text style={styles.errorTitle}>Error de Confirmación</Text>
-          <Text style={styles.errorText}>{error}</Text>
-          
-          <View style={styles.resendContainer}>
-            <Text style={styles.resendTitle}>Reenviar Email de Confirmación</Text>
-            <Text style={styles.resendDescription}>
-              Ingresa tu email para recibir un nuevo enlace de confirmación
-            </Text>
-            
-            <Input
-              label="Email"
-              placeholder="tu@email.com"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              leftIcon={<Mail size={20} color="#6B7280" />}
-            />
-            
-            <Button
-              title={resending ? 'Enviando...' : 'Reenviar Confirmación'}
-              onPress={handleResendConfirmation}
-              loading={resending}
-              size="large"
-            />
-          </View>
-
-          <TouchableOpacity style={styles.linkButton} onPress={() => router.replace('/auth/login')}>
-            <Text style={styles.linkText}>Volver al Login</Text>
-          </TouchableOpacity>
-        </Card>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.container}>
-      <Card style={styles.errorCard}>
-        <XCircle size={64} color="#EF4444" />
-        <Text style={styles.errorTitle}>Error</Text>
-        <Text style={styles.errorText}>
-          {error || 'Ocurrió un error inesperado'}
-        </Text>
-        <Button
-          title="Volver al Login"
-          onPress={() => router.replace('/auth/login')}
-          size="large"
-        />
-      </Card>
-    </View>
-  );
+  return null;
 }
 
 const styles = StyleSheet.create({
@@ -312,62 +160,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
   },
-  successCard: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  successTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  successText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 24,
-  },
-  emailText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  passwordCard: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    width: '100%',
-    maxWidth: 400,
-  },
-  iconContainer: {
-    marginBottom: 16,
-  },
-  passwordTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  passwordText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 24,
-  },
-  passwordForm: {
-    width: '100%',
-    gap: 16,
-  },
   errorCard: {
     alignItems: 'center',
     paddingVertical: 40,
@@ -382,7 +174,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     textAlign: 'center',
   },
-  errorText: {
+  errorMessage: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
@@ -390,32 +182,37 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     lineHeight: 24,
   },
-  resendContainer: {
+  errorActions: {
     width: '100%',
-    marginBottom: 24,
+    gap: 12,
   },
-  resendTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+  successCard: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    width: '100%',
+    maxWidth: 400,
+  },
+  successTitle: {
+    fontSize: 24,
+    fontFamily: 'Inter-Bold',
+    color: '#10B981',
+    marginTop: 16,
     marginBottom: 8,
     textAlign: 'center',
   },
-  resendDescription: {
-    fontSize: 14,
+  successMessage: {
+    fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: '#374151',
     textAlign: 'center',
     marginBottom: 16,
-    lineHeight: 20,
+    lineHeight: 24,
   },
-  linkButton: {
-    marginTop: 16,
-  },
-  linkText: {
-    fontSize: 16,
+  emailText: {
+    fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    color: '#6B7280',
     textAlign: 'center',
+    marginBottom: 24,
   },
 });

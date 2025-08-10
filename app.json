@@ -2,7 +2,7 @@
   "expo": {
     "name": "DogCatiFy",
     "slug": "dogcatify",
-    "version": "6.0.0",
+    "version": "7.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.jpg",
     "scheme": "dogcatify",
@@ -40,7 +40,7 @@
 },
     "android": {
   "package": "com.dogcatify.app",
-  "versionCode": 6,
+  "versionCode": 7,
   "adaptiveIcon": {
     "foregroundImage": "./assets/images/logo.jpg",
     "backgroundColor": "#FFFFFF"
