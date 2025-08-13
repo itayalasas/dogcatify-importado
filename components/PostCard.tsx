@@ -41,14 +41,23 @@ const PostCard: React.FC<PostCardProps> = ({
     }
     setLikesCount(post.likes?.length || 0);
     
-    // Fetch comments
-    if (showCommentsModal) {
-      fetchComments();
-    } else {
-      fetchCommentsCount();
-    }
+    console.log('PostCard useEffect - Post likes updated:', {
+      postId: post.id,
+      likesArray: post.likes,
+      isLiked: post.likes?.includes(currentUser?.id),
+      likesCount: post.likes?.length || 0
+    });
+    
+    // Always fetch comments count for display
+    fetchCommentsCount();
   }, [post.likes, currentUser]);
 
+  // Separate effect for modal comments
+  useEffect(() => {
+    if (showCommentsModal) {
+      fetchComments();
+    }
+  }, [showCommentsModal]);
   useEffect(() => {
     if (showCommentsModal) {
       fetchComments();
@@ -75,7 +84,16 @@ const PostCard: React.FC<PostCardProps> = ({
       console.log('Fetching comments for post:', post.id);
       const { data: commentsData, error } = await supabaseClient
         .from('comments')
-        .select('*')
+        .select(`
+          id,
+          post_id,
+          user_id,
+          content,
+          parent_id,
+          likes,
+          created_at,
+          profiles:user_id(display_name, photo_url)
+        `)
         .eq('post_id', post.id)
         .order('created_at', { ascending: true });
       
@@ -83,37 +101,12 @@ const PostCard: React.FC<PostCardProps> = ({
       
       console.log('Raw comments data:', commentsData);
       
-      // Fetch user profiles for each comment
-      const commentsWithProfiles = await Promise.all(
-        (commentsData || []).map(async (comment) => {
-          try {
-            const { data: profileData, error: profileError } = await supabaseClient
-              .from('profiles')
-              .select('display_name, photo_url')
-              .eq('id', comment.user_id)
-              .single();
-            
-            if (profileError) {
-              console.error('Error fetching profile for comment:', profileError);
-              return {
-                ...comment,
-                profiles: null
-              };
-            }
-            
-            return {
-              ...comment,
-              profiles: profileData
-            };
-          } catch (error) {
-            console.error('Error processing comment profile:', error);
-            return {
-              ...comment,
-              profiles: null
-            };
-          }
-        })
-      );
+      // Process comments data (profiles are already joined)
+      const commentsWithProfiles = (commentsData || []).map(comment => ({
+        ...comment,
+        likes: comment.likes || [], // Ensure likes array exists
+        profiles: comment.profiles || null
+      }));
       
       console.log('Comments with profiles:', commentsWithProfiles);
       
@@ -148,7 +141,10 @@ const PostCard: React.FC<PostCardProps> = ({
       const parentReplies = replies.filter(reply => reply.parent_id === parent.id);
       return {
         ...parent,
-        replies: parentReplies
+        replies: parentReplies.map(reply => ({
+          ...reply,
+          likes: reply.likes || [] // Ensure likes array exists for replies
+        }))
       };
     });
     
@@ -210,7 +206,8 @@ const PostCard: React.FC<PostCardProps> = ({
         post_id: post.id,
         user_id: currentUser.id,
         content: newComment.trim(),
-        likes: []
+        likes: [],
+        created_at: new Date().toISOString()
       };
       
       // Add parent_id if replying to a comment
@@ -226,6 +223,8 @@ const PostCard: React.FC<PostCardProps> = ({
 
       setNewComment('');
       setReplyTo(null);
+      
+      // Refresh both comments and count
       fetchComments();
       fetchCommentsCount();
     } catch (error) {
@@ -238,6 +237,19 @@ const PostCard: React.FC<PostCardProps> = ({
     if (!currentUser) return;
 
     try {
+      console.log('=== COMMENT LIKE DEBUG START ===');
+      console.log('Comment ID:', commentId);
+      console.log('User ID:', currentUser.id);
+      
+      // Check current session before making the update
+      const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
+      if (sessionError || !session) {
+        console.error('No valid session for comment like');
+        Alert.alert('Error', 'Sesión expirada. Por favor inicia sesión nuevamente.');
+        return;
+      }
+      
+      // Get fresh comment data from database
       const { data: commentData, error: fetchError } = await supabaseClient
         .from('comments')
         .select('likes')
@@ -246,8 +258,12 @@ const PostCard: React.FC<PostCardProps> = ({
       
       if (fetchError) throw fetchError;
       
+      console.log('Current comment likes from DB:', commentData.likes);
+      
       const likes = commentData.likes || [];
       const isLiked = likes.includes(currentUser.id);
+      
+      console.log('Is currently liked:', isLiked);
       
       let newLikes;
       if (isLiked) {
@@ -256,20 +272,67 @@ const PostCard: React.FC<PostCardProps> = ({
         newLikes = [...likes, currentUser.id];
       }
       
+      console.log('New likes array:', newLikes);
+      
+      // Use RPC function to update likes with proper permissions
+      console.log('Updating comment likes using direct update...');
+      // Update database first
       const { error } = await supabaseClient
         .from('comments')
         .update({ likes: newLikes })
         .eq('id', commentId);
       
-      if (error) throw error;
+      if (error) {
+        console.error('Database update error:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        throw error;
+      }
       
-      setComments(prev => prev.map(comment => 
-        comment.id === commentId 
-          ? { ...comment, likes: newLikes }
-          : comment
-      ));
+      console.log('Database updated successfully');
+      
+      // Verify the update worked by fetching again
+      const { data: verifyData, error: verifyError } = await supabaseClient
+        .from('comments')
+        .select('likes')
+        .eq('id', commentId)
+        .single();
+      
+      if (verifyError) {
+        console.error('Verification failed:', verifyError);
+      } else {
+        console.log('Verification - likes in DB after update:', verifyData.likes);
+        if (JSON.stringify(verifyData.likes) !== JSON.stringify(newLikes)) {
+          console.error('❌ Update not persisted! Expected:', newLikes, 'Got:', verifyData.likes);
+          Alert.alert('Error', 'Los likes no se guardaron correctamente');
+          return;
+        } else {
+          console.log('✅ Update verified successfully');
+        }
+      }
+      
+      // Update local state for both main comments and replies
+      setComments(prev => prev.map(comment => {
+        if (comment.id === commentId) {
+          return { ...comment, likes: newLikes };
+        }
+        // Also check replies
+        if (comment.replies && comment.replies.length > 0) {
+          const updatedReplies = comment.replies.map(reply => 
+            reply.id === commentId 
+              ? { ...reply, likes: newLikes }
+              : reply
+          );
+          return { ...comment, replies: updatedReplies };
+        }
+        return comment;
+      }));
+      
+      console.log('Local comment state updated');
+      console.log('=== COMMENT LIKE DEBUG END ===');
     } catch (error) {
       console.error('Error updating comment like:', error);
+      // Show user feedback on error
+      Alert.alert('Error', 'No se pudo actualizar el me gusta del comentario');
     }
   };
 

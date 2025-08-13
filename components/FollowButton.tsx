@@ -67,16 +67,27 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
 
     setLoading(true);
     try {
+      console.log('=== FOLLOW/UNFOLLOW ACTION START ===');
+      console.log('Current user:', currentUser.id, currentUser.displayName);
+      console.log('Target user:', userId, authorName);
+      console.log('Current status - isFollowing:', isFollowing);
+      
       if (isFollowing) {
         // Unfollow
+        console.log('Executing UNFOLLOW action...');
         await unfollowUser(currentUser.id, userId);
       } else {
         // Follow
+        console.log('Executing FOLLOW action...');
         await followUser(currentUser.id, userId);
       }
       
       // Update local state immediately
+      const newFollowingStatus = !isFollowing;
+      console.log('Updating local state to:', newFollowingStatus);
       setIsFollowing(!isFollowing);
+      
+      console.log('=== FOLLOW/UNFOLLOW ACTION COMPLETED ===');
     } catch (error) {
       console.error('Error updating follow status:', error);
       Alert.alert('Error', 'No se pudo actualizar el estado de seguimiento');
@@ -86,6 +97,10 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
   };
 
   const followUser = async (followerId: string, followingId: string) => {
+    console.log('=== FOLLOW USER FUNCTION ===');
+    console.log('Follower ID:', followerId);
+    console.log('Following ID:', followingId);
+    
     // Get current data for both users
     const [currentUserResult, targetUserResult] = await Promise.all([
       supabaseClient
@@ -102,6 +117,9 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
     
     if (currentUserResult.error) throw currentUserResult.error;
     if (targetUserResult.error) throw targetUserResult.error;
+    
+    console.log('Current user following before:', currentUserResult.data.following);
+    console.log('Target user followers before:', targetUserResult.data.followers);
     
     // Update following list for current user
     const newFollowing = [...(currentUserResult.data.following || []), followingId];
@@ -109,6 +127,9 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
     // Update followers list for target user
     const newFollowers = [...(targetUserResult.data.followers || []), followerId];
     
+    console.log('New following array:', newFollowing);
+    console.log('New followers array:', newFollowers);
+    
     // Update both users simultaneously
     const [updateCurrentResult, updateTargetResult] = await Promise.all([
       supabaseClient
@@ -129,9 +150,16 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
     
     if (updateCurrentResult.error) throw updateCurrentResult.error;
     if (updateTargetResult.error) throw updateTargetResult.error;
+    
+    console.log('Both users updated successfully');
+    console.log('=== FOLLOW USER FUNCTION COMPLETED ===');
   };
 
   const unfollowUser = async (followerId: string, followingId: string) => {
+    console.log('=== UNFOLLOW USER FUNCTION ===');
+    console.log('Follower ID:', followerId);
+    console.log('Following ID:', followingId);
+    
     // Get current data for both users
     const [currentUserResult, targetUserResult] = await Promise.all([
       supabaseClient
@@ -149,11 +177,17 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
     if (currentUserResult.error) throw currentUserResult.error;
     if (targetUserResult.error) throw targetUserResult.error;
     
+    console.log('Current user following before:', currentUserResult.data.following);
+    console.log('Target user followers before:', targetUserResult.data.followers);
+    
     // Remove from following list for current user
     const newFollowing = (currentUserResult.data.following || []).filter((id: string) => id !== followingId);
     
     // Remove from followers list for target user
     const newFollowers = (targetUserResult.data.followers || []).filter((id: string) => id !== followerId);
+    
+    console.log('New following array:', newFollowing);
+    console.log('New followers array:', newFollowers);
     
     // Update both users simultaneously
     const [updateCurrentResult, updateTargetResult] = await Promise.all([
@@ -175,6 +209,9 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
     
     if (updateCurrentResult.error) throw updateCurrentResult.error;
     if (updateTargetResult.error) throw updateTargetResult.error;
+    
+    console.log('Both users updated successfully');
+    console.log('=== UNFOLLOW USER FUNCTION COMPLETED ===');
   };
   // Don't show button for own posts
   if (!currentUser || userId === currentUser.id) {

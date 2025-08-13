@@ -223,10 +223,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             bio: profile.bio,
             phone: profile.phone,
             createdAt: new Date(profile.created_at),
-            followers: profile.followers,
-            following: profile.following,
-            followersCount: profile.followers?.length || 0,
-            followingCount: profile.following?.length || 0,
+            followers: profile.followers || [],
+            following: profile.following || [],
+            followersCount: (profile.followers || []).length,
+            followingCount: (profile.following || []).length,
           });
         } else {
           // Create user profile if it doesn't exist
@@ -604,10 +604,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             bio: profile.bio,
             phone: profile.phone,
             createdAt: new Date(profile.created_at),
-            followers: profile.followers,
-            following: profile.following,
-            followersCount: profile.followers?.length || 0,
-            followingCount: profile.following?.length || 0,
+            followers: profile.followers || [],
+            following: profile.following || [],
+            followersCount: (profile.followers || []).length,
+            followingCount: (profile.following || []).length,
           };
           
           console.log('AuthContext - Login successful, setting user:', user.email);

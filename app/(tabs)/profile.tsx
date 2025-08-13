@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Switch } from 'react-native';
 import { router } from 'expo-router';
+import Constants from 'expo-constants';
+import * as Device from 'expo-device';
 import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, Shield, CircleHelp as HelpCircle, Globe, Building, CreditCard, Fingerprint, ChevronRight, ArrowRight, Trash2 } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { useBiometric } from '../../contexts/BiometricContext';
 import { supabaseClient } from '../../lib/supabase';
 
 export default function Profile() {
   const { currentUser, logout } = useAuth();
   const { t, language, setLanguage } = useLanguage();
+  const { expoPushToken, registerForPushNotifications } = useNotifications();
   const { 
     isBiometricSupported, 
     isBiometricEnabled, 
@@ -28,6 +32,14 @@ export default function Profile() {
   });
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  
+  // Computed values for notifications
+  const isExpoGo = Constants.appOwnership === 'expo';
+  const isPhysicalDevice = Device.isDevice;
+  const hasNotificationToken = !!expoPushToken;
+  const notificationsSupported = !isExpoGo && isPhysicalDevice;
+  const notificationsEnabled = notificationsSupported && hasNotificationToken;
 
   useEffect(() => {
     if (currentUser) {
@@ -40,6 +52,9 @@ export default function Profile() {
   useEffect(() => {
     if (!currentUser) return;
     
+    console.log('Setting up real-time subscriptions for user:', currentUser.id);
+    
+    // Subscribe to changes in the current user's profile
     const subscription = supabaseClient
       .channel('profile-updates')
       .on('postgres_changes', 
@@ -50,16 +65,44 @@ export default function Profile() {
           filter: `id=eq.${currentUser.id}`
         }, 
         (payload) => {
-          console.log('Profile updated, refreshing stats...');
+          console.log('=== REAL-TIME: Current user profile updated ===');
+          console.log('Updated fields:', payload.new);
           fetchUserStats();
+        }
+      )
+      // Also subscribe to ANY profile changes that might affect followers
+      .on('postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public', 
+          table: 'profiles'
+        },
+        (payload) => {
+          // Check if the updated profile's following array includes current user
+          const updatedFollowing = payload.new?.following || [];
+          const oldFollowing = payload.old?.following || [];
+          
+          const wasFollowing = oldFollowing.includes(currentUser.id);
+          const isNowFollowing = updatedFollowing.includes(currentUser.id);
+          
+          // If someone started or stopped following current user, update stats
+          if (wasFollowing !== isNowFollowing) {
+            console.log('=== REAL-TIME: Follower status changed ===');
+            console.log('User', payload.new?.display_name, isNowFollowing ? 'started following' : 'stopped following', 'current user');
+            fetchUserStats();
+          }
         }
       )
       .subscribe();
     
+    console.log('Real-time subscription established');
+    
     return () => {
+      console.log('Cleaning up real-time subscription');
       subscription.unsubscribe();
     };
   }, [currentUser]);
+  
   const fetchUserStats = async () => {
     try {
       console.log('Fetching user stats for:', currentUser!.id);
@@ -76,10 +119,28 @@ export default function Profile() {
         .select('*', { count: 'exact', head: true })
         .eq('user_id', currentUser!.id);
 
-      // Fetch updated profile data to get current followers/following
+      // Fetch followers count - buscar usuarios que tienen a este usuario en su array 'following'
+      console.log('=== FETCHING FOLLOWERS ===');
+      console.log('Looking for users who have', currentUser!.id, 'in their following array');
+      const { data: followersData, error: followersError } = await supabaseClient
+        .from('profiles')
+        .select('id, display_name')
+        .contains('following', [currentUser!.id]);
+      
+      if (followersError) {
+        console.error('Error fetching followers:', followersError);
+      }
+      
+      const followersCount = followersData?.length || 0;
+      console.log('Followers found:', followersData?.map(f => ({ id: f.id, name: f.display_name })) || []);
+      console.log('Total followers count:', followersCount);
+      
+      // Fetch following count - obtener el array 'following' del usuario actual
+      console.log('=== FETCHING FOLLOWING ===');
+      console.log('Getting following array for user:', currentUser!.id);
       const { data: profileData, error: profileError } = await supabaseClient
         .from('profiles')
-        .select('followers, following')
+        .select('following, followers')
         .eq('id', currentUser!.id)
         .single();
       
@@ -87,23 +148,51 @@ export default function Profile() {
         console.error('Error fetching profile data:', profileError);
       }
       
-      const followersCount = profileData?.followers?.length || 0;
-      const followingCount = profileData?.following?.length || 0;
+      const followingArray = profileData?.following || [];
+      const followersArray = profileData?.followers || [];
+      
+      // Validate and clean arrays
+      const validFollowing = followingArray.filter((id: any) => id && typeof id === 'string' && id.trim() !== '');
+      const validFollowers = followersArray.filter((id: any) => id && typeof id === 'string' && id.trim() !== '');
+      
+      const followingCount = validFollowing.length;
+      const localFollowersCount = validFollowers.length;
+      
+      console.log('Following array from profile:', validFollowing);
+      console.log('Followers array from profile:', validFollowers);
+      console.log('Following count:', followingCount);
+      console.log('Local followers count:', localFollowersCount);
+      
+      // Use the higher count between database query and local array
+      // This handles cases where the arrays might be out of sync
+      const finalFollowersCount = Math.max(followersCount, localFollowersCount);
       
       console.log('Updated stats:', {
         petsCount: petsCount || 0,
         postsCount: postsCount || 0,
-        followersCount,
-        followingCount
+        followersCount: finalFollowersCount,
+        followingCount,
+        followersFromQuery: followersData?.map(f => f.display_name) || [],
+        followersFromProfile: validFollowers,
+        followingArray: validFollowing,
+        finalFollowersCount
       });
+      
       setUserStats({
         petsCount: petsCount || 0,
         postsCount: postsCount || 0,
-        followersCount,
+        followersCount: finalFollowersCount,
         followingCount
       });
     } catch (error) {
       console.error('Error fetching user stats:', error);
+      // Set default stats on error
+      setUserStats({
+        petsCount: 0,
+        postsCount: 0,
+        followersCount: 0,
+        followingCount: 0
+      });
     } finally {
       setLoading(false);
     }
@@ -262,6 +351,154 @@ export default function Profile() {
     }
   };
 
+  const handleToggleNotifications = async () => {
+    try {
+      if (Constants.appOwnership === 'expo') {
+        Alert.alert(
+          'No disponible en Expo Go',
+          'Las notificaciones push no están disponibles en Expo Go. Necesitas una build de desarrollo o producción.',
+          [{ text: 'Entendido' }]
+        );
+        return;
+      }
+
+      if (!Device.isDevice) {
+        Alert.alert(
+          'Dispositivo no compatible',
+          'Las notificaciones push solo funcionan en dispositivos físicos, no en simuladores.',
+          [{ text: 'Entendido' }]
+        );
+        return;
+      }
+
+      if (notificationsEnabled) {
+        // Notificaciones ya habilitadas - mostrar opciones
+        Alert.alert(
+          'Notificaciones Habilitadas ✅',
+          `Las notificaciones push están funcionando correctamente.\n\n📱 Token configurado\n🔔 Permisos concedidos\n\n¿Qué quieres hacer?`,
+          [
+            { text: 'Cerrar', style: 'cancel' },
+            { 
+              text: 'Probar Notificación', 
+              onPress: () => testPushNotification()
+            },
+            {
+              text: 'Ver Detalles',
+              onPress: () => showNotificationDetails()
+            }
+          ]
+        );
+      } else {
+        // Intentar habilitar notificaciones
+        Alert.alert(
+          'Habilitar Notificaciones',
+          '¿Quieres habilitar las notificaciones push para recibir actualizaciones importantes sobre reservas, pedidos y mensajes?',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            { 
+              text: 'Habilitar', 
+              onPress: () => enableNotifications()
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Error in handleToggleNotifications:', error);
+      Alert.alert('Error', 'Hubo un problema con la configuración de notificaciones');
+    }
+  };
+
+  const showNotificationDetails = () => {
+    Alert.alert(
+      '🔔 Detalles de Notificaciones',
+      `Estado: ✅ Activas\n\nTipo de notificaciones que recibirás:\n• Confirmaciones de reservas\n• Actualizaciones de pedidos\n• Mensajes de adopción\n• Recordatorios médicos\n• Ofertas especiales\n\nToken: ${expoPushToken?.substring(0, 30)}...`,
+      [
+        { text: 'Cerrar', style: 'cancel' },
+        { 
+          text: 'Probar Ahora', 
+          onPress: () => testPushNotification()
+        }
+      ]
+    );
+  };
+
+  const enableNotifications = async () => {
+    setNotificationsLoading(true);
+    try {
+      console.log('🔔 Attempting to enable notifications...');
+      
+      const token = await registerForPushNotifications();
+      
+      if (token) {
+        console.log('✅ Notifications enabled successfully');
+        Alert.alert(
+          '¡Notificaciones Habilitadas! 🎉',
+          `✅ Las notificaciones push han sido configuradas correctamente.\n\n📱 Ahora recibirás notificaciones sobre:\n• Reservas confirmadas\n• Pedidos actualizados\n• Mensajes de adopción\n• Recordatorios médicos\n\n¿Quieres probar enviando una notificación?`,
+          [
+            { text: 'Más tarde', style: 'cancel' },
+            { 
+              text: 'Probar Ahora', 
+              onPress: () => testPushNotification()
+            }
+          ]
+        );
+      } else {
+        console.log('❌ Failed to get notification token');
+        Alert.alert(
+          'No se pudieron habilitar',
+          'Las notificaciones no se pudieron configurar.\n\nPosibles causas:\n• Permisos denegados por el usuario\n• Error de configuración del proyecto\n• Problema de conectividad\n\nPuedes intentar habilitarlas desde la configuración del dispositivo o contactar soporte.',
+          [{ text: 'Entendido' }]
+        );
+      }
+    } catch (error) {
+      console.error('Error enabling notifications:', error);
+      Alert.alert(
+        'Error al Habilitar',
+        `Hubo un problema técnico al habilitar las notificaciones.\n\nError: ${error.message || 'Desconocido'}\n\nPuedes intentar:\n• Verificar permisos en configuración\n• Reiniciar la app\n• Contactar soporte si persiste`,
+        [{ text: 'Entendido' }]
+      );
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
+  const testPushNotification = async () => {
+    if (!expoPushToken) {
+      Alert.alert('Error', 'No hay token de notificación disponible');
+      return;
+    }
+
+    try {
+      console.log('🧪 Testing push notification...');
+      
+      // Send test notification using the utility function
+      const { NotificationService } = await import('../../utils/notifications');
+      
+      await NotificationService.sendPushNotification(
+        expoPushToken,
+        '🐾 Prueba DogCatiFy',
+        '¡Las notificaciones están funcionando perfectamente!',
+        {
+          type: 'test',
+          timestamp: new Date().toISOString()
+        }
+      );
+      
+      Alert.alert(
+        'Notificación Enviada 📤',
+        'Se envió una notificación de prueba a tu dispositivo. Deberías recibirla en unos segundos.\n\nSi no la recibes, verifica:\n• Permisos de notificación en configuración\n• Que la app no esté en "No molestar"\n• Tu conexión a internet',
+        [{ text: 'Perfecto' }]
+      );
+    } catch (error) {
+      console.error('Error testing notification:', error);
+      Alert.alert(
+        'Error en la Prueba',
+        `No se pudo enviar la notificación de prueba.\n\nError: ${error.message || 'Desconocido'}\n\nVerifica tu conexión e intenta nuevamente.`,
+        [{ text: 'Entendido' }]
+      );
+    }
+  };
+
   const handleLanguageChange = () => {
     Alert.alert(
       'Cambiar idioma',
@@ -282,23 +519,16 @@ export default function Profile() {
     );
   };
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     Alert.alert(
       'Cerrar sesión',
       '¿Estás seguro de que quieres cerrar sesión?',
       [
         { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Cerrar sesión',
+        { 
+          text: 'Cerrar sesión', 
           style: 'destructive',
-          onPress: async () => {
-            try {
-              await logout();
-              router.replace('/auth/login');
-            } catch (error) {
-              Alert.alert('Error', 'No se pudo cerrar sesión');
-            }
-          }
+          onPress: logout
         }
       ]
     );
@@ -473,9 +703,83 @@ export default function Profile() {
 
         {/* Settings */}
         <Card style={styles.menuCard}>
-          {/* Biometric Authentication Setup */}
+          {/* Notificaciones Push Card - Estilo consistente con Face ID */}
+          <View style={styles.notificationCard}>
+            <View style={styles.notificationHeader}>
+              <View style={styles.notificationIconContainer}>
+                <Bell size={24} color="#2D6A6F" />
+              </View>
+              <View style={styles.notificationInfo}>
+                <Text style={styles.notificationTitle}>Notificaciones Push v2</Text>
+                <Text style={styles.notificationDescription}>
+                  {notificationsEnabled ? 
+                    '🔔 Habilita para recibir actualizaciones importantes' :
+                    notificationsSupported ?
+                      '🔔 Habilita para recibir notificaciones' :
+                      isExpoGo ? 
+                        '❌ No disponible en Expo Go' :
+                        '❌ Dispositivo no compatible'
+                  }
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.notificationToggle,
+                  notificationsEnabled && styles.notificationToggleActive,
+                  !notificationsSupported && styles.notificationToggleDisabled
+                ]}
+                onPress={handleToggleNotifications}
+                disabled={notificationsLoading || !notificationsSupported}
+              >
+                <View style={[
+                  styles.notificationToggleHandle,
+                  notificationsEnabled && styles.notificationToggleHandleActive,
+                  notificationsLoading && styles.notificationToggleHandleLoading
+                ]} />
+              </TouchableOpacity>
+            </View>
+            
+            {notificationsEnabled ? (
+              <View style={styles.notificationStatus}>
+                <Text style={styles.statusTitle}>Estado de las notificaciones:</Text>
+                <Text style={styles.statusItem}>✅ Permisos concedidos</Text>
+                <Text style={styles.statusItem}>📱 Token configurado</Text>
+                <Text style={styles.statusItem}>🔔 Recibiendo notificaciones</Text>
+                <TouchableOpacity style={styles.testButton} onPress={testPushNotification}>
+                  <Text style={styles.testButtonText}>Probar notificación</Text>
+                </TouchableOpacity>
+              </View>
+            ) : !notificationsSupported ? (
+              <View style={styles.notificationBenefits}>
+                <Text style={styles.benefitsTitle}>Limitaciones:</Text>
+                <Text style={styles.benefitItem}>
+                  {isExpoGo ? 
+                    '• Expo Go no soporta notificaciones push' :
+                    '• Este dispositivo no soporta notificaciones'
+                  }
+                </Text>
+                <Text style={styles.benefitItem}>
+                  {isExpoGo ? 
+                    '• Necesitas una build nativa para usar esta función' :
+                    '• Usa un dispositivo físico para mejores resultados'
+                  }
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.notificationBenefits}>
+                <Text style={styles.benefitsTitle}>Beneficios:</Text>
+                <Text style={styles.benefitItem}>• Confirmaciones de reservas</Text>
+                <Text style={styles.benefitItem}>• Actualizaciones de pedidos</Text>
+                <Text style={styles.benefitItem}>• Mensajes de adopción</Text>
+                <Text style={styles.benefitItem}>• Recordatorios médicos</Text>
+                <Text style={styles.benefitItem}>• Ofertas especiales</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Biometric Authentication - Estilo consistente */}
           {isBiometricSupported && (
-            <Card style={styles.biometricCard}>
+            <View style={styles.biometricCard}>
               <View style={styles.biometricHeader}>
                 <View style={styles.biometricIconContainer}>
                   <Fingerprint size={24} color="#2D6A6F" />
@@ -491,13 +795,18 @@ export default function Profile() {
                     }
                   </Text>
                 </View>
-                <Switch
-                  value={isBiometricEnabled}
-                  onValueChange={handleToggleBiometric}
-                  trackColor={{ false: '#E5E7EB', true: '#2D6A6F' }}
-                  thumbColor="#FFFFFF"
-                  style={styles.biometricSwitch}
-                />
+                <TouchableOpacity
+                  style={[
+                    styles.biometricToggle,
+                    isBiometricEnabled && styles.biometricToggleActive
+                  ]}
+                  onPress={handleToggleBiometric}
+                >
+                  <View style={[
+                    styles.biometricToggleHandle,
+                    isBiometricEnabled && styles.biometricToggleHandleActive
+                  ]} />
+                </TouchableOpacity>
               </View>
               
               {!isBiometricEnabled && (
@@ -508,21 +817,8 @@ export default function Profile() {
                   <Text style={styles.benefitItem}>• Credenciales protegidas en tu dispositivo</Text>
                 </View>
               )}
-            </Card>
-          )}
-
-          <View style={styles.menuOption}>
-            <View style={styles.menuOptionLeft}>
-              <Bell size={20} color="#6B7280" />
-              <Text style={styles.menuOptionText}>{t('notifications')}</Text>
             </View>
-            <Switch
-              value={true}
-              onValueChange={() => {}}
-              trackColor={{ false: '#E5E7EB', true: '#2D6A6F' }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
+          )}
 
           <TouchableOpacity style={styles.menuOption} onPress={handleLanguageChange}>
             <View style={styles.menuOptionLeft}>
@@ -535,7 +831,7 @@ export default function Profile() {
               </Text>
               <ChevronRight size={16} color="#6B7280" />
             </View>
-          </TouchableOpacity>        
+          </TouchableOpacity>
 
           <TouchableOpacity 
             style={styles.menuOption} 
@@ -823,21 +1119,137 @@ const styles = StyleSheet.create({
   dangerText: {
     color: '#EF4444',
   },
-  biometricTextContainer: {
-    marginLeft: 12,
+  // Notification Card Styles (consistente con Face ID)
+  notificationCard: {
+    marginBottom: 16,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 16,
+    borderRadius: 12,
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  notificationIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F0F9FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  notificationInfo: {
     flex: 1,
   },
-  biometricSubtext: {
+  notificationTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  notificationDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    marginTop: 2,
+    color: '#6B7280',
   },
+  notificationToggle: {
+    width: 50,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#E5E7EB',
+    justifyContent: 'center',
+    padding: 2,
+  },
+  notificationToggleActive: {
+    backgroundColor: '#2D6A6F',
+  },
+  notificationToggleDisabled: {
+    backgroundColor: '#F3F4F6',
+    opacity: 0.5,
+  },
+  notificationToggleHandle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  notificationToggleHandleActive: {
+    transform: [{ translateX: 20 }],
+  },
+  notificationToggleHandleLoading: {
+    opacity: 0.7,
+  },
+  notificationStatus: {
+    backgroundColor: '#F0FDF4',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  notificationBenefits: {
+    backgroundColor: '#F0F9FF',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  statusTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#166534',
+    marginBottom: 8,
+  },
+  statusItem: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#166534',
+    marginBottom: 4,
+    lineHeight: 18,
+  },
+  testButton: {
+    backgroundColor: '#2D6A6F',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  testButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+  },
+  benefitsTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0369A1',
+    marginBottom: 8,
+  },
+  benefitItem: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#0369A1',
+    marginBottom: 4,
+    lineHeight: 18,
+  },
+  
+  // Biometric Card Styles (consistente con notificaciones)
   biometricCard: {
     marginBottom: 16,
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    padding: 16,
+    borderRadius: 12,
   },
   biometricHeader: {
     flexDirection: 'row',
@@ -867,8 +1279,30 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
   },
-  biometricSwitch: {
-    transform: [{ scaleX: 1.1 }, { scaleY: 1.1 }],
+  biometricToggle: {
+    width: 50,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#E5E7EB',
+    justifyContent: 'center',
+    padding: 2,
+  },
+  biometricToggleActive: {
+    backgroundColor: '#2D6A6F',
+  },
+  biometricToggleHandle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  biometricToggleHandleActive: {
+    transform: [{ translateX: 20 }],
   },
   biometricBenefits: {
     backgroundColor: '#F0F9FF',
@@ -876,18 +1310,5 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#BAE6FD',
-  },
-  benefitsTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#0369A1',
-    marginBottom: 8,
-  },
-  benefitItem: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#0369A1',
-    marginBottom: 4,
-    lineHeight: 18,
   },
 });

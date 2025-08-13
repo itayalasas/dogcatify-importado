@@ -11,9 +11,22 @@ Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
-    shouldSetBadge: false,
+    shouldSetBadge: true,a
   }),
 });
+
+// Add notification categories for better organization
+if (Platform.OS === 'ios') {
+  Notifications.setNotificationCategoryAsync('chat', [
+    {
+      identifier: 'reply',
+      buttonTitle: 'Responder',
+      options: {
+        opensAppToForeground: true,
+      },
+    },
+  ]);
+}
 
 interface NotificationContextType {
   expoPushToken: string | null;
@@ -40,13 +53,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // Auto-register push token when user is authenticated
   useEffect(() => {
-    // Don't auto-register in Expo Go or if notifications are not supported
-    const isExpoGo = Constants.appOwnership === 'expo' || __DEV__;
+    // Don't auto-register in Expo Go only
+    const isExpoGo = Constants.appOwnership === 'expo';
     if (currentUser && !expoPushToken && !isExpoGo) {
       console.log('User authenticated, auto-registering push notifications...');
       registerForPushNotifications();
     } else if (isExpoGo) {
-      console.log('Skipping auto-registration in development/Expo Go - notifications not supported');
+      console.log('Skipping auto-registration in Expo Go - notifications not supported');
     }
   }, [currentUser]);
   useEffect(() => {
@@ -69,12 +82,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const registerForPushNotifications = async (): Promise<string | null> => {
     try {
+      console.log('=== DETAILED PUSH NOTIFICATION REGISTRATION DEBUG ===');
       console.log('Starting push notification registration...');
+      console.log('App ownership:', Constants.appOwnership);
+      console.log('Is device:', Device.isDevice);
+      console.log('Platform:', Platform.OS);
+      console.log('Constants.platform:', Constants.platform);
+      console.log('Constants.expoConfig:', Constants.expoConfig);
+      console.log('EAS Project ID:', Constants.expoConfig?.extra?.eas?.projectId);
       
-      // Check if running in Expo Go or development
-      const isExpoGo = Constants.appOwnership === 'expo' || __DEV__;
+      // Only skip in Expo Go, not in development builds
+      const isExpoGo = Constants.appOwnership === 'expo';
       if (isExpoGo) {
-        console.log('Running in development/Expo Go - push notifications not supported');
+        console.log('Running in Expo Go - push notifications not supported');
         return null;
       }
       
@@ -86,7 +106,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       // Check if device supports push notifications
       if (!Device.isDevice) {
-        console.log('Must use physical device for Push Notifications');
+        console.log('❌ Must use physical device for Push Notifications');
+        console.log('Device info:', {
+          isDevice: Device.isDevice,
+          deviceType: Device.deviceType,
+          modelName: Device.modelName,
+          osName: Device.osName,
+          osVersion: Device.osVersion
+        });
         return null;
       }
 
@@ -107,7 +134,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
       
       if (finalStatus !== 'granted') {
-        console.log('Push notification permissions not granted. Final status:', finalStatus);
+        console.log('❌ Push notification permissions not granted. Final status:', finalStatus);
+        console.log('Permission details:', {
+          existingStatus,
+          finalStatus,
+          canAskAgain: finalStatus === 'denied' ? 'No' : 'Sí'
+        });
         return null;
       }
 
@@ -115,29 +147,91 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       // Get the push token
       try {
-        const projectId = Constants.expoConfig?.extra?.eas?.projectId || process.env.EXPO_PUBLIC_PROJECT_ID;
-        console.log('Using project ID:', projectId);
+        // Use the exact project ID
+        const projectId = '0618d9ae-6714-46bb-adce-f4ee57fff324';
         
-        if (!projectId) {
-          console.error('No project ID found for push notifications');
-          return null;
+        console.log('📋 Using project ID:', projectId);
+        console.log('📋 Constants project ID:', Constants.expoConfig?.extra?.eas?.projectId);
+        console.log('📋 Project IDs match:', projectId === Constants.expoConfig?.extra?.eas?.projectId);
+        
+        console.log('Requesting Expo push token...');
+        
+        // Try with explicit project ID first
+        let tokenData;
+        try {
+          console.log('Attempting with explicit project ID...');
+          tokenData = await Notifications.getExpoPushTokenAsync({
+            projectId: projectId,
+          });
+          console.log('✅ Token obtained with explicit project ID');
+        } catch (explicitError) {
+          console.log('❌ Failed with explicit project ID:', explicitError.message);
+          console.log('Attempting without project ID...');
+          
+          try {
+            tokenData = await Notifications.getExpoPushTokenAsync();
+            console.log('✅ Token obtained without project ID');
+          } catch (fallbackError) {
+            console.log('❌ Failed without project ID:', fallbackError.message);
+            throw fallbackError;
+          }
         }
 
-        const tokenData = await Notifications.getExpoPushTokenAsync({
-          projectId: projectId,
-        });
-
-        console.log('Push token obtained:', tokenData.data);
+        console.log('=== TOKEN GENERATION RESULT ===');
+        console.log('Success:', !!tokenData.data);
+        console.log('Token type:', typeof tokenData.data);
+        console.log('Token length:', tokenData.data ? tokenData.data.length : 0);
+        console.log('Token preview:', tokenData.data ? tokenData.data.substring(0, 50) + '...' : 'NULL');
+        console.log('Token starts with ExponentPushToken:', tokenData.data ? tokenData.data.startsWith('ExponentPushToken[') : false);
+        console.log('Token ends with ]:', tokenData.data ? tokenData.data.endsWith(']') : false);
 
         // Configure Android notification channel
         if (Platform.OS === 'android') {
           console.log('Setting up Android notification channel...');
-          await Notifications.setNotificationChannelAsync('default', {
-            name: 'default',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#FF231F7C',
-          });
+          try {
+            await Notifications.setNotificationChannelAsync('default', {
+              name: 'DogCatiFy Notifications',
+              importance: Notifications.AndroidImportance.MAX,
+              vibrationPattern: [0, 250, 250, 250],
+              lightColor: '#2D6A6F',
+              sound: 'default',
+              enableVibrate: true,
+              enableLights: true,
+              lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+              bypassDnd: false,
+            });
+            console.log('✅ Android notification channel configured');
+          } catch (channelError) {
+            console.error('❌ Error setting up notification channel:', channelError);
+            // Don't fail registration if channel setup fails
+          }
+          
+          // Add additional channels for different notification types
+          try {
+            await Notifications.setNotificationChannelAsync('chat', {
+              name: 'Mensajes de Chat',
+              importance: Notifications.AndroidImportance.HIGH,
+              vibrationPattern: [0, 250, 250, 250],
+              sound: 'default',
+              description: 'Notificaciones de mensajes de chat y adopción',
+            });
+            console.log('✅ Chat notification channel configured');
+          } catch (chatChannelError) {
+            console.error('❌ Error setting up chat channel:', chatChannelError);
+          }
+          
+          try {
+            await Notifications.setNotificationChannelAsync('bookings', {
+              name: 'Reservas y Citas',
+              importance: Notifications.AndroidImportance.HIGH,
+              vibrationPattern: [0, 500, 250, 500],
+              sound: 'default',
+              description: 'Notificaciones de reservas y confirmaciones',
+            });
+            console.log('✅ Bookings notification channel configured');
+          } catch (bookingsChannelError) {
+            console.error('❌ Error setting up bookings channel:', bookingsChannelError);
+          }
         }
 
         // Store token in user profile if user is logged in
@@ -154,8 +248,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               console.error('Error fetching existing profile:', fetchError);
             } else {
               const currentToken = existingProfile?.[0]?.push_token;
-              console.log('Current stored token:', currentToken ? 'EXISTS' : 'NULL');
-              console.log('New token:', tokenData.data);
+              console.log('Current stored token exists:', !!currentToken);
+              console.log('New token exists:', !!tokenData.data);
+              console.log('Tokens are different:', currentToken !== tokenData.data);
               
               if (currentToken !== tokenData.data) {
                 console.log('Token changed, updating in database...');
@@ -163,6 +258,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
                   .from('profiles')
                   .update({ 
                     push_token: tokenData.data,
+                    notification_preferences: {
+                      push: true,
+                      email: true
+                    },
                     updated_at: new Date().toISOString()
                   })
                   .eq('id', currentUser.id);
@@ -178,17 +277,25 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             }
           } catch (dbError) {
             console.error('Database error managing push token:', dbError);
+            // Don't fail registration if database update fails
+            console.log('Continuing with token registration despite database error');
           }
         }
 
         setExpoPushToken(tokenData.data);
+        console.log('✅ Push notification registration completed successfully!');
+        console.log('=== END DETAILED PUSH NOTIFICATION REGISTRATION DEBUG ===');
         return tokenData.data;
       } catch (tokenError) {
-        console.error('Error getting push token:', tokenError);
+        console.error('❌ Error getting push token:', tokenError);
+        console.error('Token error details:', JSON.stringify(tokenError, null, 2));
+        console.log('=== END DETAILED PUSH NOTIFICATION REGISTRATION DEBUG ===');
         return null;
       }
     } catch (error) {
-      console.error('Error in registerForPushNotifications:', error);
+      console.error('❌ Error in registerForPushNotifications:', error);
+      console.error('Registration error details:', JSON.stringify(error, null, 2));
+      console.log('=== END DETAILED PUSH NOTIFICATION REGISTRATION DEBUG ===');
       return null;
     }
   };
@@ -200,184 +307,45 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     data?: any
   ): Promise<void> => {
     try {
-      console.log('=== SENDING PUSH NOTIFICATION ===');
+      console.log('🚀 Sending push notification via Edge Function...');
       console.log('Target user ID:', userId);
-      console.log('Notification title:', title);
-      console.log('Notification body:', body);
-      console.log('Additional data:', data);
+      console.log('Title:', title);
+      console.log('Body:', body);
       
-      // First check if this is a partner_id that needs to be converted to user_id
-      console.log('Fetching push token for user...');
-      
-      // Try to get user profile directly first
-      const { data: userData, error } = await supabaseClient
-        .from('profiles')
-        .select('push_token, display_name')
-        .eq('id', userId);
-      
-      console.log('Push token query result:', { 
-        userData, 
-        error: error?.message,
-        userCount: userData?.length || 0
+      // Call our secure Edge Function
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const response = await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          userId,
+          title,
+          body,
+          data: data || {}
+        }),
       });
 
-      if (error || !userData || userData.length === 0) {
-        console.log('No direct user profile found, checking if this is a partner_id...');
-        
-        // Try to find partner and get their user_id
-        const { data: partnerData, error: partnerError } = await supabaseClient
-          .from('partners')
-          .select('user_id, business_name')
-          .eq('id', userId);
-        
-        console.log('Partner lookup result:', {
-          partnerData,
-          error: partnerError?.message,
-          partnerCount: partnerData?.length || 0
-        });
-        
-        if (partnerError || !partnerData || partnerData.length === 0) {
-          console.log('❌ No partner found with ID:', userId);
-          return;
-        }
-        
-        const partner = partnerData[0];
-        if (!partner.user_id) {
-          console.log('❌ Partner has no user_id:', partner);
-          return;
-        }
-        
-        console.log('✅ Found partner, getting user profile for user_id:', partner.user_id);
-        
-        // Now get the actual user profile
-        const { data: partnerUserData, error: partnerUserError } = await supabaseClient
-          .from('profiles')
-          .select('push_token, display_name')
-          .eq('id', partner.user_id);
-        
-        console.log('Partner user profile result:', {
-          partnerUserData,
-          error: partnerUserError?.message,
-          userCount: partnerUserData?.length || 0
-        });
-        
-        if (partnerUserError || !partnerUserData || partnerUserData.length === 0) {
-          console.log('❌ No user profile found for partner user_id:', partner.user_id);
-          return;
-        }
-        
-        // Use partner user data
-        const userProfile = partnerUserData[0];
-        console.log('✅ Using partner user profile:', {
-          displayName: userProfile.display_name,
-          hasPushToken: !!userProfile.push_token,
-          tokenPreview: userProfile.push_token ? userProfile.push_token.substring(0, 20) + '...' : 'NULL'
-        });
-        
-        if (!userProfile.push_token) {
-          console.log('❌ Partner user has no push token registered');
-          return;
-        }
-        
-        // Send notification using partner user's token
-        await sendPushNotification(userProfile.push_token, title, body, data);
-        return;
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Edge Function error:', response.status, errorText);
+        throw new Error(`Edge Function error: ${response.status} - ${errorText}`);
       }
+
+      const result = await response.json();
+      console.log('✅ Push notification sent via Edge Function:', result);
       
-      const userProfile = userData[0];
-      console.log('User profile found:', {
-        displayName: userProfile.display_name,
-        hasPushToken: !!userProfile.push_token,
-        tokenPreview: userProfile.push_token ? userProfile.push_token.substring(0, 20) + '...' : 'NULL'
-      });
-      
-      if (!userProfile.push_token) {
-        console.log('❌ User has no push token registered');
-        return;
+      if (!result.success) {
+        console.warn('⚠️ Edge Function returned success=false:', result.error);
       }
-      
-      // Send notification using user's token
-      await sendPushNotification(userProfile.push_token, title, body, data);
     } catch (error) {
-      console.error('❌ Error in sendNotificationToUser:', error);
+      console.error('❌ Error sending push notification via Edge Function:', error);
       // Don't throw error to avoid breaking the chat flow
     }
   };
 
-  const sendPushNotification = async (
-    pushToken: string,
-    title: string,
-    body: string,
-    data?: any
-  ) => {
-    try {
-      console.log('✅ User has push token, preparing notification...');
-
-      // Validate token format
-      if (!pushToken.startsWith('ExponentPushToken[')) {
-        console.error('❌ Invalid push token format:', pushToken);
-        return;
-      }
-
-      // Send push notification
-      const notificationPayload = {
-        to: pushToken,
-        title,
-        body,
-        data: data || {},
-        sound: 'default',
-        priority: 'high',
-        channelId: 'default',
-      };
-      
-      console.log('📤 Sending push notification with payload:', {
-        to: pushToken.substring(0, 20) + '...',
-        title,
-        body,
-        dataKeys: Object.keys(data || {})
-      });
-      
-      const response = await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Accept-encoding': 'gzip, deflate',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(notificationPayload),
-      });
-
-      console.log('📨 Push notification API response status:', response.status);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Push notification API error:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorText
-        });
-        throw new Error(`Push notification API error: ${response.status} - ${errorText}`);
-      }
-      
-      const result = await response.json();
-      console.log('📨 Push notification API result:', result);
-      
-      // Check for errors in the result
-      if (result.data && Array.isArray(result.data)) {
-        const firstResult = result.data[0];
-        if (firstResult && firstResult.status === 'error') {
-          console.error('❌ Push notification error in result:', firstResult);
-          throw new Error(`Push notification error: ${firstResult.message || firstResult.details}`);
-        }
-      }
-      
-      console.log('✅ Push notification sent successfully!');
-      console.log('=== END PUSH NOTIFICATION ===');
-    } catch (error) {
-      console.error('❌ Error in sendPushNotification:', error);
-      throw error;
-    }
-  };
 
   const sendNotificationToAdmin = async (
     title: string, 
@@ -385,49 +353,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     data?: any
   ): Promise<void> => {
     try {
-      console.log('Sending notification to admin');
+      console.log('🚀 Sending notification to admin via Edge Function...');
       
-      // Get admin users
-      const { data: adminUsers, error } = await supabaseClient
-        .from('profiles')
-        .select('push_token')
-        .eq('email', 'admin@dogcatify.com');
-
-      if (error || !adminUsers?.length) {
-        console.log('No admin users found or error:', error);
-        return;
-      }
-
-      // Send to all admin users
-      const notifications = adminUsers
-        .filter(admin => admin.push_token)
-        .map(admin => ({
-          to: admin.push_token,
-          title,
-          body,
-          data,
-          sound: 'default',
-          priority: 'high',
-        }));
-
-      if (notifications.length > 0) {
-        console.log('Sending notifications to', notifications.length, 'admin users');
-        
-        const response = await fetch('https://exp.host/--/api/v2/push/send', {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Accept-encoding': 'gzip, deflate',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(notifications),
-        });
-
-        const result = await response.json();
-        console.log('Admin push notification result:', result);
-      }
+      // Use Edge Function for admin notifications too
+      await sendNotificationToUser('admin@dogcatify.com', title, body, data);
     } catch (error) {
-      console.error('Error sending notification to admin:', error);
+      console.error('❌ Error sending notification to admin:', error);
     }
   };
 

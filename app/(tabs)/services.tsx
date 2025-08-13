@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, LogBox } from 'react-native';
 import { Search } from 'lucide-react-native';
+import { FlatGrid } from 'react-native-super-grid';
 import { ServiceCard } from '../../components/ServiceCard'; 
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -159,10 +160,10 @@ export default function Services() {
 
   const categories = [
     { id: 'all', name: t('all') },
-    { id: 'consulta', name: 'Veterinario' },
-    { id: 'baño', name: 'Peluquería' },
-    { id: 'paseo', name: 'Paseo' },
-    { id: 'hospedaje', name: 'Pensión' },
+    { id: 'consulta', name: t('consultation') },
+    { id: 'baño', name: t('grooming') },
+    { id: 'paseo', name: t('walking') },
+    { id: 'hospedaje', name: t('boarding') }
   ];
 
   return (
@@ -295,11 +296,13 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
   },
+  servicesGrid: {
+    flex: 1,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 40,
     paddingVertical: 40,
   },
   loadingText: {

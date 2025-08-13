@@ -38,12 +38,7 @@ export default function WebInfo() {
             </Text>
           </View>
           
-          <View style={styles.downloadSection}>
-            <Text style={styles.downloadTitle}>Descargar la App</Text>
-            <Text style={styles.downloadText}>
-              Próximamente disponible en App Store y Google Play
-            </Text>
-          </View>
+        
         </Card>
       </View>
     </SafeAreaView>

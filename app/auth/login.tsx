@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Modal, Platform, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Modal, Platform, Animated, Alert } from 'react-native';
 import { Link, router } from 'expo-router';
 import { Mail, Lock, Eye, EyeOff, Fingerprint, CircleAlert as AlertCircle, X, CircleCheck as CheckCircle } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
@@ -13,7 +13,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const SAVED_CREDENTIALS_KEY = '@saved_credentials';
 
 // Componente de error moderno
-const ErrorBanner = ({ error, onDismiss }: { error: string; onDismiss: () => void }) => {
+const ErrorBanner = ({ error, onDismiss }: { 
+  error: string; 
+  onDismiss: () => void;
+}) => {
   const fadeAnim = new Animated.Value(0);
 
   useEffect(() => {
@@ -39,31 +42,32 @@ const ErrorBanner = ({ error, onDismiss }: { error: string; onDismiss: () => voi
       return {
         title: 'Credenciales incorrectas',
         message: 'El correo electrónico o la contraseña no son correctos. Verifica e intenta nuevamente.',
-        icon: <AlertCircle size={20} color="#EF4444" />
+        icon: <AlertCircle size={20} color="#EF4444" />,
+        showResendButton: false
       };
-    } else if (errorText.includes('Email not confirmed')) {
+    } else if (errorText.includes('Email not confirmed') || errorText.includes('confirmar tu correo')) {
       return {
         title: 'Email no confirmado',
         message: 'Debes confirmar tu correo electrónico antes de iniciar sesión.',
-        icon: <Mail size={20} color="#F59E0B" />
+        icon: <Mail size={20} color="#F59E0B" />,
       };
     } else if (errorText.includes('Too many requests')) {
       return {
         title: 'Demasiados intentos',
         message: 'Has intentado muchas veces. Espera unos minutos antes de intentar nuevamente.',
-        icon: <AlertCircle size={20} color="#F59E0B" />
+        icon: <AlertCircle size={20} color="#F59E0B" />,
       };
     } else if (errorText.includes('User not found')) {
       return {
         title: 'Usuario no encontrado',
         message: 'No existe una cuenta con este correo electrónico. ¿Quizás necesitas registrarte?',
-        icon: <AlertCircle size={20} color="#3B82F6" />
+        icon: <AlertCircle size={20} color="#3B82F6" />,
       };
     } else {
       return {
         title: 'Error de conexión',
         message: 'Hubo un problema al conectar. Verifica tu conexión e intenta nuevamente.',
-        icon: <AlertCircle size={20} color="#EF4444" />
+        icon: <AlertCircle size={20} color="#EF4444" />,
       };
     }
   };
@@ -151,6 +155,7 @@ export default function Login() {
         const userEmail = authError.split(':')[1];
         setPendingEmail(userEmail || email);
         setShowEmailConfirmationModal(true);
+        setLoginError(null); // No mostrar banner de error
       } else {
         setLoginError(authError);
       }
@@ -240,8 +245,11 @@ export default function Login() {
     } catch (error: any) {
       console.error('Login error:', error);
       
-      // Don't show error banner for email confirmation errors - the modal will handle it
-      if (!error.message?.includes('confirmar tu correo')) {
+      // Verificar si es error de email no confirmado
+      if (error.message?.includes('confirmar tu correo') || error.message?.includes('Email not confirmed')) {
+        setPendingEmail(email);
+        setShowEmailConfirmationModal(true);
+      } else {
         setLoginError(error.message);
       }
     } finally {
@@ -263,7 +271,7 @@ export default function Login() {
     }
   };
 
-  const handleResendEmail = async () => {
+  const handleResendConfirmationEmail = async () => {
     if (!pendingEmail) {
       return;
     }
@@ -272,28 +280,20 @@ export default function Login() {
     try {
       const result = await resendConfirmationEmail(pendingEmail);
       if (result.success) {
-        // Close modal first
         setShowEmailConfirmationModal(false);
         clearAuthError();
-        
-        // Show success banner instead of alert
-        setLoginError(null);
-        
-        // Clear form and show success message
-        setEmail('');
-        setPassword('');
         setPendingEmail('');
         
-        // Show success banner
-        setTimeout(() => {
-          setLoginError(`SUCCESS:Se ha enviado un nuevo correo de confirmación a ${pendingEmail}. Revisa tu bandeja de entrada.`);
-        }, 300);
+        Alert.alert(
+          '✅ Correo enviado',
+          `Se ha enviado un nuevo enlace de confirmación a:\n${pendingEmail}\n\nPor favor revisa tu bandeja de entrada y haz clic en el enlace.`
+        );
       } else {
-        setLoginError(result.error || 'No se pudo reenviar el correo');
+        Alert.alert('Error', result.error || 'No se pudo reenviar el correo');
       }
     } catch (error) {
       console.error('Resend email error:', error);
-      setLoginError('No se pudo reenviar el correo de confirmación');
+      Alert.alert('Error', 'No se pudo reenviar el correo de confirmación');
     } finally {
       setResendingEmail(false);
     }
@@ -302,14 +302,12 @@ export default function Login() {
   const handleCloseEmailModal = () => {
     setShowEmailConfirmationModal(false);
     clearAuthError();
-    // Clear form when closing modal
-    setEmail('');
-    setPassword('');
     setPendingEmail('');
   };
 
   const dismissError = () => {
     setLoginError(null);
+    clearAuthError();
   };
 
   return (
@@ -356,10 +354,7 @@ export default function Login() {
 
           {/* Error Banner - Solo se renderiza cuando hay error */}
           {loginError && (
-            <ErrorBanner 
-              error={loginError} 
-              onDismiss={dismissError}
-            />
+            <ErrorBanner error={loginError} onDismiss={dismissError} />
           )}
 
           <View style={styles.rememberCredentialsContainer}>
@@ -395,7 +390,7 @@ export default function Login() {
           <Text style={styles.footerText}>
             ¿No tienes una cuenta?{' '}
             <Link href="/auth/register" style={styles.link}>
-              Registrarse
+              Registrate
             </Link>
           </Text>
         </View>
@@ -437,7 +432,7 @@ export default function Login() {
               />
               <Button
                 title={resendingEmail ? 'Enviando...' : 'Reenviar correo'}
-                onPress={handleResendEmail}
+                onPress={handleResendConfirmationEmail}
                 loading={resendingEmail}
                 size="large"
                 style={styles.modalButton}

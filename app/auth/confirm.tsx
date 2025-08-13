@@ -13,6 +13,7 @@ export default function EmailConfirmationScreen() {
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [resendingEmail, setResendingEmail] = useState(false);
 
   useEffect(() => {
     const confirmEmail = async () => {
@@ -50,7 +51,19 @@ export default function EmailConfirmationScreen() {
           setError(null);
         } else {
           console.error('❌ Email confirmation failed:', result.error);
-          setError(result.error || 'Error al confirmar el email');
+          
+          // Mejorar mensajes de error
+          let errorMessage = 'Error al confirmar el email';
+          if (result.error === 'TOKEN_ALREADY_USED') {
+            errorMessage = 'ALREADY_USED';
+          } else if (result.error === 'TOKEN_EXPIRED') {
+            errorMessage = 'EXPIRED';
+          } else if (result.error === 'TOKEN_NOT_FOUND') {
+            errorMessage = 'NOT_FOUND';
+          }
+          
+          setError(errorMessage);
+          setUserEmail(result.email || null);
           setConfirmed(false);
         }
       } catch (error) {
@@ -65,6 +78,47 @@ export default function EmailConfirmationScreen() {
     confirmEmail();
   }, [params]);
 
+  const handleResendEmail = async () => {
+    if (!userEmail) {
+      console.error('No email available for resend');
+      return;
+    }
+
+    setResendingEmail(true);
+    try {
+      console.log('Resending confirmation email to:', userEmail);
+      
+      // First check if user is already confirmed
+      const { data: existingProfile, error: profileError } = await supabaseClient
+        .from('profiles')
+        .select('email_confirmed, display_name')
+        .eq('email', userEmail)
+        .single();
+      
+      if (!profileError && existingProfile?.email_confirmed) {
+        console.log('User is already confirmed, showing appropriate message');
+        setError('ALREADY_CONFIRMED');
+        setResendingEmail(false);
+        return;
+      }
+      
+      const { resendConfirmationEmail } = await import('../../utils/emailConfirmation');
+      const result = await resendConfirmationEmail(userEmail);
+      
+      if (result.success) {
+        console.log('✅ Email resent successfully');
+        setError('EMAIL_SENT');
+      } else {
+        console.error('❌ Failed to resend email:', result.error);
+        setError('RESEND_ERROR');
+      }
+    } catch (error) {
+      console.error('❌ Error resending email:', error);
+      setError('RESEND_ERROR');
+    } finally {
+      setResendingEmail(false);
+    }
+  };
   const handleGoToLogin = () => {
     if (Platform.OS === 'web') {
       router.replace('/web-info');
@@ -73,9 +127,6 @@ export default function EmailConfirmationScreen() {
     }
   };
 
-  const handleResendEmail = () => {
-    router.replace('/auth/forgot-password');
-  };
 
   if (loading) {
     return (
@@ -89,25 +140,79 @@ export default function EmailConfirmationScreen() {
   }
 
   if (error) {
+    // Determinar el contenido basado en el tipo de error
+    let title, message, showResendButton, buttonText;
+    
+    if (error === 'ALREADY_USED') {
+      title = 'Enlace Ya Utilizado';
+      message = 'Este enlace de confirmación ya fue utilizado anteriormente. Si aún no puedes iniciar sesión, puedes solicitar un nuevo enlace.';
+      showResendButton = true;
+      buttonText = resendingEmail ? 'Enviando...' : 'Enviar Nuevo Enlace';
+    } else if (error === 'ALREADY_CONFIRMED') {
+      title = '✅ Email Ya Confirmado';
+      message = 'Tu correo electrónico ya está confirmado. Puedes iniciar sesión normalmente en la aplicación.';
+      showResendButton = false;
+      buttonText = '';
+    } else if (error === 'EXPIRED') {
+      title = 'Enlace Expirado';
+      message = 'Este enlace de confirmación ha expirado. Los enlaces son válidos por 24 horas por seguridad.';
+      showResendButton = true;
+      buttonText = resendingEmail ? 'Enviando...' : 'Enviar Nuevo Enlace';
+    } else if (error === 'EMAIL_SENT') {
+      title = '¡Nuevo Enlace Enviado!';
+      message = `Se ha enviado un nuevo enlace de confirmación a tu correo electrónico. Por favor revisa tu bandeja de entrada y haz clic en el nuevo enlace.`;
+      showResendButton = false;
+      buttonText = '';
+    } else if (error === 'RESEND_ERROR') {
+      title = 'Error al Reenviar';
+      message = 'No se pudo reenviar el correo de confirmación. Por favor intenta nuevamente más tarde.';
+      showResendButton = true;
+      buttonText = resendingEmail ? 'Enviando...' : 'Intentar Nuevamente';
+    } else {
+      title = 'Error de Confirmación';
+      message = 'El enlace de confirmación no es válido o ha ocurrido un error.';
+      showResendButton = false;
+      buttonText = '';
+    }
+    
     return (
       <View style={styles.container}>
         <Card style={styles.errorCard}>
-          <XCircle size={64} color="#EF4444" />
-          <Text style={styles.errorTitle}>Error de Confirmación</Text>
-          <Text style={styles.errorMessage}>{error}</Text>
+          {error === 'EMAIL_SENT' ? (
+            <CheckCircle size={64} color="#10B981" />
+          ) : (
+            <XCircle size={64} color="#EF4444" />
+          )}
+          <Text style={[
+            styles.errorTitle,
+            error === 'EMAIL_SENT' && styles.successTitle
+          ]}>
+            {title}
+          </Text>
+          <Text style={[
+            styles.errorMessage,
+            error === 'EMAIL_SENT' && styles.successMessage
+          ]}>
+            {message}
+          </Text>
+          
+          {userEmail && (
+            <View style={styles.emailInfo}>
+              <Text style={styles.emailLabel}>Correo:</Text>
+              <Text style={styles.emailValue}>{userEmail}</Text>
+            </View>
+          )}
           
           <View style={styles.errorActions}>
-            <Button
-              title="Ir al Login"
-              onPress={handleGoToLogin}
-              size="large"
-            />
-            <Button
-              title="Solicitar Nuevo Enlace"
-              onPress={handleResendEmail}
-              variant="outline"
-              size="large"
-            />
+            {showResendButton && (
+              <Button
+                title={buttonText}
+                onPress={handleResendEmail}
+                loading={resendingEmail}
+                disabled={resendingEmail}
+                size="large"
+              />
+            )}
           </View>
         </Card>
       </View>
@@ -128,11 +233,6 @@ export default function EmailConfirmationScreen() {
               Cuenta confirmada: {userEmail}
             </Text>
           )}
-          <Button
-            title="Ir a Iniciar Sesión"
-            onPress={handleGoToLogin}
-            size="large"
-          />
         </Card>
       </View>
     );
@@ -215,4 +315,25 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 24,
   },
+ 
+  emailInfo: {
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  emailLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#64748B',
+    marginBottom: 4,
+  },
+  emailValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#334155',
+  },
+  
 });
