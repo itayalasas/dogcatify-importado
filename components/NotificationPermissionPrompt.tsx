@@ -19,17 +19,17 @@ export const NotificationPermissionPrompt: React.FC = () => {
 
   const checkShouldShowPrompt = async () => {
     try {
-      // Don't show prompt in Expo Go or development
-      const isExpoGo = Constants.appOwnership === 'expo' || __DEV__;
+      // Don't show prompt in Expo Go only
+      const isExpoGo = Constants.appOwnership === 'expo';
       if (isExpoGo) {
-        console.log('Skipping notification prompt in development/Expo Go');
+        console.log('Skipping notification prompt in Expo Go');
         return;
       }
 
       const hasShown = await AsyncStorage.getItem(NOTIFICATION_PROMPT_KEY);
       
-      // Mostrar si no se ha mostrado antes y no tiene token
-      if (!hasShown && !expoPushToken) {
+      // Show if not shown before and no token, but only in production builds
+      if (!hasShown && !expoPushToken && !isExpoGo) {
         // Esperar un poco antes de mostrar para mejor UX
         setTimeout(() => {
           setShowPrompt(true);
@@ -43,6 +43,18 @@ export const NotificationPermissionPrompt: React.FC = () => {
   const handleEnableNotifications = async () => {
     try {
       console.log('User clicked enable notifications');
+      
+      // Additional check for production environment
+      const isExpoGo = Constants.appOwnership === 'expo';
+      if (isExpoGo) {
+        Alert.alert(
+          'No disponible en Expo Go',
+          'Las notificaciones push no están disponibles en Expo Go. Necesitas una build de desarrollo o producción.',
+          [{ text: 'Entendido' }]
+        );
+        return;
+      }
+      
       const token = await registerForPushNotifications();
       
       if (token) {
@@ -62,7 +74,7 @@ export const NotificationPermissionPrompt: React.FC = () => {
         
         Alert.alert(
           'Notificaciones no disponibles',
-          'No se pudieron habilitar las notificaciones push. Puedes intentar habilitarlas más tarde desde la configuración del dispositivo.',
+          'No se pudieron habilitar las notificaciones push. Asegúrate de estar usando una build de producción y que el dispositivo soporte notificaciones.',
           [{ text: 'Entendido' }]
         );
       }

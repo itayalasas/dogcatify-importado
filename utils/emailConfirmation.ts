@@ -89,52 +89,50 @@ export const confirmEmailCustom = async (
 
     // Find the token in database using service client to bypass RLS
     const serviceClient = getServiceClient();
-    const { data: tokenData, error } = await serviceClient
+    
+    // First, check if token exists at all (including already confirmed ones)
+    const { data: anyTokenData, error: anyTokenError } = await serviceClient
       .from('email_confirmations')
       .select('*')
       .eq('token_hash', token)
       .eq('type', type)
-      .eq('is_confirmed', false)
       .single();
 
-    if (error) {
-      console.error('Error finding token:', error);
-      
-      // If token not found, try without the is_confirmed filter (maybe it was already confirmed)
-      const { data: anyTokenData, error: anyTokenError } = await serviceClient
-        .from('email_confirmations')
-        .select('*')
-        .eq('token_hash', token)
-        .eq('type', type)
-        .single();
-      
-      if (anyTokenError) {
-        console.error('Token not found at all:', anyTokenError);
-        return { success: false, error: 'Token no encontrado' };
-      }
-      
-      if (anyTokenData && anyTokenData.is_confirmed) {
-        console.log('Token already confirmed, treating as success');
-        return {
-          success: true,
-          userId: anyTokenData.user_id,
-          email: anyTokenData.email
-        };
-      }
-      
-      return { success: false, error: 'Token no encontrado o ya utilizado' };
+    if (anyTokenError) {
+      console.error('Token not found at all:', anyTokenError);
+      return { success: false, error: 'TOKEN_NOT_FOUND' };
     }
 
-    if (!tokenData) {
-      return { success: false, error: 'Token no válido' };
+    if (!anyTokenData) {
+      return { success: false, error: 'TOKEN_NOT_FOUND' };
+    }
+
+    // Check if token was already confirmed
+    if (anyTokenData.is_confirmed) {
+      console.log('Token already used:', {
+        userId: anyTokenData.user_id,
+        email: anyTokenData.email,
+        confirmedAt: anyTokenData.confirmed_at
+      });
+      return { 
+        success: false, 
+        error: 'TOKEN_ALREADY_USED',
+        userId: anyTokenData.user_id,
+        email: anyTokenData.email
+      };
     }
 
     // Check if token has expired
     const now = new Date();
-    const expiresAt = new Date(tokenData.expires_at);
+    const expiresAt = new Date(anyTokenData.expires_at);
     
     if (now > expiresAt) {
-      return { success: false, error: 'Token expirado' };
+      return { 
+        success: false, 
+        error: 'TOKEN_EXPIRED',
+        userId: anyTokenData.user_id,
+        email: anyTokenData.email
+      };
     }
 
     // Mark token as confirmed
@@ -144,17 +142,17 @@ export const confirmEmailCustom = async (
         is_confirmed: true,
         confirmed_at: new Date().toISOString()
       })
-      .eq('id', tokenData.id);
+      .eq('id', anyTokenData.id);
 
     if (updateError) {
       console.error('Error updating token:', updateError);
-      return { success: false, error: 'Error al confirmar token' };
+      return { success: false, error: 'UPDATE_ERROR' };
     }
 
     // CRITICAL: Update user in auth.users to mark email as confirmed
     console.log('Updating user in auth.users to mark email as confirmed...');
     const { error: authUpdateError } = await serviceClient.auth.admin.updateUserById(
-      tokenData.user_id,
+      anyTokenData.user_id,
       { 
         email_confirm: true,
         user_metadata: {
@@ -179,23 +177,23 @@ export const confirmEmailCustom = async (
         email_confirmed_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
-      .eq('id', tokenData.user_id);
+      .eq('id', anyTokenData.user_id);
 
     if (profileError) {
       console.error('Error updating profile:', profileError);
       // Don't fail the confirmation if profile update fails
     }
 
-    console.log('Email confirmation successful for user:', tokenData.user_id);
+    console.log('Email confirmation successful for user:', anyTokenData.user_id);
 
     return {
       success: true,
-      userId: tokenData.user_id,
-      email: tokenData.email
+      userId: anyTokenData.user_id,
+      email: anyTokenData.email
     };
   } catch (error) {
     console.error('Error verifying email confirmation token:', error);
-    return { success: false, error: 'Error interno del servidor' };
+    return { success: false, error: 'INTERNAL_ERROR' };
   }
 };
 
@@ -293,6 +291,8 @@ export const generateConfirmationUrl = (token: string, type: 'signup' | 'passwor
  */
 export const resendConfirmationEmail = async (email: string): Promise<{ success: boolean; error?: string }> => {
   try {
+    console.log('Resending confirmation email for:', email);
+    
     // Find user by email
     const { data: userData, error: userError } = await supabaseClient
       .from('profiles')
@@ -301,24 +301,36 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
       .single();
 
     if (userError) {
+      console.error('User not found for email resend:', userError);
+      if (userError.code === 'PGRST116') {
+        return { success: false, error: 'No existe una cuenta con este correo electrónico' };
+      }
       return { success: false, error: 'Usuario no encontrado' };
     }
 
     console.log('Resending confirmation email for user:', userData.id);
 
-    // Invalidate any existing tokens for this user
-    // Use service client to bypass RLS
+    // Invalidate any existing signup tokens for this user
     const serviceClient = getServiceClient();
-    await serviceClient
+    const { error: invalidateError } = await serviceClient
       .from('email_confirmations')
-      .update({ is_confirmed: true })
+      .update({ 
+        is_confirmed: true,
+        confirmed_at: new Date().toISOString()
+      })
       .eq('user_id', userData.id)
       .eq('type', 'signup')
       .eq('is_confirmed', false);
+    
+    if (invalidateError) {
+      console.warn('Could not invalidate existing tokens:', invalidateError);
+    }
 
     // Create new confirmation token
     const token = await createEmailConfirmationToken(userData.id, email, 'signup');
     const confirmationUrl = generateConfirmationUrl(token, 'signup');
+
+    console.log('New confirmation URL generated:', confirmationUrl);
 
     // Send confirmation email
     const { NotificationService } = await import('./notifications');

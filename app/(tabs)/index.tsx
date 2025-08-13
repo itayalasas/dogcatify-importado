@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, SafeAreaView, Alert, RefreshControl, Image, Animated } from 'react-native';
 import { router } from 'expo-router';
 import { Platform, Linking } from 'react-native';
+import Constants from 'expo-constants';
 import PostCard from '../../components/PostCard';
 import PromotionCard from '../../components/PromotionCard';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -9,7 +10,37 @@ import { useAuth } from '../../contexts/AuthContext';
 import { NotificationPermissionPrompt } from '../../components/NotificationPermissionPrompt';
 import { LocationPermissionPrompt } from '../../components/LocationPermissionPrompt';
 import { MedicalAlertsWidget } from '../../components/MedicalAlertsWidget';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { supabaseClient } from '../../lib/supabase';
+
+// Debug component for production notification testing
+const NotificationDebugInfo = () => {
+  const { expoPushToken } = useNotifications();
+  const isExpoGo = Constants.appOwnership === 'expo';
+  
+  // Only show in development or when there are issues
+  if (!__DEV__ && expoPushToken) return null;
+  
+  return (
+    <View style={styles.debugContainer}>
+      <Text style={styles.debugTitle}>🔔 Estado de Notificaciones</Text>
+      <Text style={styles.debugText}>
+        Entorno: {isExpoGo ? 'Expo Go' : 'Build nativo'}
+      </Text>
+      <Text style={styles.debugText}>
+        Token: {expoPushToken ? '✅ Configurado' : '❌ No disponible'}
+      </Text>
+      <Text style={styles.debugText}>
+        Plataforma: {Platform.OS}
+      </Text>
+      {!expoPushToken && !isExpoGo && (
+        <Text style={styles.debugWarning}>
+          ⚠️ Las notificaciones no están funcionando. Verifica la configuración.
+        </Text>
+      )}
+    </View>
+  );
+};
 
 // Loading component with app logo
 const FeedLoader = () => {
@@ -278,6 +309,12 @@ export default function Home() {
     }
 
     try {
+      console.log('=== LIKE DEBUG START ===');
+      console.log('Post ID:', postId);
+      console.log('User ID:', currentUser.id);
+      console.log('Double tap:', doubleTap);
+      
+      // Get fresh data from database to avoid stale state
       const { data: postData, error: fetchError } = await supabaseClient
         .from('posts')
         .select('likes')
@@ -286,8 +323,12 @@ export default function Home() {
       
       if (fetchError) throw fetchError;
       
+      console.log('Current likes from DB:', postData.likes);
+      
       const likes = postData.likes || [];
       const isLiked = likes.includes(currentUser.id);
+      
+      console.log('Is currently liked:', isLiked);
       
       let newLikes;
       if (doubleTap && !isLiked) {
@@ -297,17 +338,48 @@ export default function Home() {
           ? likes.filter((id: string) => id !== currentUser.id)
           : [...likes, currentUser.id];
       } else {
+        console.log('Double tap on already liked post, no action');
         return;
       }
       
+      console.log('New likes array:', newLikes);
+      
+      // Update database first
       const { error } = await supabaseClient
         .from('posts')
         .update({ likes: newLikes })
         .eq('id', postId);
       
-      if (error) throw error;
+      if (error) {
+        console.error('Database update error:', error);
+        throw error;
+      }
       
-      // Update local state
+      console.log('Database updated successfully');
+      
+      // Verify the update worked by fetching again
+      const { data: verifyData, error: verifyError } = await supabaseClient
+        .from('posts')
+        .select('likes')
+        .eq('id', postId)
+        .single();
+      
+      if (verifyError) {
+        console.error('❌ Verification failed:', verifyError);
+        Alert.alert('Error', 'No se pudo verificar la actualización del like');
+        return;
+      } else {
+        console.log('✅ Verification - likes in DB after update:', verifyData.likes);
+        if (JSON.stringify(verifyData.likes?.sort()) !== JSON.stringify(newLikes.sort())) {
+          console.error('❌ Update not persisted! Expected:', newLikes, 'Got:', verifyData.likes);
+          Alert.alert('Error', 'Los likes no se guardaron correctamente en la base de datos');
+          return;
+        } else {
+          console.log('✅ Update verified successfully in database');
+        }
+      }
+      
+      // Update local state only after successful database update
       setPosts(prevPosts => 
         prevPosts.map(post => 
           post.id === postId 
@@ -315,8 +387,22 @@ export default function Home() {
             : post
         )
       );
+      
+      // Also update feedItems state to keep consistency
+      setFeedItems(prevItems => 
+        prevItems.map(item => 
+          item.type === 'post' && item.data.id === postId
+            ? { ...item, data: { ...item.data, likes: newLikes } }
+            : item
+        )
+      );
+      
+      console.log('Local state updated');
+      console.log('=== LIKE DEBUG END ===');
     } catch (error) {
       console.error('Error updating like:', error);
+      Alert.alert('Error', 'No se pudo actualizar el me gusta. Intenta nuevamente.');
+      Alert.alert('Error', 'No se pudo actualizar el me gusta. Intenta nuevamente.');
     }
   };
 
@@ -327,6 +413,11 @@ export default function Home() {
     }
 
     try {
+      console.log('=== PROMOTION LIKE DEBUG START ===');
+      console.log('Promotion ID:', promotionId);
+      console.log('User ID:', currentUser.id);
+      
+      // Get fresh data from database
       const { data: promotionData, error: fetchError } = await supabaseClient
         .from('promotions')
         .select('likes')
@@ -335,21 +426,55 @@ export default function Home() {
       
       if (fetchError) throw fetchError;
       
+      console.log('Current promotion likes from DB:', promotionData.likes);
+      
       const likes = promotionData.likes || [];
       const isLiked = likes.includes(currentUser.id);
+      
+      console.log('Is currently liked:', isLiked);
       
       const newLikes = isLiked
         ? likes.filter((id: string) => id !== currentUser.id)
         : [...likes, currentUser.id];
       
+      console.log('New likes array:', newLikes);
+      
+      // Update database first
       const { error } = await supabaseClient
         .from('promotions')
         .update({ likes: newLikes })
         .eq('id', promotionId);
       
-      if (error) throw error;
+      if (error) {
+        console.error('Database update error:', error);
+        throw error;
+      }
       
-      // Update local state
+      console.log('Database updated successfully');
+      
+      // Verify the update worked by fetching again
+      const { data: verifyData, error: verifyError } = await supabaseClient
+        .from('promotions')
+        .select('likes')
+        .eq('id', promotionId)
+        .single();
+      
+      if (verifyError) {
+        console.error('❌ Verification failed:', verifyError);
+        Alert.alert('Error', 'No se pudo verificar la actualización del like');
+        return;
+      } else {
+        console.log('✅ Verification - likes in DB after update:', verifyData.likes);
+        if (JSON.stringify(verifyData.likes?.sort()) !== JSON.stringify(newLikes.sort())) {
+          console.error('❌ Update not persisted! Expected:', newLikes, 'Got:', verifyData.likes);
+          Alert.alert('Error', 'Los likes no se guardaron correctamente en la base de datos');
+          return;
+        } else {
+          console.log('✅ Update verified successfully in database');
+        }
+      }
+      
+      // Update local state only after successful database update
       setPromotions(prevPromotions => 
         prevPromotions.map(promo => 
           promo.id === promotionId 
@@ -357,8 +482,21 @@ export default function Home() {
             : promo
         )
       );
+      
+      // Also update feedItems state
+      setFeedItems(prevItems => 
+        prevItems.map(item => 
+          item.type === 'promotion' && item.data.id === promotionId
+            ? { ...item, data: { ...item.data, likes: newLikes } }
+            : item
+        )
+      );
+      
+      console.log('Local state updated');
+      console.log('=== PROMOTION LIKE DEBUG END ===');
     } catch (error) {
       console.error('Error updating promotion like:', error);
+      Alert.alert('Error', 'No se pudo actualizar el me gusta. Intenta nuevamente.');
     }
   };
 
@@ -551,6 +689,7 @@ export default function Home() {
     <SafeAreaView style={styles.container}>
       <NotificationPermissionPrompt />
       <LocationPermissionPrompt />
+      {__DEV__ && <NotificationDebugInfo />}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>DogCatiFy</Text>
       </View>
@@ -723,5 +862,31 @@ const styles = StyleSheet.create({
   },
   dot3: {
     opacity: 1,
+  },
+  debugContainer: {
+    backgroundColor: '#FEF3C7',
+    margin: 16,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  debugTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#92400E',
+    marginBottom: 8,
+  },
+  debugText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#92400E',
+    marginBottom: 4,
+  },
+  debugWarning: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#DC2626',
+    marginTop: 8,
   },
 });

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Calendar, Clock, User, Phone, Check, X, Eye } from 'lucide-react-native';
+import { ArrowLeft, Calendar, Clock, User, Phone, Check, X, Eye, MapPin, DollarSign } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
@@ -15,6 +15,9 @@ export default function PartnerBookings() {
   const [activeTab, setActiveTab] = useState<'pending' | 'confirmed' | 'completed'>('pending');
   const [loading, setLoading] = useState(true);
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<any>(null);
+  const [updatingBooking, setUpdatingBooking] = useState<string | null>(null);
 
   useEffect(() => {
     if (!currentUser || !businessId) return;
@@ -127,7 +130,10 @@ export default function PartnerBookings() {
   };
 
   const handleUpdateBookingStatus = async (bookingId: string, newStatus: string) => {
+    setUpdatingBooking(bookingId);
     try {
+      console.log('Updating booking status:', { bookingId, newStatus });
+      
       const { error } = await supabaseClient
         .from('bookings')
         .update({
@@ -138,6 +144,8 @@ export default function PartnerBookings() {
       
       if (error) throw error;
       
+      console.log('Booking status updated successfully');
+      
       const statusMessages = {
         confirmed: 'Reserva confirmada',
         completed: 'Reserva marcada como completada',
@@ -145,9 +153,47 @@ export default function PartnerBookings() {
       };
       
       Alert.alert('Éxito', statusMessages[newStatus as keyof typeof statusMessages]);
+      
+      // Refresh bookings immediately to show updated status
+      if (businessId) {
+        fetchBookings(businessId as string);
+      }
     } catch (error) {
       console.error('Error updating booking status:', error);
       Alert.alert('Error', 'No se pudo actualizar la reserva');
+    } finally {
+      setUpdatingBooking(null);
+    }
+  };
+
+  const handleViewDetails = (booking: any) => {
+    setSelectedBooking(booking);
+    setShowDetailsModal(true);
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency: 'ARS',
+    }).format(amount);
+  };
+
+  const getPaymentStatusText = (status: string) => {
+    switch (status) {
+      case 'paid': return '✅ Pagado';
+      case 'pending': return '⏳ Pendiente';
+      case 'failed': return '❌ Fallido';
+      default: return '❓ No especificado';
+    }
+  };
+
+  const getPaymentMethodText = (method: string) => {
+    switch (method) {
+      case 'credit_card': return '💳 Tarjeta de crédito';
+      case 'debit_card': return '💳 Tarjeta de débito';
+      case 'cash': return '💵 Efectivo';
+      case 'transfer': return '🏦 Transferencia';
+      default: return '❓ No especificado';
     }
   };
 
@@ -248,30 +294,47 @@ export default function PartnerBookings() {
 
       <View style={styles.bookingActions}>
         {booking.status === 'pending' && (
-          <>
-            <Button
-              title="Rechazar"
+          <View style={styles.pendingActions}>
+            <TouchableOpacity
+              style={styles.rejectButton}
               onPress={() => handleUpdateBookingStatus(booking.id, 'cancelled')}
-              variant="outline"
-              size="small"
-            />
-            <Button
-              title="Confirmar"
+              disabled={updatingBooking === booking.id}
+            >
+              <X size={16} color="#FFFFFF" />
+              <Text style={styles.rejectButtonText}>
+                {updatingBooking === booking.id ? 'Rechazando...' : 'Rechazar'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.confirmButton}
               onPress={() => handleUpdateBookingStatus(booking.id, 'confirmed')}
-              size="small"
-            />
-          </>
+              disabled={updatingBooking === booking.id}
+            >
+              <Check size={16} color="#FFFFFF" />
+              <Text style={styles.confirmButtonText}>
+                {updatingBooking === booking.id ? 'Confirmando...' : 'Confirmar'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
         
         {booking.status === 'confirmed' && (
-          <Button
-            title="Marcar Completada"
+          <TouchableOpacity
+            style={styles.completeButton}
             onPress={() => handleUpdateBookingStatus(booking.id, 'completed')}
-            size="small"
-          />
+            disabled={updatingBooking === booking.id}
+          >
+            <Check size={16} color="#FFFFFF" />
+            <Text style={styles.completeButtonText}>
+              {updatingBooking === booking.id ? 'Completando...' : 'Marcar Completada'}
+            </Text>
+          </TouchableOpacity>
         )}
         
-        <TouchableOpacity style={styles.viewButton}>
+        <TouchableOpacity 
+          style={styles.viewButton}
+          onPress={() => handleViewDetails(booking)}
+        >
           <Eye size={16} color="#3B82F6" />
           <Text style={styles.viewButtonText}>Ver Detalles</Text>
         </TouchableOpacity>
@@ -338,7 +401,6 @@ export default function PartnerBookings() {
             </View>
           </View>
         </View>
-        <View style={styles.placeholder} />
       </View>
 
       <View style={styles.tabBar}>
@@ -383,6 +445,179 @@ export default function PartnerBookings() {
           filteredBookings.map(renderBooking)
         )}
       </ScrollView>
+
+      {/* Booking Details Modal */}
+      <Modal
+        visible={showDetailsModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowDetailsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Detalles de la Reserva</Text>
+              <TouchableOpacity onPress={() => setShowDetailsModal(false)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {selectedBooking && (
+              <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                {/* Service Information */}
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>📋 Información del Servicio</Text>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Servicio:</Text>
+                    <Text style={styles.detailValue}>{selectedBooking.serviceName || 'No especificado'}</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Duración:</Text>
+                    <Text style={styles.detailValue}>{selectedBooking.serviceDuration || 60} minutos</Text>
+                  </View>
+                  {selectedBooking.totalAmount && (
+                    <View style={styles.detailItem}>
+                      <Text style={styles.detailLabel}>Precio:</Text>
+                      <Text style={styles.detailValue}>{formatCurrency(selectedBooking.totalAmount)}</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Customer Information */}
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>👤 Información del Cliente</Text>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Nombre:</Text>
+                    <Text style={styles.detailValue}>{selectedBooking.customerName || 'No especificado'}</Text>
+                  </View>
+                  {selectedBooking.customerEmail && (
+                    <View style={styles.detailItem}>
+                      <Text style={styles.detailLabel}>Email:</Text>
+                      <Text style={styles.detailValue}>{selectedBooking.customerEmail}</Text>
+                    </View>
+                  )}
+                  {selectedBooking.customerPhone && (
+                    <View style={styles.detailItem}>
+                      <Text style={styles.detailLabel}>Teléfono:</Text>
+                      <Text style={styles.detailValue}>{selectedBooking.customerPhone}</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Pet Information */}
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>🐾 Información de la Mascota</Text>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Nombre:</Text>
+                    <Text style={styles.detailValue}>{selectedBooking.petName || 'No especificado'}</Text>
+                  </View>
+                </View>
+
+                {/* Appointment Information */}
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>📅 Información de la Cita</Text>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Fecha:</Text>
+                    <Text style={styles.detailValue}>{selectedBooking.date.toLocaleDateString()}</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Hora:</Text>
+                    <Text style={styles.detailValue}>{selectedBooking.time || 'No especificada'}</Text>
+                  </View>
+                  {selectedBooking.endTime && (
+                    <View style={styles.detailItem}>
+                      <Text style={styles.detailLabel}>Hora de fin:</Text>
+                      <Text style={styles.detailValue}>{selectedBooking.endTime}</Text>
+                    </View>
+                  )}
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Estado:</Text>
+                    <View style={[
+                      styles.statusBadgeInModal,
+                      { backgroundColor: getStatusColor(selectedBooking.status) }
+                    ]}>
+                      <Text style={[
+                        styles.statusTextInModal,
+                        { color: getStatusTextColor(selectedBooking.status) }
+                      ]}>
+                        {getStatusText(selectedBooking.status)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Payment Information */}
+                {(selectedBooking.paymentStatus || selectedBooking.paymentMethod || selectedBooking.totalAmount) && (
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailSectionTitle}>💳 Información de Pago</Text>
+                    {selectedBooking.paymentStatus && (
+                      <View style={styles.detailItem}>
+                        <Text style={styles.detailLabel}>Estado del pago:</Text>
+                        <Text style={styles.detailValue}>{getPaymentStatusText(selectedBooking.paymentStatus)}</Text>
+                      </View>
+                    )}
+                    {selectedBooking.paymentMethod && (
+                      <View style={styles.detailItem}>
+                        <Text style={styles.detailLabel}>Método de pago:</Text>
+                        <Text style={styles.detailValue}>{getPaymentMethodText(selectedBooking.paymentMethod)}</Text>
+                      </View>
+                    )}
+                    {selectedBooking.paymentConfirmedAt && (
+                      <View style={styles.detailItem}>
+                        <Text style={styles.detailLabel}>Pago confirmado:</Text>
+                        <Text style={styles.detailValue}>
+                          {new Date(selectedBooking.paymentConfirmedAt).toLocaleDateString()} a las{' '}
+                          {new Date(selectedBooking.paymentConfirmedAt).toLocaleTimeString()}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* Notes */}
+                {selectedBooking.notes && (
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailSectionTitle}>📝 Notas del Cliente</Text>
+                    <View style={styles.notesContainer}>
+                      <Text style={styles.notesText}>{selectedBooking.notes}</Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* Timestamps */}
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>🕒 Información de Registro</Text>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Reserva creada:</Text>
+                    <Text style={styles.detailValue}>
+                      {selectedBooking.createdAt.toLocaleDateString()} a las{' '}
+                      {selectedBooking.createdAt.toLocaleTimeString()}
+                    </Text>
+                  </View>
+                  {selectedBooking.updatedAt && (
+                    <View style={styles.detailItem}>
+                      <Text style={styles.detailLabel}>Última actualización:</Text>
+                      <Text style={styles.detailValue}>
+                        {new Date(selectedBooking.updatedAt).toLocaleDateString()} a las{' '}
+                        {new Date(selectedBooking.updatedAt).toLocaleTimeString()}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </ScrollView>
+            )}
+
+            <View style={styles.modalActions}>
+              <Button
+                title="Cerrar"
+                onPress={() => setShowDetailsModal(false)}
+                variant="outline"
+                size="large"
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -391,19 +626,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+    paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+    minHeight: 70,
   },
   backButton: {
-    padding: 6,
+    padding: 8,
+    marginRight: 8,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -413,7 +651,6 @@ const styles = StyleSheet.create({
   businessInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 8,
   },
   businessLogo: {
     width: 40,
@@ -443,9 +680,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
   },
-  placeholder: {
-    width: 32,
-  },
   tabBar: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
@@ -463,9 +697,10 @@ const styles = StyleSheet.create({
     borderBottomColor: '#3B82F6',
   },
   tabText: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: 'Inter-Medium',
     color: '#6B7280',
+    textAlign: 'center',
   },
   activeTabText: {
     color: '#3B82F6',
@@ -473,6 +708,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
+    paddingBottom: 100,
   },
   loadingContainer: {
     flex: 1,
@@ -499,6 +735,7 @@ const styles = StyleSheet.create({
   },
   bookingCard: {
     marginBottom: 12,
+    marginHorizontal: 4,
   },
   bookingHeader: {
     flexDirection: 'row',
@@ -561,10 +798,60 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   bookingActions: {
+    marginTop: 8,
+  },
+  pendingActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 8,
+  },
+  rejectButton: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    backgroundColor: '#EF4444',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    gap: 6,
+  },
+  rejectButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  confirmButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10B981',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    gap: 6,
+  },
+  confirmButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  completeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3B82F6',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    gap: 6,
+    marginBottom: 8,
+  },
+  completeButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
   viewButton: {
     flexDirection: 'row',
@@ -573,6 +860,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
+    alignSelf: 'flex-start',
   },
   viewButtonText: {
     fontSize: 12,
@@ -602,5 +890,89 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Bold',
     color: '#10B981',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+  },
+  modalCloseText: {
+    fontSize: 18,
+    color: '#6B7280',
+  },
+  modalBody: {
+    flex: 1,
+    marginBottom: 20,
+  },
+  detailSection: {
+    marginBottom: 20,
+  },
+  detailSectionTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  detailItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  detailLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    flex: 1,
+  },
+  detailValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    flex: 2,
+    textAlign: 'right',
+  },
+  statusBadgeInModal: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-end',
+  },
+  statusTextInModal: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  notesContainer: {
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#3B82F6',
+  },
+  modalActions: {
+    paddingTop: 10,
   },
 });

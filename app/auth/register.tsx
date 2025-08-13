@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Platform, Linking } from 'react-native';
 import { router, Stack } from 'expo-router';
 import { ArrowLeft, User, Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
@@ -17,8 +17,56 @@ export default function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
+  // Computed property to check if form is valid
+  const isFormValid = fullName.trim() && 
+                     email.trim() && 
+                     password.length >= 6 && 
+                     confirmPassword && 
+                     password === confirmPassword && 
+                     acceptTerms;
+
   const { register } = useAuth();
   const { t } = useLanguage();
+
+  const handlePrivacyPress = async () => {
+    try {
+      const privacyUrl = process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL || 'https://dogcatify.com/privacy';
+      
+      if (Platform.OS === 'web') {
+        window.open(privacyUrl, '_blank');
+      } else {
+        const canOpen = await Linking.canOpenURL(privacyUrl);
+        if (canOpen) {
+          await Linking.openURL(privacyUrl);
+        } else {
+          Alert.alert('Error', 'No se pudo abrir el enlace');
+        }
+      }
+    } catch (error) {
+      console.error('Error opening privacy policy:', error);
+      Alert.alert('Error', 'No se pudo abrir las políticas de privacidad');
+    }
+  };
+
+  const handleTermsPress = async () => {
+    try {
+      const termsUrl = process.env.EXPO_PUBLIC_TERMS_OF_SERVICE_URL || 'https://dogcatify.com/terms';
+      
+      if (Platform.OS === 'web') {
+        window.open(termsUrl, '_blank');
+      } else {
+        const canOpen = await Linking.canOpenURL(termsUrl);
+        if (canOpen) {
+          await Linking.openURL(termsUrl);
+        } else {
+          Alert.alert('Error', 'No se pudo abrir el enlace');
+        }
+      }
+    } catch (error) {
+      console.error('Error opening terms of service:', error);
+      Alert.alert('Error', 'No se pudo abrir los términos de servicio');
+    }
+  };
 
   const handleRegister = async () => {
     if (!fullName || !email || !password || !confirmPassword) {
@@ -95,7 +143,7 @@ export default function Register() {
       </View>
 
       <View style={styles.form}>
-        <Text style={styles.title}>{t('joinPatitas')}</Text>
+        <Text style={styles.title}>¡Únete a DogCatiFy! 🐾</Text>
         <Text style={styles.subtitle}>{t('createAccountSubtitle')}</Text>
 
         <Input
@@ -150,9 +198,9 @@ export default function Register() {
             </View>
             <Text style={styles.termsText}>
               Acepto las{' '}
-              <Text style={styles.termsLink}>políticas de privacidad</Text>
+              <Text style={styles.termsLink} onPress={handlePrivacyPress}>políticas de privacidad</Text>
               {' '}y los{' '}
-              <Text style={styles.termsLink}>términos de servicio</Text>
+              <Text style={styles.termsLink} onPress={handleTermsPress}>términos de servicio</Text>
             </Text>
           </TouchableOpacity>
         </View>
@@ -161,6 +209,7 @@ export default function Register() {
           title={loading ? "Creando cuenta..." : t('createAccount')}
           onPress={handleRegister}
           loading={loading}
+          disabled={!isFormValid || loading}
           size="large"
         />
 
@@ -186,36 +235,38 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     padding: 20,
+    paddingBottom: 40,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 20,
   },
   backButton: {
     padding: 8,
     marginRight: 16,
   },
   logo: {
-    width: 120,
-    height: 120,
+    width: 100,
+    height: 100,
     resizeMode: 'contain',
   },
   form: {
     width: '100%',
     maxWidth: 400,
     alignSelf: 'center',
+    marginBottom: 20,
   },
   title: {
     fontSize: 24,
     fontFamily: 'Inter-Bold',
     color: '#2D6A6F',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
     color: '#6B7280',
-    marginBottom: 24,
+    marginBottom: 20,
     fontFamily: 'Inter-Regular',
     lineHeight: 22,
   },

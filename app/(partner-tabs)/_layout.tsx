@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { ChartBar as BarChart3, ArrowLeft, Building, ShoppingBag, Calendar, Settings } from 'lucide-react-native';
+import { ChartBar as BarChart3, ArrowLeft, Building, ShoppingBag, Calendar } from 'lucide-react-native';
 import { MessageCircle } from 'lucide-react-native';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -14,6 +14,7 @@ export default function PartnerTabLayout() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const [partnerProfile, setPartnerProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasActiveSchedule, setHasActiveSchedule] = useState(false);
 
   useEffect(() => {
     if (authInitialized && !currentUser) {
@@ -38,6 +39,7 @@ export default function PartnerTabLayout() {
 
   const fetchPartnerProfile = async (businessId: string) => {
     try {
+      // Fetch partner profile
       const { data: partnerDoc, error } = await supabaseClient
         .from('partners')
         .select('*')
@@ -57,7 +59,9 @@ export default function PartnerTabLayout() {
         setPartnerProfile(profileData);
         console.log('PartnerTabLayout - Profile loaded:', profileData.business_name);
         console.log('PartnerTabLayout - Business type:', profileData.business_type);
-        console.log('PartnerTabLayout - Features:', JSON.stringify(profileData.features || {}));
+        
+        // Check if this business has active schedule
+        await checkActiveSchedule(businessId);
       } else {
         console.log('PartnerTabLayout - No partner document found for ID:', businessId);
       }
@@ -65,6 +69,31 @@ export default function PartnerTabLayout() {
       console.error('PartnerTabLayout - Error fetching partner profile:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkActiveSchedule = async (businessId: string) => {
+    try {
+      console.log('Checking active schedule for business:', businessId);
+      
+      const { data: scheduleData, error } = await supabaseClient
+        .from('business_schedule')
+        .select('*')
+        .eq('partner_id', businessId)
+        .eq('is_active', true);
+      
+      if (error) {
+        console.error('Error checking schedule:', error);
+        setHasActiveSchedule(false);
+        return;
+      }
+      
+      const hasSchedule = scheduleData && scheduleData.length > 0;
+      console.log('Active schedule found:', hasSchedule, 'Count:', scheduleData?.length || 0);
+      setHasActiveSchedule(hasSchedule);
+    } catch (error) {
+      console.error('Error checking active schedule:', error);
+      setHasActiveSchedule(false);
     }
   };
 
@@ -87,16 +116,13 @@ export default function PartnerTabLayout() {
   const features = partnerProfile?.features || {};
   
   const hasProductsEnabled = features.products || businessType === 'shop';
-
-  // Función para verificar si debe mostrar el chat (solo refugios)
-  const shouldShowChat = (): boolean => {
-    return partnerProfile?.business_type === 'shelter';
-  };
   
-  // Log para depuración
-  console.log('PartnerTabLayout - Has products enabled:', hasProductsEnabled);
-  console.log('PartnerTabLayout - Business type:', businessType);
-  console.log('PartnerTabLayout - Should show chat:', shouldShowChat());
+  console.log('PartnerTabLayout - Tab visibility:', {
+    businessType,
+    hasProductsEnabled,
+    hasActiveSchedule,
+    shouldShowReservas: hasActiveSchedule
+  });
 
   return (
     <Tabs
@@ -109,7 +135,7 @@ export default function PartnerTabLayout() {
           borderTopWidth: 0,
           paddingTop: 5,
           paddingBottom: 5,
-          height: 60, // Further reduced height for better fit
+          height: 60,
           shadowColor: '#000',
           shadowOffset: {
             width: 0,
@@ -148,19 +174,11 @@ export default function PartnerTabLayout() {
         name="bookings"
         options={{
           title: 'Reservas',
-          href: { pathname: '/bookings', params: { businessId } },
+          href: hasActiveSchedule && partnerProfile
+            ? { pathname: '/bookings', params: { businessId } }
+            : null,
           tabBarIcon: ({ size, color }) => (
             <Calendar size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="services"
-        options={{
-          title: 'Servicios',
-          href: { pathname: '/services', params: { businessId } },
-          tabBarIcon: ({ size, color }) => (
-            <Settings size={size} color={color} />
           ),
         }}
       />
@@ -174,24 +192,18 @@ export default function PartnerTabLayout() {
           tabBarIcon: ({ size, color }) => (
             <ShoppingBag size={size} color={color} />
           ),
-          tabBarStyle: (businessType === 'shop' || hasProductsEnabled) && partnerProfile
-            ? undefined
-            : { display: 'none' },
         }}
       />
       <Tabs.Screen
         name="chat-contacts"
         options={{
           title: 'Contactos',
-          href: shouldShowChat() && partnerProfile
+          href: partnerProfile?.business_type === 'shelter' && partnerProfile
             ? { pathname: '/chat-contacts', params: { businessId } }
             : null,
           tabBarIcon: ({ size, color }) => (
             <MessageCircle size={size} color={color} />
           ),
-          tabBarStyle: shouldShowChat() && partnerProfile
-            ? undefined
-            : { display: 'none' },
         }}
       />
       <Tabs.Screen
@@ -207,12 +219,6 @@ export default function PartnerTabLayout() {
             e.preventDefault();
             handleBackToUser();
           },
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          href: null, // Hide this tab
         }}
       />
     </Tabs>
