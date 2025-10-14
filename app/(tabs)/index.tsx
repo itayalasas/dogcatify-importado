@@ -320,7 +320,8 @@ export default function Home() {
         partnerId: promo.partner_id,
         views: promo.views || 0,
         clicks: promo.clicks || 0,
-        likes: promo.likes || []
+        likes: promo.likes || [],
+        discount_percentage: promo.discount_percentage || 0
       })) || [];
 
       console.log(`✅ Promotions loaded: ${processedPromotions.length}`);
@@ -575,6 +576,13 @@ export default function Home() {
 
   const handlePromotionPress = async (promotion: any) => {
     try {
+      // Debug promotion data
+      console.log('=== Promotion Press Debug ===');
+      console.log('Promotion:', promotion);
+      console.log('Discount percentage:', promotion.discount_percentage);
+      console.log('CTA URL:', promotion.ctaUrl);
+      console.log('=========================');
+
       // Increment clicks
       const newClicksCount = (promotion.clicks || 0) + 1;
       
