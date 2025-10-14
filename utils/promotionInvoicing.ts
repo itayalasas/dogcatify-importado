@@ -1,4 +1,4 @@
-import { supabaseClient } from '@/lib/supabase';
+import { supabaseClient } from '../lib/supabase';
 import jsPDF from 'jspdf';
 
 /**
