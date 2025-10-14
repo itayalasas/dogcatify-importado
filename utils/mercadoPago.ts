@@ -1,4 +1,4 @@
-import { supabaseClient } from '../lib/supabase';
+import { supabaseClient } from '@/lib/supabase';
 
 /**
  * Mercado Pago OAuth2 Marketplace Implementation
@@ -295,13 +295,13 @@ export const createPaymentPreference = async (
         title: item.name,
         quantity: item.quantity,
         unit_price: item.price,
-        currency_id: 'ARS'
+        currency_id: 'UYU'
       })).concat([{
         id: 'shipping',
         title: 'Envío',
         quantity: 1,
         unit_price: shippingCost,
-        currency_id: 'ARS'
+        currency_id: 'UYU'
       }]),
       payer: {
         name: customerInfo.displayName || 'Cliente',
@@ -536,13 +536,13 @@ export const createUnifiedPaymentPreference = async (
         title: item.name,
         quantity: item.quantity,
         unit_price: item.price,
-        currency_id: 'ARS'
+        currency_id: 'UYU'
       })).concat([{
         id: 'shipping',
         title: 'Envío',
         quantity: 1,
         unit_price: shippingCost,
-        currency_id: 'ARS'
+        currency_id: 'UYU'
       }]),
       payer: {
         name: customerInfo.displayName || 'Cliente',
@@ -602,6 +602,234 @@ export const createUnifiedPaymentPreference = async (
     return preference;
   } catch (error) {
     console.error('Error creating split payment preference:', error);
+    throw error;
+  }
+};
+
+/**
+ * Create service booking order with Mercado Pago payment
+ */
+export const createServiceBookingOrder = async (bookingData: {
+  serviceId: string;
+  partnerId: string;
+  customerId: string;
+  petId: string;
+  date: Date;
+  time: string;
+  notes: string | null;
+  serviceName: string;
+  partnerName: string;
+  petName: string;
+  totalAmount: number;
+  customerInfo: any;
+}): Promise<{ success: boolean; paymentUrl?: string; orderId?: string; error?: string }> => {
+  try {
+    console.log('Creating service booking order...');
+    console.log('Booking data:', bookingData);
+    
+    // Get partner's Mercado Pago configuration
+    const partnerConfig = await getPartnerMercadoPagoConfig(bookingData.partnerId);
+    console.log('Partner MP config loaded for:', partnerConfig.business_name);
+    
+    // Calculate commission
+    const commissionAmount = bookingData.totalAmount * ((partnerConfig.commission_percentage || 5.0) / 100);
+    const partnerAmount = bookingData.totalAmount - commissionAmount;
+    
+    console.log('Commission calculation:', {
+      total: bookingData.totalAmount,
+      commission_rate: partnerConfig.commission_percentage || 5.0,
+      commission_amount: commissionAmount,
+      partner_amount: partnerAmount
+    });
+    
+    // Create booking record in database
+    const bookingRecord = {
+      service_id: bookingData.serviceId,
+      partner_id: bookingData.partnerId,
+      customer_id: bookingData.customerId,
+      pet_id: bookingData.petId,
+      date: bookingData.date.toISOString(),
+      time: bookingData.time,
+      status: 'pending_payment',
+      notes: bookingData.notes,
+      total_amount: bookingData.totalAmount,
+      commission_amount: commissionAmount,
+      partner_amount: partnerAmount,
+      service_name: bookingData.serviceName,
+      partner_name: bookingData.partnerName,
+      pet_name: bookingData.petName,
+      payment_method: 'mercadopago',
+      created_at: new Date().toISOString()
+    };
+    
+    console.log('Inserting booking record...');
+    const { data: insertedBooking, error: bookingError } = await supabaseClient
+      .from('bookings')
+      .insert([bookingRecord])
+      .select()
+      .single();
+    
+    if (bookingError) {
+      console.error('Error creating booking:', bookingError);
+      throw new Error('No se pudo crear la reserva en la base de datos');
+    }
+    
+    console.log('Booking created with ID:', insertedBooking.id);
+    
+    // Create order record for payment tracking
+    const orderData = {
+      partner_id: bookingData.partnerId,
+      customer_id: bookingData.customerId,
+      booking_id: insertedBooking.id,
+      items: [{
+        id: bookingData.serviceId,
+        name: bookingData.serviceName,
+        price: bookingData.totalAmount,
+        quantity: 1,
+        type: 'service'
+      }],
+      total_amount: bookingData.totalAmount,
+      commission_amount: commissionAmount,
+      partner_amount: partnerAmount,
+      payment_method: 'mercadopago',
+      status: 'pending',
+      order_type: 'service_booking',
+      created_at: new Date().toISOString()
+    };
+    
+    console.log('Creating order record...');
+    const { data: insertedOrder, error: orderError } = await supabaseClient
+      .from('orders')
+      .insert([orderData])
+      .select()
+      .single();
+    
+    if (orderError) {
+      console.error('Error creating order:', orderError);
+      throw new Error('No se pudo crear la orden de pago');
+    }
+    
+    console.log('Order created with ID:', insertedOrder.id);
+    
+    // Create Mercado Pago payment preference
+    const preference = await createServicePaymentPreference(
+      insertedOrder.id,
+      bookingData,
+      partnerConfig,
+      commissionAmount
+    );
+    
+    console.log('Payment preference created:', preference.id);
+    
+    // Update order with payment preference ID
+    await supabaseClient
+      .from('orders')
+      .update({
+        payment_preference_id: preference.id,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', insertedOrder.id);
+    
+    // Get payment URL
+    const paymentUrl = preference.sandbox_init_point || preference.init_point;
+    
+    if (!paymentUrl) {
+      throw new Error('No se pudo obtener la URL de pago');
+    }
+    
+    console.log('Payment URL generated successfully');
+    
+    return {
+      success: true,
+      paymentUrl: paymentUrl,
+      orderId: insertedOrder.id
+    };
+  } catch (error) {
+    console.error('Error creating service booking order:', error);
+    return {
+      success: false,
+      error: error.message || 'Error desconocido'
+    };
+  }
+};
+
+/**
+ * Create payment preference for service booking
+ */
+export const createServicePaymentPreference = async (
+  orderId: string,
+  bookingData: any,
+  partnerConfig: any,
+  commissionAmount: number
+): Promise<any> => {
+  try {
+    const marketplaceAccessToken = await getMarketplaceAccessToken();
+    
+    const preferenceData = {
+      items: [{
+        id: bookingData.serviceId,
+        title: bookingData.serviceName,
+        quantity: 1,
+        unit_price: bookingData.totalAmount,
+        currency_id: 'UYU'
+      }],
+      payer: {
+        name: bookingData.customerInfo.displayName || 'Cliente',
+        email: bookingData.customerInfo.email,
+        phone: {
+          area_code: '598',
+          number: bookingData.customerInfo.phone || '99999999'
+        }
+      },
+      back_urls: {
+        success: `dogcatify://payment/success?order_id=${orderId}&type=booking`,
+        failure: `dogcatify://payment/failure?order_id=${orderId}&type=booking`,
+        pending: `dogcatify://payment/pending?order_id=${orderId}&type=booking`
+      },
+      auto_return: 'approved',
+      external_reference: orderId,
+      notification_url: `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/mercadopago-webhook`,
+      statement_descriptor: 'DOGCATIFY',
+      metadata: {
+        order_type: 'service_booking',
+        service_name: bookingData.serviceName,
+        partner_name: bookingData.partnerName,
+        pet_name: bookingData.petName,
+        appointment_date: bookingData.date.toISOString(),
+        appointment_time: bookingData.time
+      }
+    };
+    
+    // Add marketplace fee if partner has OAuth configuration
+    if (partnerConfig.is_oauth && partnerConfig.user_id && !isNaN(parseInt(partnerConfig.user_id))) {
+      preferenceData.application_fee = commissionAmount;
+      console.log('Using OAuth marketplace split for service booking');
+    } else {
+      console.log('Using manual configuration for service booking');
+    }
+    
+    console.log('Creating service payment preference...');
+    const response = await fetch(`${MP_BASE_URL}/checkout/preferences`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${partnerConfig.access_token}`,
+      },
+      body: JSON.stringify(preferenceData),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Mercado Pago API error for service booking:', errorData);
+      throw new Error(`Failed to create payment preference: ${errorData.message || response.statusText}`);
+    }
+    
+    const preference = await response.json();
+    console.log('Service payment preference created successfully');
+    
+    return preference;
+  } catch (error) {
+    console.error('Error creating service payment preference:', error);
     throw error;
   }
 };

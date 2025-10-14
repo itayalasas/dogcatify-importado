@@ -1,41 +1,38 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { CircleCheck as CheckCircle, Package, Chrome as Home } from 'lucide-react-native';
+import { CircleCheck as CheckCircle, Package, Calendar } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { supabaseClient } from '../../lib/supabase';
 
 export default function PaymentSuccess() {
-  const { order_id, payment_id, status } = useLocalSearchParams<{
+  const { order_id, type } = useLocalSearchParams<{
     order_id: string;
-    payment_id: string;
-    status: string;
+    type?: string;
   }>();
-  
-  const [order, setOrder] = useState<any>(null);
+
+  const [orderDetails, setOrderDetails] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (order_id) {
-      fetchOrderDetails();
-    }
-  }, [order_id]);
-
-  const fetchOrderDetails = async () => {
-    try {
-      const { data, error } = await supabaseClient
-        .from('orders')
-        .select('*')
-        .eq('id', order_id)
-        .single();
-      
-      if (error) throw error;
-      setOrder(data);
-    } catch (error) {
-      console.error('Error fetching order details:', error);
-    } finally {
+    // Simulate loading order details
+    setTimeout(() => {
+      setOrderDetails({
+        id: order_id || '#abc123',
+        total: '$430.00',
+        status: 'Confirmado',
+        paymentId: '#mp789456',
+        isBooking: type === 'booking'
+      });
       setLoading(false);
+    }, 1000);
+  }, [order_id, type]);
+
+  const handleViewOrders = () => {
+    if (orderDetails?.isBooking) {
+      router.replace('/(tabs)/services');
+    } else {
+      router.replace('/orders');
     }
   };
 
@@ -43,16 +40,12 @@ export default function PaymentSuccess() {
     router.replace('/(tabs)');
   };
 
-  const handleViewOrders = () => {
-    router.push('/orders');
-  };
-
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#10B981" />
-          <Text style={styles.loadingText}>Verificando pago...</Text>
+          <Text style={styles.loadingText}>Confirmando pago...</Text>
         </View>
       </SafeAreaView>
     );
@@ -61,67 +54,93 @@ export default function PaymentSuccess() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Card style={styles.successCard}>
-          <View style={styles.iconContainer}>
-            <CheckCircle size={80} color="#10B981" />
+        <View style={styles.iconContainer}>
+          <CheckCircle size={80} color="#10B981" />
+        </View>
+
+        <Text style={styles.title}>¡Pago Exitoso!</Text>
+        <Text style={styles.subtitle}>
+          {orderDetails?.isBooking 
+            ? 'Tu reserva ha sido confirmada y el pago procesado correctamente.'
+            : 'Tu pedido ha sido confirmado y el pago procesado correctamente.'
+          }
+        </Text>
+
+        <Card style={styles.detailsCard}>
+          <Text style={styles.detailsTitle}>
+            {orderDetails?.isBooking ? 'Detalles de la Reserva' : 'Detalles del Pedido'}
+          </Text>
+          
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>
+              {orderDetails?.isBooking ? 'Número de reserva:' : 'Número de pedido:'}
+            </Text>
+            <Text style={styles.detailValue}>{orderDetails?.id}</Text>
           </View>
           
-          <Text style={styles.title}>¡Pago Exitoso!</Text>
-          <Text style={styles.subtitle}>
-            Tu pedido ha sido confirmado y está siendo procesado
-          </Text>
-
-          {order && (
-            <View style={styles.orderDetails}>
-              <Text style={styles.orderTitle}>Detalles del Pedido</Text>
-              
-              <View style={styles.orderInfo}>
-                <Text style={styles.orderLabel}>Número de pedido:</Text>
-                <Text style={styles.orderValue}>#{order.id.slice(-6)}</Text>
-              </View>
-              
-              <View style={styles.orderInfo}>
-                <Text style={styles.orderLabel}>Total pagado:</Text>
-                <Text style={styles.orderValue}>
-                  ${order.total_amount?.toLocaleString() || '0'}
-                </Text>
-              </View>
-              
-              <View style={styles.orderInfo}>
-                <Text style={styles.orderLabel}>Estado:</Text>
-                <Text style={[styles.orderValue, styles.statusConfirmed]}>
-                  Confirmado
-                </Text>
-              </View>
-              
-              {payment_id && (
-                <View style={styles.orderInfo}>
-                  <Text style={styles.orderLabel}>ID de pago:</Text>
-                  <Text style={styles.orderValue}>#{payment_id.slice(-6)}</Text>
-                </View>
-              )}
-            </View>
-          )}
-
-          <Text style={styles.nextSteps}>
-            Recibirás actualizaciones por email sobre el estado de tu pedido
-          </Text>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Total:</Text>
+            <Text style={styles.detailValue}>{orderDetails?.total}</Text>
+          </View>
+          
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Estado:</Text>
+            <Text style={[styles.detailValue, styles.successStatus]}>
+              {orderDetails?.status}
+            </Text>
+          </View>
+          
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>ID de pago:</Text>
+            <Text style={styles.detailValue}>{orderDetails?.paymentId}</Text>
+          </View>
         </Card>
 
-        <View style={styles.actions}>
-          <Button
-            title="Ver Mis Pedidos"
-            onPress={handleViewOrders}
-            variant="outline"
-            size="large"
-          />
-          
-          <Button
-            title="Volver al Inicio"
-            onPress={handleGoHome}
-            size="large"
-          />
-        </View>
+        <Card style={styles.successCard}>
+          <Text style={styles.successTitle}>¡Gracias por tu {orderDetails?.isBooking ? 'reserva' : 'compra'}!</Text>
+          <View style={styles.successList}>
+            {orderDetails?.isBooking ? (
+              <>
+                <Text style={styles.successItem}>
+                  • Recibirás una confirmación por email
+                </Text>
+                <Text style={styles.successItem}>
+                  • El proveedor te contactará para confirmar detalles
+                </Text>
+                <Text style={styles.successItem}>
+                  • Puedes ver tus citas en la sección de servicios
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.successItem}>
+                  • Recibirás una confirmación por email
+                </Text>
+                <Text style={styles.successItem}>
+                  • Te notificaremos cuando tu pedido sea enviado
+                </Text>
+                <Text style={styles.successItem}>
+                  • Puedes rastrear tu pedido en "Mis Pedidos"
+                </Text>
+              </>
+            )}
+          </View>
+        </Card>
+      </View>
+
+      <View style={styles.actionsContainer}>
+        <Button
+          title={orderDetails?.isBooking ? "Ver Mis Citas" : "Ver Mis Pedidos"}
+          onPress={handleViewOrders}
+          variant="outline"
+          size="large"
+        />
+        
+        <Button
+          title="Ir al Inicio"
+          onPress={handleGoHome}
+          size="large"
+        />
       </View>
     </SafeAreaView>
   );
@@ -147,72 +166,90 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
-    justifyContent: 'center',
-  },
-  successCard: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    marginBottom: 24,
+    paddingBottom: 20,
   },
   iconContainer: {
-    marginBottom: 24,
+    alignItems: 'center',
+    marginTop: 40,
+    marginBottom: 32,
   },
   title: {
     fontSize: 28,
     fontFamily: 'Inter-Bold',
     color: '#111827',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   subtitle: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     textAlign: 'center',
-    marginBottom: 32,
     lineHeight: 24,
+    marginBottom: 32,
+    paddingHorizontal: 20,
   },
-  orderDetails: {
-    width: '100%',
-    backgroundColor: '#F8FAFC',
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 24,
+  detailsCard: {
+    marginBottom: 20,
   },
-  orderTitle: {
+  detailsTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
     marginBottom: 16,
     textAlign: 'center',
   },
-  orderInfo: {
+  detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
-  orderLabel: {
+  detailLabel: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
   },
-  orderValue: {
+  detailValue: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
   },
-  statusConfirmed: {
+  successStatus: {
     color: '#10B981',
   },
-  nextSteps: {
+  successCard: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    marginBottom: 20,
+  },
+  successTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#166534',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  successList: {
+    gap: 8,
+  },
+  successItem: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
+    color: '#166534',
     lineHeight: 20,
   },
-  actions: {
+  actionsContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 60,
+    paddingTop: 24,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
     gap: 16,
+    marginBottom: 20,
   },
 });

@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { ChartBar as BarChart3, Users, Megaphone, Settings, MapPin, FileText, ArrowLeft } from 'lucide-react-native';
+import { ChartBar as BarChart3, Users, Volume2, Settings, MapPin, FileText, ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { View, Text } from 'react-native';
 
@@ -72,7 +72,7 @@ export default function AdminTabLayout() {
         options={{
           title: 'Promoc...',
           tabBarIcon: ({ size, color }) => (
-            <Megaphone size={size} color={color} />
+            <Volume2 size={size} color={color} />
           ),
         }}
       />

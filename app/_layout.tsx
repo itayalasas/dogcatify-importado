@@ -10,7 +10,7 @@ import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { supabaseClient } from '../lib/supabase';
+import { supabaseClient } from '@/lib/supabase';
 
 // Configure notifications for production
 Notifications.setNotificationHandler({
@@ -23,6 +23,12 @@ Notifications.setNotificationHandler({
 
 export default function RootLayout() {
   useFrameworkReady();
+
+  // Add navigation state logging
+  useEffect(() => {
+    console.log('=== RootLayout Mount ===');
+    console.log('Available routes being registered...');
+  }, []);
 
   // Prevent Supabase from showing automatic modals
   useEffect(() => {
@@ -99,7 +105,13 @@ export default function RootLayout() {
                   <Stack.Screen name="services/[id]" />
                   <Stack.Screen name="services/partner/[id]" />
                   <Stack.Screen name="services/shelter/[id]" />
-                  <Stack.Screen name="services/booking" />
+                  <Stack.Screen 
+                    name="services/booking/[serviceId]" 
+                    options={{
+                      title: 'Reservar Servicio',
+                      headerShown: false 
+                    }} 
+                  />
                   <Stack.Screen name="products/[id]" />
                   <Stack.Screen name="cart/index" />
                   <Stack.Screen name="orders/index" />

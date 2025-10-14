@@ -5,7 +5,7 @@ import { ArrowLeft, Calendar, Clock, CircleAlert as AlertCircle, CircleCheck as 
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { useAuth } from '../../../contexts/AuthContext';
-import { supabaseClient, getPet } from '../../../lib/supabase';
+import { supabaseClient, getPet } from '@/lib/supabase';
 
 export default function PetAppointments() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -73,12 +73,48 @@ export default function PetAppointments() {
       
       const bookingIds = completedAppointments.map(apt => apt.id);
       
+      // Validate that all booking IDs are valid UUIDs
+      const validBookingIds = bookingIds.filter(id => {
+        // More strict validation
+        if (!id || typeof id !== 'string' || id.length === 0) {
+          console.log('Invalid booking ID (empty or not string):', id);
+          return false;
+        }
+        
+        // Filter out obviously invalid values
+        const invalidValues = ['booking', 'undefined', 'null', 'temp-', 'order_'];
+        if (invalidValues.some(invalid => id.includes(invalid))) {
+          console.log('Invalid booking ID (contains invalid pattern):', id);
+          return false;
+        }
+        
+        // Check if it's a valid UUID format
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        const isValidUUID = uuidRegex.test(id);
+        
+        if (!isValidUUID) {
+          console.log('Invalid booking ID (not UUID format):', id);
+        }
+        
+        return isValidUUID;
+      });
+      
+      if (validBookingIds.length === 0) {
+        console.log('No valid booking IDs found for reviews');
+        return;
+      }
+      
+      console.log('Valid booking IDs for reviews:', validBookingIds);
+      
       const { data: reviews, error } = await supabaseClient
         .from('service_reviews')
         .select('*')
-        .in('booking_id', bookingIds);
+        .in('booking_id', validBookingIds);
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching reviews:', error);
+        return; // Don't throw, just return
+      }
       
       const reviewsMap: {[key: string]: any} = {};
       reviews?.forEach(review => {

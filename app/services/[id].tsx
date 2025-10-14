@@ -5,13 +5,22 @@ import { ArrowLeft, MapPin, Clock, Phone, Calendar, Star, User } from 'lucide-re
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
-import { supabaseClient } from '../../lib/supabase';
+import { supabaseClient } from '@/lib/supabase';
 
 const { width } = Dimensions.get('window');
 
 export default function ServiceDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { currentUser } = useAuth();
+  
+  // Debug the received ID - MOVED OUTSIDE useEffect
+  console.log('=== ServiceDetail Component Render ===');
+  console.log('ServiceDetail - Received ID:', id);
+  console.log('ServiceDetail - ID type:', typeof id);
+  console.log('ServiceDetail - ID length:', id?.length);
+  console.log('ServiceDetail - Current user:', currentUser?.id);
+  console.log('=== End ServiceDetail Debug ===');
+  
   const [service, setService] = useState<any>(null);
   const [partnerInfo, setPartnerInfo] = useState<any>(null);
   const [reviews, setReviews] = useState<any[]>([]);
@@ -33,6 +42,21 @@ export default function ServiceDetail() {
 
   const fetchServiceDetails = async () => {
     try {
+      // Validate service ID before making any queries
+      if (!id || typeof id !== 'string') {
+        console.error('Invalid service ID received:', id);
+        setLoading(false);
+        return;
+      }
+      
+      // Check if ID is a valid UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(id)) {
+        console.error('Service ID is not a valid UUID:', id);
+        setLoading(false);
+        return;
+      }
+      
       const { data: serviceData, error } = await supabaseClient
         .from('partner_services')
         .select('*')
@@ -46,10 +70,8 @@ export default function ServiceDetail() {
           description: serviceData.description,
           price: serviceData.price,
           duration: serviceData.duration,
-          category: serviceData.category,
-          images: serviceData.images,
           partnerId: serviceData.partner_id,
-          createdAt: new Date(serviceData.created_at),
+          images: serviceData.images
         });
         
         // Fetch partner info
@@ -86,25 +108,76 @@ export default function ServiceDetail() {
 
   const fetchServiceReviews = async () => {
     try {
+      // Validate service ID is a proper UUID before making the query
+      if (!id || typeof id !== 'string') {
+        console.error('Invalid service ID for reviews:', id);
+        return;
+      }
+      
+      // Check if ID is a valid UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(id)) {
+        console.error('Service ID is not a valid UUID:', id);
+        return;
+      }
+      
       const { data: reviewsData, error } = await supabaseClient
         .from('service_reviews')
         .select(`
-          *,
-          profiles:customer_id(display_name, photo_url),
-          pets:pet_id(name)
+          id,
+          rating,
+          comment,
+          created_at,
+          customer_id,
+          service_id,
+          pet_id
         `)
         .eq('service_id', id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      setReviews(reviewsData || []);
+      // Fetch user profiles and pet names for each review
+      const enrichedReviews = await Promise.all(
+        (reviewsData || []).map(async (review) => {
+          try {
+            // Fetch user profile
+            const { data: userProfile } = await supabaseClient
+              .from('profiles')
+              .select('display_name, photo_url')
+              .eq('id', review.customer_id)
+              .single();
+            
+            // Fetch pet name
+            const { data: petData } = await supabaseClient
+              .from('pets')
+              .select('name')
+              .eq('id', review.pet_id)
+              .single();
+            
+            return {
+              ...review,
+              profiles: userProfile,
+              pets: petData
+            };
+          } catch (error) {
+            console.error('Error enriching review:', error);
+            return {
+              ...review,
+              profiles: null,
+              pets: null
+            };
+          }
+        })
+      );
+      
+      setReviews(enrichedReviews);
       
       // Calculate average rating
-      if (reviewsData && reviewsData.length > 0) {
-        const avgRating = reviewsData.reduce((sum, review) => sum + review.rating, 0) / reviewsData.length;
+      if (enrichedReviews && enrichedReviews.length > 0) {
+        const avgRating = enrichedReviews.reduce((sum, review) => sum + review.rating, 0) / enrichedReviews.length;
         setAverageRating(avgRating);
-        setTotalReviews(reviewsData.length);
+        setTotalReviews(enrichedReviews.length);
       }
     } catch (error) {
       console.error('Error fetching service reviews:', error);
@@ -139,17 +212,66 @@ export default function ServiceDetail() {
   };
 
   const handleSelectPet = (petId: string) => {
+    console.log('=== handleSelectPet START ===');
+    console.log('Selected pet ID:', petId);
+    console.log('Current service ID:', id);
+    console.log('Current service partnerId:', service?.partnerId);
+    console.log('Cerrando modal...');
+    console.log('About to close modal and navigate...');
+    
     setSelectedPet(petId);
-    // Navigate to booking screen with service and pet info
-    router.push({
-      pathname: '/services/booking',
-      params: { 
-        serviceId: id,
-        partnerId: service.partnerId,
-        petId: petId
-      }
-    });
+    
+    // Validate all required data before navigation
     setShowBookingModal(false);
+    
+    console.log('Modal cerrado, esperando antes de navegar...');
+    
+    // Esperar un momento para que el modal se cierre completamente
+    setTimeout(() => {
+      console.log('=== INICIANDO NAVEGACIÓN DESPUÉS DEL DELAY ===');
+      console.log('Datos para navegación:', {
+        serviceId: id,
+        partnerId: service?.partnerId,
+        petId: petId
+      });
+      
+      // Validar datos antes de navegar
+      if (!id || !service?.partnerId || !petId) {
+        console.error('❌ Faltan datos requeridos:', { serviceId: id, partnerId: service?.partnerId, petId });
+        Alert.alert('Error', 'Información incompleta para la reserva');
+        return;
+      }
+      
+      // Validar formato UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(id) || !uuidRegex.test(service.partnerId) || !uuidRegex.test(petId)) {
+        console.error('❌ Formato UUID inválido:', { serviceId: id, partnerId: service.partnerId, petId });
+        Alert.alert('Error', 'Datos de identificación inválidos');
+        return;
+      }
+      
+      console.log('✅ Validación exitosa, navegando...');
+      
+      try {
+        console.log('🚀 Ejecutando router.push...');
+        router.push({
+          pathname: '/services/booking/[serviceId]',
+          params: {
+            serviceId: id,
+            partnerId: service.partnerId,
+            petId: petId
+          }
+        });
+        console.log('✅ router.push ejecutado exitosamente');
+      } catch (navigationError) {
+        console.error('❌ Error en la navegación:', navigationError);
+        Alert.alert('Error', 'No se pudo navegar a la pantalla de reserva');
+      }
+      
+      console.log('=== FIN DE NAVEGACIÓN ===');
+    }, 500); // Esperar 500ms para que el modal se cierre
+    
+    console.log('=== handleSelectPet FIN ===');
   };
 
   const handleShowReviews = () => {
@@ -157,13 +279,10 @@ export default function ServiceDetail() {
   };
 
   const calculateReviewPercentages = () => {
-    if (reviews.length === 0) return [];
-    
     const counts = [0, 0, 0, 0, 0]; // For 1-5 stars
+    
     reviews.forEach(review => {
-      if (review.rating >= 1 && review.rating <= 5) {
-        counts[review.rating - 1]++;
-      }
+      counts[review.rating - 1]++;
     });
     
     return counts.map((count, index) => ({
@@ -174,9 +293,9 @@ export default function ServiceDetail() {
   };
   
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('es-AR', {
+    return new Intl.NumberFormat('es-UY', {
       style: 'currency',
-      currency: 'ARS',
+      currency: 'UYU',
     }).format(price);
   };
 
@@ -373,16 +492,16 @@ export default function ServiceDetail() {
                     style={styles.petItem}
                     onPress={() => handleSelectPet(pet.id)}
                   >
-                    <View style={styles.petImage}>
-                      {pet.photo_url ? (
-                        <Image source={{ uri: pet.photo_url }} style={styles.petImage} />
-                      ) : (
-                        <Text style={styles.logoPlaceholderText}>
+                    {pet.photo_url ? (
+                      <Image source={{ uri: pet.photo_url }} style={styles.petItemImage} />
+                    ) : (
+                      <View style={styles.petItemImagePlaceholder}>
+                        <Text style={styles.petItemImageText}>
                           {pet.species === 'dog' ? '🐕' : 
                            pet.species === 'cat' ? '🐱' : '🐾'}
                         </Text>
-                      )}
-                    </View>
+                      </View>
+                    )}
                     <View style={styles.petInfo}>
                       <Text style={styles.petName}>{pet.name}</Text>
                       <Text style={styles.petBreed}>
@@ -775,7 +894,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
-  petImage: {
+  petItemImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 12,
+  },
+  petItemImagePlaceholder: {
     width: 50,
     height: 50,
     borderRadius: 25,
@@ -783,6 +908,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  petItemImageText: {
+    fontSize: 20,
   },
   petInfo: {
     flex: 1,
