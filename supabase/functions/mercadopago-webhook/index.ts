@@ -23,7 +23,6 @@ interface WebhookNotification {
 }
 
 serve(async (req: Request) => {
-  // Handle CORS preflight request
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       status: 200,
@@ -32,18 +31,13 @@ serve(async (req: Request) => {
   }
 
   try {
-    // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Parse webhook notification
     const notification: WebhookNotification = await req.json();
     
     console.log('Received MP webhook:', notification);
-
-    // Verify webhook authenticity (optional but recommended)
-    // You should implement webhook signature verification here
 
     if (notification.type === 'payment') {
       await processPaymentNotification(supabase, notification);
@@ -80,82 +74,117 @@ serve(async (req: Request) => {
 async function processPaymentNotification(supabase: any, notification: WebhookNotification) {
   try {
     const paymentId = notification.data.id;
-    
-    // Get admin MP configuration
-    const { data: adminConfig, error: adminError } = await supabase
-      .from('admin_settings')
-      .select('value')
-      .eq('key', 'mercadopago_config')
-      .single();
+    console.log(`Processing payment notification for payment ID: ${paymentId}`);
 
-    if (adminError || !adminConfig?.value?.access_token) {
-      console.error('Admin MP configuration not found:', adminError);
-      throw new Error('Admin MP configuration not found');
-    }
+    const { data: orderByPayment, error: orderSearchError } = await supabase
+      .from('orders')
+      .select('*')
+      .or(`payment_id.eq.${paymentId},preference_id.eq.${paymentId}`)
+      .maybeSingle();
 
-    // Fetch payment details from Mercado Pago
-    const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-      headers: {
-        'Authorization': `Bearer ${adminConfig.value.access_token}`,
-      },
-    });
+    let orderId = orderByPayment?.id;
+    let paymentData: any = null;
 
-    if (!mpResponse.ok) {
-      throw new Error(`Failed to fetch payment: ${mpResponse.status}`);
-    }
-
-    const paymentData = await mpResponse.json();
-    console.log('Payment data:', paymentData);
-
-    // Find order by external reference
-    const orderId = paymentData.external_reference;
     if (!orderId) {
-      console.log('No external reference found in payment');
-      return;
+      console.log('Order not found locally, fetching from Mercado Pago API...');
+
+      const { data: adminConfig, error: adminError } = await supabase
+        .from('admin_settings')
+        .select('value')
+        .eq('key', 'mercadopago_config')
+        .maybeSingle();
+
+      if (adminError || !adminConfig?.value?.access_token) {
+        console.error('Admin MP configuration not found:', adminError);
+        console.log('Skipping MP API call, will retry later');
+        return;
+      }
+
+      const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+        headers: {
+          'Authorization': `Bearer ${adminConfig.value.access_token}`,
+        },
+      });
+
+      if (!mpResponse.ok) {
+        console.error(`Failed to fetch payment from MP API: ${mpResponse.status}`);
+        const errorText = await mpResponse.text();
+        console.error('MP API Error:', errorText);
+        return;
+      }
+
+      paymentData = await mpResponse.json();
+      console.log('Payment data from MP:', paymentData);
+
+      orderId = paymentData.external_reference;
+      if (!orderId) {
+        console.log('No external reference found in payment');
+        return;
+      }
+    } else {
+      console.log(`Order found locally: ${orderId}`);
     }
 
-    // Get order details to calculate commission split
     const { data: orderData, error: orderError } = await supabase
       .from('orders')
       .select('*, partners!inner(mercadopago_config)')
       .eq('id', orderId)
-      .single();
-    
-    if (orderError) {
-      console.error('Error fetching order:', orderError);
-      throw orderError;
+      .maybeSingle();
+
+    if (orderError || !orderData) {
+      console.error('Error fetching order or order not found:', orderError);
+      return;
     }
-    
-    // Calculate commission amounts
-    const totalAmount = paymentData.transaction_amount || orderData.total_amount;
+
+    console.log(`Found order: ${orderId}, current status: ${orderData.status}`);
+
+    let paymentStatus = 'approved';
+    let orderStatus = 'confirmed';
+
+    if (paymentData) {
+      paymentStatus = paymentData.status;
+      orderStatus = mapPaymentStatusToOrderStatus(paymentData.status);
+    } else if (notification.action) {
+      if (notification.action === 'payment.created' || notification.action === 'payment.updated') {
+        paymentStatus = 'approved';
+        orderStatus = 'confirmed';
+      }
+    }
+
+    const totalAmount = paymentData?.transaction_amount || orderData.total_amount;
     const commissionAmount = orderData.commission_amount || (totalAmount * 0.05);
     const partnerAmount = totalAmount - commissionAmount;
 
-    // Update order status based on payment status
-    const orderStatus = mapPaymentStatusToOrderStatus(paymentData.status);
-    
+    console.log(`Updating order ${orderId} to status: ${orderStatus}`);
+
+    const updateData: any = {
+      status: orderStatus,
+      payment_id: paymentId,
+      payment_status: paymentStatus,
+      commission_amount: commissionAmount,
+      partner_amount: partnerAmount,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (paymentData) {
+      updateData.payment_data = paymentData;
+    }
+
     const { error: updateError } = await supabase
       .from('orders')
-      .update({
-        status: orderStatus,
-        payment_id: paymentId,
-        payment_status: paymentData.status,
-        payment_data: paymentData,
-        commission_amount: commissionAmount,
-        partner_amount: partnerAmount,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', orderId);
 
     if (updateError) {
-      throw updateError;
+      console.error('Error updating order:', updateError);
+      return;
     }
 
-    console.log(`Order ${orderId} updated to status: ${orderStatus}`);
+    console.log(`✅ Order ${orderId} updated to status: ${orderStatus}`);
     console.log(`Commission: $${commissionAmount}, Partner: $${partnerAmount}`);
 
-    // Update product stock and send notification if payment is approved
-    if (paymentData.status === 'approved') {
+    if (paymentStatus === 'approved' || orderStatus === 'confirmed') {
+      console.log('Payment approved, updating stock and sending notifications...');
       await updateProductStock(supabase, orderId);
       await sendPaymentConfirmationEmail(supabase, orderId);
     }
@@ -168,7 +197,6 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
 
 async function processMerchantOrderNotification(supabase: any, notification: WebhookNotification) {
   try {
-    // Handle merchant order notifications if needed
     console.log('Processing merchant order notification:', notification.data.id);
   } catch (error) {
     console.error('Error processing merchant order notification:', error);
@@ -198,7 +226,6 @@ async function updateProductStock(supabase: any, orderId: string) {
   try {
     console.log(`Updating product stock for order ${orderId}`);
 
-    // Get order items
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .select('items')
@@ -218,14 +245,12 @@ async function updateProductStock(supabase: any, orderId: string) {
 
     console.log(`Processing ${items.length} items for stock update`);
 
-    // Update stock for each product
     for (const item of items) {
       const productId = item.id;
       const quantity = item.quantity || 1;
 
       console.log(`Reducing stock for product ${productId} by ${quantity}`);
 
-      // Get current stock
       const { data: product, error: productError } = await supabase
         .from('partner_products')
         .select('stock, name')
@@ -242,7 +267,6 @@ async function updateProductStock(supabase: any, orderId: string) {
 
       console.log(`Product "${product.name}": ${currentStock} -> ${newStock}`);
 
-      // Update stock
       const { error: updateError } = await supabase
         .from('partner_products')
         .update({
@@ -257,7 +281,6 @@ async function updateProductStock(supabase: any, orderId: string) {
         console.log(`Stock updated successfully for product ${productId}`);
       }
 
-      // Log stock warning if low
       if (newStock <= 5 && newStock > 0) {
         console.warn(`⚠️ Low stock warning for product ${productId}: ${newStock} units remaining`);
       } else if (newStock === 0) {
@@ -273,7 +296,6 @@ async function updateProductStock(supabase: any, orderId: string) {
 
 async function sendPaymentConfirmationEmail(supabase: any, orderId: string) {
   try {
-    // Get order details
     const { data: order } = await supabase
       .from('orders')
       .select(`
@@ -288,7 +310,6 @@ async function sendPaymentConfirmationEmail(supabase: any, orderId: string) {
       return;
     }
 
-    // Send email notification
     const emailData = {
       to: order.profiles.email,
       subject: 'Pago confirmado - DogCatiFy',
@@ -312,7 +333,6 @@ async function sendPaymentConfirmationEmail(supabase: any, orderId: string) {
       `
     };
 
-    // Call email function
     const emailResponse = await fetch(`${supabase.supabaseUrl}/functions/v1/send-email`, {
       method: 'POST',
       headers: {
