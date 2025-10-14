@@ -154,8 +154,9 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
     console.log(`Order ${orderId} updated to status: ${orderStatus}`);
     console.log(`Commission: $${commissionAmount}, Partner: $${partnerAmount}`);
 
-    // Send notification email to customer if payment is approved
+    // Update product stock and send notification if payment is approved
     if (paymentData.status === 'approved') {
+      await updateProductStock(supabase, orderId);
       await sendPaymentConfirmationEmail(supabase, orderId);
     }
 
@@ -190,6 +191,83 @@ function mapPaymentStatusToOrderStatus(mpStatus: string): string {
       return 'refunded';
     default:
       return 'pending';
+  }
+}
+
+async function updateProductStock(supabase: any, orderId: string) {
+  try {
+    console.log(`Updating product stock for order ${orderId}`);
+
+    // Get order items
+    const { data: order, error: orderError } = await supabase
+      .from('orders')
+      .select('items')
+      .eq('id', orderId)
+      .single();
+
+    if (orderError || !order) {
+      console.error('Error fetching order:', orderError);
+      return;
+    }
+
+    const items = order.items;
+    if (!items || items.length === 0) {
+      console.log('No items found in order');
+      return;
+    }
+
+    console.log(`Processing ${items.length} items for stock update`);
+
+    // Update stock for each product
+    for (const item of items) {
+      const productId = item.id;
+      const quantity = item.quantity || 1;
+
+      console.log(`Reducing stock for product ${productId} by ${quantity}`);
+
+      // Get current stock
+      const { data: product, error: productError } = await supabase
+        .from('partner_products')
+        .select('stock, name')
+        .eq('id', productId)
+        .single();
+
+      if (productError) {
+        console.error(`Error fetching product ${productId}:`, productError);
+        continue;
+      }
+
+      const currentStock = product.stock || 0;
+      const newStock = Math.max(0, currentStock - quantity);
+
+      console.log(`Product "${product.name}": ${currentStock} -> ${newStock}`);
+
+      // Update stock
+      const { error: updateError } = await supabase
+        .from('partner_products')
+        .update({
+          stock: newStock,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', productId);
+
+      if (updateError) {
+        console.error(`Error updating stock for product ${productId}:`, updateError);
+      } else {
+        console.log(`Stock updated successfully for product ${productId}`);
+      }
+
+      // Log stock warning if low
+      if (newStock <= 5 && newStock > 0) {
+        console.warn(`⚠️ Low stock warning for product ${productId}: ${newStock} units remaining`);
+      } else if (newStock === 0) {
+        console.warn(`⚠️ Product ${productId} is now out of stock`);
+      }
+    }
+
+    console.log(`✅ Stock update completed for order ${orderId}`);
+  } catch (error) {
+    console.error('Error updating product stock:', error);
   }
 }
 

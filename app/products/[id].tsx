@@ -406,9 +406,20 @@ export default function ProductDetail() {
           
           <View style={styles.detailsGrid}>
             <View style={styles.detailItem}>
-              <Package size={16} color="#6B7280" />
+              <Package size={16} color={product.stock > 0 ? '#6B7280' : '#EF4444'} />
               <Text style={styles.detailLabel}>Stock:</Text>
-              <Text style={styles.detailValue}>{product.stock || 'No disponible'}</Text>
+              <Text style={[
+                styles.detailValue,
+                product.stock === 0 && styles.outOfStock,
+                product.stock > 0 && product.stock <= 5 && styles.lowStock
+              ]}>
+                {product.stock === 0
+                  ? 'Agotado'
+                  : product.stock <= 5
+                  ? `${product.stock} (¡Últimas unidades!)`
+                  : product.stock
+                }
+              </Text>
             </View>
             
             <View style={styles.detailItem}>
@@ -486,11 +497,25 @@ export default function ProductDetail() {
 
         {/* Add to Cart Button */}
         <View style={styles.addToCartContainer}>
-          <Button
-            title="Agregar al Carrito"
-            onPress={handleAddToCart}
-            size="large"
-          />
+          {product.stock === 0 ? (
+            <View style={styles.outOfStockContainer}>
+              <Text style={styles.outOfStockMessage}>
+                Lo sentimos, este producto está agotado
+              </Text>
+              <Button
+                title="Ver Productos Similares"
+                onPress={() => router.push('/(tabs)/shop')}
+                variant="outline"
+                size="large"
+              />
+            </View>
+          ) : (
+            <Button
+              title="Agregar al Carrito"
+              onPress={handleAddToCart}
+              size="large"
+            />
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -845,5 +870,23 @@ const styles = StyleSheet.create({
   addToCartContainer: {
     padding: 16,
     paddingBottom: 32,
+  },
+  outOfStock: {
+    color: '#EF4444',
+    fontFamily: 'Inter-Bold',
+  },
+  lowStock: {
+    color: '#F59E0B',
+    fontFamily: 'Inter-SemiBold',
+  },
+  outOfStockContainer: {
+    gap: 12,
+  },
+  outOfStockMessage: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#EF4444',
+    textAlign: 'center',
+    marginBottom: 8,
   },
 });
