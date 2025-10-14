@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator, ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Clock, Package } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
@@ -48,57 +48,59 @@ export default function PaymentPending() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.iconContainer}>
-          <Clock size={80} color="#F59E0B" />
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <View style={styles.content}>
+          <View style={styles.iconContainer}>
+            <Clock size={80} color="#F59E0B" />
+          </View>
+
+          <Text style={styles.title}>Pago Pendiente</Text>
+          <Text style={styles.subtitle}>
+            Tu pago está siendo procesado. Te notificaremos cuando se complete.
+          </Text>
+
+          <Card style={styles.detailsCard}>
+            <Text style={styles.detailsTitle}>Detalles del Pedido</Text>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Número de pedido:</Text>
+              <Text style={styles.detailValue}>{orderDetails?.id}</Text>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Total:</Text>
+              <Text style={styles.detailValue}>{orderDetails?.total}</Text>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Estado:</Text>
+              <Text style={[styles.detailValue, styles.pendingStatus]}>
+                {orderDetails?.status}
+              </Text>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>ID de pago:</Text>
+              <Text style={styles.detailValue}>{orderDetails?.paymentId}</Text>
+            </View>
+          </Card>
+
+          <Card style={styles.infoCard}>
+            <Text style={styles.infoTitle}>¿Qué sigue?</Text>
+            <View style={styles.infoList}>
+              <Text style={styles.infoItem}>
+                • Recibirás una notificación cuando el pago sea confirmado
+              </Text>
+              <Text style={styles.infoItem}>
+                • Puedes verificar el estado en "Mis Pedidos"
+              </Text>
+              <Text style={styles.infoItem}>
+                • El proceso puede tomar unos minutos
+              </Text>
+            </View>
+          </Card>
         </View>
-
-        <Text style={styles.title}>Pago Pendiente</Text>
-        <Text style={styles.subtitle}>
-          Tu pago está siendo procesado. Te notificaremos cuando se complete.
-        </Text>
-
-        <Card style={styles.detailsCard}>
-          <Text style={styles.detailsTitle}>Detalles del Pedido</Text>
-          
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Número de pedido:</Text>
-            <Text style={styles.detailValue}>{orderDetails?.id}</Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Total:</Text>
-            <Text style={styles.detailValue}>{orderDetails?.total}</Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Estado:</Text>
-            <Text style={[styles.detailValue, styles.pendingStatus]}>
-              {orderDetails?.status}
-            </Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>ID de pago:</Text>
-            <Text style={styles.detailValue}>{orderDetails?.paymentId}</Text>
-          </View>
-        </Card>
-
-        <Card style={styles.infoCard}>
-          <Text style={styles.infoTitle}>¿Qué sigue?</Text>
-          <View style={styles.infoList}>
-            <Text style={styles.infoItem}>
-              • Recibirás una notificación cuando el pago sea confirmado
-            </Text>
-            <Text style={styles.infoItem}>
-              • Puedes verificar el estado en "Mis Pedidos"
-            </Text>
-            <Text style={styles.infoItem}>
-              • El proceso puede tomar unos minutos
-            </Text>
-          </View>
-        </Card>
-      </View>
+      </ScrollView>
 
       <View style={styles.actionsContainer}>
         <Button
@@ -107,7 +109,7 @@ export default function PaymentPending() {
           variant="outline"
           size="large"
         />
-        
+
         <Button
           title="Ir al Inicio"
           onPress={handleGoHome}
@@ -124,6 +126,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
     paddingTop: 50,
   },
+  scrollView: {
+    flex: 1,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -136,9 +141,8 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   content: {
-    flex: 1,
     padding: 20,
-    paddingBottom: 20,
+    paddingBottom: 100,
   },
   iconContainer: {
     alignItems: 'center',
