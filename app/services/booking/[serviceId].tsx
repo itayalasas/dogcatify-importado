@@ -447,7 +447,7 @@ export default function ServiceBooking() {
                     selectedTime === time && styles.selectedTimeText,
                     isBooked && styles.bookedTimeText
                   ]}>
-                    {isBooked ? `${time} (Ocupado)` : time}
+                    {time}
                   </Text>
                 </TouchableOpacity>
                 );
@@ -772,7 +772,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
-    paddingBottom: 120, // Space for fixed button
+    paddingBottom: 200,
   },
   loadingContainer: {
     flex: 1,
@@ -874,12 +874,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#F3F4F6',
     paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     borderRadius: 12,
     borderWidth: 2,
     borderColor: 'transparent',
-    width: '31%',
-    minWidth: 100,
+    width: '31.5%',
   },
   selectedTimeOption: {
     backgroundColor: '#4285F4',
@@ -891,10 +890,10 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   timeText: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: 'Inter-Medium',
     color: '#111827',
-    marginLeft: 8,
+    marginLeft: 6,
   },
   selectedTimeText: {
     color: '#FFFFFF',
