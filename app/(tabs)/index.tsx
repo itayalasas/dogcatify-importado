@@ -321,10 +321,19 @@ export default function Home() {
         views: promo.views || 0,
         clicks: promo.clicks || 0,
         likes: promo.likes || [],
-        discount_percentage: promo.discount_percentage || 0
+        discount_percentage: promo.discount_percentage || 0,
+        discount_amount: promo.discount_amount || 0,
+        original_price: promo.original_price || 0,
+        discounted_price: promo.discounted_price || 0
       })) || [];
 
       console.log(`✅ Promotions loaded: ${processedPromotions.length}`);
+
+      // Debug: Log promotions with discounts
+      const promotionsWithDiscount = processedPromotions.filter(p => p.discount_percentage > 0);
+      if (promotionsWithDiscount.length > 0) {
+        console.log('🎁 Promotions with discount:', promotionsWithDiscount);
+      }
       setPromotions(processedPromotions);
       setPromotionsLoaded(true);
     } catch (error) {
