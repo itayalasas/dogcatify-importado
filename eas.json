@@ -3,17 +3,20 @@
     "version": ">= 5.9.1"
   },
   "build": {
-    "default": {
+    "development": {
+      "distribution": "internal",
       "android": {
-        "buildType": "app-bundle"      
+        "buildType": "apk"
       }
     },
     "production": {
       "android": {
         "buildType": "app-bundle"
-      },
-      "ios": {
-        "resourceClass": "m-medium"
+      }
+    },
+    "default": {
+      "android": {
+        "buildType": "apk"
       }
     }
   },

@@ -6,11 +6,11 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
-import { supabaseClient } from '../../lib/supabase';
+import { supabaseClient } from '@/lib/supabase';
 import { NotificationService } from '../../utils/notifications';
 import { PaymentModal } from '../../components/PaymentModal';
 
-const ServiceBooking = () => {
+export default function ServiceBooking() {
   const { serviceId, partnerId, petId } = useLocalSearchParams<{ 
     serviceId: string;
     partnerId: string;
@@ -32,9 +32,32 @@ const ServiceBooking = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   useEffect(() => {
-    if (!serviceId || !partnerId || !petId || !currentUser) {
-      Alert.alert('Error', 'Información incompleta para la reserva');
-      router.back();
+    console.log('ServiceBooking - Received params:', { serviceId, partnerId, petId });
+    
+    // Validate all required parameters
+    if (!serviceId || !partnerId || !petId) {
+      console.error('Missing required parameters:', { serviceId, partnerId, petId });
+      Alert.alert('Error', 'Información incompleta para la reserva', [
+        { text: 'OK', onPress: () => router.back() }
+      ]);
+      return;
+    }
+    
+    if (!currentUser) {
+      console.error('No current user');
+      Alert.alert('Error', 'Debes iniciar sesión para hacer una reserva', [
+        { text: 'OK', onPress: () => router.replace('/auth/login') }
+      ]);
+      return;
+    }
+    
+    // Validate UUID formats
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(serviceId) || !uuidRegex.test(partnerId) || !uuidRegex.test(petId)) {
+      console.error('Invalid UUID format in booking params:', { serviceId, partnerId, petId });
+      Alert.alert('Error', 'Datos de identificación inválidos', [
+        { text: 'OK', onPress: () => router.back() }
+      ]);
       return;
     }
     
@@ -131,7 +154,7 @@ const ServiceBooking = () => {
         const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
         
         // Find the next available day in the schedule
-        const availableDays = scheduleData.map(item => item.dayOfWeek);
+        const availableDays = scheduleData.map(item => item.day_of_week);
         let nextDay = dayOfWeek;
         let daysToAdd = 0;
         
@@ -224,26 +247,26 @@ const ServiceBooking = () => {
 
   const generateAvailableTimes = (date: Date, scheduleData: any[]) => {
     const dayOfWeek = date.getDay();
-    const daySchedule = scheduleData.find(item => item.dayOfWeek === dayOfWeek);
+    const daySchedule = scheduleData.find(item => item.day_of_week === dayOfWeek);
     
     if (!daySchedule) { 
       setAvailableTimes([]);
       return;
     }
     
-    const { startTime, endTime, slotDuration } = daySchedule;
+    const { start_time, end_time, slot_duration } = daySchedule;
     const times: string[] = [];
     
     // Parse start and end times
-    const [startHour, startMinute] = startTime.split(':').map(Number);
-    const [endHour, endMinute] = endTime.split(':').map(Number);
+    const [startHour, startMinute] = start_time.split(':').map(Number);
+    const [endHour, endMinute] = end_time.split(':').map(Number);
     
     // Convert to minutes for easier calculation
     let currentMinutes = startHour * 60 + startMinute;
     const endMinutes = endHour * 60 + endMinute;
     
     // Generate time slots
-    while (currentMinutes + (service?.duration || slotDuration) <= endMinutes) {
+    while (currentMinutes + (service?.duration || slot_duration) <= endMinutes) {
       const hour = Math.floor(currentMinutes / 60);
       const minute = currentMinutes % 60; 
       const timeSlot = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
@@ -254,10 +277,10 @@ const ServiceBooking = () => {
 
       // Check if subsequent slots needed for this service duration are available
       let hasConflict = false;
-      if (service && service.duration > slotDuration) {
-        const slotsNeeded = Math.ceil(service.duration / slotDuration);
+      if (service && service.duration > slot_duration) {
+        const slotsNeeded = Math.ceil(service.duration / slot_duration);
         for (let i = 1; i < slotsNeeded; i++) {
-          const nextSlotMinutes = currentMinutes + (i * slotDuration);
+          const nextSlotMinutes = currentMinutes + (i * slot_duration);
           if (nextSlotMinutes > endMinutes) {
             hasConflict = true;
             break;
@@ -274,7 +297,7 @@ const ServiceBooking = () => {
       
       if (!isBooked && !hasConflict) times.push(timeSlot);
       
-      currentMinutes += slotDuration;
+      currentMinutes += slot_duration;
     }
     
     setAvailableTimes(times);
@@ -304,9 +327,13 @@ const ServiceBooking = () => {
     console.log('Payment successful:', paymentResult);
     setBookingLoading(true);
     try {
+      if (!currentUser || !selectedDate || !selectedTime || !service || !pet || !partnerInfo) {
+        throw new Error('Información incompleta para crear la reserva');
+      }
+      
       // Create booking date by combining selected date and time
       const bookingDate = new Date(selectedDate);
-      const [hours, minutes] = selectedTime.split(':').map(Number);
+      const [hours, minutes] = selectedTime!.split(':').map(Number);
       bookingDate.setHours(hours, minutes, 0, 0);
       
       // Calculate end time based on service duration
@@ -318,15 +345,6 @@ const ServiceBooking = () => {
       const formatTime = (date: Date) => {
         return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
       };
-      
-      console.log('Creating booking with data:', {
-        partner_id: partnerId,
-        service_id: serviceId,
-        customer_id: currentUser.id,
-        pet_id: petId,
-        date: bookingDate.toISOString(),
-        time: formatTime(bookingDate)
-      });
       
       const bookingData = {
         partner_id: partnerId,
@@ -362,7 +380,6 @@ const ServiceBooking = () => {
       
       if (error) {
         console.error('Supabase booking insert error:', error);
-        console.error('Error details:', JSON.stringify(error, null, 2));
         throw new Error(`Error al crear la reserva: ${error.message || error.details || 'Error desconocido'}`);
       }
       
@@ -394,7 +411,7 @@ const ServiceBooking = () => {
           service.name,
           partnerInfo?.businessName || 'Proveedor',
           selectedDate.toLocaleDateString(),
-          selectedTime,
+          selectedTime!,
           pet.name
         );
         console.log('Booking confirmation email sent successfully');
@@ -459,6 +476,13 @@ const ServiceBooking = () => {
       month: date.toLocaleString('es-ES', { month: 'short' }),
       isToday: date.toDateString() === new Date().toDateString(),
     };
+  };
+
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency: 'ARS',
+    }).format(price);
   };
 
   if (loading) {
@@ -616,7 +640,7 @@ const ServiceBooking = () => {
           </Card>
         )}
 
-        {/* Booking Button */}
+        {/* Notes */}
         <Card style={styles.notesCard}>
           <Text style={styles.sectionTitle}>Notas para el proveedor</Text>
           <Input
@@ -656,14 +680,7 @@ const ServiceBooking = () => {
       />
     </SafeAreaView>
   );
-};
-
-const formatPrice = (price: number) => {
-  return new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-  }).format(price);
-};
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -902,5 +919,3 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
 });
-
-export default ServiceBooking;

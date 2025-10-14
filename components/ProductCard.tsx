@@ -22,9 +22,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, onAd
   };
 
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('es-AR', {
+    return new Intl.NumberFormat('es-UY', {
       style: 'currency',
-      currency: 'ARS',
+      currency: 'UYU',
     }).format(price);
   };
 

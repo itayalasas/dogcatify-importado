@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, Alert, RefreshControl, Image, Animated } from 'react-native';
+import { View, Text, StyleSheet, FlatList, SafeAreaView, Alert, RefreshControl, Image, Animated, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
-import { Platform, Linking } from 'react-native';
+import { Platform, Linking, InteractionManager } from 'react-native';
 import Constants from 'expo-constants';
 import PostCard from '../../components/PostCard';
 import PromotionCard from '../../components/PromotionCard';
@@ -11,7 +11,7 @@ import { NotificationPermissionPrompt } from '../../components/NotificationPermi
 import { LocationPermissionPrompt } from '../../components/LocationPermissionPrompt';
 import { MedicalAlertsWidget } from '../../components/MedicalAlertsWidget';
 import { useNotifications } from '../../contexts/NotificationContext';
-import { supabaseClient } from '../../lib/supabase';
+import { supabaseClient } from '@/lib/supabase';
 
 // Debug component for production notification testing
 const NotificationDebugInfo = () => {
@@ -142,41 +142,64 @@ export default function Home() {
   const [posts, setPosts] = useState<any[]>([]);
   const [promotions, setPromotions] = useState<any[]>([]);
   const [feedItems, setFeedItems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [postsLoaded, setPostsLoaded] = useState(false);
+  const [promotionsLoaded, setPromotionsLoaded] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [hasMorePosts, setHasMorePosts] = useState(true);
+  const [allPostsLoaded, setAllPostsLoaded] = useState(false);
   const { t } = useLanguage();
   const { currentUser } = useAuth();
+  
+  // Configuración de paginación
+  const POSTS_PER_PAGE = 5; // Cargar 5 posts por página
+  const INITIAL_LOAD = 3; // Carga inicial más pequeña
 
   useEffect(() => {
     if (currentUser) {
-      fetchFeedData();
+      // Defer heavy operations until after initial render
+      InteractionManager.runAfterInteractions(() => {
+        fetchFeedData();
+      });
     }
   }, [currentUser]);
 
   const fetchFeedData = async () => {
+    setLoading(true);
     try {
-      await Promise.all([
-        fetchPosts(),
-        fetchPromotions()
-      ]);
+      // Reset pagination for fresh load
+      setCurrentPage(0);
+      setHasMorePosts(true);
+      setAllPostsLoaded(false);
+      
+      // Load initial posts and promotions
+      await fetchInitialPosts();
+      // Small delay to prevent blocking
+      setTimeout(() => {
+        fetchPromotions();
+      }, 100);
     } catch (error) {
       console.error('Error fetching feed data:', error);
     } finally {
       setLoading(false);
+      // Reduce initial loading time
       setTimeout(() => {
         setInitialLoading(false);
-      }, 1500);
+      }, 800);
     }
   };
 
-  const fetchPosts = async () => {
+  const fetchInitialPosts = async () => {
     try {
+      console.log('🔄 Fetching initial posts...');
       const { data: postsData, error } = await supabaseClient
         .from('posts')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(INITIAL_LOAD); // Carga inicial muy pequeña
 
       if (error) throw error;
 
@@ -196,22 +219,94 @@ export default function Home() {
       })) || [];
 
       setPosts(processedPosts);
+      setCurrentPage(1); // Ya cargamos la primera "página"
+      setHasMorePosts(processedPosts.length === INITIAL_LOAD);
+      setPostsLoaded(true);
+      
+      console.log(`✅ Initial posts loaded: ${processedPosts.length}`);
     } catch (error) {
       console.error('Error fetching posts:', error);
+    } finally {
+      setPostsLoaded(true);
+    }
+  };
+
+  const fetchMorePosts = async () => {
+    if (loadingMore || !hasMorePosts || allPostsLoaded) {
+      console.log('⏭️ Skipping fetch more posts:', { loadingMore, hasMorePosts, allPostsLoaded });
+      return;
+    }
+
+    console.log(`🔄 Fetching more posts - Page ${currentPage + 1}...`);
+    setLoadingMore(true);
+    
+    try {
+      const offset = currentPage * POSTS_PER_PAGE;
+      
+      const { data: morePosts, error } = await supabaseClient
+        .from('posts')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(offset, offset + POSTS_PER_PAGE - 1);
+
+      if (error) throw error;
+
+      if (!morePosts || morePosts.length === 0) {
+        console.log('📄 No more posts to load');
+        setHasMorePosts(false);
+        setAllPostsLoaded(true);
+        return;
+      }
+
+      const processedNewPosts = morePosts.map(post => ({
+        id: post.id,
+        userId: post.user_id,
+        petId: post.pet_id,
+        content: post.content,
+        imageURL: post.image_url,
+        albumImages: post.album_images || [],
+        likes: post.likes || [],
+        createdAt: new Date(post.created_at),
+        author: post.author || { name: 'Usuario', avatar: 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100' },
+        pet: post.pet || { name: 'Mascota', species: 'Perro' },
+        timeAgo: getTimeAgo(new Date(post.created_at)),
+        type: post.type || 'single'
+      }));
+
+      // Append new posts to existing ones
+      setPosts(prevPosts => [...prevPosts, ...processedNewPosts]);
+      setCurrentPage(prev => prev + 1);
+      
+      // Check if we got fewer posts than requested (end of data)
+      if (morePosts.length < POSTS_PER_PAGE) {
+        console.log('📄 Reached end of posts');
+        setHasMorePosts(false);
+        setAllPostsLoaded(true);
+      }
+      
+      console.log(`✅ Loaded ${morePosts.length} more posts. Total: ${posts.length + processedNewPosts.length}`);
+    } catch (error) {
+      console.error('Error fetching more posts:', error);
+      setHasMorePosts(false);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
   const fetchPromotions = async () => {
     try {
-      const now = new Date().toISOString();
+      console.log('🎯 Fetching promotions...');
+      const now = new Date();
+      const nowISO = now.toISOString();
       
       const { data: promotionsData, error } = await supabaseClient
         .from('promotions')
         .select('*')
         .eq('is_active', true)
-        .lte('start_date', now)
-        .gte('end_date', now)
-        .order('created_at', { ascending: false });
+        .lte('start_date', nowISO)
+        .gte('end_date', nowISO)
+        .order('created_at', { ascending: false })
+        .limit(5); // Limit promotions
 
       if (error) throw error;
 
@@ -228,14 +323,23 @@ export default function Home() {
         likes: promo.likes || []
       })) || [];
 
+      console.log(`✅ Promotions loaded: ${processedPromotions.length}`);
       setPromotions(processedPromotions);
+      setPromotionsLoaded(true);
     } catch (error) {
       console.error('Error fetching promotions:', error);
+    } finally {
+      setPromotionsLoaded(true);
     }
   };
 
   // Intercalar promociones en el feed cada 3 posts
   useEffect(() => {
+    // Only process when both data sources are loaded
+    if (!postsLoaded || !promotionsLoaded) return;
+    
+    console.log(`🔄 Interleaving feed: ${posts.length} posts, ${promotions.length} promotions`);
+    
     const interleaveFeedItems = () => {
       const items = [];
       
@@ -284,10 +388,11 @@ export default function Home() {
       setFeedItems(items);
     };
 
-    if (posts.length > 0 || promotions.length > 0) {
+    // Defer processing to avoid blocking UI
+    InteractionManager.runAfterInteractions(() => {
       interleaveFeedItems();
-    }
-  }, [posts, promotions]);
+    });
+  }, [posts, promotions, postsLoaded, promotionsLoaded]);
 
   const getTimeAgo = (date: Date): string => {
     const now = new Date();
@@ -308,12 +413,31 @@ export default function Home() {
       return;
     }
 
+    // Optimistic update for better UX
+    setPosts(prevPosts => 
+      prevPosts.map(post => {
+        if (post.id === postId) {
+          const likes = post.likes || [];
+          const isLiked = likes.includes(currentUser.id);
+          let newLikes;
+          
+          if (doubleTap && !isLiked) {
+            newLikes = [...likes, currentUser.id];
+          } else if (!doubleTap) {
+            newLikes = isLiked
+              ? likes.filter((id: string) => id !== currentUser.id)
+              : [...likes, currentUser.id];
+          } else {
+            return post;
+          }
+          
+          return { ...post, likes: newLikes };
+        }
+        return post;
+      })
+    );
+
     try {
-      console.log('=== LIKE DEBUG START ===');
-      console.log('Post ID:', postId);
-      console.log('User ID:', currentUser.id);
-      console.log('Double tap:', doubleTap);
-      
       // Get fresh data from database to avoid stale state
       const { data: postData, error: fetchError } = await supabaseClient
         .from('posts')
@@ -323,12 +447,8 @@ export default function Home() {
       
       if (fetchError) throw fetchError;
       
-      console.log('Current likes from DB:', postData.likes);
-      
       const likes = postData.likes || [];
       const isLiked = likes.includes(currentUser.id);
-      
-      console.log('Is currently liked:', isLiked);
       
       let newLikes;
       if (doubleTap && !isLiked) {
@@ -338,11 +458,8 @@ export default function Home() {
           ? likes.filter((id: string) => id !== currentUser.id)
           : [...likes, currentUser.id];
       } else {
-        console.log('Double tap on already liked post, no action');
         return;
       }
-      
-      console.log('New likes array:', newLikes);
       
       // Update database first
       const { error } = await supabaseClient
@@ -351,42 +468,16 @@ export default function Home() {
         .eq('id', postId);
       
       if (error) {
-        console.error('Database update error:', error);
+        // Revert optimistic update on error
+        setPosts(prevPosts => 
+          prevPosts.map(post => 
+            post.id === postId 
+              ? { ...post, likes: postData.likes }
+              : post
+          )
+        );
         throw error;
       }
-      
-      console.log('Database updated successfully');
-      
-      // Verify the update worked by fetching again
-      const { data: verifyData, error: verifyError } = await supabaseClient
-        .from('posts')
-        .select('likes')
-        .eq('id', postId)
-        .single();
-      
-      if (verifyError) {
-        console.error('❌ Verification failed:', verifyError);
-        Alert.alert('Error', 'No se pudo verificar la actualización del like');
-        return;
-      } else {
-        console.log('✅ Verification - likes in DB after update:', verifyData.likes);
-        if (JSON.stringify(verifyData.likes?.sort()) !== JSON.stringify(newLikes.sort())) {
-          console.error('❌ Update not persisted! Expected:', newLikes, 'Got:', verifyData.likes);
-          Alert.alert('Error', 'Los likes no se guardaron correctamente en la base de datos');
-          return;
-        } else {
-          console.log('✅ Update verified successfully in database');
-        }
-      }
-      
-      // Update local state only after successful database update
-      setPosts(prevPosts => 
-        prevPosts.map(post => 
-          post.id === postId 
-            ? { ...post, likes: newLikes }
-            : post
-        )
-      );
       
       // Also update feedItems state to keep consistency
       setFeedItems(prevItems => 
@@ -396,12 +487,8 @@ export default function Home() {
             : item
         )
       );
-      
-      console.log('Local state updated');
-      console.log('=== LIKE DEBUG END ===');
     } catch (error) {
       console.error('Error updating like:', error);
-      Alert.alert('Error', 'No se pudo actualizar el me gusta. Intenta nuevamente.');
       Alert.alert('Error', 'No se pudo actualizar el me gusta. Intenta nuevamente.');
     }
   };
@@ -412,11 +499,22 @@ export default function Home() {
       return;
     }
 
+    // Optimistic update for promotions too
+    setPromotions(prevPromotions => 
+      prevPromotions.map(promo => {
+        if (promo.id === promotionId) {
+          const likes = promo.likes || [];
+          const isLiked = likes.includes(currentUser.id);
+          const newLikes = isLiked
+            ? likes.filter((id: string) => id !== currentUser.id)
+            : [...likes, currentUser.id];
+          return { ...promo, likes: newLikes };
+        }
+        return promo;
+      })
+    );
+
     try {
-      console.log('=== PROMOTION LIKE DEBUG START ===');
-      console.log('Promotion ID:', promotionId);
-      console.log('User ID:', currentUser.id);
-      
       // Get fresh data from database
       const { data: promotionData, error: fetchError } = await supabaseClient
         .from('promotions')
@@ -426,18 +524,12 @@ export default function Home() {
       
       if (fetchError) throw fetchError;
       
-      console.log('Current promotion likes from DB:', promotionData.likes);
-      
       const likes = promotionData.likes || [];
       const isLiked = likes.includes(currentUser.id);
-      
-      console.log('Is currently liked:', isLiked);
       
       const newLikes = isLiked
         ? likes.filter((id: string) => id !== currentUser.id)
         : [...likes, currentUser.id];
-      
-      console.log('New likes array:', newLikes);
       
       // Update database first
       const { error } = await supabaseClient
@@ -446,42 +538,16 @@ export default function Home() {
         .eq('id', promotionId);
       
       if (error) {
-        console.error('Database update error:', error);
+        // Revert optimistic update on error
+        setPromotions(prevPromotions => 
+          prevPromotions.map(promo => 
+            promo.id === promotionId 
+              ? { ...promo, likes: promotionData.likes }
+              : promo
+          )
+        );
         throw error;
       }
-      
-      console.log('Database updated successfully');
-      
-      // Verify the update worked by fetching again
-      const { data: verifyData, error: verifyError } = await supabaseClient
-        .from('promotions')
-        .select('likes')
-        .eq('id', promotionId)
-        .single();
-      
-      if (verifyError) {
-        console.error('❌ Verification failed:', verifyError);
-        Alert.alert('Error', 'No se pudo verificar la actualización del like');
-        return;
-      } else {
-        console.log('✅ Verification - likes in DB after update:', verifyData.likes);
-        if (JSON.stringify(verifyData.likes?.sort()) !== JSON.stringify(newLikes.sort())) {
-          console.error('❌ Update not persisted! Expected:', newLikes, 'Got:', verifyData.likes);
-          Alert.alert('Error', 'Los likes no se guardaron correctamente en la base de datos');
-          return;
-        } else {
-          console.log('✅ Update verified successfully in database');
-        }
-      }
-      
-      // Update local state only after successful database update
-      setPromotions(prevPromotions => 
-        prevPromotions.map(promo => 
-          promo.id === promotionId 
-            ? { ...promo, likes: newLikes }
-            : promo
-        )
-      );
       
       // Also update feedItems state
       setFeedItems(prevItems => 
@@ -491,9 +557,6 @@ export default function Home() {
             : item
         )
       );
-      
-      console.log('Local state updated');
-      console.log('=== PROMOTION LIKE DEBUG END ===');
     } catch (error) {
       console.error('Error updating promotion like:', error);
       Alert.alert('Error', 'No se pudo actualizar el me gusta. Intenta nuevamente.');
@@ -512,86 +575,19 @@ export default function Home() {
 
   const handlePromotionPress = async (promotion: any) => {
     try {
-      console.log('=== PROMOTION CLICK DEBUG ===');
-      console.log('Promotion ID:', promotion.id);
-      console.log('Current clicks:', promotion.clicks);
-      console.log('CTA URL:', promotion.ctaUrl);
-      console.log('Current user ID:', currentUser?.id);
-      
       // Increment clicks
-      console.log('Attempting to increment clicks...');
-      
       const newClicksCount = (promotion.clicks || 0) + 1;
       
-      // Use direct API call with proper authentication
-      try {
-        // Get current user token for authentication
-        const token = await supabaseClient.auth.getSession();
-        const accessToken = token.data?.session?.access_token;
-        
-        console.log('Has access token:', !!accessToken);
-        
-        const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-        const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-        
-        const headers = {
-          'Content-Type': 'application/json',
-          'apikey': supabaseKey,
-          'Prefer': 'return=representation'
-        };
-        
-        // Add authorization header if we have a token
-        if (accessToken) {
-          headers['Authorization'] = `Bearer ${accessToken}`;
-        }
-        
-        console.log('Making API call with headers:', Object.keys(headers));
-        
-        const response = await fetch(`${supabaseUrl}/rest/v1/promotions?id=eq.${promotion.id}`, {
-          method: 'PATCH',
-          headers,
-          body: JSON.stringify({
-            clicks: newClicksCount
-          })
-        });
-        
-        console.log('API response status:', response.status);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('API error response:', errorText);
-          throw new Error(`API Error: ${response.status} - ${errorText}`);
-        }
-        
-        const responseData = await response.json();
-        console.log('API response data:', responseData);
-        
-        console.log('Clicks incremented successfully. New count:', newClicksCount);
-        
-        // Verify the update worked
-        console.log('Verifying update in database...');
-        const verifyResponse = await fetch(`${supabaseUrl}/rest/v1/promotions?id=eq.${promotion.id}&select=clicks`, {
-          headers: {
-            'apikey': supabaseKey,
-            'Authorization': accessToken ? `Bearer ${accessToken}` : `Bearer ${supabaseKey}`
+      // Update clicks asynchronously without blocking navigation
+      supabaseClient
+        .from('promotions')
+        .update({ clicks: newClicksCount })
+        .eq('id', promotion.id)
+        .then(({ error }) => {
+          if (error) {
+            console.error('Error incrementing clicks:', error);
           }
         });
-        
-        if (verifyResponse.ok) {
-          const verifyData = await verifyResponse.json();
-          console.log('Database verification - clicks value:', verifyData[0]?.clicks);
-          
-          if (verifyData[0]?.clicks === newClicksCount) {
-            console.log('✅ Update verified successfully in database');
-          } else {
-            console.log('❌ Update not reflected in database');
-          }
-        }
-        
-      } catch (error) {
-        console.error('Error incrementing clicks:', error);
-        // Don't throw error, continue with navigation
-      }
       
       // Update local state to reflect the click increment
       setPromotions(prevPromotions => 
@@ -610,32 +606,23 @@ export default function Home() {
             : item
         )
       );
-      
-      console.log('Local state updated. New clicks:', newClicksCount);
 
       // Handle promotion CTA URL
       if (promotion.ctaUrl) {
-        console.log('Opening promotion URL:', promotion.ctaUrl);
-        
         if (promotion.ctaUrl.startsWith('dogcatify://')) {
           // Handle internal app links
           const urlParts = promotion.ctaUrl.replace('dogcatify://', '').split('/');
           const type = urlParts[0]; // 'services', 'products', 'partners'
           const id = urlParts[1];
           
-          console.log('Internal link - Type:', type, 'ID:', id);
-          
           switch (type) {
             case 'services':
-              console.log('Navigating to service:', id);
               router.push(`/services/${id}`);
               break;
             case 'products':
-              console.log('Navigating to product:', id);
               router.push(`/products/${id}`);
               break;
             case 'partners':
-              console.log('Navigating to partner:', id);
               router.push(`/services/partner/${id}`);
               break;
             default:
@@ -643,30 +630,105 @@ export default function Home() {
           }
         } else if (promotion.ctaUrl.startsWith('http')) {
           // Handle external links
-          console.log('External link detected:', promotion.ctaUrl);
           try {
             if (Platform.OS === 'web') {
-              console.log('Opening in web browser');
               window.open(promotion.ctaUrl, '_blank');
             } else {
-              console.log('Opening with Linking API');
               const supported = await Linking.canOpenURL(promotion.ctaUrl);
               if (supported) {
                 await Linking.openURL(promotion.ctaUrl);
               } else {
-                console.error('URL not supported:', promotion.ctaUrl);
                 Alert.alert('Error', 'No se puede abrir este enlace');
               }
             }
           } catch (error) {
-            console.error('Error opening URL:', error);
             Alert.alert('Error', 'No se pudo abrir el enlace');
           }
         }
       }
     } catch (error) {
-      console.error('Error handling promotion press:', error);
+    try {
+      // Faster refresh - load in parallel
+      await Promise.all([
+        fetchPosts(),
+        fetchPromotions()
+      ]);
+    } catch (error) {
+      console.error('Error refreshing feed:', error);
     }
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      // Reset pagination
+      setCurrentPage(0);
+      setHasMorePosts(true);
+      setAllPostsLoaded(false);
+      
+      // Fetch fresh data
+      await Promise.all([
+        fetchInitialPosts(),
+        fetchPromotions()
+      ]);
+    } catch (error) {
+      console.error('Error refreshing feed:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleEndReached = () => {
+    console.log('🔚 End reached, loading more posts...');
+    fetchMorePosts();
+  };
+
+  const renderFeedItem = ({ item, index }: { item: any; index: number }) => {
+    if (item.type === 'promotion') {
+      return (
+        <PromotionWrapper
+          key={`promotion-${item.data.id}-${index}`}
+          promotion={item.data}
+          onPress={() => handlePromotionPress(item.data)}
+          onLike={handlePromotionLike}
+        />
+      );
+    } else {
+      return (
+        <PostCard
+          key={`post-${item.data.id}-${index}`}
+          post={item.data}
+          onLike={handleLike}
+          onComment={handleComment}
+          onShare={handleShare}
+        />
+      );
+    }
+  };
+
+  const renderFooter = () => {
+    if (!loadingMore) return null;
+    
+    return (
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color="#2D6A6F" />
+        <Text style={styles.footerLoaderText}>Cargando más publicaciones...</Text>
+      </View>
+    );
+  };
+
+  const renderEmpty = () => {
+    if (loading || initialLoading) return null;
+    
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyTitle}>{t('noPostsYet')}</Text>
+        <Text style={styles.emptySubtitle}>
+          {t('beFirstToPost')}
+        </Text>
+      </View>
+    );
   };
 
   // Manejar redirección cuando no hay usuario - FUERA del render condicional
@@ -694,57 +756,31 @@ export default function Home() {
         <Text style={styles.headerTitle}>DogCatiFy</Text>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
+      <FlatList
+        data={feedItems}
+        renderItem={renderFeedItem}
+        keyExtractor={(item, index) => `${item.type}-${item.data.id}-${index}`}
+        style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={fetchFeedData}
+            onRefresh={onRefresh}
             colors={['#2D6A6F']}
             tintColor="#2D6A6F"
           />
         }
-      >
-        <MedicalAlertsWidget />
-        
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Cargando feed...</Text>
-          </View>
-        ) : feedItems.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyTitle}>{t('noPostsYet')}</Text>
-            <Text style={styles.emptySubtitle}>
-              {t('beFirstToPost')}
-            </Text>
-          </View>
-        ) : (
-          feedItems.map((item, index) => {
-            if (item.type === 'promotion') {
-              return (
-                <PromotionWrapper
-                  key={`promotion-${item.data.id}-${index}`}
-                  promotion={item.data}
-                  onPress={() => handlePromotionPress(item.data)}
-                  onLike={handlePromotionLike}
-                />
-              );
-            } else {
-              return (
-                <PostCard
-                  key={`post-${item.data.id}-${index}`}
-                  post={item.data}
-                  onLike={handleLike}
-                  onComment={handleComment}
-                  onShare={handleShare}
-                  currentUserId={currentUser?.id}
-                />
-              );
-            }
-          })
-        )}
-      </ScrollView>
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.3} // Cargar más cuando esté al 70% del scroll
+        ListHeaderComponent={<MedicalAlertsWidget />}
+        ListFooterComponent={renderFooter}
+        ListEmptyComponent={renderEmpty}
+        initialNumToRender={INITIAL_LOAD}
+        maxToRenderPerBatch={POSTS_PER_PAGE}
+        windowSize={10}
+        removeClippedSubviews={true}
+        getItemLayout={undefined} // Let FlatList calculate automatically
+      />
     </SafeAreaView>
   );
 }
@@ -888,5 +924,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#DC2626',
     marginTop: 8,
+  },
+  footerLoader: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+    gap: 8,
+  },
+  footerLoaderText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
   },
 });

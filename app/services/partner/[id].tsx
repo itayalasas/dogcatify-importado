@@ -5,7 +5,7 @@ import { ArrowLeft, MapPin, Clock, Phone, Star, Search, User, Heart, MessageCirc
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { useAuth } from '../../../contexts/AuthContext';
-import { supabaseClient } from '../../../lib/supabase';
+import { supabaseClient } from '@/lib/supabase';
 
 const { width } = Dimensions.get('window');
 
@@ -284,7 +284,28 @@ export default function PartnerServices() {
   };
 
   const handleServicePress = (serviceId: string) => {
-    router.push(`/services/${serviceId}`);
+    // Validate service ID before navigation
+    if (!serviceId || typeof serviceId !== 'string') {
+      console.error('Invalid service ID for navigation:', serviceId);
+      Alert.alert('Error', 'ID de servicio inválido');
+      return;
+    }
+    
+    // Check if ID is a valid UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(serviceId)) {
+      console.error('Service ID is not a valid UUID for navigation:', serviceId);
+      Alert.alert('Error', 'ID de servicio no válido');
+      return;
+    }
+    
+    console.log('Navigating to service detail with valid UUID:', serviceId);
+    try {
+      router.push(`/services/${serviceId}`);
+    } catch (navigationError) {
+      console.error('Navigation error to service detail:', navigationError);
+      Alert.alert('Error', 'No se pudo navegar al detalle del servicio');
+    }
   };
 
   const handleShowReviews = () => {
@@ -298,14 +319,32 @@ export default function PartnerServices() {
     setLoadingDetailedReviews(true);
     try {
       console.log('Fetching detailed reviews for partner:', partner?.id);
+      
+      // Validate partner ID
+      if (!partner?.id || typeof partner.id !== 'string') {
+        console.error('Invalid partner ID for reviews:', partner?.id);
+        return;
+      }
+      
       const { data: reviewsData, error } = await supabaseClient
         .from('service_reviews')
-        .select('*')
+        .select(`
+          id,
+          rating,
+          comment,
+          created_at,
+          customer_id,
+          service_id,
+          partner_id
+        `)
         .eq('partner_id', partner?.id)
         .order('created_at', { ascending: false })
         .limit(50);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching detailed reviews:', error);
+        return; // Don't throw, just return
+      }
 
       console.log('Reviews data received:', reviewsData?.length || 0);
       
@@ -353,9 +392,9 @@ export default function PartnerServices() {
   };
 
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('es-AR', {
+    return new Intl.NumberFormat('es-UY', {
       style: 'currency',
-      currency: 'ARS',
+      currency: 'UYU',
     }).format(price);
   };
 

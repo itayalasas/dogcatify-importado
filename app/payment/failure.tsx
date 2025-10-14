@@ -1,70 +1,127 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { CircleX as XCircle, RefreshCw, Chrome as Home } from 'lucide-react-native';
+import { CircleX as XCircle, RefreshCw } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 
 export default function PaymentFailure() {
-  const { order_id, error_message } = useLocalSearchParams<{
+  const { order_id, type } = useLocalSearchParams<{
     order_id: string;
-    error_message: string;
+    type?: string;
   }>();
 
+  const [orderDetails, setOrderDetails] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Simulate loading order details
+    setTimeout(() => {
+      setOrderDetails({
+        id: order_id || '#failed123',
+        total: '$430.00',
+        status: 'Fallido',
+        isBooking: type === 'booking'
+      });
+      setLoading(false);
+    }, 1000);
+  }, [order_id, type]);
+
   const handleRetryPayment = () => {
-    router.push('/cart');
+    if (orderDetails?.isBooking) {
+      router.replace('/(tabs)/services');
+    } else {
+      router.replace('/cart');
+    }
   };
 
   const handleGoHome = () => {
     router.replace('/(tabs)');
   };
 
-  const getErrorMessage = () => {
-    if (error_message) {
-      return decodeURIComponent(error_message);
-    }
-    return 'El pago no pudo ser procesado. Por favor intenta nuevamente.';
-  };
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#EF4444" />
+          <Text style={styles.loadingText}>Verificando estado del pago...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Card style={styles.errorCard}>
-          <View style={styles.iconContainer}>
-            <XCircle size={80} color="#EF4444" />
+        <View style={styles.iconContainer}>
+          <XCircle size={80} color="#EF4444" />
+        </View>
+
+        <Text style={styles.title}>Pago No Procesado</Text>
+        <Text style={styles.subtitle}>
+          {orderDetails?.isBooking 
+            ? 'Hubo un problema procesando el pago de tu reserva. Puedes intentar nuevamente.'
+            : 'Hubo un problema procesando el pago de tu pedido. Puedes intentar nuevamente.'
+          }
+        </Text>
+
+        <Card style={styles.detailsCard}>
+          <Text style={styles.detailsTitle}>
+            {orderDetails?.isBooking ? 'Detalles de la Reserva' : 'Detalles del Pedido'}
+          </Text>
+          
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>
+              {orderDetails?.isBooking ? 'Número de reserva:' : 'Número de pedido:'}
+            </Text>
+            <Text style={styles.detailValue}>{orderDetails?.id}</Text>
           </View>
           
-          <Text style={styles.title}>Pago No Completado</Text>
-          <Text style={styles.subtitle}>
-            {getErrorMessage()}
-          </Text>
-
-          {order_id && (
-            <View style={styles.orderInfo}>
-              <Text style={styles.orderLabel}>Referencia del pedido:</Text>
-              <Text style={styles.orderValue}>#{order_id.slice(-6)}</Text>
-            </View>
-          )}
-
-          <Text style={styles.helpText}>
-            Puedes intentar nuevamente o contactar con soporte si el problema persiste
-          </Text>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Total:</Text>
+            <Text style={styles.detailValue}>{orderDetails?.total}</Text>
+          </View>
+          
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Estado:</Text>
+            <Text style={[styles.detailValue, styles.failureStatus]}>
+              {orderDetails?.status}
+            </Text>
+          </View>
         </Card>
 
-        <View style={styles.actions}>
-          <Button
-            title="Intentar Nuevamente"
-            onPress={handleRetryPayment}
-            size="large"
-          />
-          
-          <Button
-            title="Volver al Inicio"
-            onPress={handleGoHome}
-            variant="outline"
-            size="large"
-          />
-        </View>
+        <Card style={styles.errorCard}>
+          <Text style={styles.errorTitle}>Posibles causas:</Text>
+          <View style={styles.errorList}>
+            <Text style={styles.errorItem}>
+              • Fondos insuficientes en la tarjeta
+            </Text>
+            <Text style={styles.errorItem}>
+              • Datos de tarjeta incorrectos
+            </Text>
+            <Text style={styles.errorItem}>
+              • Problema temporal con el procesador
+            </Text>
+            <Text style={styles.errorItem}>
+              • Límites de transacción excedidos
+            </Text>
+          </View>
+        </Card>
+      </View>
+
+      <View style={styles.actionsContainer}>
+        <Button
+          title={orderDetails?.isBooking ? "Intentar Reserva Nuevamente" : "Intentar Pago Nuevamente"}
+          onPress={handleRetryPayment}
+          variant="outline"
+          size="large"
+        />
+        
+        <Button
+          title="Ir al Inicio"
+          onPress={handleGoHome}
+          size="large"
+        />
       </View>
     </SafeAreaView>
   );
@@ -76,62 +133,103 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
     paddingTop: 50,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 16,
+  },
   content: {
     flex: 1,
     padding: 20,
-    justifyContent: 'center',
-  },
-  errorCard: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    marginBottom: 24,
+    paddingBottom: 20,
   },
   iconContainer: {
-    marginBottom: 24,
+    alignItems: 'center',
+    marginTop: 40,
+    marginBottom: 32,
   },
   title: {
     fontSize: 28,
     fontFamily: 'Inter-Bold',
     color: '#111827',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   subtitle: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     textAlign: 'center',
-    marginBottom: 24,
     lineHeight: 24,
+    marginBottom: 32,
+    paddingHorizontal: 20,
   },
-  orderInfo: {
+  detailsCard: {
+    marginBottom: 20,
+  },
+  detailsTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 24,
-    width: '100%',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
-  orderLabel: {
+  detailLabel: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
   },
-  orderValue: {
+  detailValue: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
   },
-  helpText: {
+  failureStatus: {
+    color: '#EF4444',
+  },
+  errorCard: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    marginBottom: 20,
+  },
+  errorTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#991B1B',
+    marginBottom: 12,
+  },
+  errorList: {
+    gap: 8,
+  },
+  errorItem: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
+    color: '#991B1B',
     lineHeight: 20,
   },
-  actions: {
+  actionsContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 60,
+    paddingTop: 24,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
     gap: 16,
+    marginBottom: 20,
   },
 });

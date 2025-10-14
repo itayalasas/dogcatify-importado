@@ -12,6 +12,17 @@ interface ServiceCardProps {
 
 export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) => {
   const { t } = useLanguage();
+  
+  // Debug service data
+  React.useEffect(() => {
+    console.log('ServiceCard - Service data:', {
+      id: service?.id,
+      partnerId: service?.partnerId,
+      name: service?.name,
+      partnerType: service?.partnerType
+    });
+  }, [service]);
+  
   const [reviews, setReviews] = React.useState<any[]>([]);
   const [averageRating, setAverageRating] = React.useState(0);
   const [totalReviews, setTotalReviews] = React.useState(0);
@@ -53,7 +64,10 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
       setAverageRating(service.rating || 0);
       setTotalReviews(service.reviews || 0);
       
-      // Only fetch detailed reviews when modal is opened
+      console.log('Service reviews set from partner data:', {
+        rating: service.rating || 0,
+        reviews: service.reviews || 0
+      });
     } catch (error) {
       console.error('Error setting service reviews:', error);
     }
@@ -65,14 +79,41 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
     setLoadingReviews(true);
     try {
       console.log('Fetching detailed reviews for partner:', service.partnerId);
+      
+      // Validate partner ID is a valid UUID
+      if (!service.partnerId || typeof service.partnerId !== 'string') {
+        console.error('Invalid partner ID:', service.partnerId);
+        setLoadingReviews(false);
+        return;
+      }
+      
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(service.partnerId)) {
+        console.error('Partner ID is not a valid UUID:', service.partnerId);
+        setLoadingReviews(false);
+        return;
+      }
+      
       const { data: reviewsData, error } = await supabaseClient
         .from('service_reviews')
-        .select('*')
+        .select(`
+          id,
+          rating,
+          comment,
+          created_at,
+          customer_id,
+          service_id,
+          partner_id
+        `)
         .eq('partner_id', service.partnerId)
         .order('created_at', { ascending: false })
         .limit(50); // Load more reviews for the modal
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching reviews:', error);
+        setLoadingReviews(false);
+        return; // Don't throw, just return
+      }
 
       console.log('Reviews data received:', reviewsData?.length || 0);
       
