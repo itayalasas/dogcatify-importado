@@ -22,23 +22,29 @@ export default function RootLayout() {
 
   // Prevent Supabase from showing automatic modals
   useEffect(() => {
-    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
-      (event, session) => {
-        console.log('Auth event intercepted:', event);
+    try {
+      const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
+        (event, session) => {
+          console.log('Auth event intercepted:', event);
 
-        // Only block SIGNED_UP to prevent the confirmation modal
-        if (event === 'SIGNED_UP') {
-          console.log('Blocking SIGNED_UP event to prevent modal');
-          setTimeout(() => {
-            supabaseClient.auth.signOut();
-          }, 100);
+          // Only block SIGNED_UP to prevent the confirmation modal
+          if (event === 'SIGNED_UP') {
+            console.log('Blocking SIGNED_UP event to prevent modal');
+            setTimeout(() => {
+              supabaseClient.auth.signOut().catch(err => {
+                console.log('Error signing out:', err.message);
+              });
+            }, 100);
+          }
         }
-      }
-    );
+      );
 
-    return () => {
-      subscription.unsubscribe();
-    };
+      return () => {
+        subscription?.unsubscribe();
+      };
+    } catch (error) {
+      console.error('Error setting up auth listener:', error);
+    }
   }, []);
 
   // Determine initial route based on platform

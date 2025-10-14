@@ -47,11 +47,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const isExpoGo = Constants.appOwnership === 'expo';
     if (currentUser && !expoPushToken && !isExpoGo) {
       console.log('User authenticated, auto-registering push notifications...');
-      registerForPushNotifications();
+      registerForPushNotifications().catch(err => {
+        console.log('Push notification registration failed:', err.message);
+      });
     } else if (isExpoGo) {
       console.log('Skipping auto-registration in Expo Go - notifications not supported');
     }
-  }, [currentUser]);
+  }, [currentUser, expoPushToken]);
   useEffect(() => {
     // Only set up notification listeners if not in Expo Go
     const isExpoGo = Constants.appOwnership === 'expo';
