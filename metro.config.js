@@ -47,19 +47,4 @@ config.resolver.assetExts = [
   'json',
 ];
 
-// Configure serializer to handle modules properly
-config.serializer = {
-  ...config.serializer,
-  getModulesRunBeforeMainModule: () => [
-    require.resolve('react-native/Libraries/Core/InitializeCore'),
-  ],
-};
-
-// Reset cache to ensure clean builds
-config.resetCache = true;
-
-// Configure resolver to handle undefined paths
-config.resolver.resolverMainFields = ['react-native', 'browser', 'main'];
-config.resolver.platforms = ['ios', 'android', 'native', 'web'];
-
 module.exports = config;
