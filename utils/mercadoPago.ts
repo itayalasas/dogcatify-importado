@@ -423,6 +423,7 @@ export const createMultiPartnerOrder = async (
       shipping_address: shippingAddress,
       payment_method: 'mercadopago',
       status: 'pending',
+      order_type: 'product_purchase',
       created_at: new Date().toISOString(),
       partner_breakdown: {
         partners: cartItems.reduce((acc, item) => {
@@ -681,6 +682,11 @@ export const createServiceBookingOrder = async (bookingData: {
       partner_id: bookingData.partnerId,
       customer_id: bookingData.customerId,
       booking_id: insertedBooking.id,
+      service_id: bookingData.serviceId,
+      pet_id: bookingData.petId,
+      appointment_date: bookingData.date.toISOString(),
+      appointment_time: bookingData.time,
+      booking_notes: bookingData.notes,
       items: [{
         id: bookingData.serviceId,
         name: bookingData.serviceName,
