@@ -59,20 +59,20 @@ export default function AdminTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="promotions"
+        options={{
+          title: 'Promociones',
+          tabBarIcon: ({ size, color }) => (
+            <Volume2 size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="partners"
         options={{
           title: 'Aliados',
           tabBarIcon: ({ size, color }) => (
             <Users size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="promotions"
-        options={{
-          title: 'Promoc...',
-          tabBarIcon: ({ size, color }) => (
-            <Volume2 size={size} color={color} />
           ),
         }}
       />
