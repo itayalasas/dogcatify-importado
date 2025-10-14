@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image, TextInput } from 'react-native';
-import { Plus, Volume2, Search, Calendar, ExternalLink, Building, X } from 'lucide-react-native';
+import { Plus, Volume2, Search, Calendar, ExternalLink, Building, X, FileText, Send } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -8,6 +8,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import {
+  createPromotionInvoice,
+  generateInvoicePDF,
+  saveInvoice,
+  getAllInvoices
+} from '../../utils/promotionInvoicing';
 
 export default function AdminPromotions() {
   const { currentUser } = useAuth();
@@ -408,6 +414,101 @@ export default function AdminPromotions() {
     }
   };
 
+  const handleGenerateInvoice = async (promotion: any) => {
+    try {
+      if (!promotion.partnerId) {
+        Alert.alert('Error', 'Esta promoción no tiene un aliado asociado');
+        return;
+      }
+
+      Alert.alert(
+        'Generar Factura',
+        `¿Generar factura para la promoción "${promotion.title}"?\n\nVistas: ${promotion.views || 0}\nLikes: ${(promotion.likes || []).length}`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Generar y Enviar',
+            onPress: async () => {
+              try {
+                setLoading(true);
+
+                // Guardar datos de promociones en localStorage para que la función los pueda leer
+                const promotionsData = promotions.map(p => ({
+                  ...p,
+                  likes: Array.isArray(p.likes) ? p.likes : []
+                }));
+                localStorage.setItem('promotions_data', JSON.stringify(promotionsData));
+
+                // Crear factura
+                const { success, invoice, error } = await createPromotionInvoice(
+                  promotion.id,
+                  promotion.startDate,
+                  promotion.endDate
+                );
+
+                if (!success || !invoice) {
+                  throw new Error(error || 'Error al crear la factura');
+                }
+
+                // Generar PDF
+                const pdf = generateInvoicePDF(invoice);
+                const pdfBase64 = pdf.output('datauristring').split(',')[1];
+
+                // Guardar factura
+                invoice.status = 'sent';
+                invoice.sentAt = new Date();
+                saveInvoice(invoice);
+
+                // Enviar por email usando Edge Function
+                const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+                const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+                const response = await fetch(`${supabaseUrl}/functions/v1/send-invoice-email`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${supabaseKey}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    invoiceNumber: invoice.invoiceNumber,
+                    partnerName: invoice.partnerName,
+                    partnerEmail: invoice.partnerEmail,
+                    promotionTitle: invoice.promotionTitle,
+                    totalAmount: invoice.totalAmount,
+                    pdfBase64: pdfBase64,
+                    billingPeriodStart: invoice.billingPeriodStart.toISOString(),
+                    billingPeriodEnd: invoice.billingPeriodEnd.toISOString()
+                  }),
+                });
+
+                if (!response.ok) {
+                  console.warn('Email no pudo ser enviado, pero la factura fue generada');
+                }
+
+                // Descargar PDF localmente
+                pdf.save(`Factura_${invoice.invoiceNumber}.pdf`);
+
+                Alert.alert(
+                  'Éxito',
+                  `Factura ${invoice.invoiceNumber} generada y enviada exitosamente!\n\nTotal: $${invoice.totalAmount.toFixed(2)}`
+                );
+
+                setLoading(false);
+              } catch (err: any) {
+                console.error('Error generating invoice:', err);
+                Alert.alert('Error', err.message || 'No se pudo generar la factura');
+                setLoading(false);
+              }
+            }
+          }
+        ]
+      );
+    } catch (error: any) {
+      console.error('Error in handleGenerateInvoice:', error);
+      Alert.alert('Error', error.message || 'Error inesperado');
+    }
+  };
+
   const resetForm = () => {
     setPromoTitle('');
     setPromoDescription('');
@@ -601,12 +702,24 @@ export default function AdminPromotions() {
                 </View>
 
                 <View style={styles.promotionActions}>
-                  <Button
-                    title={promotion.isActive ? 'Desactivar' : 'Activar'}
-                    onPress={() => handleTogglePromotion(promotion.id, promotion.isActive)}
-                    variant={promotion.isActive ? 'outline' : 'primary'}
-                    size="medium"
-                  />
+                  <View style={styles.actionsRow}>
+                    <Button
+                      title={promotion.isActive ? 'Desactivar' : 'Activar'}
+                      onPress={() => handleTogglePromotion(promotion.id, promotion.isActive)}
+                      variant={promotion.isActive ? 'outline' : 'primary'}
+                      size="medium"
+                    />
+
+                    {promotion.partnerId && (
+                      <TouchableOpacity
+                        style={styles.invoiceButton}
+                        onPress={() => handleGenerateInvoice(promotion)}
+                      >
+                        <FileText size={18} color="#FFFFFF" />
+                        <Text style={styles.invoiceButtonText}>Facturar</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
               </Card>
             ))
@@ -1306,7 +1419,27 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
   },
   promotionActions: {
-    alignItems: 'flex-end',
+    marginTop: 12,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  invoiceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10B981',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  invoiceButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
   emptyCard: {
     marginHorizontal: 16,
