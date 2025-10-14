@@ -617,10 +617,20 @@ export default function Home() {
           
           switch (type) {
             case 'services':
-              router.push(`/services/${id}`);
+              // Pass discount if available
+              if (promotion.discount_percentage && promotion.discount_percentage > 0) {
+                router.push(`/services/${id}?discount=${promotion.discount_percentage}`);
+              } else {
+                router.push(`/services/${id}`);
+              }
               break;
             case 'products':
-              router.push(`/products/${id}`);
+              // Pass discount if available
+              if (promotion.discount_percentage && promotion.discount_percentage > 0) {
+                router.push(`/products/${id}?discount=${promotion.discount_percentage}`);
+              } else {
+                router.push(`/products/${id}`);
+              }
               break;
             case 'partners':
               router.push(`/services/partner/${id}`);

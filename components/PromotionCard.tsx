@@ -16,6 +16,7 @@ interface PromotionCardProps {
     likes?: string[];
     views?: number;
     clicks?: number;
+    discount_percentage?: number;
   };
   onPress?: () => void;
   onLike?: (promotionId: string) => void;
@@ -58,6 +59,15 @@ export default function PromotionCard({ promotion, onPress, onLike }: PromotionC
       <View style={styles.promotionBadge}>
         <Text style={styles.promotionBadgeText}>Promoción</Text>
       </View>
+
+      {/* Discount Badge */}
+      {promotion.discount_percentage && promotion.discount_percentage > 0 && (
+        <View style={styles.discountBadge}>
+          <Text style={styles.discountBadgeText}>
+            -{promotion.discount_percentage}%
+          </Text>
+        </View>
+      )}
 
       {/* Promotion Image */}
       <TouchableOpacity onPress={handlePress} activeOpacity={0.9}>
@@ -121,6 +131,26 @@ const styles = StyleSheet.create({
   promotionBadgeText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
+  },
+  discountBadge: {
+    position: 'absolute',
+    top: 24,
+    right: 28,
+    backgroundColor: '#10B981',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    zIndex: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  discountBadgeText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Bold',
     color: '#FFFFFF',
   },
   image: {
