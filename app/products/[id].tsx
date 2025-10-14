@@ -9,7 +9,7 @@ import { supabaseClient } from '../../lib/supabase';
 import { useCart } from '@/contexts/CartContext';
 
 export default function ProductDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, discount } = useLocalSearchParams<{ id: string; discount?: string }>();
   const { currentUser } = useAuth();
   const { addToCart, getCartCount } = useCart();
   const [product, setProduct] = useState<any>(null);
@@ -20,13 +20,22 @@ export default function ProductDetail() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isFavorite, setIsFavorite] = useState(false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
 
   const cartCount = getCartCount();
 
   useEffect(() => {
     fetchProductDetails();
     checkIfFavorite();
-  }, [id]);
+
+    // Apply discount from promotion if provided
+    if (discount) {
+      const discountValue = parseFloat(discount);
+      if (!isNaN(discountValue) && discountValue > 0 && discountValue <= 100) {
+        setAppliedDiscount(discountValue);
+      }
+    }
+  }, [id, discount]);
 
   const checkIfFavorite = async () => {
     if (!currentUser) return;
@@ -116,11 +125,16 @@ export default function ProductDetail() {
     }
     
     if (!product) return;
-    
+
+    // Calculate final price with discount
+    const finalPrice = appliedDiscount > 0
+      ? product.price * (1 - appliedDiscount / 100)
+      : product.price;
+
     addToCart({
       id: product.id,
       name: product.name,
-      price: product.price,
+      price: finalPrice,
       quantity: quantity,
       image: product.images && product.images.length > 0 ? product.images[0] : null,
       partnerId: product.partner_id,
@@ -339,8 +353,24 @@ export default function ProductDetail() {
               </Text>
             </View>
           )}
-          
-          <Text style={styles.price}>{formatPrice(product.price)}</Text>
+
+          {/* Price with Discount Badge */}
+          {appliedDiscount > 0 ? (
+            <View style={styles.priceContainer}>
+              <View style={styles.discountBadge}>
+                <Text style={styles.discountBadgeText}>-{appliedDiscount}%</Text>
+              </View>
+              <Text style={styles.originalPrice}>{formatPrice(product.price)}</Text>
+              <Text style={styles.discountedPrice}>
+                {formatPrice(product.price * (1 - appliedDiscount / 100))}
+              </Text>
+              <Text style={styles.savingsText}>
+                ¡Ahorras {formatPrice(product.price * (appliedDiscount / 100))}!
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.price}>{formatPrice(product.price)}</Text>
+          )}
           
           {/* Store Info */}
           <TouchableOpacity 
@@ -625,11 +655,45 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginLeft: 4,
   },
+  priceContainer: {
+    marginBottom: 16,
+  },
   price: {
     fontSize: 24,
     fontFamily: 'Inter-Bold',
     color: '#10B981',
     marginBottom: 16,
+  },
+  discountBadge: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  discountBadgeText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+  },
+  originalPrice: {
+    fontSize: 18,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
+    marginBottom: 4,
+  },
+  discountedPrice: {
+    fontSize: 28,
+    fontFamily: 'Inter-Bold',
+    color: '#10B981',
+    marginBottom: 4,
+  },
+  savingsText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#10B981',
   },
   storeContainer: {
     flexDirection: 'row',

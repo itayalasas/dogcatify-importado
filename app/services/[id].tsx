@@ -10,7 +10,7 @@ import { supabaseClient } from '@/lib/supabase';
 const { width } = Dimensions.get('window');
 
 export default function ServiceDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, discount } = useLocalSearchParams<{ id: string; discount?: string }>();
   const { currentUser } = useAuth();
   
   // Debug the received ID - MOVED OUTSIDE useEffect
@@ -32,13 +32,22 @@ export default function ServiceDetail() {
   const [userPets, setUserPets] = useState<any[]>([]);
   const [selectedPet, setSelectedPet] = useState<string | null>(null);
   const [loadingPets, setLoadingPets] = useState(false);
+  const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
 
   useEffect(() => {
     fetchServiceDetails();
     if (currentUser) {
       fetchUserPets();
     }
-  }, [id, currentUser]);
+
+    // Apply discount from promotion if provided
+    if (discount) {
+      const discountValue = parseFloat(discount);
+      if (!isNaN(discountValue) && discountValue > 0 && discountValue <= 100) {
+        setAppliedDiscount(discountValue);
+      }
+    }
+  }, [id, currentUser, discount]);
 
   const fetchServiceDetails = async () => {
     try {
@@ -402,7 +411,25 @@ export default function ServiceDetail() {
           <Text style={styles.sectionTitle}>Detalles del Servicio</Text>
           
           <Text style={styles.serviceName}>{service.name}</Text>
-          
+
+          {/* Price with Discount */}
+          {appliedDiscount > 0 ? (
+            <View style={styles.priceContainer}>
+              <View style={styles.discountBadge}>
+                <Text style={styles.discountBadgeText}>-{appliedDiscount}%</Text>
+              </View>
+              <Text style={styles.originalPrice}>{formatPrice(service.price)}</Text>
+              <Text style={styles.discountedPrice}>
+                {formatPrice(service.price * (1 - appliedDiscount / 100))}
+              </Text>
+              <Text style={styles.savingsText}>
+                ¡Ahorras {formatPrice(service.price * (appliedDiscount / 100))}!
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.priceText}>{formatPrice(service.price)}</Text>
+          )}
+
           <View style={styles.serviceDetails}>
             <View style={styles.serviceDetail}>
               <Clock size={16} color="#6B7280" />
@@ -440,7 +467,7 @@ export default function ServiceDetail() {
         
         <View style={styles.bookingButtonContainer}>
           <Button
-            title={`Reservar por ${formatPrice(service.price)}`}
+            title={`Reservar por ${formatPrice(appliedDiscount > 0 ? service.price * (1 - appliedDiscount / 100) : service.price)}`}
             onPress={handleBookService}
             variant="primary"
           />
@@ -762,6 +789,47 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     color: '#111827',
     marginBottom: 12,
+  },
+  priceContainer: {
+    marginBottom: 16,
+    paddingTop: 8,
+  },
+  priceText: {
+    fontSize: 22,
+    fontFamily: 'Inter-Bold',
+    color: '#10B981',
+    marginBottom: 12,
+  },
+  discountBadge: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  discountBadgeText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+  },
+  originalPrice: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
+    marginBottom: 4,
+  },
+  discountedPrice: {
+    fontSize: 24,
+    fontFamily: 'Inter-Bold',
+    color: '#10B981',
+    marginBottom: 4,
+  },
+  savingsText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#10B981',
   },
   serviceDetails: {
     flexDirection: 'row',
