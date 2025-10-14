@@ -214,13 +214,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   actionsContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 60,
-    paddingTop: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 32,
+    paddingTop: 20,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
-    gap: 16,
-    marginBottom: 20,
+    gap: 12,
   },
 });
