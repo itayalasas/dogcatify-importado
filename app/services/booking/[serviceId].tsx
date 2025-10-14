@@ -456,8 +456,8 @@ export default function ServiceBooking() {
           </Card>
         )}
 
-        {/* Notes */}
-        <Card style={styles.notesCard}>
+        {/* Notes - Hidden for now */}
+        {/* <Card style={styles.notesCard}>
           <Text style={styles.sectionTitle}>Notas para el proveedor</Text>
           <TextInput
             style={styles.notesInput}
@@ -469,7 +469,7 @@ export default function ServiceBooking() {
             numberOfLines={4}
             textAlignVertical="top"
           />
-        </Card>
+        </Card> */}
       </ScrollView>
 
       {/* Fixed Confirm Button */}
@@ -772,7 +772,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
-    paddingBottom: 200,
+    paddingBottom: 120,
   },
   loadingContainer: {
     flex: 1,
