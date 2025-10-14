@@ -137,10 +137,7 @@ export default function MyOrders() {
   };
 
   const handleTrackOrder = (order: any) => {
-    Alert.alert(
-      'Seguimiento de Pedido',
-      `Pedido #${order.id.slice(-6)}\nEstado: ${getStatusText(order.status)}\nFecha: ${order.createdAt.toLocaleDateString()}`
-    );
+    router.push(`/orders/${order.id}?tracking=true`);
   };
 
   const handleContactSupport = () => {

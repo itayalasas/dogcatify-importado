@@ -6,6 +6,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { OrderTracking } from '../../components/OrderTracking';
 
 export default function OrderDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -161,16 +162,26 @@ export default function OrderDetail() {
               </Text>
             </View>
           </View>
-          
+
           <Text style={styles.orderDate}>
             Realizado el {order.createdAt.toLocaleDateString()} a las {order.createdAt.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
           </Text>
-          
+
           {order.updatedAt && (
             <Text style={styles.lastUpdate}>
               Última actualización: {order.updatedAt.toLocaleDateString()}
             </Text>
           )}
+        </Card>
+
+        {/* Order Tracking Timeline */}
+        <Card style={styles.trackingCard}>
+          <Text style={styles.sectionTitle}>Seguimiento del Pedido</Text>
+          <OrderTracking
+            orderStatus={order.status}
+            orderDate={order.createdAt}
+            cancelledDate={order.status === 'cancelled' ? order.updatedAt : undefined}
+          />
         </Card>
 
         {/* Order Items */}
@@ -244,19 +255,12 @@ export default function OrderDetail() {
             />
           )}
           
-          {['pending', 'confirmed', 'processing', 'shipped'].includes(order.status) && (
-            <Button
-              title="Rastrear Pedido"
-              onPress={() => {
-                Alert.alert(
-                  'Seguimiento',
-                  `Estado actual: ${getStatusText(order.status)}\n\nTe notificaremos cuando haya actualizaciones.`
-                );
-              }}
-              variant="outline"
-              size="large"
-            />
-          )}
+          <Button
+            title="Contactar Soporte"
+            onPress={handleContactSupport}
+            variant="outline"
+            size="large"
+          />
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -318,6 +322,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   statusCard: {
+    marginBottom: 16,
+  },
+  trackingCard: {
     marginBottom: 16,
   },
   statusHeader: {
