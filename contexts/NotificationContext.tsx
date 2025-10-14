@@ -6,14 +6,17 @@ import Constants from 'expo-constants';
 import { useAuth } from './AuthContext';
 import { supabaseClient } from '../lib/supabase';
 
-// Configure notification behavior
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+// Only configure notifications if not in Expo Go
+const isExpoGo = Constants.appOwnership === 'expo';
+if (!isExpoGo) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+}
 
 interface NotificationContextType {
   expoPushToken: string | null;
@@ -50,6 +53,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, [currentUser]);
   useEffect(() => {
+    // Only set up notification listeners if not in Expo Go
+    const isExpoGo = Constants.appOwnership === 'expo';
+
+    if (isExpoGo) {
+      console.log('Skipping notification listeners in Expo Go');
+      return;
+    }
+
     // Set up notification listeners
     const notificationListener = Notifications.addNotificationReceivedListener(notification => {
       console.log('Notification received:', notification);
