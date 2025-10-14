@@ -45,28 +45,48 @@ export default function Services() {
     try {
       console.log('🔄 Fetching partners...');
       setLoading(true);
-      
-      const { data: partnersData, error } = await supabaseClient
-        .from('partners')
-        .select('*')
-        .eq('is_verified', true)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
 
-      if (partnersData && !error) {
-        console.log(`📊 Found ${partnersData.length} verified partners`);
+      // Optimized: Fetch partners and their first service in parallel
+      const [partnersResult, servicesResult] = await Promise.all([
+        supabaseClient
+          .from('partners')
+          .select('id, business_name, address, logo, business_type, rating, reviews_count')
+          .eq('is_verified', true)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false }),
+        supabaseClient
+          .from('partner_services')
+          .select('id, partner_id, name, price, duration, images')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+      ]);
+
+      const partnersData = partnersResult.data;
+      const servicesData = servicesResult.data;
+
+      if (partnersData && servicesData && !partnersResult.error && !servicesResult.error) {
+        console.log(`📊 Found ${partnersData.length} verified partners and ${servicesData.length} services`);
+
+        // Create a map of partner_id to first service for quick lookup
+        const partnerServicesMap = new Map();
+        servicesData.forEach(service => {
+          if (!partnerServicesMap.has(service.partner_id)) {
+            partnerServicesMap.set(service.partner_id, service);
+          }
+        });
+
         const allPartnersWithServices = [];
 
         for (const partner of partnersData) {
           if (partner.business_type === 'shelter') {
-            // For shelters, check if they have adoption pets
+            // For shelters, fetch adoption pets (still need individual query)
             const { data: adoptionPets, error: adoptionError } = await supabaseClient
               .from('adoption_pets')
-              .select('*')
+              .select('id, images')
               .eq('partner_id', partner.id)
               .eq('is_available', true)
               .limit(1);
-            
+
             if (adoptionPets && adoptionPets.length > 0 && !adoptionError) {
               const pet = adoptionPets[0];
               allPartnersWithServices.push({
@@ -79,7 +99,6 @@ export default function Services() {
                 rating: partner.rating || 0,
                 reviews: partner.reviews_count || 0,
                 location: partner.address,
-                // For shelters, show adoption info
                 name: `Adopciones disponibles`,
                 price: 0,
                 duration: 0,
@@ -89,23 +108,12 @@ export default function Services() {
               });
             }
           } else {
-            // For other business types, fetch services
-            const { data: servicesData, error: servicesError } = await supabaseClient
-              .from('partner_services')
-              .select('*')
-              .eq('partner_id', partner.id)
-              .eq('is_active', true)
-              .order('created_at', { ascending: false })
-              .limit(1); // Solo el primer servicio para carga inicial
+            // Use the pre-fetched service from map
+            const serviceData = partnerServicesMap.get(partner.id);
 
-            if (servicesData && servicesData.length > 0 && !servicesError) {
-              const serviceData = servicesData[0];
-              
-              // Solo usar imágenes del primer servicio para carga inicial
-              const serviceImages = serviceData.images || [];
-              
+            if (serviceData) {
               allPartnersWithServices.push({
-                id: serviceData.id, // This should be the service ID
+                id: serviceData.id,
                 partnerId: partner.id,
                 partnerName: partner.business_name,
                 partnerAddress: partner.address,
@@ -117,21 +125,17 @@ export default function Services() {
                 name: serviceData.name,
                 price: serviceData.price,
                 duration: serviceData.duration,
-                category: partner.business_type, // This is the partner's business type
-                serviceImages: serviceImages,
+                category: partner.business_type,
+                serviceImages: serviceData.images || [],
                 images: serviceData.images || [],
-                // Add debug info
-                debug_service_id: serviceData.id,
-                debug_partner_id: partner.id,
-                debug_business_type: partner.business_type
               });
             }
           }
         }
-        
+
         console.log(`✅ Processed ${allPartnersWithServices.length} partners with services`);
         setPartners(allPartnersWithServices);
-        
+
         // Carga inicial paginada
         const initialPartners = allPartnersWithServices.slice(0, INITIAL_LOAD);
         setDisplayedPartners(initialPartners);
