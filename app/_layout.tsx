@@ -3,23 +3,13 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider } from '../contexts/AuthContext';
 import { LanguageProvider } from '../contexts/LanguageContext';
-import { BiometricProvider } from '../contexts/BiometricContext'; 
+import { BiometricProvider } from '../contexts/BiometricContext';
 import { CartProvider } from '../contexts/CartContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import { supabaseClient } from '@/lib/supabase';
-
-// Configure notifications for production
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
 
 export default function RootLayout() {
   useFrameworkReady();
@@ -32,20 +22,10 @@ export default function RootLayout() {
 
   // Prevent Supabase from showing automatic modals
   useEffect(() => {
-    // Set up notification listeners for production
-    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
-      console.log('Notification received in app:', notification);
-    });
-
-    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('Notification response received:', response);
-      // Handle notification tap navigation here if needed
-    });
-
     const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
       (event, session) => {
         console.log('Auth event intercepted:', event);
-        
+
         // Only block SIGNED_UP to prevent the confirmation modal
         if (event === 'SIGNED_UP') {
           console.log('Blocking SIGNED_UP event to prevent modal');
@@ -57,8 +37,6 @@ export default function RootLayout() {
     );
 
     return () => {
-      notificationListener.remove();
-      responseListener.remove();
       subscription.unsubscribe();
     };
   }, []);
