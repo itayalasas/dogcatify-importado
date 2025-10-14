@@ -312,9 +312,9 @@ export const createPaymentPreference = async (
         }
       },
       back_urls: {
-        success: `${process.env.EXPO_PUBLIC_APP_URL || 'https://dogcatify.com'}/payment/success?order_id=${orderId}`,
-        failure: `${process.env.EXPO_PUBLIC_APP_URL || 'https://dogcatify.com'}/payment/failure?order_id=${orderId}`,
-        pending: `${process.env.EXPO_PUBLIC_APP_URL || 'https://dogcatify.com'}/payment/pending?order_id=${orderId}`
+        success: `dogcatify://payment/success?order_id=${orderId}`,
+        failure: `dogcatify://payment/failure?order_id=${orderId}`,
+        pending: `dogcatify://payment/pending?order_id=${orderId}`
       },
       auto_return: 'approved',
       external_reference: orderId,
@@ -553,9 +553,9 @@ export const createUnifiedPaymentPreference = async (
         }
       },
       back_urls: {
-        success: `${process.env.EXPO_PUBLIC_APP_URL || 'https://dogcatify.com'}/payment/success?order_id=${orderId}`,
-        failure: `${process.env.EXPO_PUBLIC_APP_URL || 'https://dogcatify.com'}/payment/failure?order_id=${orderId}`,
-        pending: `${process.env.EXPO_PUBLIC_APP_URL || 'https://dogcatify.com'}/payment/pending?order_id=${orderId}`
+        success: `dogcatify://payment/success?order_id=${orderId}`,
+        failure: `dogcatify://payment/failure?order_id=${orderId}`,
+        pending: `dogcatify://payment/pending?order_id=${orderId}`
       },
       auto_return: 'approved',
       external_reference: orderId,
