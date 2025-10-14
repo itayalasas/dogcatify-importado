@@ -11,8 +11,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   createPromotionInvoice,
   generateInvoicePDF,
-  saveInvoice,
-  getAllInvoices
+  saveInvoiceToDatabase,
+  getAllInvoicesFromDatabase
 } from '../../utils/promotionInvoicing';
 
 export default function AdminPromotions() {
@@ -421,9 +421,11 @@ export default function AdminPromotions() {
         return;
       }
 
+      const totalLikes = Array.isArray(promotion.likes) ? promotion.likes.length : 0;
+
       Alert.alert(
         'Generar Factura',
-        `¿Generar factura para la promoción "${promotion.title}"?\n\nVistas: ${promotion.views || 0}\nLikes: ${(promotion.likes || []).length}`,
+        `¿Generar factura para la promoción "${promotion.title}"?\n\nClicks: ${promotion.clicks || 0}\nVistas: ${promotion.views || 0}\nLikes: ${totalLikes}`,
         [
           { text: 'Cancelar', style: 'cancel' },
           {
@@ -432,18 +434,12 @@ export default function AdminPromotions() {
               try {
                 setLoading(true);
 
-                // Guardar datos de promociones en localStorage para que la función los pueda leer
-                const promotionsData = promotions.map(p => ({
-                  ...p,
-                  likes: Array.isArray(p.likes) ? p.likes : []
-                }));
-                localStorage.setItem('promotions_data', JSON.stringify(promotionsData));
-
-                // Crear factura
+                // Crear factura usando datos de Supabase
                 const { success, invoice, error } = await createPromotionInvoice(
                   promotion.id,
                   promotion.startDate,
-                  promotion.endDate
+                  promotion.endDate,
+                  currentUser?.id || ''
                 );
 
                 if (!success || !invoice) {
@@ -454,35 +450,42 @@ export default function AdminPromotions() {
                 const pdf = generateInvoicePDF(invoice);
                 const pdfBase64 = pdf.output('datauristring').split(',')[1];
 
-                // Guardar factura
+                // Guardar factura en Supabase (tabla promotion_billing)
                 invoice.status = 'sent';
-                invoice.sentAt = new Date();
-                saveInvoice(invoice);
+                const saveResult = await saveInvoiceToDatabase(invoice);
+
+                if (!saveResult.success) {
+                  console.warn('No se pudo guardar en la base de datos:', saveResult.error);
+                }
 
                 // Enviar por email usando Edge Function
                 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
                 const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-                const response = await fetch(`${supabaseUrl}/functions/v1/send-invoice-email`, {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${supabaseKey}`,
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    invoiceNumber: invoice.invoiceNumber,
-                    partnerName: invoice.partnerName,
-                    partnerEmail: invoice.partnerEmail,
-                    promotionTitle: invoice.promotionTitle,
-                    totalAmount: invoice.totalAmount,
-                    pdfBase64: pdfBase64,
-                    billingPeriodStart: invoice.billingPeriodStart.toISOString(),
-                    billingPeriodEnd: invoice.billingPeriodEnd.toISOString()
-                  }),
-                });
+                try {
+                  const response = await fetch(`${supabaseUrl}/functions/v1/send-invoice-email`, {
+                    method: 'POST',
+                    headers: {
+                      'Authorization': `Bearer ${supabaseKey}`,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      invoiceNumber: invoice.invoiceNumber,
+                      partnerName: invoice.partnerName,
+                      partnerEmail: invoice.partnerEmail,
+                      promotionTitle: invoice.promotionTitle,
+                      totalAmount: invoice.totalAmount,
+                      pdfBase64: pdfBase64,
+                      billingPeriodStart: invoice.billingPeriodStart.toISOString(),
+                      billingPeriodEnd: invoice.billingPeriodEnd.toISOString()
+                    }),
+                  });
 
-                if (!response.ok) {
-                  console.warn('Email no pudo ser enviado, pero la factura fue generada');
+                  if (!response.ok) {
+                    console.warn('Email no pudo ser enviado automáticamente');
+                  }
+                } catch (emailError) {
+                  console.warn('Error enviando email:', emailError);
                 }
 
                 // Descargar PDF localmente
@@ -490,7 +493,11 @@ export default function AdminPromotions() {
 
                 Alert.alert(
                   'Éxito',
-                  `Factura ${invoice.invoiceNumber} generada y enviada exitosamente!\n\nTotal: $${invoice.totalAmount.toFixed(2)}`
+                  `Factura ${invoice.invoiceNumber} generada exitosamente!\n\n` +
+                  `Clicks: ${invoice.totalClicks} × $${invoice.costPerClick.toFixed(2)} = $${invoice.clicksAmount.toFixed(2)}\n` +
+                  `Vistas: ${invoice.totalViews} × $${invoice.pricePerView.toFixed(2)} = $${invoice.viewsAmount.toFixed(2)}\n` +
+                  `Likes: ${invoice.totalLikes} × $${invoice.pricePerLike.toFixed(2)} = $${invoice.likesAmount.toFixed(2)}\n\n` +
+                  `Total: $${invoice.totalAmount.toFixed(2)}`
                 );
 
                 setLoading(false);
