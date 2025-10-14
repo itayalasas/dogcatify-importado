@@ -303,7 +303,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
               <TouchableOpacity style={styles.detailItem} onPress={openReviewsModal}>
                 {renderStarRating(averageRating)}
                 <Text style={styles.detailText}>
-                  {averageRating.toFixed(1)} ({totalReviews} reseñas)
+                  {averageRating.toFixed(1)} ({totalReviews.toString()} reseñas)
                 </Text>
               </TouchableOpacity>
             )}
@@ -345,7 +345,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
                   {renderStarRating(Math.round(averageRating), 24)}
                 </View>
                 <Text style={styles.totalReviewsText}>
-                  Basado en {totalReviews} reseñas
+                  Basado en {totalReviews.toString()} reseñas
                 </Text>
               </View>
             )}
