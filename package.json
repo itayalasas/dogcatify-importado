@@ -4,8 +4,8 @@
   "version": "9.0.0",
   "private": true,
   "scripts": {
-    "start": "expo start",
-    "dev": "expo start --clear",
+    "start": "expo start --tunnel",
+    "dev": "expo start --clear --tunnel",
     "web": "expo start --web",
     "android": "expo run:android",
     "ios": "expo run:ios",
