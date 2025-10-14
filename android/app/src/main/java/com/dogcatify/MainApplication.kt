@@ -1,4 +1,4 @@
-package com.helloworld
+package com.dogcatify
 
 import android.app.Application
 import android.content.res.Configuration
