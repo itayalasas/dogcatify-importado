@@ -11,22 +11,9 @@ Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
-    shouldSetBadge: true,a
+    shouldSetBadge: true,
   }),
 });
-
-// Add notification categories for better organization
-if (Platform.OS === 'ios') {
-  Notifications.setNotificationCategoryAsync('chat', [
-    {
-      identifier: 'reply',
-      buttonTitle: 'Responder',
-      options: {
-        opensAppToForeground: true,
-      },
-    },
-  ]);
-}
 
 interface NotificationContextType {
   expoPushToken: string | null;
