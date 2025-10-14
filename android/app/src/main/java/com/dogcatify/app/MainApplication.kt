@@ -1,4 +1,4 @@
-package com.dogcatify
+package com.dogcatify.app
 
 import android.app.Application
 import android.content.res.Configuration
