@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Dimensions, TextInput, FlatList } from 'react-native';
-import { router, useLocalSearchParams, Link } from 'expo-router';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Dimensions, TextInput } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, ChevronDown, Check, Mars, Venus, Search } from 'lucide-react-native';
+import { ArrowLeft, ChevronDown, Check, Mars, Venus, Search } from '../../components/ui/Icons';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -508,8 +508,8 @@ export default function AddPet() {
   ];
 
   const genderOptions = [
-    { value: 'male', label: 'Macho', icon: Mars },
-    { value: 'female', label: 'Hembra', icon: Venus },
+    { value: 'male', label: 'Macho', icon: '♂' },
+    { value: 'female', label: 'Hembra', icon: '♀' },
   ];
 
   return (
@@ -848,30 +848,29 @@ export default function AddPet() {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Género *</Text>
             <View style={styles.genderSelector}>
-              {genderOptions.map((option) => {
-                const IconComponent = option.icon;
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[
-                      styles.genderOption,
-                      gender === option.value && styles.selectedGenderOption
-                    ]}
-                    onPress={() => setGender(option.value)}
-                  >
-                    <IconComponent 
-                      size={24} 
-                      color={gender === option.value ? '#FFFFFF' : '#6B7280'} 
-                    />
-                    <Text style={[
-                      styles.genderOptionText,
-                      gender === option.value && styles.selectedGenderOptionText
-                    ]}>
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+              {genderOptions.map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.genderOption,
+                    gender === option.value && styles.selectedGenderOption
+                  ]}
+                  onPress={() => setGender(option.value)}
+                >
+                  <Text style={[
+                    styles.genderIcon,
+                    { color: gender === option.value ? '#FFFFFF' : '#6B7280' }
+                  ]}>
+                    {option.icon}
+                  </Text>
+                  <Text style={[
+                    styles.genderOptionText,
+                    gender === option.value && styles.selectedGenderOptionText
+                  ]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
 
@@ -1157,6 +1156,10 @@ const styles = StyleSheet.create({
   selectedGenderOption: {
     backgroundColor: '#2D6A6F',
     borderColor: '#2D6A6F',
+  },
+  genderIcon: {
+    fontSize: 24,
+    fontFamily: 'Inter-Regular',
   },
   genderOptionText: {
     fontSize: 16,
