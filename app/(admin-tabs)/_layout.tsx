@@ -103,24 +103,6 @@ export default function AdminTabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="promotions-new"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="promotions-test"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="promotions.bak"
-        options={{
-          href: null,
-        }}
-      />
     </Tabs>
   );
 }

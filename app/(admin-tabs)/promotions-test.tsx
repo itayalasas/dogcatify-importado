@@ -1,21 +1,7 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+// Este archivo ha sido deshabilitado
+// La funcionalidad de promociones está en promotions.tsx
+import { View } from 'react-native';
 
-export default function PromotionsTest() {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.text}>Test Promociones</Text>
-    </View>
-  );
+export default function DisabledScreen() {
+  return null;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  text: {
-    fontSize: 20,
-  },
-});
