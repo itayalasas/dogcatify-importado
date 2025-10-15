@@ -11,6 +11,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { generatePromotionInvoice } from '../../utils/promotionInvoicing';
 
 export default function AdminPromotions() {
+  console.log('🚀 [AdminPromotions] Component loaded!');
+
   const { currentUser } = useAuth();
   const [promotions, setPromotions] = useState<any[]>([]);
   const [filteredPromotions, setFilteredPromotions] = useState<any[]>([]);
@@ -54,19 +56,22 @@ export default function AdminPromotions() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    console.log('📋 [AdminPromotions useEffect] Running...');
     if (!currentUser) {
-      console.log('No user logged in');
+      console.log('⚠️ [AdminPromotions] No user logged in');
       return;
     }
 
-    console.log('Current user email:', currentUser.email);
+    console.log('✅ [AdminPromotions] Current user email:', currentUser.email);
     const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
+    console.log('🔐 [AdminPromotions] Is admin:', isAdmin);
+
     if (!isAdmin) {
-      console.log('User is not admin');
+      console.log('❌ [AdminPromotions] User is not admin, skipping fetch');
       return;
     }
 
-    console.log('Fetching promotions data...');
+    console.log('📡 [AdminPromotions] Starting data fetch...');
     fetchPromotions();
     fetchPartners();
     fetchProducts();
@@ -88,6 +93,7 @@ export default function AdminPromotions() {
   }, [searchQuery, promotions]);
 
   const fetchPromotions = async () => {
+    console.log('📥 [fetchPromotions] Starting...');
     try {
       const { data, error } = await supabaseClient
         .from('promotions')
@@ -96,6 +102,8 @@ export default function AdminPromotions() {
           partners:partner_id(business_name, business_type, logo)
         `)
         .order('created_at', { ascending: false });
+
+      console.log('📊 [fetchPromotions] Response:', { data, error });
 
       if (error) throw error;
 
@@ -121,10 +129,12 @@ export default function AdminPromotions() {
         } : null,
       })) || [];
 
+      console.log('✅ [fetchPromotions] Promotions data prepared:', promotionsData.length, 'items');
       setPromotions(promotionsData);
       setFilteredPromotions(promotionsData);
+      console.log('✅ [fetchPromotions] State updated successfully');
     } catch (error) {
-      console.error('Error fetching promotions:', error);
+      console.error('❌ [fetchPromotions] Error:', error);
     }
   };
 
