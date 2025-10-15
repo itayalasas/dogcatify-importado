@@ -3,7 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+  "Access-Control-Allow-Headers": "Content-Type, X-Cron-Secret",
 };
 
 /**
@@ -13,6 +13,8 @@ const corsHeaders = {
  * 2. Cancela la reserva asociada
  * 3. Cancela el pago en Mercado Pago si existe
  * 4. Actualiza el estado de la orden a 'cancelled'
+ *
+ * Seguridad: Esta función es pública pero requiere un token secreto en el header X-Cron-Secret
  */
 
 Deno.serve(async (req: Request) => {
@@ -24,6 +26,27 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    // Validar token secreto para seguridad
+    const cronSecret = req.headers.get('X-Cron-Secret');
+    const expectedSecret = Deno.env.get('CRON_SECRET') || 'default-secret-change-me';
+
+    if (cronSecret !== expectedSecret) {
+      console.error('❌ Invalid or missing cron secret');
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Unauthorized: Invalid or missing X-Cron-Secret header'
+        }),
+        {
+          status: 401,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders,
+          },
+        }
+      );
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
