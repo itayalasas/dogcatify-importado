@@ -305,7 +305,7 @@ export default function EditService() {
         `${isProduct ? 'Producto' : 'Servicio'} actualizado correctamente`,
         [{
           text: 'OK',
-          onPress: () => router.back()
+          onPress: () => router.replace(`/services/partner/${partnerId}?refresh=${Date.now()}`)
         }]
       );
     } catch (error) {

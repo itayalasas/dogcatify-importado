@@ -366,13 +366,7 @@ export default function AddService() {
         [{
           text: 'OK',
           onPress: () => {
-            router.push({
-              pathname: '/partner/configure-activities',
-              params: {
-                partnerId: partnerId,
-                businessType: businessType
-              }
-            });
+            router.replace(`/services/partner/${partnerId}?refresh=${Date.now()}`);
           }
         }]
       );
