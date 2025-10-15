@@ -12,6 +12,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Modal, TextInput } from 'react-native';
 import { supabaseClient } from '../../lib/supabase';
 import { NotificationService } from '@/utils/notifications';
+import { PartnerServiceAgreement } from '../../components/PartnerServiceAgreement';
 
 const replicateMercadoPagoConfig = async (userId: string) => {
   try {
@@ -124,6 +125,10 @@ export default function PartnerRegister() {
   const [geocodingResults, setGeocodingResults] = useState<any[]>([]);
   const [showGeocodingResults, setShowGeocodingResults] = useState(false);
   const [selectedGeocodingResult, setSelectedGeocodingResult] = useState<any>(null);
+
+  // Estados para el contrato de servicio
+  const [showAgreement, setShowAgreement] = useState(false);
+  const [agreementAccepted, setAgreementAccepted] = useState(false);
 
   useEffect(() => {
     loadCountries();
@@ -336,6 +341,16 @@ export default function PartnerRegister() {
 
   const handleSelectLogo = async () => {
     try {
+      // Solicitar permisos
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permisos requeridos',
+          'Necesitamos acceso a tu galería de fotos para seleccionar el logo'
+        );
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -344,15 +359,27 @@ export default function PartnerRegister() {
       });
 
       if (!result.canceled && result.assets[0]) {
+        console.log('Logo selected:', result.assets[0].uri);
         setLogo(result.assets[0].uri);
       }
     } catch (error) {
+      console.error('Error selecting logo:', error);
       Alert.alert('Error', 'No se pudo seleccionar la imagen');
     }
   };
 
   const handleSelectImages = async () => {
     try {
+      // Solicitar permisos
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permisos requeridos',
+          'Necesitamos acceso a tu galería de fotos para seleccionar las imágenes'
+        );
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
@@ -362,9 +389,11 @@ export default function PartnerRegister() {
 
       if (!result.canceled && result.assets) {
         const newImages = result.assets.map(asset => asset.uri);
+        console.log('Images selected:', newImages);
         setImages(prev => [...prev, ...newImages].slice(0, 5));
       }
     } catch (error) {
+      console.error('Error selecting images:', error);
       Alert.alert('Error', 'No se pudieron seleccionar las imágenes');
     }
   };
@@ -373,43 +402,77 @@ export default function PartnerRegister() {
   const uploadImage = async (imageUri: string, path: string): Promise<string> => {
     try {
       console.log(`Uploading image to path: ${path}`);
-      
-      // Fetch the image and convert to blob using the correct method for React Native
+      console.log(`Image URI: ${imageUri}`);
+
+      // Verificar que la URI existe
+      if (!imageUri || imageUri.trim() === '') {
+        throw new Error('URI de imagen inválida');
+      }
+
+      // Crear un FormData para la subida
+      const formData = new FormData();
+
+      // Determinar el tipo de archivo
+      const fileExtension = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+      const mimeType = fileExtension === 'png' ? 'image/png' : 'image/jpeg';
+
+      // Agregar el archivo al FormData
+      const file: any = {
+        uri: imageUri,
+        type: mimeType,
+        name: `image.${fileExtension}`,
+      };
+
+      console.log(`File info:`, file);
+
+      // Fetch the image and convert to blob
       const response = await fetch(imageUri);
       if (!response.ok) {
         throw new Error(`Failed to fetch image: ${response.status}`);
       }
-      
+
       const blob = await response.blob();
-      
-      console.log(`Image blob size: ${blob.size} bytes`);
-      
-      // Upload blob to Supabase storage using the correct method
+      console.log(`Image blob size: ${blob.size} bytes, type: ${blob.type}`);
+
+      // Verificar que el blob tiene contenido
+      if (blob.size === 0) {
+        throw new Error('La imagen está vacía');
+      }
+
+      // Upload blob to Supabase storage
       const { data, error } = await supabaseClient.storage
         .from('dogcatify')
         .upload(path, blob, {
-          contentType: 'image/jpeg',
+          contentType: mimeType,
           cacheControl: '3600',
-          upsert: false,
+          upsert: true,
         });
 
       if (error) {
         console.error('Supabase storage error:', error);
+        console.error('Error details:', JSON.stringify(error));
         throw error;
       }
 
-      console.log('Upload successful, getting public URL...');
-      
+      console.log('Upload successful, data:', data);
+      console.log('Getting public URL...');
+
       const { data: urlData } = supabaseClient.storage
         .from('dogcatify')
         .getPublicUrl(path);
-      
+
       const publicUrl = urlData.publicUrl;
       console.log(`Generated public URL: ${publicUrl}`);
+
+      // Verificar que la URL es válida
+      if (!publicUrl || publicUrl.trim() === '') {
+        throw new Error('No se pudo generar la URL pública');
+      }
 
       return publicUrl;
     } catch (error) {
       console.error('Error in uploadImage:', error);
+      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       throw error;
     }
   };
@@ -417,6 +480,15 @@ export default function PartnerRegister() {
   const handleSubmit = async () => {
     if (!selectedType || !businessName || !description || !calle || !numero || !selectedCountry || !selectedDepartment || !phone) {
       Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
+      return;
+    }
+
+    if (!agreementAccepted) {
+      Alert.alert(
+        'Contrato requerido',
+        'Debes leer y aceptar el contrato de servicio para continuar',
+        [{ text: 'OK' }]
+      );
       return;
     }
 
@@ -843,8 +915,8 @@ export default function PartnerRegister() {
               <View style={styles.shippingHeader}>
                 <Text style={styles.shippingTitle}>Configuración de Envío</Text>
               </View>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.shippingCheckbox}
                 onPress={() => setHasShipping(!hasShipping)}
               >
@@ -853,7 +925,7 @@ export default function PartnerRegister() {
                 </View>
                 <Text style={styles.checkboxLabel}>Ofrece servicio de envío</Text>
               </TouchableOpacity>
-              
+
               {hasShipping && (
                 <Input
                   label="Costo de envío"
@@ -866,6 +938,44 @@ export default function PartnerRegister() {
               )}
             </View>
           )}
+
+          <View style={styles.agreementSection}>
+            <TouchableOpacity
+              style={styles.agreementCheckbox}
+              onPress={() => {
+                if (agreementAccepted) {
+                  setAgreementAccepted(false);
+                } else {
+                  setShowAgreement(true);
+                }
+              }}
+            >
+              <View style={[styles.checkbox, agreementAccepted && styles.checkedCheckbox]}>
+                {agreementAccepted && <Text style={styles.checkmark}>✓</Text>}
+              </View>
+              <View style={styles.agreementTextContainer}>
+                <Text style={styles.agreementText}>
+                  He leído y acepto el{' '}
+                  <Text
+                    style={styles.agreementLink}
+                    onPress={() => setShowAgreement(true)}
+                  >
+                    Contrato de Servicio para Aliados
+                  </Text>
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {!agreementAccepted && (
+              <TouchableOpacity
+                style={styles.readAgreementButton}
+                onPress={() => setShowAgreement(true)}
+              >
+                <FileText size={16} color="#2D6A6F" />
+                <Text style={styles.readAgreementText}>Leer contrato completo</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           <Button
             title="Enviar Solicitud"
@@ -917,6 +1027,13 @@ export default function PartnerRegister() {
           </View>
         </View>
       </Modal>
+
+      {/* Modal del Contrato de Servicio */}
+      <PartnerServiceAgreement
+        visible={showAgreement}
+        onClose={() => setShowAgreement(false)}
+        onAccept={() => setAgreementAccepted(true)}
+      />
     </SafeAreaView>
   );
 }
@@ -1306,5 +1423,50 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#111827',
+  },
+  agreementSection: {
+    marginBottom: 24,
+    padding: 16,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  agreementCheckbox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  agreementTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  agreementText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    lineHeight: 20,
+  },
+  agreementLink: {
+    color: '#2D6A6F',
+    fontFamily: 'Inter-SemiBold',
+    textDecorationLine: 'underline',
+  },
+  readAgreementButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2D6A6F',
+  },
+  readAgreementText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#2D6A6F',
+    marginLeft: 8,
   },
 });
