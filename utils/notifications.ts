@@ -169,45 +169,119 @@ export const NotificationService = {
    * Send password reset email with custom token
    */
   sendPasswordResetEmail: async (
-    email: string, 
-    name: string, 
+    email: string,
+    name: string,
     resetUrl: string
   ): Promise<void> => {
-    const subject = 'Restablecer contraseña - DogCatiFy';
-    const text = `Hola ${name},\n\nHemos recibido una solicitud para restablecer la contraseña de tu cuenta en DogCatiFy.\n\nPara restablecer tu contraseña, haz clic en el siguiente enlace:\n\n${resetUrl}\n\nEste enlace expira en 24 horas.\n\nSi no solicitaste este cambio, puedes ignorar este correo.\n\nEl equipo de DogCatiFy`;
+    const subject = 'Restablecer tu contraseña - DogCatiFy';
+    const text = `Hola ${name},\n\nHemos recibido una solicitud para restablecer la contraseña de tu cuenta en DogCatiFy.\n\nPara restablecer tu contraseña, haz clic en el siguiente enlace:\n\n${resetUrl}\n\nEste enlace expira en 24 horas.\n\nSi no solicitaste este cambio, puedes ignorar este correo de forma segura.\n\nEl equipo de DogCatiFy`;
     const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background-color: #2D6A6F; padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 10px 0;">Restablecer contraseña</h1>
-        </div>
-        <div style="padding: 20px; background-color: #f9f9f9;">
-          <p>Hola <strong>${name}</strong>,</p>
-          <p>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta en DogCatiFy.</p>
-          
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${resetUrl}" style="background-color: #2D6A6F; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block;">
-              🔑 Restablecer mi contraseña
-            </a>
-          </div>
-          
-          <div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0;">
-            <p><strong>🔒 Importante:</strong></p>
-            <p>Debes hacer clic en el botón de arriba para restablecer tu contraseña.</p>
-            <p>Si el botón no funciona, copia y pega este enlace en tu navegador:</p>
-            <p style="word-break: break-all; font-family: monospace; background: #f5f5f5; padding: 10px; border-radius: 4px;">
-              ${resetUrl}
-            </p>
-            <p><strong>Este enlace expira en 24 horas.</strong></p>
-          </div>
-          
-          <p>Si no solicitaste este cambio, puedes ignorar este correo de forma segura.</p>
-          <p>El equipo de DogCatiFy</p>
-        </div>
-        <div style="background-color: #f0f0f0; padding: 10px; text-align: center; font-size: 12px; color: #666;">
-          <p>© 2025 DogCatiFy. Todos los derechos reservados.</p>
-          <p>Si no solicitaste este cambio, puedes ignorar este correo.</p>
-        </div>
-      </div>
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Restablecer Contraseña</title>
+      </head>
+      <body style="margin: 0; padding: 0; background-color: #f4f4f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f4f4f7;">
+          <tr>
+            <td align="center" style="padding: 40px 20px;">
+              <table width="600" border="0" cellspacing="0" cellpadding="0" style="background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden;">
+
+                <!-- Header con logo -->
+                <tr>
+                  <td style="background: linear-gradient(135deg, #2D6A6F 0%, #1e4d51 100%); padding: 40px 30px; text-align: center;">
+                    <img src="https://zkgiwamycbjcogcgqhff.supabase.co/storage/v1/object/public/dogcatify/system/nuevo%20logo%20fondo%20blanco.png" alt="DogCatiFy" style="max-width: 180px; height: auto; margin-bottom: 20px;" />
+                    <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.5px;">Recuperación de Contraseña</h1>
+                  </td>
+                </tr>
+
+                <!-- Contenido principal -->
+                <tr>
+                  <td style="padding: 40px 30px;">
+                    <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">Hola <strong style="color: #1f2937;">${name}</strong>,</p>
+
+                    <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
+                      Recibimos una solicitud para restablecer la contraseña de tu cuenta en DogCatiFy. Para continuar con el proceso, haz clic en el botón de abajo:
+                    </p>
+
+                    <!-- Botón CTA -->
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 30px 0;">
+                      <tr>
+                        <td align="center">
+                          <a href="${resetUrl}" style="display: inline-block; background: linear-gradient(135deg, #2D6A6F 0%, #1e4d51 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 8px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(45, 106, 111, 0.3); transition: all 0.3s;">
+                            Restablecer mi contraseña
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Información adicional -->
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 30px 0;">
+                      <tr>
+                        <td style="background-color: #EFF6FF; border-left: 4px solid #3B82F6; padding: 20px; border-radius: 6px;">
+                          <p style="color: #1e40af; font-size: 14px; line-height: 1.6; margin: 0 0 12px 0; font-weight: 600;">
+                            Información importante:
+                          </p>
+                          <ul style="color: #374151; font-size: 14px; line-height: 1.6; margin: 0; padding-left: 20px;">
+                            <li style="margin-bottom: 8px;">Este enlace es válido por <strong>24 horas</strong></li>
+                            <li style="margin-bottom: 8px;">Solo puedes usar este enlace una vez</li>
+                            <li>Si el botón no funciona, copia y pega el enlace de abajo en tu navegador</li>
+                          </ul>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- URL alternativa -->
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 20px 0;">
+                      <tr>
+                        <td style="background-color: #F9FAFB; padding: 15px; border-radius: 6px; border: 1px solid #E5E7EB;">
+                          <p style="color: #6B7280; font-size: 12px; margin: 0 0 8px 0;">Enlace alternativo:</p>
+                          <p style="color: #374151; font-size: 12px; word-break: break-all; font-family: 'Courier New', monospace; margin: 0; line-height: 1.5;">
+                            ${resetUrl}
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Nota de seguridad -->
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 30px 0 0 0;">
+                      <tr>
+                        <td style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; border-radius: 6px;">
+                          <p style="color: #92400E; font-size: 14px; line-height: 1.6; margin: 0; font-weight: 500;">
+                            <strong>¿No solicitaste este cambio?</strong><br>
+                            Si no realizaste esta solicitud, puedes ignorar este correo de forma segura. Tu contraseña permanecerá sin cambios.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <p style="color: #6B7280; font-size: 14px; line-height: 1.6; margin: 30px 0 0 0;">
+                      Saludos,<br>
+                      <strong style="color: #374151;">El equipo de DogCatiFy</strong>
+                    </p>
+                  </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                  <td style="background-color: #F9FAFB; padding: 30px; text-align: center; border-top: 1px solid #E5E7EB;">
+                    <p style="color: #6B7280; font-size: 12px; line-height: 1.6; margin: 0 0 8px 0;">
+                      © 2025 DogCatiFy. Todos los derechos reservados.
+                    </p>
+                    <p style="color: #9CA3AF; font-size: 11px; line-height: 1.5; margin: 0;">
+                      Este es un correo automático, por favor no respondas a este mensaje.
+                    </p>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
     `;
 
     await NotificationService.sendEmail(email, subject, text, html);
