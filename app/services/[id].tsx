@@ -10,7 +10,7 @@ import { supabaseClient } from '@/lib/supabase';
 const { width } = Dimensions.get('window');
 
 export default function ServiceDetail() {
-  const { id, discount } = useLocalSearchParams<{ id: string; discount?: string }>();
+  const { id, discount, partnerId } = useLocalSearchParams<{ id: string; discount?: string; partnerId?: string }>();
   const { currentUser } = useAuth();
   
   // Debug the received ID - MOVED OUTSIDE useEffect
@@ -471,7 +471,10 @@ export default function ServiceDetail() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace(`/services/partner/${service.partnerId}`)} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => router.replace(`/services/partner/${partnerId || service.partnerId}`)}
+          style={styles.backButton}
+        >
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.titleContainer}>

@@ -10,7 +10,7 @@ import { supabaseClient } from '@/lib/supabase';
 const { width } = Dimensions.get('window');
 
 export default function PartnerServices() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, refresh } = useLocalSearchParams<{ id: string; refresh?: string }>();
   const { currentUser } = useAuth();
   const [partner, setPartner] = useState<any>(null);
   const [services, setServices] = useState<any[]>([]);
@@ -30,7 +30,7 @@ export default function PartnerServices() {
 
   useEffect(() => {
     fetchPartnerDetails();
-  }, [id]);
+  }, [id, refresh]);
 
   useEffect(() => {
     if (partner) {
@@ -318,7 +318,7 @@ export default function PartnerServices() {
     
     console.log('Navigating to service detail with valid UUID:', serviceId);
     try {
-      router.push(`/services/${serviceId}`);
+      router.push(`/services/${serviceId}?partnerId=${id}`);
     } catch (navigationError) {
       console.error('Navigation error to service detail:', navigationError);
       Alert.alert('Error', 'No se pudo navegar al detalle del servicio');

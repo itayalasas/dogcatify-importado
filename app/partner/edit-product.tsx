@@ -30,6 +30,7 @@ export default function EditProduct() {
   const [loading, setLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState(false);
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
+  const [partnerId, setPartnerId] = useState<string>('');
 
   useEffect(() => {
     if (!productId) {
@@ -66,6 +67,7 @@ export default function EditProduct() {
         
         // Fetch partner info
         if (data.partnerId) {
+          setPartnerId(data.partnerId);
           const partnerDoc = await getDoc(doc(db, 'partners', data.partnerId));
           if (partnerDoc.exists()) {
             setPartnerProfile(partnerDoc.data());
@@ -188,7 +190,7 @@ export default function EditProduct() {
       });
 
       Alert.alert('Éxito', 'Producto actualizado correctamente', [
-        { text: 'OK', onPress: () => router.back() }
+        { text: 'OK', onPress: () => router.replace(`/services/partner/${partnerId}?refresh=${Date.now()}`) }
       ]);
     } catch (error) {
       console.error('Error updating product:', error);
