@@ -1724,12 +1724,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     width: '100%',
     maxWidth: 500,
-    maxHeight: '90%',
+    height: '90%',
     alignSelf: 'center',
     flexDirection: 'column',
   },
   modalBody: {
     flex: 1,
+    minHeight: 200,
   },
   modalBodyContent: {
     paddingHorizontal: 20,
