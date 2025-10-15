@@ -860,36 +860,70 @@ export default function PartnerServices() {
               </Text>
             </Card>
           ) : (
-            filteredServices.map((service) => (
-              <Card key={service.id} style={styles.serviceCard}>
-                <TouchableOpacity 
-                  style={styles.serviceContent}
+            filteredServices.map((service) => {
+              const isBoarding = partner?.business_type === 'boarding' || partner?.businessType === 'boarding';
+
+              return (
+                <TouchableOpacity
+                  key={service.id}
                   onPress={() => handleServicePress(service.id)}
+                  style={styles.modernServiceCard}
                 >
-                  <View style={styles.serviceHeader}>
-                    <Text style={styles.serviceName} numberOfLines={2}>{service.name}</Text>
-                    {service.price > 0 && (
-                      <Text style={styles.servicePrice} numberOfLines={1}>{formatPrice(service.price)}</Text>
-                    )}
-                  </View>
-                  
-                  {service.description && (
-                    <Text style={styles.serviceDescription} numberOfLines={2}>
-                      {service.description}
-                    </Text>
-                  )}
-                  
-                  <View style={styles.serviceDetails}>
-                    <View style={styles.serviceDetail}>
-                      <Clock size={14} color="#6B7280" />
-                      <Text style={styles.serviceDetailText}>
-                        {service.duration || 60} min
+                  <View style={styles.modernServiceContent}>
+                    <View style={styles.modernServiceLeft}>
+                      <View style={styles.serviceIconContainer}>
+                        <Text style={styles.serviceIcon}>🐾</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.modernServiceCenter}>
+                      <Text style={styles.modernServiceName} numberOfLines={1}>
+                        {service.name}
                       </Text>
+                      {service.description && (
+                        <Text style={styles.modernServiceDescription} numberOfLines={2}>
+                          {service.description}
+                        </Text>
+                      )}
+
+                      {!isBoarding && (
+                        <View style={styles.modernServiceInfo}>
+                          {service.duration && (
+                            <View style={styles.modernInfoItem}>
+                              <Clock size={14} color="#10B981" />
+                              <Text style={styles.modernInfoText}>
+                                {service.duration} min
+                              </Text>
+                            </View>
+                          )}
+                          {service.price > 0 && (
+                            <View style={styles.modernInfoItem}>
+                              <Text style={styles.modernPriceText}>
+                                {formatPrice(service.price)}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+
+                      {isBoarding && (
+                        <View style={styles.boardingBadge}>
+                          <Text style={styles.boardingBadgeText}>Ver opciones de hospedaje</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.modernServiceRight}>
+                      <View style={styles.reserveButton}>
+                        <Text style={styles.reserveButtonText}>
+                          {isBoarding ? 'Ver' : 'Reservar'}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                 </TouchableOpacity>
-              </Card>
-            ))
+              );
+            })
           )
         )}
       </ScrollView>
@@ -1365,6 +1399,105 @@ const styles = StyleSheet.create({
   },
   serviceCard: {
     marginBottom: 12,
+  },
+  modernServiceCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+    overflow: 'hidden',
+  },
+  modernServiceContent: {
+    flexDirection: 'row',
+    padding: 16,
+    alignItems: 'center',
+  },
+  modernServiceLeft: {
+    marginRight: 12,
+  },
+  serviceIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#ECFDF5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  serviceIcon: {
+    fontSize: 24,
+  },
+  modernServiceCenter: {
+    flex: 1,
+    marginRight: 12,
+  },
+  modernServiceName: {
+    fontSize: 17,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  modernServiceDescription: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  modernServiceInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  modernInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  modernInfoText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#10B981',
+  },
+  modernPriceText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    color: '#10B981',
+  },
+  boardingBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  boardingBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#3B82F6',
+  },
+  modernServiceRight: {
+    justifyContent: 'center',
+  },
+  reserveButton: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  reserveButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
   },
   serviceContent: {
     padding: 12,
