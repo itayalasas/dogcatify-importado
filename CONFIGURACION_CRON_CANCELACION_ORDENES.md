@@ -18,32 +18,156 @@ Esta configuración permite cancelar automáticamente las órdenes de reserva qu
 https://[TU-PROYECTO].supabase.co/functions/v1/cancel-expired-orders
 ```
 
-## Configuración del Cron Job en Supabase
+---
 
-### Opción 1: Configurar desde el Dashboard de Supabase (Recomendado)
+## Paso 1: Configurar Token Secreto (OBLIGATORIO)
+
+La función está protegida con un token secreto personalizado para evitar accesos no autorizados.
+
+### Generar un Token Secreto
+
+Genera un token seguro aleatorio. Puedes usar uno de estos métodos:
+
+**Opción A: Usando openssl (Linux/Mac)**
+```bash
+openssl rand -base64 32
+```
+
+**Opción B: Usando Node.js**
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+**Opción C: Online**
+Ve a https://www.random.org/strings/ y genera una cadena de 32 caracteres.
+
+**Ejemplo de token generado:**
+```
+mT8xK9pQ2wR5yN3jL7vB4hF6gD1sA0cE
+```
+
+### Configurar el Secret en Supabase
 
 1. Ve al Dashboard de Supabase: https://supabase.com/dashboard
 2. Selecciona tu proyecto
-3. Ve a **Database** → **Extensions**
-4. Busca y habilita la extensión **pg_cron**
-5. Ve a **SQL Editor**
-6. Ejecuta el siguiente script SQL:
+3. Ve a **Project Settings** → **Edge Functions**
+4. En la sección **Secrets**, agrega un nuevo secret:
+   - **Name**: `CRON_SECRET`
+   - **Value**: [Tu token generado]
+5. Haz clic en **Add Secret**
+
+**IMPORTANTE:** Guarda este token en un lugar seguro, lo necesitarás para configurar el cron job.
+
+---
+
+## Paso 2: Configurar el Cron Job
+
+### Opción A: Usando cron-job.org (Recomendado - GRATIS)
+
+#### 1. Crear cuenta en cron-job.org
+
+Ve a https://cron-job.org y crea una cuenta gratuita.
+
+#### 2. Crear un nuevo Cron Job
+
+Haz clic en "Create cronjob" y configura lo siguiente:
+
+**Title:**
+```
+DogCatify - Cancelar Órdenes Expiradas
+```
+
+**URL:**
+```
+https://[TU-PROYECTO-ID].supabase.co/functions/v1/cancel-expired-orders
+```
+
+Reemplaza `[TU-PROYECTO-ID]` con tu ID real de Supabase. Ejemplo:
+```
+https://zkgiwamycbjcogcgqhff.supabase.co/functions/v1/cancel-expired-orders
+```
+
+**Request Method:**
+```
+POST
+```
+
+**Request Headers:**
+
+Haz clic en "Add header" y agrega estos dos headers:
+
+**Header 1:**
+- Name: `X-Cron-Secret`
+- Value: `[TU-TOKEN-SECRETO]`
+
+Ejemplo:
+```
+X-Cron-Secret: mT8xK9pQ2wR5yN3jL7vB4hF6gD1sA0cE
+```
+
+**Header 2:**
+- Name: `Content-Type`
+- Value: `application/json`
+
+**Request Body:**
+Deja vacío o pon:
+```json
+{}
+```
+
+**Schedule:**
+- Selecciona: **Every 10 minutes**
+- O usa cron expression: `*/10 * * * *`
+
+#### 3. Guardar y Activar
+
+1. Haz clic en "Create cronjob"
+2. Activa el job usando el toggle
+3. Haz clic en "Test run" para verificar que funciona
+
+**Respuesta esperada:**
+```json
+{
+  "success": true,
+  "message": "No expired orders found",
+  "cancelledCount": 0
+}
+```
+
+---
+
+### Opción B: Usando pg_cron (Dentro de Supabase)
+
+Si prefieres que el cron job se ejecute directamente desde la base de datos:
+
+#### 1. Habilitar pg_cron
+
+1. Ve a **Database** → **Extensions**
+2. Busca y habilita **pg_cron**
+
+#### 2. Ejecutar Script SQL
+
+Ve a **SQL Editor** y ejecuta:
 
 ```sql
--- Habilitar la extensión pg_cron si no está habilitada
+-- Habilitar la extensión pg_cron
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 
--- Crear el cron job para ejecutar cada 2 minutos
+-- Configurar variables
+ALTER DATABASE postgres SET app.settings.supabase_url = 'https://[TU-PROYECTO].supabase.co';
+ALTER DATABASE postgres SET app.settings.cron_secret = '[TU-TOKEN-SECRETO]';
+
+-- Crear el cron job para ejecutar cada 10 minutos
 SELECT cron.schedule(
-  'cancel-expired-orders',           -- Nombre del job
-  '*/2 * * * *',                     -- Cada 2 minutos
+  'cancel-expired-orders',
+  '*/10 * * * *',
   $$
   SELECT
     net.http_post(
       url := current_setting('app.settings.supabase_url') || '/functions/v1/cancel-expired-orders',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key')
+        'X-Cron-Secret', current_setting('app.settings.cron_secret')
       ),
       body := '{}'::jsonb
     ) as request_id;
@@ -51,69 +175,62 @@ SELECT cron.schedule(
 );
 ```
 
-7. Configura las variables de entorno necesarias:
+Reemplaza:
+- `[TU-PROYECTO]` con tu ID de Supabase
+- `[TU-TOKEN-SECRETO]` con el token que generaste
 
-```sql
--- Configurar la URL de Supabase (reemplaza con tu URL)
-ALTER DATABASE postgres SET app.settings.supabase_url = 'https://[TU-PROYECTO].supabase.co';
+---
 
--- Configurar el service role key (reemplaza con tu clave)
-ALTER DATABASE postgres SET app.settings.service_role_key = '[TU-SERVICE-ROLE-KEY]';
+## Probar la Configuración
+
+### Probar manualmente con curl
+
+```bash
+curl -X POST \
+  "https://[TU-PROYECTO].supabase.co/functions/v1/cancel-expired-orders" \
+  -H "X-Cron-Secret: [TU-TOKEN-SECRETO]" \
+  -H "Content-Type: application/json" \
+  -d '{}'
 ```
 
-### Opción 2: Usar un Servicio Externo de Cron (Alternativa)
-
-Si prefieres usar un servicio externo, puedes usar:
-
-#### A) Usando cron-job.org (Gratis)
-
-1. Ve a https://cron-job.org
-2. Crea una cuenta
-3. Crea un nuevo cron job con:
-   - **URL**: `https://[TU-PROYECTO].supabase.co/functions/v1/cancel-expired-orders`
-   - **Método**: POST
-   - **Headers**:
-     ```
-     Authorization: Bearer [TU-SERVICE-ROLE-KEY]
-     Content-Type: application/json
-     ```
-   - **Frecuencia**: Cada 2 minutos
-
-#### B) Usando EasyCron (Gratis hasta 250 jobs/día)
-
-1. Ve a https://www.easycron.com
-2. Registrate y crea un cron job
-3. Configura:
-   - **URL**: `https://[TU-PROYECTO].supabase.co/functions/v1/cancel-expired-orders`
-   - **Cron Expression**: `*/2 * * * *` (cada 2 minutos)
-   - **Method**: POST
-   - **Custom Headers**:
-     ```
-     Authorization: Bearer [TU-SERVICE-ROLE-KEY]
-     Content-Type: application/json
-     ```
-
-### Opción 3: Usar Supabase Edge Function con Deno Deploy Cron
-
-Si estás usando Deno Deploy, puedes configurar un cron en el archivo `deno.json`:
-
+**Respuesta exitosa:**
 ```json
 {
-  "tasks": {
-    "cron:cancel-orders": "deno run --allow-net --allow-env cancel-expired-orders-cron.ts"
-  },
-  "cron": {
-    "cancel-expired-orders": {
-      "schedule": "*/2 * * * *",
-      "handler": "cancel-expired-orders-cron.ts"
-    }
-  }
+  "success": true,
+  "message": "No expired orders found",
+  "cancelledCount": 0
 }
 ```
 
+O si hay órdenes para cancelar:
+```json
+{
+  "success": true,
+  "message": "Cancelled 2 expired orders",
+  "cancelledCount": 2
+}
+```
+
+**Respuesta con error (token incorrecto):**
+```json
+{
+  "success": false,
+  "error": "Unauthorized: Invalid or missing X-Cron-Secret header"
+}
+```
+
+---
+
 ## Verificar que el Cron está Funcionando
 
-### Ver logs del cron job (si usas pg_cron)
+### Si usas cron-job.org:
+
+1. Ve a tu dashboard en cron-job.org
+2. Haz clic en tu cron job
+3. Ve a la pestaña "History"
+4. Verifica que las ejecuciones muestran status 200 OK
+
+### Si usas pg_cron:
 
 ```sql
 -- Ver el historial de ejecuciones
@@ -126,20 +243,7 @@ LIMIT 10;
 SELECT * FROM cron.job;
 ```
 
-### Probar la función manualmente
-
-Puedes probar la función haciendo una llamada HTTP directa:
-
-```bash
-curl -X POST \
-  https://[TU-PROYECTO].supabase.co/functions/v1/cancel-expired-orders \
-  -H "Authorization: Bearer [TU-SERVICE-ROLE-KEY]" \
-  -H "Content-Type: application/json"
-```
-
-## Monitoreo
-
-### Ver órdenes canceladas en la base de datos
+### Ver órdenes canceladas en la base de datos:
 
 ```sql
 -- Ver órdenes canceladas recientemente
@@ -156,69 +260,137 @@ WHERE status = 'cancelled'
 ORDER BY updated_at DESC;
 ```
 
-### Ver reservas canceladas
-
-```sql
--- Ver reservas canceladas recientemente
-SELECT
-  b.id,
-  b.created_at,
-  b.updated_at,
-  b.status,
-  b.service_name,
-  b.customer_email,
-  b.date,
-  b.time
-FROM bookings b
-WHERE b.status = 'cancelled'
-  AND b.updated_at > NOW() - INTERVAL '1 hour'
-ORDER BY b.updated_at DESC;
-```
-
-## Desactivar el Cron Job (si es necesario)
-
-Si necesitas desactivar temporalmente la cancelación automática:
-
-### Si usas pg_cron:
-
-```sql
--- Desactivar el job
-SELECT cron.unschedule('cancel-expired-orders');
-
--- Para reactivarlo, vuelve a ejecutar el script de configuración
-```
-
-### Si usas un servicio externo:
-- Simplemente pausa o elimina el cron job desde el panel del servicio
-
-## Notas Importantes
-
-⚠️ **Importante**: El cron job ejecuta cada 2 minutos, pero solo cancela órdenes con más de 10 minutos. Esto significa:
-- Una orden creada a las 10:00 AM será cancelada aproximadamente a las 10:10-10:12 AM
-- El horario permanece bloqueado durante esos 10 minutos para dar tiempo al usuario de completar el pago
-
-🔐 **Seguridad**: Nunca expongas tu Service Role Key públicamente. Solo úsala en el backend o en configuraciones seguras.
-
-📊 **Rendimiento**: La función está optimizada para manejar múltiples órdenes expiradas en una sola ejecución.
+---
 
 ## Frecuencia Recomendada
 
-- **Cada 2 minutos** (configuración actual): Balance óptimo entre respuesta rápida y uso de recursos
-- **Cada 5 minutos**: Si quieres reducir el uso de recursos
-- **Cada minuto**: Solo si necesitas liberación inmediata de horarios (mayor consumo)
+- **Cada 10 minutos** (configuración recomendada): Balance óptimo
+- **Cada 5 minutos**: Si quieres liberación más rápida de horarios
+- **Cada 2 minutos**: Si tienes alto volumen de reservas
+
+---
+
+## Seguridad
+
+### ¿Por qué usar un token secreto?
+
+La función es pública (puede ser llamada desde internet) pero está protegida con un token secreto que solo tú conoces. Esto previene:
+
+- ❌ Llamadas no autorizadas
+- ❌ Abuso del servicio
+- ❌ Cancelaciones maliciosas
+
+### ¿Es seguro el token en cron-job.org?
+
+Sí, los headers de cron-job.org son privados y no se exponen públicamente.
+
+### ¿Debo rotar el token?
+
+Puedes cambiar el token en cualquier momento:
+
+1. Genera un nuevo token
+2. Actualiza el secret en Supabase (Project Settings → Edge Functions)
+3. Actualiza el header en cron-job.org
+
+---
 
 ## Solución de Problemas
 
-### La función no está cancelando órdenes
+### Error 401 Unauthorized
 
-1. Verifica que el cron job esté configurado correctamente
-2. Revisa los logs de la función en Supabase Dashboard → Edge Functions → Logs
-3. Verifica que las variables de entorno estén configuradas
+**Causa:** Token secreto incorrecto o faltante
+
+**Solución:**
+1. Verifica que configuraste el secret `CRON_SECRET` en Supabase
+2. Verifica que el header `X-Cron-Secret` en cron-job.org tiene el valor correcto
+3. Asegúrate de que no hay espacios extra en el token
+
+### La función no cancela órdenes
+
+**Verificar:**
+1. El cron job está activo y ejecutándose
+2. Hay órdenes con más de 10 minutos en estado pending
+3. Los logs de la función en Supabase Dashboard → Edge Functions → Logs
 
 ### Mercado Pago muestra errores
 
-Esto es normal si el usuario no inició el pago. La función continuará cancelando la orden y liberando el horario de todas formas.
+Esto es normal si el usuario no inició el pago. La función continuará cancelando la orden de todas formas.
 
-### Los horarios no se liberan
+---
 
-Verifica que la función `fetchExistingBookings` en el código cliente esté filtrando correctamente los estados `cancelled`.
+## Monitoreo
+
+### Ver logs de la función:
+
+1. Ve a Supabase Dashboard
+2. **Edge Functions** → **cancel-expired-orders**
+3. Pestaña **Logs**
+
+### Estadísticas SQL:
+
+```sql
+-- Contar órdenes canceladas por el cron en las últimas 24 horas
+SELECT COUNT(*) as total_canceladas
+FROM orders
+WHERE status = 'cancelled'
+  AND payment_status = 'cancelled'
+  AND updated_at > NOW() - INTERVAL '24 hours';
+
+-- Ver horario de las cancelaciones
+SELECT
+  DATE_TRUNC('hour', updated_at) as hora,
+  COUNT(*) as cancelaciones
+FROM orders
+WHERE status = 'cancelled'
+  AND updated_at > NOW() - INTERVAL '24 hours'
+GROUP BY hora
+ORDER BY hora DESC;
+```
+
+---
+
+## Desactivar el Cron Job
+
+### Si usas cron-job.org:
+1. Ve a tu dashboard
+2. Desactiva el toggle del job
+3. O elimínalo completamente
+
+### Si usas pg_cron:
+```sql
+-- Desactivar el job
+SELECT cron.unschedule('cancel-expired-orders');
+```
+
+---
+
+## Checklist de Configuración Completa
+
+Antes de terminar, verifica que completaste todos los pasos:
+
+- [ ] Generé un token secreto seguro
+- [ ] Configuré el secret `CRON_SECRET` en Supabase
+- [ ] Creé el cron job en cron-job.org (o configuré pg_cron)
+- [ ] Configuré el header `X-Cron-Secret` correctamente
+- [ ] Probé la función manualmente con curl (respuesta 200 OK)
+- [ ] Verifiqué que el cron job está ejecutándose (History en cron-job.org)
+- [ ] Guardé el token secreto en un lugar seguro
+
+---
+
+## Resumen de la Configuración
+
+**Función:** `cancel-expired-orders`
+**URL:** `https://[TU-PROYECTO].supabase.co/functions/v1/cancel-expired-orders`
+**Método:** POST
+**Headers requeridos:**
+- `X-Cron-Secret`: Tu token secreto
+- `Content-Type`: application/json
+
+**Frecuencia:** Cada 10 minutos
+**Timeout de órdenes:** 10 minutos
+**Protección:** Token secreto personalizado
+
+---
+
+¡Listo! Tu sistema de cancelación automática está configurado y funcionando.
