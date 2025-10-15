@@ -189,11 +189,12 @@ export default function ServiceBooking() {
       twoWeeksLater.setDate(today.getDate() + 14);
       
       // Fetch existing bookings using Supabase
+      // Include pending_payment to block slots while payment is being processed
       const { data: bookingsData, error } = await supabaseClient
         .from('bookings')
         .select('*')
         .eq('partner_id', partnerId)
-        .in('status', ['pending', 'confirmed'])
+        .in('status', ['pending', 'pending_payment', 'confirmed'])
         .gte('date', today.toISOString())
         .lte('date', twoWeeksLater.toISOString());
       
