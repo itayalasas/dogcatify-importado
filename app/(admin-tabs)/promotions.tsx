@@ -5,7 +5,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
-import { supabaseClient } from '@/lib/supabase';
+import { supabaseClient, supabaseUrl, supabaseAnonKey } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
@@ -464,11 +464,27 @@ export default function AdminPromotions() {
       const clicksTotal = invoiceType !== 'views' ? selectedPromotionForInvoice.clicks * parseFloat(pricePerClick || '0') : 0;
       const total = viewsTotal + clicksTotal;
 
+      // Get current session token
+      const { data: { session } } = await supabaseClient.auth.getSession();
+
+      if (!session) {
+        throw new Error('No hay sesión activa');
+      }
+
+      console.log('📧 [Invoice] Calling Edge Function...');
+      console.log('📧 [Invoice] URL:', `${supabaseUrl}/functions/v1/generate-promotion-invoice`);
+      console.log('📧 [Invoice] Data:', {
+        promotionId: selectedPromotionForInvoice.id,
+        invoiceType,
+        email: invoiceEmail,
+        total,
+      });
+
       // Call Edge Function to generate and send invoice
-      const response = await fetch(`${supabaseClient.supabaseUrl}/functions/v1/generate-promotion-invoice`, {
+      const response = await fetch(`${supabaseUrl}/functions/v1/generate-promotion-invoice`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${supabaseClient.supabaseKey}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -491,8 +507,13 @@ export default function AdminPromotions() {
         }),
       });
 
+      console.log('📧 [Invoice] Response status:', response.status);
+
+      const responseData = await response.json();
+      console.log('📧 [Invoice] Response data:', responseData);
+
       if (!response.ok) {
-        throw new Error('Error al generar la factura');
+        throw new Error(responseData.error || 'Error al generar la factura');
       }
 
       Alert.alert('Éxito', `Factura generada y enviada a ${invoiceEmail}`);
@@ -501,9 +522,12 @@ export default function AdminPromotions() {
       setPricePerClick('');
       setInvoiceEmail('');
       setInvoiceType('both');
-    } catch (error) {
-      console.error('Error generating invoice:', error);
-      Alert.alert('Error', 'No se pudo generar la factura');
+    } catch (error: any) {
+      console.error('❌ [Invoice] Error generating invoice:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'No se pudo generar la factura. Por favor intenta de nuevo.'
+      );
     } finally {
       setLoading(false);
     }
@@ -2125,26 +2149,29 @@ const styles = StyleSheet.create({
   },
   invoiceTypeContainer: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
   },
   invoiceTypeButton: {
     flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
     borderRadius: 8,
     borderWidth: 2,
     borderColor: '#D1D5DB',
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 40,
   },
   invoiceTypeButtonActive: {
     borderColor: '#DC2626',
     backgroundColor: '#FEE2E2',
   },
   invoiceTypeButtonText: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: 'Inter-Medium',
     color: '#6B7280',
+    textAlign: 'center',
   },
   invoiceTypeButtonTextActive: {
     color: '#DC2626',
