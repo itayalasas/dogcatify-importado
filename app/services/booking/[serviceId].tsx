@@ -266,8 +266,13 @@ export default function ServiceBooking() {
   };
 
   const handleConfirmBooking = () => {
-    if (!selectedDate || !selectedTime) {
-      Alert.alert('Error', 'Por favor selecciona fecha y hora');
+    if (!selectedDate) {
+      Alert.alert('Error', 'Por favor selecciona una fecha');
+      return;
+    }
+    // Solo validar hora si NO es un servicio de pensión
+    if (!boardingCategory && !selectedTime) {
+      Alert.alert('Error', 'Por favor selecciona una hora');
       return;
     }
     setShowPaymentModal(true);
@@ -282,8 +287,13 @@ export default function ServiceBooking() {
   };
 
   const handleMercadoPagoPayment = async () => {
-    if (!selectedDate || !selectedTime || !service || !partner || !pet) {
+    if (!selectedDate || !service || !partner || !pet) {
       Alert.alert('Error', 'Información de reserva incompleta');
+      return;
+    }
+    // Validar hora solo si NO es servicio de pensión
+    if (!boardingCategory && !selectedTime) {
+      Alert.alert('Error', 'Por favor selecciona una hora');
       return;
     }
 
@@ -298,7 +308,7 @@ export default function ServiceBooking() {
         customerId: currentUser!.id,
         petId: pet.id,
         date: selectedDate.toISOString(),
-        time: selectedTime,
+        time: selectedTime || 'N/A', // Para servicios de pensión, la hora no aplica
         serviceName: service.name,
         totalAmount: service.price
       });
@@ -309,7 +319,7 @@ export default function ServiceBooking() {
         customerId: currentUser!.id,
         petId: pet.id,
         date: selectedDate,
-        time: selectedTime,
+        time: selectedTime || 'N/A', // Para servicios de pensión, la hora no aplica
         notes: notes.trim() || null,
         serviceName: service.name,
         partnerName: partner.business_name,
@@ -410,9 +420,13 @@ export default function ServiceBooking() {
         
         setShowPaymentModal(false);
         
+        const timeInfo = boardingCategory
+          ? `📦 Tipo: ${boardingCategory}`
+          : `🕐 ${selectedTime}`;
+
         Alert.alert(
           '¡Pago Exitoso! 🎉',
-          `Tu reserva ha sido confirmada:\n\n📅 ${selectedDate?.toLocaleDateString()}\n🕐 ${selectedTime}\n💰 ${formatCurrency(getServicePrice())}\n\nRecibirás una confirmación por email.`,
+          `Tu reserva ha sido confirmada:\n\n📅 ${selectedDate?.toLocaleDateString()}\n${timeInfo}\n💰 ${formatCurrency(getServicePrice())}\n\nRecibirás una confirmación por email.`,
           [{ text: 'Perfecto', onPress: () => router.replace('/(tabs)/services') }]
         );
       } else {
@@ -505,8 +519,8 @@ export default function ServiceBooking() {
           </ScrollView>
         </Card>
 
-        {/* Time Selection */}
-        {selectedDate && (
+        {/* Time Selection - Solo mostrar si NO es servicio de pensión */}
+        {selectedDate && !boardingCategory && (
           <Card style={styles.timeCard}>
             <Text style={styles.sectionTitle}>Selecciona una hora</Text>
             <View style={styles.timesGrid}>
@@ -558,11 +572,14 @@ export default function ServiceBooking() {
       </ScrollView>
 
       {/* Fixed Confirm Button */}
-      {selectedDate && selectedTime && (
+      {selectedDate && (boardingCategory || selectedTime) && (
         <View style={styles.confirmContainer}>
           <View style={styles.confirmSummary}>
             <Text style={styles.confirmDate}>
-              {selectedDate.toLocaleDateString()} a las {selectedTime}
+              {boardingCategory
+                ? `${selectedDate.toLocaleDateString()} - ${boardingCategory}`
+                : `${selectedDate.toLocaleDateString()} a las ${selectedTime}`
+              }
             </Text>
             <Text style={styles.confirmPrice}>
               {formatCurrency(getServicePrice())}
@@ -643,7 +660,10 @@ export default function ServiceBooking() {
                   <Text style={styles.summaryTitle}>Resumen de la Reserva</Text>
                   <Text style={styles.summaryService}>{service?.name}</Text>
                   <Text style={styles.summaryDateTime}>
-                    {selectedDate?.toLocaleDateString()} a las {selectedTime}
+                    {boardingCategory
+                      ? `${selectedDate?.toLocaleDateString()} - ${boardingCategory}`
+                      : `${selectedDate?.toLocaleDateString()} a las ${selectedTime}`
+                    }
                   </Text>
                   <Text style={styles.summaryTotal}>
                     Total: {formatCurrency(getServicePrice())}
