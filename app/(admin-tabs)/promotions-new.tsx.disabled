@@ -1,4 +1,0 @@
-// Archivo deshabilitado - usar promotions.tsx
-export default function Disabled() {
-  return null;
-}
