@@ -24,6 +24,9 @@ export default function PartnerServices() {
   const [showReviewsModal, setShowReviewsModal] = useState(false);
   const [detailedReviews, setDetailedReviews] = useState<any[]>([]);
   const [loadingDetailedReviews, setLoadingDetailedReviews] = useState(false);
+  const [showImageViewer, setShowImageViewer] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [viewerImages, setViewerImages] = useState<string[]>([]);
 
   useEffect(() => {
     fetchPartnerDetails();
@@ -608,19 +611,27 @@ export default function PartnerServices() {
     <Card key={pet.id} style={styles.adoptionPetCard}>
       {/* Pet Images */}
       {pet.images && pet.images.length > 0 && (
-        <ScrollView 
-          horizontal 
-          pagingEnabled 
+        <ScrollView
+          horizontal
+          pagingEnabled
           showsHorizontalScrollIndicator={false}
           style={styles.petImagesContainer}
         >
           {pet.images.map((image: string, index: number) => (
-            <Image 
-              key={index} 
-              source={{ uri: image }} 
-              style={styles.petImage} 
-              resizeMode="cover"
-            />
+            <TouchableOpacity
+              key={index}
+              onPress={() => {
+                setViewerImages(pet.images);
+                setSelectedImageIndex(index);
+                setShowImageViewer(true);
+              }}
+            >
+              <Image
+                source={{ uri: image }}
+                style={styles.petImage}
+                resizeMode="cover"
+              />
+            </TouchableOpacity>
           ))}
         </ScrollView>
       )}
@@ -987,6 +998,47 @@ export default function PartnerServices() {
                 ))
               )}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Image Viewer Modal */}
+      <Modal
+        visible={showImageViewer}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowImageViewer(false)}
+      >
+        <View style={styles.imageViewerContainer}>
+          <TouchableOpacity
+            style={styles.imageViewerCloseButton}
+            onPress={() => setShowImageViewer(false)}
+          >
+            <Text style={styles.imageViewerCloseText}>✕</Text>
+          </TouchableOpacity>
+
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            contentOffset={{ x: selectedImageIndex * width, y: 0 }}
+            style={styles.imageViewerScroll}
+          >
+            {viewerImages.map((imageUrl: string, index: number) => (
+              <View key={index} style={styles.imageViewerSlide}>
+                <Image
+                  source={{ uri: imageUrl }}
+                  style={styles.imageViewerImage}
+                  resizeMode="contain"
+                />
+              </View>
+            ))}
+          </ScrollView>
+
+          <View style={styles.imageViewerCounter}>
+            <Text style={styles.imageViewerCounterText}>
+              {selectedImageIndex + 1} / {viewerImages.length}
+            </Text>
           </View>
         </View>
       </Modal>
@@ -1483,6 +1535,55 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   adoptionButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  imageViewerContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerCloseButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerCloseText: {
+    fontSize: 24,
+    color: '#FFFFFF',
+    fontFamily: 'Inter-Bold',
+  },
+  imageViewerScroll: {
+    flex: 1,
+  },
+  imageViewerSlide: {
+    width: width,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerImage: {
+    width: width,
+    height: '100%',
+  },
+  imageViewerCounter: {
+    position: 'absolute',
+    bottom: 50,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  imageViewerCounterText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',

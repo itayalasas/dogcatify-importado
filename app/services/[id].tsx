@@ -36,6 +36,8 @@ export default function ServiceDetail() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [boardingCategories, setBoardingCategories] = useState<any[]>([]);
   const [categoryAvailability, setCategoryAvailability] = useState<{ [key: string]: number }>({});
+  const [showImageViewer, setShowImageViewer] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   // Función para calcular disponibilidad por categoría
   const calculateCategoryAvailability = async (serviceId: string, categories: any[]) => {
@@ -643,11 +645,18 @@ export default function ServiceDetail() {
               <Text style={styles.imagesTitle}>Imágenes</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {service.images.map((imageUrl: string, index: number) => (
-                  <Image 
-                    key={index} 
-                    source={{ uri: imageUrl }} 
-                    style={styles.serviceImage} 
-                  />
+                  <TouchableOpacity
+                    key={index}
+                    onPress={() => {
+                      setSelectedImageIndex(index);
+                      setShowImageViewer(true);
+                    }}
+                  >
+                    <Image
+                      source={{ uri: imageUrl }}
+                      style={styles.serviceImage}
+                    />
+                  </TouchableOpacity>
                 ))}
               </ScrollView>
             </View>
@@ -841,6 +850,47 @@ export default function ServiceDetail() {
                 ))
               )}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Image Viewer Modal */}
+      <Modal
+        visible={showImageViewer}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowImageViewer(false)}
+      >
+        <View style={styles.imageViewerContainer}>
+          <TouchableOpacity
+            style={styles.imageViewerCloseButton}
+            onPress={() => setShowImageViewer(false)}
+          >
+            <Text style={styles.imageViewerCloseText}>✕</Text>
+          </TouchableOpacity>
+
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            contentOffset={{ x: selectedImageIndex * width, y: 0 }}
+            style={styles.imageViewerScroll}
+          >
+            {service?.images?.map((imageUrl: string, index: number) => (
+              <View key={index} style={styles.imageViewerSlide}>
+                <Image
+                  source={{ uri: imageUrl }}
+                  style={styles.imageViewerImage}
+                  resizeMode="contain"
+                />
+              </View>
+            ))}
+          </ScrollView>
+
+          <View style={styles.imageViewerCounter}>
+            <Text style={styles.imageViewerCounterText}>
+              {selectedImageIndex + 1} / {service?.images?.length || 0}
+            </Text>
           </View>
         </View>
       </Modal>
@@ -1401,5 +1451,54 @@ const styles = StyleSheet.create({
   },
   selectedCategoryText: {
     color: '#3B82F6',
+  },
+  imageViewerContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerCloseButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerCloseText: {
+    fontSize: 24,
+    color: '#FFFFFF',
+    fontFamily: 'Inter-Bold',
+  },
+  imageViewerScroll: {
+    flex: 1,
+  },
+  imageViewerSlide: {
+    width: width,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerImage: {
+    width: width,
+    height: '100%',
+  },
+  imageViewerCounter: {
+    position: 'absolute',
+    bottom: 50,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  imageViewerCounterText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
 });
