@@ -42,6 +42,20 @@ export default function PartnerServices() {
     }
   }, [partner]);
 
+  // Auto-navigate if only one service available
+  useEffect(() => {
+    if (services.length === 1 && partner?.business_type !== 'shelter') {
+      console.log('Only one service available, navigating directly...');
+      const service = services[0];
+      if (service.id) {
+        // Small delay to ensure smooth navigation
+        setTimeout(() => {
+          handleServicePress(service.id);
+        }, 300);
+      }
+    }
+  }, [services, partner]);
+
   useEffect(() => {
     if (searchQuery.trim()) {
       setFilteredServices(
@@ -840,8 +854,10 @@ export default function PartnerServices() {
                   onPress={() => handleServicePress(service.id)}
                 >
                   <View style={styles.serviceHeader}>
-                    <Text style={styles.serviceName}>{service.name}</Text>
-                    <Text style={styles.servicePrice}>{formatPrice(service.price)}</Text>
+                    <Text style={styles.serviceName} numberOfLines={2}>{service.name}</Text>
+                    {service.price > 0 && (
+                      <Text style={styles.servicePrice} numberOfLines={1}>{formatPrice(service.price)}</Text>
+                    )}
                   </View>
                   
                   {service.description && (
@@ -1313,9 +1329,11 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   servicePrice: {
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: 'Inter-Bold',
     color: '#10B981',
+    flexShrink: 0,
+    maxWidth: '40%',
   },
   serviceDescription: {
     fontSize: 14,
