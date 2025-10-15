@@ -165,16 +165,68 @@ export default function ServiceBooking() {
     }
   }, [selectedDate, partnerId]);
 
+  // Validar fecha seleccionada cuando cambia la categoría
+  useEffect(() => {
+    if (selectedDate && boardingCategory) {
+      const dayOfWeek = selectedDate.getDay();
+
+      // Validar fin de semana
+      if (boardingCategory === 'Fin de semana') {
+        // Si la fecha seleccionada no es viernes (5), sábado (6) o domingo (0), resetear
+        if (dayOfWeek !== 5 && dayOfWeek !== 6 && dayOfWeek !== 0) {
+          setSelectedDate(null);
+        }
+      }
+
+      // Validar semanal (solo lunes)
+      if (boardingCategory === 'Semanal') {
+        // Si la fecha seleccionada no es lunes (1), resetear
+        if (dayOfWeek !== 1) {
+          setSelectedDate(null);
+        }
+      }
+    }
+  }, [boardingCategory]);
+
   const generateAvailableDates = () => {
     const dates = [];
     const today = new Date();
-    
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      dates.push(date);
+
+    // Si es fin de semana, solo mostrar viernes, sábado y domingo
+    if (boardingCategory === 'Fin de semana') {
+      for (let i = 0; i < 30; i++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() + i);
+        const dayOfWeek = date.getDay();
+
+        // 5 = Viernes, 6 = Sábado, 0 = Domingo
+        if (dayOfWeek === 5 || dayOfWeek === 6 || dayOfWeek === 0) {
+          dates.push(date);
+          if (dates.length >= 9) break; // Mostrar más opciones para fin de semana
+        }
+      }
+    } else if (boardingCategory === 'Semanal') {
+      // Para semanal, mostrar solo lunes (o el día actual si es lunes)
+      for (let i = 0; i < 60; i++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() + i);
+        const dayOfWeek = date.getDay();
+
+        // 1 = Lunes
+        if (dayOfWeek === 1 || (i === 0)) {
+          dates.push(date);
+          if (dates.length >= 7) break;
+        }
+      }
+    } else {
+      // Para otros tipos (Diario, Nocturno), mostrar los próximos 7 días
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() + i);
+        dates.push(date);
+      }
     }
-    
+
     return dates;
   };
 
@@ -482,12 +534,23 @@ export default function ServiceBooking() {
         {/* Date Selection */}
         <Card style={styles.dateCard}>
           <Text style={styles.sectionTitle}>Selecciona una fecha</Text>
+          {boardingCategory === 'Fin de semana' && (
+            <Text style={styles.weekendInfo}>
+              📅 Solo puedes reservar de viernes a domingo
+            </Text>
+          )}
+          {boardingCategory === 'Semanal' && (
+            <Text style={styles.weekendInfo}>
+              📅 La reserva inicia cada lunes por una semana completa
+            </Text>
+          )}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.datesScroll}>
             {generateAvailableDates().map((date, index) => {
               const dateInfo = formatDate(date);
               const isSelected = selectedDate?.toDateString() === date.toDateString();
-              const isToday = index === 0;
-              
+              const today = new Date();
+              const isToday = date.toDateString() === today.toDateString();
+
               return (
                 <TouchableOpacity
                   key={index}
@@ -947,6 +1010,15 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
     marginBottom: 16,
+  },
+  weekendInfo: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#3B82F6',
+    marginBottom: 12,
+    backgroundColor: '#EFF6FF',
+    padding: 8,
+    borderRadius: 8,
   },
   datesScroll: {
     flexDirection: 'row',
