@@ -187,6 +187,13 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
       console.log('Payment approved, updating stock and sending notifications...');
       await updateProductStock(supabase, orderId);
       await sendPaymentConfirmationEmail(supabase, orderId);
+
+      // If this is a service booking, update the booking status and send confirmation
+      if (orderData.order_type === 'service_booking' && orderData.booking_id) {
+        console.log(`Updating booking ${orderData.booking_id} status to confirmed`);
+        await updateBookingStatus(supabase, orderData.booking_id, 'confirmed', paymentId);
+        await sendBookingConfirmationEmail(supabase, orderData.booking_id);
+      }
     }
 
   } catch (error) {
@@ -350,5 +357,214 @@ async function sendPaymentConfirmationEmail(supabase: any, orderId: string) {
 
   } catch (error) {
     console.error('Error sending payment confirmation email:', error);
+  }
+}
+
+async function updateBookingStatus(supabase: any, bookingId: string, status: string, paymentId: string) {
+  try {
+    console.log(`Updating booking ${bookingId} to status: ${status}`);
+
+    const { error } = await supabase
+      .from('bookings')
+      .update({
+        status: status,
+        payment_status: 'paid',
+        payment_transaction_id: paymentId,
+        payment_confirmed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', bookingId);
+
+    if (error) {
+      console.error('Error updating booking status:', error);
+      throw error;
+    }
+
+    console.log(`✅ Booking ${bookingId} updated to status: ${status}`);
+  } catch (error) {
+    console.error('Error updating booking status:', error);
+    throw error;
+  }
+}
+
+async function sendBookingConfirmationEmail(supabase: any, bookingId: string) {
+  try {
+    console.log(`Sending booking confirmation email for booking ${bookingId}`);
+
+    const { data: booking, error } = await supabase
+      .from('bookings')
+      .select(`
+        *,
+        customer:profiles!customer_id(email, display_name)
+      `)
+      .eq('id', bookingId)
+      .single();
+
+    if (error || !booking) {
+      console.error('Error fetching booking for email:', error);
+      return;
+    }
+
+    if (!booking.customer || !booking.customer.email) {
+      console.error('Customer email not found for booking');
+      return;
+    }
+
+    // Format date and time for display
+    const bookingDate = new Date(booking.date);
+    const formattedDate = bookingDate.toLocaleDateString('es-ES', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+
+    const emailData = {
+      to: booking.customer.email,
+      subject: '¡Reserva Confirmada! - DogCatiFy',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #f4f4f7; font-family: Arial, sans-serif;">
+          <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f4f4f7;">
+            <tr>
+              <td align="center" style="padding: 40px 20px;">
+                <table width="600" border="0" cellspacing="0" cellpadding="0" style="background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden;">
+
+                  <!-- Header -->
+                  <tr>
+                    <td style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); padding: 40px 30px; text-align: center;">
+                      <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;">¡Reserva Confirmada!</h1>
+                      <p style="color: #D1FAE5; margin: 10px 0 0 0; font-size: 16px;">Tu pago ha sido procesado exitosamente</p>
+                    </td>
+                  </tr>
+
+                  <!-- Content -->
+                  <tr>
+                    <td style="padding: 40px 30px;">
+                      <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                        Hola <strong>${booking.customer.display_name}</strong>,
+                      </p>
+
+                      <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
+                        ¡Excelente noticia! Tu reserva ha sido confirmada y el pago procesado correctamente.
+                      </p>
+
+                      <!-- Booking Details -->
+                      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 30px 0; background-color: #F0FDF4; border-left: 4px solid #10B981; border-radius: 6px;">
+                        <tr>
+                          <td style="padding: 20px;">
+                            <p style="color: #065F46; font-size: 14px; font-weight: 600; margin: 0 0 15px 0;">
+                              📅 Detalles de tu Reserva
+                            </p>
+                            <table width="100%" border="0" cellspacing="0" cellpadding="8">
+                              <tr>
+                                <td style="color: #374151; font-size: 14px; font-weight: 600; width: 140px;">Servicio:</td>
+                                <td style="color: #111827; font-size: 14px;">${booking.service_name}</td>
+                              </tr>
+                              <tr>
+                                <td style="color: #374151; font-size: 14px; font-weight: 600;">Proveedor:</td>
+                                <td style="color: #111827; font-size: 14px;">${booking.partner_name}</td>
+                              </tr>
+                              <tr>
+                                <td style="color: #374151; font-size: 14px; font-weight: 600;">Mascota:</td>
+                                <td style="color: #111827; font-size: 14px;">${booking.pet_name}</td>
+                              </tr>
+                              <tr>
+                                <td style="color: #374151; font-size: 14px; font-weight: 600;">Fecha:</td>
+                                <td style="color: #111827; font-size: 14px;">${formattedDate}</td>
+                              </tr>
+                              <tr>
+                                <td style="color: #374151; font-size: 14px; font-weight: 600;">Hora:</td>
+                                <td style="color: #111827; font-size: 14px;">${booking.time}</td>
+                              </tr>
+                              <tr>
+                                <td style="color: #374151; font-size: 14px; font-weight: 600;">Monto Pagado:</td>
+                                <td style="color: #10B981; font-size: 16px; font-weight: 700;">$${booking.total_amount.toLocaleString()}</td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+
+                      ${booking.notes ? `
+                      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 20px 0;">
+                        <tr>
+                          <td style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; border-radius: 6px;">
+                            <p style="color: #92400E; font-size: 14px; margin: 0;">
+                              <strong>Notas:</strong><br>${booking.notes}
+                            </p>
+                          </td>
+                        </tr>
+                      </table>
+                      ` : ''}
+
+                      <!-- Next Steps -->
+                      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 30px 0;">
+                        <tr>
+                          <td style="background-color: #EFF6FF; border-left: 4px solid #3B82F6; padding: 20px; border-radius: 6px;">
+                            <p style="color: #1e40af; font-size: 14px; font-weight: 600; margin: 0 0 12px 0;">
+                              📋 Próximos Pasos:
+                            </p>
+                            <ul style="color: #374151; font-size: 14px; line-height: 1.6; margin: 0; padding-left: 20px;">
+                              <li style="margin-bottom: 8px;">El proveedor ha sido notificado de tu reserva</li>
+                              <li style="margin-bottom: 8px;">Recibirás recordatorios antes de tu cita</li>
+                              <li>Si necesitas cancelar o reprogramar, contáctanos lo antes posible</li>
+                            </ul>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <p style="color: #6B7280; font-size: 14px; line-height: 1.6; margin: 30px 0 0 0;">
+                        ¡Gracias por confiar en DogCatiFy!<br>
+                        <strong style="color: #374151;">El equipo de DogCatiFy</strong>
+                      </p>
+                    </td>
+                  </tr>
+
+                  <!-- Footer -->
+                  <tr>
+                    <td style="background-color: #F9FAFB; padding: 30px; text-align: center; border-top: 1px solid #E5E7EB;">
+                      <p style="color: #6B7280; font-size: 12px; line-height: 1.6; margin: 0 0 8px 0;">
+                        © 2025 DogCatiFy. Todos los derechos reservados.
+                      </p>
+                      <p style="color: #9CA3AF; font-size: 11px; line-height: 1.5; margin: 0;">
+                        Este es un correo automático, por favor no respondas a este mensaje.
+                      </p>
+                    </td>
+                  </tr>
+
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `
+    };
+
+    const emailResponse = await fetch(`${supabase.supabaseUrl}/functions/v1/send-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabase.supabaseKey}`,
+      },
+      body: JSON.stringify(emailData),
+    });
+
+    if (!emailResponse.ok) {
+      console.error('Failed to send booking confirmation email');
+      const errorText = await emailResponse.text();
+      console.error('Email error:', errorText);
+    } else {
+      console.log('✅ Booking confirmation email sent successfully');
+    }
+
+  } catch (error) {
+    console.error('Error sending booking confirmation email:', error);
   }
 }
