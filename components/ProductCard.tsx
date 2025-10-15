@@ -25,6 +25,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, onAd
     return new Intl.NumberFormat('es-UY', {
       style: 'currency',
       currency: 'UYU',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     }).format(price);
   };
 

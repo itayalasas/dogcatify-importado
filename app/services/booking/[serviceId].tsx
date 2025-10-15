@@ -194,6 +194,8 @@ export default function ServiceBooking() {
     return new Intl.NumberFormat('es-UY', {
       style: 'currency',
       currency: 'UYU',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     }).format(amount);
   };
 
@@ -491,25 +493,34 @@ export default function ServiceBooking() {
                   key={index}
                   style={[
                     styles.dateOption,
-                    isSelected && styles.selectedDateOption
+                    isSelected && styles.selectedDateOption,
+                    isToday && !isSelected && styles.todayDateOption
                   ]}
                   onPress={() => setSelectedDate(date)}
                 >
+                  {isToday && (
+                    <View style={styles.todayBadge}>
+                      <Text style={styles.todayBadgeText}>●</Text>
+                    </View>
+                  )}
                   <Text style={[
                     styles.dayName,
-                    isSelected && styles.selectedDateText
+                    isSelected && styles.selectedDateText,
+                    isToday && !isSelected && styles.todayText
                   ]}>
                     {isToday ? 'Hoy' : dateInfo.dayName}
                   </Text>
                   <Text style={[
                     styles.dayNumber,
-                    isSelected && styles.selectedDateText
+                    isSelected && styles.selectedDateText,
+                    isToday && !isSelected && styles.todayText
                   ]}>
                     {dateInfo.day}
                   </Text>
                   <Text style={[
                     styles.monthName,
-                    isSelected && styles.selectedDateText
+                    isSelected && styles.selectedDateText,
+                    isToday && !isSelected && styles.todayText
                   ]}>
                     {dateInfo.month}
                   </Text>
@@ -954,6 +965,24 @@ const styles = StyleSheet.create({
   selectedDateOption: {
     backgroundColor: '#3B82F6',
     borderColor: '#3B82F6',
+  },
+  todayDateOption: {
+    borderColor: '#3B82F6',
+    borderWidth: 2,
+    backgroundColor: '#EFF6FF',
+  },
+  todayBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+  },
+  todayBadgeText: {
+    fontSize: 10,
+    color: '#3B82F6',
+  },
+  todayText: {
+    color: '#3B82F6',
+    fontFamily: 'Inter-SemiBold',
   },
   dayName: {
     fontSize: 12,
