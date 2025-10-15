@@ -1,0 +1,2 @@
+// Este archivo fue renombrado para evitar conflictos con Expo Router
+// El archivo original estaba causando tabs duplicados
