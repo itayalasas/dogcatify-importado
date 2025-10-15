@@ -51,6 +51,7 @@ export default function ServiceBooking() {
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
   const [bookedTimes, setBookedTimes] = useState<string[]>([]);
+  const [partnerSchedule, setPartnerSchedule] = useState<any[]>([]);
   
   // Payment flow
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -112,6 +113,16 @@ export default function ServiceBooking() {
 
       if (petError) throw petError;
       setPet(petData);
+
+      // Fetch partner schedule
+      const { data: scheduleData, error: scheduleError } = await supabaseClient
+        .from('business_schedule')
+        .select('*')
+        .eq('partner_id', partnerId)
+        .eq('is_active', true);
+
+      if (scheduleError) throw scheduleError;
+      setPartnerSchedule(scheduleData || []);
 
       // Generate available times
       await generateAvailableTimes();
@@ -191,40 +202,60 @@ export default function ServiceBooking() {
   const generateAvailableDates = () => {
     const dates = [];
     const today = new Date();
+    const now = new Date();
 
-    // Si es fin de semana, solo mostrar viernes, sábado y domingo
-    if (boardingCategory === 'Fin de semana') {
-      for (let i = 0; i < 30; i++) {
-        const date = new Date(today);
-        date.setDate(today.getDate() + i);
-        const dayOfWeek = date.getDay();
+    // Obtener los días de la semana que tienen horario configurado
+    const scheduledDays = partnerSchedule.map(s => s.day_of_week);
 
-        // 5 = Viernes, 6 = Sábado, 0 = Domingo
-        if (dayOfWeek === 5 || dayOfWeek === 6 || dayOfWeek === 0) {
-          dates.push(date);
-          if (dates.length >= 9) break; // Mostrar más opciones para fin de semana
+    // Si no hay horarios configurados, no mostrar fechas
+    if (scheduledDays.length === 0) {
+      return dates;
+    }
+
+    // Generar fechas para el mes en curso
+    const daysInMonth = 30; // Aproximadamente un mes
+
+    for (let i = 0; i < daysInMonth; i++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      const dayOfWeek = date.getDay();
+
+      // Verificar si este día tiene horario configurado
+      const daySchedule = partnerSchedule.find(s => s.day_of_week === dayOfWeek);
+
+      if (!daySchedule) continue;
+
+      // Si es hoy, verificar si aún está dentro del horario
+      if (i === 0) {
+        const [endHour, endMinute] = daySchedule.end_time.split(':').map(Number);
+        const endTime = new Date(now);
+        endTime.setHours(endHour, endMinute, 0, 0);
+
+        // Si ya pasó la hora de cierre, saltar este día
+        if (now > endTime) {
+          continue;
         }
       }
-    } else if (boardingCategory === 'Semanal') {
-      // Para semanal, mostrar solo lunes (o el día actual si es lunes)
-      for (let i = 0; i < 60; i++) {
-        const date = new Date(today);
-        date.setDate(today.getDate() + i);
-        const dayOfWeek = date.getDay();
 
-        // 1 = Lunes
-        if (dayOfWeek === 1 || (i === 0)) {
-          dates.push(date);
-          if (dates.length >= 7) break;
+      // Aplicar filtros adicionales según la categoría de boarding
+      if (boardingCategory === 'Fin de semana') {
+        // Solo viernes, sábado y domingo
+        if (dayOfWeek !== 5 && dayOfWeek !== 6 && dayOfWeek !== 0) {
+          continue;
+        }
+      } else if (boardingCategory === 'Semanal') {
+        // Solo lunes
+        if (dayOfWeek !== 1) {
+          continue;
         }
       }
-    } else {
-      // Para otros tipos (Diario, Nocturno), mostrar los próximos 7 días
-      for (let i = 0; i < 7; i++) {
-        const date = new Date(today);
-        date.setDate(today.getDate() + i);
-        dates.push(date);
-      }
+
+      dates.push(date);
+
+      // Limitar la cantidad de fechas mostradas
+      if (boardingCategory === 'Fin de semana' && dates.length >= 9) break;
+      if (boardingCategory === 'Semanal' && dates.length >= 7) break;
+      if (!boardingCategory && dates.length >= 7) break;
     }
 
     return dates;
@@ -544,8 +575,18 @@ export default function ServiceBooking() {
               📅 La reserva inicia cada lunes por una semana completa
             </Text>
           )}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.datesScroll}>
-            {generateAvailableDates().map((date, index) => {
+          {generateAvailableDates().length === 0 ? (
+            <View style={styles.noScheduleContainer}>
+              <Text style={styles.noScheduleText}>
+                📅 No hay horarios disponibles configurados
+              </Text>
+              <Text style={styles.noScheduleSubtext}>
+                El negocio aún no ha configurado su agenda de trabajo
+              </Text>
+            </View>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.datesScroll}>
+              {generateAvailableDates().map((date, index) => {
               const dateInfo = formatDate(date);
               const isSelected = selectedDate?.toDateString() === date.toDateString();
               const today = new Date();
@@ -590,7 +631,8 @@ export default function ServiceBooking() {
                 </TouchableOpacity>
               );
             })}
-          </ScrollView>
+            </ScrollView>
+          )}
         </Card>
 
         {/* Time Selection - Solo mostrar si NO es servicio de pensión */}
@@ -1019,6 +1061,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#EFF6FF',
     padding: 8,
     borderRadius: 8,
+  },
+  noScheduleContainer: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noScheduleText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  noScheduleSubtext: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    textAlign: 'center',
   },
   datesScroll: {
     flexDirection: 'row',
