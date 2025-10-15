@@ -1,7 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Modal, TouchableOpacity, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { FileText, X } from 'lucide-react-native';
-import { Button } from './ui/Button';
 
 interface PartnerServiceAgreementProps {
   visible: boolean;
@@ -265,16 +264,29 @@ export const PartnerServiceAgreement: React.FC<PartnerServiceAgreementProps> = (
             </Text>
           )}
           <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={onClose}
+              activeOpacity={0.7}
+            >
               <Text style={styles.cancelButtonText}>Cancelar</Text>
             </TouchableOpacity>
-            <View style={styles.buttonSpacer} />
-            <Button
-              title="Aceptar Contrato"
+            <TouchableOpacity
+              style={[
+                styles.acceptButton,
+                !hasScrolledToBottom && styles.acceptButtonDisabled
+              ]}
               onPress={handleAccept}
               disabled={!hasScrolledToBottom}
-              size="medium"
-            />
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.acceptButtonText,
+                !hasScrolledToBottom && styles.acceptButtonTextDisabled
+              ]}>
+                Aceptar Contrato
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -369,8 +381,9 @@ const styles = StyleSheet.create({
     height: 40,
   },
   buttonContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: 16,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',
@@ -385,22 +398,45 @@ const styles = StyleSheet.create({
   buttonRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
   },
   cancelButton: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    borderWidth: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1.5,
     borderColor: '#D1D5DB',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    minHeight: 48,
   },
   cancelButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
     color: '#6B7280',
   },
-  buttonSpacer: {
-    width: 12,
+  acceptButton: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2D6A6F',
+    minHeight: 48,
+  },
+  acceptButtonDisabled: {
+    backgroundColor: '#9CA3AF',
+    opacity: 0.6,
+  },
+  acceptButtonText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  acceptButtonTextDisabled: {
+    color: '#E5E7EB',
   },
 });
