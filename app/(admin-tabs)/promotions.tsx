@@ -54,6 +54,14 @@ export default function AdminPromotions() {
 
   const [loading, setLoading] = useState(false);
 
+  // Invoice modal states
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [selectedPromotionForInvoice, setSelectedPromotionForInvoice] = useState<any>(null);
+  const [invoiceType, setInvoiceType] = useState<'views' | 'clicks' | 'both'>('both');
+  const [pricePerView, setPricePerView] = useState('');
+  const [pricePerClick, setPricePerClick] = useState('');
+  const [invoiceEmail, setInvoiceEmail] = useState('');
+
   useEffect(() => {
     console.log('📋 [AdminPromotions useEffect] Running...');
     if (!currentUser) {
@@ -418,12 +426,87 @@ export default function AdminPromotions() {
     }
   };
 
-  const handleInvoicePromotion = async (promotion: any) => {
-    Alert.alert(
-      'Función no disponible',
-      'La generación de facturas PDF solo está disponible en la versión web. Por favor, accede desde un navegador para usar esta funcionalidad.',
-      [{ text: 'Entendido' }]
-    );
+  const handleInvoicePromotion = (promotion: any) => {
+    setSelectedPromotionForInvoice(promotion);
+    // Pre-fill email with partner email if available
+    if (promotion.partnerInfo) {
+      setInvoiceEmail(promotion.partnerInfo.email || '');
+    }
+    setShowInvoiceModal(true);
+  };
+
+  const handleGenerateInvoice = async () => {
+    if (!selectedPromotionForInvoice) return;
+
+    // Validate inputs
+    if (invoiceType === 'views' && !pricePerView) {
+      Alert.alert('Error', 'Por favor ingresa el precio por vista');
+      return;
+    }
+    if (invoiceType === 'clicks' && !pricePerClick) {
+      Alert.alert('Error', 'Por favor ingresa el precio por clic');
+      return;
+    }
+    if (invoiceType === 'both' && (!pricePerView || !pricePerClick)) {
+      Alert.alert('Error', 'Por favor ingresa ambos precios');
+      return;
+    }
+    if (!invoiceEmail) {
+      Alert.alert('Error', 'Por favor ingresa un email');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Calculate totals
+      const viewsTotal = invoiceType !== 'clicks' ? selectedPromotionForInvoice.views * parseFloat(pricePerView || '0') : 0;
+      const clicksTotal = invoiceType !== 'views' ? selectedPromotionForInvoice.clicks * parseFloat(pricePerClick || '0') : 0;
+      const total = viewsTotal + clicksTotal;
+
+      // Call Edge Function to generate and send invoice
+      const response = await fetch(`${supabaseClient.supabaseUrl}/functions/v1/generate-promotion-invoice`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseClient.supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          promotion: {
+            id: selectedPromotionForInvoice.id,
+            title: selectedPromotionForInvoice.title,
+            views: selectedPromotionForInvoice.views,
+            clicks: selectedPromotionForInvoice.clicks,
+            startDate: selectedPromotionForInvoice.startDate,
+            endDate: selectedPromotionForInvoice.endDate,
+          },
+          invoiceType,
+          pricePerView: parseFloat(pricePerView || '0'),
+          pricePerClick: parseFloat(pricePerClick || '0'),
+          viewsTotal,
+          clicksTotal,
+          total,
+          email: invoiceEmail,
+          partnerInfo: selectedPromotionForInvoice.partnerInfo,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al generar la factura');
+      }
+
+      Alert.alert('Éxito', `Factura generada y enviada a ${invoiceEmail}`);
+      setShowInvoiceModal(false);
+      setPricePerView('');
+      setPricePerClick('');
+      setInvoiceEmail('');
+      setInvoiceType('both');
+    } catch (error) {
+      console.error('Error generating invoice:', error);
+      Alert.alert('Error', 'No se pudo generar la factura');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetForm = () => {
@@ -627,12 +710,20 @@ export default function AdminPromotions() {
                       <Text style={styles.invoiceButtonText}>Facturar</Text>
                     </TouchableOpacity>
 
-                    <Button
-                      title={promotion.isActive ? 'Desactivar' : 'Activar'}
+                    <TouchableOpacity
+                      style={[
+                        styles.toggleButton,
+                        promotion.isActive ? styles.toggleButtonOutline : styles.toggleButtonPrimary
+                      ]}
                       onPress={() => handleTogglePromotion(promotion.id, promotion.isActive)}
-                      variant={promotion.isActive ? 'outline' : 'primary'}
-                      size="medium"
-                    />
+                    >
+                      <Text style={[
+                        styles.toggleButtonText,
+                        promotion.isActive ? styles.toggleButtonTextOutline : styles.toggleButtonTextPrimary
+                      ]}>
+                        {promotion.isActive ? 'Desactivar' : 'Activar'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               </Card>
@@ -1202,6 +1293,170 @@ export default function AdminPromotions() {
         </View>
       </Modal>
 
+      {/* Invoice Modal */}
+      <Modal
+        visible={showInvoiceModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowInvoiceModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Generar Factura</Text>
+              <TouchableOpacity onPress={() => setShowInvoiceModal(false)}>
+                <X size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            {selectedPromotionForInvoice && (
+              <ScrollView style={styles.modalBody}>
+                <View style={styles.invoiceSection}>
+                  <Text style={styles.invoiceSectionTitle}>Promoción</Text>
+                  <Text style={styles.invoiceSectionValue}>{selectedPromotionForInvoice.title}</Text>
+                </View>
+
+                <View style={styles.invoiceSection}>
+                  <Text style={styles.invoiceSectionTitle}>Estadísticas</Text>
+                  <View style={styles.statsRow}>
+                    <View style={styles.statItem}>
+                      <Text style={styles.statLabel}>Vistas</Text>
+                      <Text style={styles.statValue}>{selectedPromotionForInvoice.views || 0}</Text>
+                    </View>
+                    <View style={styles.statItem}>
+                      <Text style={styles.statLabel}>Clics</Text>
+                      <Text style={styles.statValue}>{selectedPromotionForInvoice.clicks || 0}</Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.invoiceSection}>
+                  <Text style={styles.invoiceSectionTitle}>Tipo de Facturación</Text>
+                  <View style={styles.invoiceTypeContainer}>
+                    <TouchableOpacity
+                      style={[
+                        styles.invoiceTypeButton,
+                        invoiceType === 'views' && styles.invoiceTypeButtonActive
+                      ]}
+                      onPress={() => setInvoiceType('views')}
+                    >
+                      <Text style={[
+                        styles.invoiceTypeButtonText,
+                        invoiceType === 'views' && styles.invoiceTypeButtonTextActive
+                      ]}>Solo Vistas</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.invoiceTypeButton,
+                        invoiceType === 'clicks' && styles.invoiceTypeButtonActive
+                      ]}
+                      onPress={() => setInvoiceType('clicks')}
+                    >
+                      <Text style={[
+                        styles.invoiceTypeButtonText,
+                        invoiceType === 'clicks' && styles.invoiceTypeButtonTextActive
+                      ]}>Solo Clics</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.invoiceTypeButton,
+                        invoiceType === 'both' && styles.invoiceTypeButtonActive
+                      ]}
+                      onPress={() => setInvoiceType('both')}
+                    >
+                      <Text style={[
+                        styles.invoiceTypeButtonText,
+                        invoiceType === 'both' && styles.invoiceTypeButtonTextActive
+                      ]}>Ambos</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {invoiceType !== 'clicks' && (
+                  <View style={styles.invoiceSection}>
+                    <Text style={styles.invoiceSectionTitle}>Precio por Vista ($)</Text>
+                    <Input
+                      value={pricePerView}
+                      onChangeText={setPricePerView}
+                      placeholder="0.00"
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                )}
+
+                {invoiceType !== 'views' && (
+                  <View style={styles.invoiceSection}>
+                    <Text style={styles.invoiceSectionTitle}>Precio por Clic ($)</Text>
+                    <Input
+                      value={pricePerClick}
+                      onChangeText={setPricePerClick}
+                      placeholder="0.00"
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                )}
+
+                <View style={styles.invoiceSection}>
+                  <Text style={styles.invoiceSectionTitle}>Email del destinatario</Text>
+                  <Input
+                    value={invoiceEmail}
+                    onChangeText={setInvoiceEmail}
+                    placeholder="email@ejemplo.com"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
+
+                {pricePerView && invoiceType !== 'clicks' && (
+                  <View style={styles.totalSection}>
+                    <Text style={styles.totalLabel}>Subtotal Vistas:</Text>
+                    <Text style={styles.totalValue}>
+                      ${((selectedPromotionForInvoice.views || 0) * parseFloat(pricePerView)).toFixed(2)}
+                    </Text>
+                  </View>
+                )}
+
+                {pricePerClick && invoiceType !== 'views' && (
+                  <View style={styles.totalSection}>
+                    <Text style={styles.totalLabel}>Subtotal Clics:</Text>
+                    <Text style={styles.totalValue}>
+                      ${((selectedPromotionForInvoice.clicks || 0) * parseFloat(pricePerClick)).toFixed(2)}
+                    </Text>
+                  </View>
+                )}
+
+                {((pricePerView && invoiceType !== 'clicks') || (pricePerClick && invoiceType !== 'views')) && (
+                  <View style={styles.totalSectionMain}>
+                    <Text style={styles.totalLabelMain}>Total:</Text>
+                    <Text style={styles.totalValueMain}>
+                      ${(
+                        (invoiceType !== 'clicks' ? (selectedPromotionForInvoice.views || 0) * parseFloat(pricePerView || '0') : 0) +
+                        (invoiceType !== 'views' ? (selectedPromotionForInvoice.clicks || 0) * parseFloat(pricePerClick || '0') : 0)
+                      ).toFixed(2)}
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.modalActions}>
+                  <Button
+                    title="Cancelar"
+                    onPress={() => setShowInvoiceModal(false)}
+                    variant="outline"
+                    disabled={loading}
+                  />
+                  <Button
+                    title={loading ? "Generando..." : "Generar y Enviar"}
+                    onPress={handleGenerateInvoice}
+                    variant="primary"
+                    disabled={loading}
+                  />
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {loading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#DC2626" />
@@ -1344,14 +1599,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   invoiceButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#10B981',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
     borderRadius: 8,
     gap: 6,
   },
@@ -1359,6 +1616,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
+  },
+  toggleButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  toggleButtonPrimary: {
+    backgroundColor: '#DC2626',
+    borderColor: '#DC2626',
+  },
+  toggleButtonOutline: {
+    backgroundColor: 'transparent',
+    borderColor: '#DC2626',
+  },
+  toggleButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+  },
+  toggleButtonTextPrimary: {
+    color: '#FFFFFF',
+  },
+  toggleButtonTextOutline: {
+    color: '#DC2626',
   },
   emptyCard: {
     marginHorizontal: 16,
@@ -1801,6 +2086,110 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: 4,
     fontStyle: 'italic',
+  },
+  invoiceSection: {
+    marginBottom: 20,
+  },
+  invoiceSectionTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  invoiceSectionValue: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#111827',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  statItem: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 24,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+  },
+  invoiceTypeContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  invoiceTypeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+  },
+  invoiceTypeButtonActive: {
+    borderColor: '#DC2626',
+    backgroundColor: '#FEE2E2',
+  },
+  invoiceTypeButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+  },
+  invoiceTypeButtonTextActive: {
+    color: '#DC2626',
+    fontFamily: 'Inter-SemiBold',
+  },
+  totalSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  totalLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+  },
+  totalValue: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  totalSectionMain: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: '#DC2626',
+    borderRadius: 8,
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  totalLabelMain: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  totalValueMain: {
+    fontSize: 24,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
   },
   loadingOverlay: {
     position: 'absolute',
