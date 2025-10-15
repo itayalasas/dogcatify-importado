@@ -8,7 +8,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { generatePromotionInvoice } from '../../utils/promotionInvoicing';
 
 export default function AdminPromotions() {
   console.log('🚀 [AdminPromotions] Component loaded!');
@@ -420,29 +419,11 @@ export default function AdminPromotions() {
   };
 
   const handleInvoicePromotion = async (promotion: any) => {
-    try {
-      setLoading(true);
-
-      await generatePromotionInvoice({
-        promotionId: promotion.id,
-        promotionTitle: promotion.title,
-        partnerInfo: promotion.partnerInfo || {
-          businessName: 'Sin aliado',
-          businessType: 'general',
-          logo: null,
-        },
-        items: [],
-        discount: 0,
-        invoiceDate: new Date(),
-      });
-
-      Alert.alert('Éxito', 'Factura generada correctamente');
-    } catch (error) {
-      console.error('Error generating invoice:', error);
-      Alert.alert('Error', 'No se pudo generar la factura');
-    } finally {
-      setLoading(false);
-    }
+    Alert.alert(
+      'Función no disponible',
+      'La generación de facturas PDF solo está disponible en la versión web. Por favor, accede desde un navegador para usar esta funcionalidad.',
+      [{ text: 'Entendido' }]
+    );
   };
 
   const resetForm = () => {
