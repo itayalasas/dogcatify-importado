@@ -1,110 +1,91 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  SafeAreaView,
-  Modal,
-  Image,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
-import {
-  Plus,
-  X,
-  Search,
-  Volume2,
-  Eye,
-  MousePointer,
-  FileText,
-  ImageIcon,
-  Store,
-  ChevronRight,
-} from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image, TextInput, ActivityIndicator } from 'react-native';
+import { Plus, Volume2, Search, Calendar, ExternalLink, Building, X, FileText } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
-import { supabaseClient } from '../../lib/supabase';
+import { supabaseClient } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { generatePromotionInvoice } from '../../utils/promotionInvoicing';
-
-interface Promotion {
-  id: string;
-  title: string;
-  description: string;
-  imageURL: string | null;
-  ctaUrl: string | null;
-  startDate: Date;
-  endDate: Date;
-  targetAudience: string;
-  isActive: boolean;
-  views: number;
-  clicks: number;
-  createdAt: Date;
-  createdBy: string;
-  partnerId: string | null;
-  partnerInfo: {
-    businessName: string;
-    businessType: string;
-    logo: string | null;
-  } | null;
-}
-
-interface Partner {
-  id: string;
-  business_name: string;
-  business_type: string;
-  logo: string | null;
-}
-
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  image_url: string | null;
-  partner_id: string;
-}
-
-interface Service {
-  id: string;
-  name: string;
-  price: number;
-  partner_id: string;
-}
 
 export default function AdminPromotions() {
   const { currentUser } = useAuth();
-  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [promotions, setPromotions] = useState<any[]>([]);
+  const [filteredPromotions, setFilteredPromotions] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  // Modal states
   const [showPromotionModal, setShowPromotionModal] = useState(false);
-  const [showPartnerSelector, setShowPartnerSelector] = useState(false);
+  const [showPartnerModal, setShowPartnerModal] = useState(false);
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [showServiceModal, setShowServiceModal] = useState(false);
+  const [partners, setPartners] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [services, setServices] = useState<any[]>([]);
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [serviceSearchQuery, setServiceSearchQuery] = useState('');
+  const [hasDiscount, setHasDiscount] = useState(false);
+  const [discountPercentage, setDiscountPercentage] = useState('');
 
-  // Form states
+  // Promotion form state
   const [promoTitle, setPromoTitle] = useState('');
   const [promoDescription, setPromoDescription] = useState('');
+  const [promoDiscountPercentage, setPromoDiscountPercentage] = useState('');
   const [promoImage, setPromoImage] = useState<string | null>(null);
   const [promoUrl, setPromoUrl] = useState('');
   const [promoStartDate, setPromoStartDate] = useState('');
   const [promoEndDate, setPromoEndDate] = useState('');
   const [promoTargetAudience, setPromoTargetAudience] = useState('all');
+  const [promoType, setPromoType] = useState('feed');
+  const [ctaText, setCtaText] = useState('Más información');
+  const [promoLinkType, setPromoLinkType] = useState<'none' | 'external' | 'internal'>('none');
+  const [promoInternalType, setPromoInternalType] = useState<'service' | 'product' | 'partner'>('service');
+  const [promoInternalId, setPromoInternalId] = useState('');
+  const [manualId, setManualId] = useState('');
 
-  // Partner selection states
-  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
-  const [selectedPartnerInfo, setSelectedPartnerInfo] = useState<Partner | null>(null);
-  const [partners, setPartners] = useState<Partner[]>([]);
-  const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
+  // Date picker states
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.log('No user logged in');
+      return;
+    }
+
+    console.log('Current user email:', currentUser.email);
+    const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
+    if (!isAdmin) {
+      console.log('User is not admin');
+      return;
+    }
+
+    console.log('Fetching promotions data...');
     fetchPromotions();
     fetchPartners();
+    fetchProducts();
+    fetchServices();
   }, [currentUser]);
+
+  useEffect(() => {
+    // Filter promotions based on search query
+    if (searchQuery.trim()) {
+      setFilteredPromotions(
+        promotions.filter(promotion =>
+          promotion.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          promotion.description.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      );
+    } else {
+      setFilteredPromotions(promotions);
+    }
+  }, [searchQuery, promotions]);
 
   const fetchPromotions = async () => {
     try {
@@ -141,6 +122,7 @@ export default function AdminPromotions() {
       })) || [];
 
       setPromotions(promotionsData);
+      setFilteredPromotions(promotionsData);
     } catch (error) {
       console.error('Error fetching promotions:', error);
     }
@@ -151,13 +133,263 @@ export default function AdminPromotions() {
       const { data, error } = await supabaseClient
         .from('partners')
         .select('id, business_name, business_type, logo')
-        .eq('status', 'approved')
-        .order('business_name');
+        .eq('is_verified', true)
+        .eq('is_active', true)
+        .order('business_name', { ascending: true });
 
       if (error) throw error;
       setPartners(data || []);
     } catch (error) {
       console.error('Error fetching partners:', error);
+    }
+  };
+
+  const fetchProducts = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('partner_products')
+        .select('id, name, price, partner_id, images')
+        .eq('is_active', true)
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      setProducts(data || []);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+    }
+  };
+
+  const fetchServices = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('partner_services')
+        .select('id, name, price, partner_id, images')
+        .eq('is_active', true)
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      setServices(data || []);
+    } catch (error) {
+      console.error('Error fetching services:', error);
+    }
+  };
+
+  const handleSelectImage = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permisos requeridos', 'Se necesitan permisos para acceder a la galería');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setPromoImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error selecting image:', error);
+      Alert.alert('Error', 'No se pudo seleccionar la imagen');
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permisos requeridos', 'Se necesitan permisos para usar la cámara');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setPromoImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'No se pudo tomar la foto');
+    }
+  };
+
+  const uploadImage = async (imageUri: string): Promise<string> => {
+    console.log('=== IMAGE UPLOAD DEBUG START ===');
+    console.log('Image URI to upload:', imageUri);
+
+    console.log('Step 1: Fetching image from URI...');
+    const response = await fetch(imageUri);
+    const filename = `promotions/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+    console.log('Generated filename:', filename);
+
+    console.log('Step 4: Uploading to Supabase Storage...');
+
+      // Create FormData for React Native
+      const formData = new FormData();
+      formData.append('file', {
+        uri: imageUri,
+        type: 'image/jpeg',
+        name: filename,
+      } as any);
+
+      console.log('FormData created for upload');
+
+      const { data, error } = await supabaseClient.storage
+        .from('dogcatify')
+        .upload(filename, formData, {
+          upsert: false,
+        });
+    if (error) {
+      console.error('Supabase storage upload error:', error);
+      throw error;
+    }
+
+    console.log('Upload successful, getting public URL...');
+
+    const { data: { publicUrl } } = supabaseClient.storage
+      .from('dogcatify')
+      .getPublicUrl(filename);
+
+    console.log('Generated public URL:', publicUrl);
+
+    if (!publicUrl) {
+      throw new Error('No se pudo generar la URL pública de la imagen');
+    }
+
+    return publicUrl;
+  };
+
+  const handleCreatePromotion = async () => {
+    console.log('=== CREATING PROMOTION DEBUG START ===');
+    console.log('Form validation check...');
+    console.log('promoTitle:', promoTitle);
+    console.log('promoDescription:', promoDescription);
+    console.log('promoStartDate:', promoStartDate);
+    console.log('promoEndDate:', promoEndDate);
+    console.log('promoImage:', promoImage ? 'Image selected' : 'No image');
+
+    if (!promoTitle || !promoDescription || !promoStartDate || !promoEndDate || !promoImage) {
+      Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
+      console.log('❌ Validation failed - missing required fields');
+      return;
+    }
+
+    console.log('✅ Validation passed, starting creation process...');
+
+    setLoading(true);
+    try {
+      console.log('Creating promotion with image:', promoImage ? 'Yes' : 'No');
+
+      console.log('Step 1: Uploading image...');
+      let imageUrl = null;
+      if (promoImage) {
+        console.log('Uploading promotion image...');
+        console.log('Image URI:', promoImage);
+        try {
+          imageUrl = await uploadImage(promoImage);
+          console.log('✅ Image uploaded successfully, URL:', imageUrl);
+        } catch (uploadError) {
+          console.error('❌ Image upload failed:', uploadError);
+          Alert.alert('Error', 'No se pudo subir la imagen');
+          return;
+        }
+      }
+
+      console.log('Step 2: Preparing promotion data...');
+      // Determine CTA URL based on link type
+      let ctaUrl = null;
+      if (promoLinkType === 'external') {
+        ctaUrl = promoUrl.trim();
+      } else if (promoLinkType === 'internal') {
+        if (promoInternalType === 'service' && selectedServiceId) {
+          ctaUrl = `dogcatify://services/${selectedServiceId}`;
+        } else if (promoInternalType === 'product' && selectedProductId) {
+          ctaUrl = `dogcatify://products/${selectedProductId}`;
+        } else if (promoInternalId) {
+          ctaUrl = `dogcatify://${promoInternalType}s/${promoInternalId}`;
+        }
+        console.log('Image uploaded successfully, URL:', imageUrl);
+      } else {
+        console.log('No image to upload');
+      }
+
+      const promotionData = {
+        title: promoTitle.trim(),
+        description: promoDescription.trim(),
+        discount_percentage: promoDiscountPercentage ? parseFloat(promoDiscountPercentage) : null,
+        cta_url: ctaUrl,
+        start_date: promoStartDate ? new Date(promoStartDate).toISOString() : new Date().toISOString(),
+        end_date: promoEndDate ? new Date(promoEndDate).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        target_audience: promoTargetAudience,
+        promotion_type: promoType,
+        views: 0,
+        clicks: 0,
+        likes: [],
+        has_discount: hasDiscount,
+        discount_percentage: hasDiscount ? parseFloat(discountPercentage) || 0 : null,
+        created_at: new Date().toISOString(),
+        created_by: currentUser?.id,
+        image_url: imageUrl,
+      };
+
+      console.log('Promotion data prepared:', promotionData);
+      console.log('Date validation:');
+      console.log('Start date valid:', !isNaN(new Date(promotionData.start_date).getTime()));
+      console.log('End date valid:', !isNaN(new Date(promotionData.end_date).getTime()));
+      console.log('Start date:', promotionData.start_date);
+      console.log('End date:', promotionData.end_date);
+
+      console.log('Final promotion data to insert:', {
+        ...promotionData,
+        image_url: imageUrl ? 'URL_PROVIDED' : 'NULL'
+      });
+      if (selectedPartnerId) {
+        promotionData.partner_id = selectedPartnerId;
+        console.log('Partner ID added:', selectedPartnerId);
+      }
+
+      console.log('Step 3: Inserting into database...');
+      console.log('Using Supabase client to insert promotion...');
+      const { error } = await supabaseClient
+        .from('promotions')
+        .insert([promotionData]);
+
+      if (error) {
+        console.error('Database insert error:', error);
+        console.error('❌ Database insertion error:', error);
+        console.error('Database error details:', JSON.stringify(error, null, 2));
+        Alert.alert('Error', 'No se pudo crear la promoción');
+        return;
+      }
+
+      console.log('Promotion created successfully in database');
+
+      console.log('✅ Promotion inserted successfully into database');
+      console.log('Step 4: Cleaning up form...');
+      resetForm();
+      setShowPromotionModal(false);
+      console.log('Step 5: Refreshing promotions list...');
+      fetchPromotions();
+      Alert.alert('Éxito', 'Promoción creada correctamente');
+      console.log('✅ Promotion creation completed successfully');
+    } catch (error) {
+      console.error('ERROR in handleCreatePromotion:', error);
+      console.error('Error type:', typeof error);
+      console.error('Error message:', error?.message);
+      console.error('Error stack:', error?.stack);
+      Alert.alert('Error', 'Ocurrió un error inesperado');
+    } finally {
+      console.log('Finally: Cleaning up loading state');
+      setLoading(false);
     }
   };
 
@@ -169,6 +401,7 @@ export default function AdminPromotions() {
         .eq('id', promotionId);
 
       if (error) throw error;
+
       fetchPromotions();
     } catch (error) {
       console.error('Error toggling promotion:', error);
@@ -176,120 +409,7 @@ export default function AdminPromotions() {
     }
   };
 
-  const handlePickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-    if (status !== 'granted') {
-      Alert.alert('Permisos necesarios', 'Se necesitan permisos para acceder a la galería');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [16, 9],
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setPromoImage(result.assets[0].uri);
-    }
-  };
-
-  const uploadImage = async (imageUri: string) => {
-    const response = await fetch(imageUri);
-    const blob = await response.blob();
-    const filename = `promotions/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-
-    const { error } = await supabaseClient.storage
-      .from('dogcatify')
-      .upload(filename, blob);
-
-    if (error) throw error;
-
-    const { data: { publicUrl } } = supabaseClient.storage
-      .from('dogcatify')
-      .getPublicUrl(filename);
-
-    return publicUrl;
-  };
-
-  const handleCreatePromotion = async () => {
-    if (!promoTitle || !promoDescription || !promoStartDate || !promoEndDate || !promoImage) {
-      Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      let imageUrl = null;
-      if (promoImage) {
-        imageUrl = await uploadImage(promoImage);
-      }
-
-      const promotionData: any = {
-        title: promoTitle.trim(),
-        description: promoDescription.trim(),
-        image_url: imageUrl,
-        cta_url: promoUrl.trim() || null,
-        start_date: new Date(promoStartDate).toISOString(),
-        end_date: new Date(promoEndDate).toISOString(),
-        target_audience: promoTargetAudience,
-        is_active: true,
-        views: 0,
-        clicks: 0,
-        likes: [],
-        promotion_type: 'feed',
-        cta_text: 'Más información',
-        created_at: new Date().toISOString(),
-        created_by: currentUser?.id,
-      };
-
-      if (selectedPartnerId) {
-        promotionData.partner_id = selectedPartnerId;
-      }
-
-      const { error } = await supabaseClient
-        .from('promotions')
-        .insert([promotionData]);
-
-      if (error) {
-        Alert.alert('Error', `No se pudo crear la promoción: ${error.message}`);
-        return;
-      }
-
-      resetForm();
-      setShowPromotionModal(false);
-      fetchPromotions();
-      Alert.alert('Éxito', 'Promoción creada correctamente');
-    } catch (error) {
-      console.error('Error creating promotion:', error);
-      Alert.alert('Error', 'No se pudo crear la promoción');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const resetForm = () => {
-    setPromoTitle('');
-    setPromoDescription('');
-    setPromoImage(null);
-    setPromoUrl('');
-    setPromoStartDate('');
-    setPromoEndDate('');
-    setPromoTargetAudience('all');
-    setSelectedPartnerId(null);
-    setSelectedPartnerInfo(null);
-    setPartnerSearchQuery('');
-  };
-
-  const handleSelectPartner = (partner: Partner) => {
-    setSelectedPartnerId(partner.id);
-    setSelectedPartnerInfo(partner);
-    setShowPartnerSelector(false);
-  };
-
-  const handleInvoicePromotion = async (promotion: Promotion) => {
+  const handleInvoicePromotion = async (promotion: any) => {
     try {
       setLoading(true);
 
@@ -315,6 +435,30 @@ export default function AdminPromotions() {
     }
   };
 
+  const resetForm = () => {
+    setPromoTitle('');
+    setPromoDescription('');
+    setPromoDiscountPercentage('');
+    setPromoImage(null);
+    setPromoUrl('');
+    setCtaText('Más información');
+    setPromoStartDate('');
+    setPromoEndDate('');
+    setPromoTargetAudience('all');
+    setPromoType('feed');
+    setPromoLinkType('none');
+    setPromoInternalType('service');
+    setPromoInternalId('');
+    setSelectedPartnerId(null);
+    setSelectedServiceId(null);
+    setPartnerSearchQuery('');
+    setProductSearchQuery('');
+    setServiceSearchQuery('');
+    setHasDiscount(false);
+    setDiscountPercentage('');
+    setManualId('');
+  };
+
   const isPromotionActive = (startDate: Date, endDate: Date) => {
     const now = new Date();
     return now >= startDate && now <= endDate;
@@ -332,18 +476,48 @@ export default function AdminPromotions() {
     }
   };
 
-  const filteredPromotions = promotions.filter(promo =>
-    promo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    promo.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    promo.partnerInfo?.businessName.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleSelectPartner = (partner: any) => {
+    setSelectedPartnerId(partner.id);
+    setPartnerSearchQuery(partner.business_name);
+    setShowPartnerModal(false);
+  };
+
+  const handleSelectProduct = (product: any) => {
+    setSelectedProductId(product.id);
+    setPromoInternalId(product.id);
+    setShowProductModal(false);
+  };
+
+  const handleSelectService = (service: any) => {
+    setSelectedServiceId(service.id);
+    setPromoInternalId(service.id);
+    setShowServiceModal(false);
+  };
 
   const filteredPartners = partners.filter(partner =>
     partner.business_name.toLowerCase().includes(partnerSearchQuery.toLowerCase())
   );
 
-  const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
+  const filteredProducts = products.filter(product =>
+    product.name.toLowerCase().includes(productSearchQuery.toLowerCase())
+  );
 
+  const filteredServices = services.filter(service =>
+    service.name.toLowerCase().includes(serviceSearchQuery.toLowerCase())
+  );
+
+  const selectedPartner = partners.find(p => p.id === selectedPartnerId);
+  const selectedProduct = products.find(p => p.id === selectedProductId);
+  const selectedService = services.find(s => s.id === selectedServiceId);
+
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency: 'ARS',
+    }).format(price);
+  };
+
+  const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
   if (!isAdmin) {
     return (
       <SafeAreaView style={styles.container}>
@@ -391,53 +565,64 @@ export default function AdminPromotions() {
               <Text style={styles.emptySubtitle}>
                 {searchQuery
                   ? 'Intenta con otros términos de búsqueda'
-                  : 'Crea tu primera promoción para empezar'}
+                  : 'Crea la primera promoción para la plataforma'
+                }
               </Text>
             </Card>
           ) : (
-            filteredPromotions.map((promo) => (
-              <Card key={promo.id} style={styles.promotionCard}>
-                {promo.partnerInfo && (
-                  <View style={styles.partnerInfoHeader}>
-                    <Text style={styles.partnerIcon}>
-                      {getBusinessTypeIcon(promo.partnerInfo.businessType)}
+            filteredPromotions.map((promotion) => (
+              <Card key={promotion.id} style={styles.promotionCard}>
+                <View style={styles.promotionHeader}>
+                  <View style={styles.promotionInfo}>
+                    <Text style={styles.promotionTitle}>{promotion.title}</Text>
+                    <Text style={styles.promotionDescription} numberOfLines={2}>
+                      {promotion.description}
                     </Text>
-                    <Text style={styles.partnerName}>
-                      {promo.partnerInfo.businessName}
-                    </Text>
+                    {promotion.partnerInfo && (
+                      <View style={styles.partnerInfo}>
+                        <Text style={styles.partnerIcon}>
+                          {getBusinessTypeIcon(promotion.partnerInfo.businessType)}
+                        </Text>
+                        <Text style={styles.partnerName}>
+                          {promotion.partnerInfo.businessName}
+                        </Text>
+                      </View>
+                    )}
                   </View>
-                )}
 
-                <Text style={styles.promotionTitle}>{promo.title}</Text>
-                <Text style={styles.promotionDescription}>{promo.description}</Text>
+                  <View style={styles.promotionStatus}>
+                    <View style={[
+                      styles.statusBadge,
+                      { backgroundColor: promotion.isActive ? '#DCFCE7' : '#F3F4F6' }
+                    ]}>
+                      <Text style={[
+                        styles.statusText,
+                        { color: promotion.isActive ? '#22C55E' : '#6B7280' }
+                      ]}>
+                        {promotion.isActive ? 'Activa' : 'Inactiva'}
+                      </Text>
+                    </View>
 
-                <View style={styles.promotionStats}>
-                  <View style={styles.statItem}>
-                    <Eye size={14} color="#6B7280" />
-                    <Text style={styles.statText}>{promo.views} vistas</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <MousePointer size={14} color="#6B7280" />
-                    <Text style={styles.statText}>{promo.clicks} clics</Text>
+                    <View style={styles.promotionStats}>
+                      <Text style={styles.statText}>👁️ {promotion.views || 0}</Text>
+                      <Text style={styles.statText}>🔗 {promotion.clicks || 0}</Text>
+                    </View>
                   </View>
                 </View>
 
-                {promo.imageURL && (
-                  <Image
-                    source={{ uri: promo.imageURL }}
-                    style={styles.promotionImage}
-                  />
+                {promotion.imageURL && (
+                  <Image source={{ uri: promotion.imageURL }} style={styles.promotionImage} />
                 )}
 
                 <View style={styles.promotionDates}>
                   <Text style={styles.dateText}>
-                    📅 {promo.startDate.toLocaleDateString()} - {promo.endDate.toLocaleDateString()}
+                    📅 {promotion.startDate.toLocaleDateString()} - {promotion.endDate.toLocaleDateString()}
                   </Text>
                   <Text style={[
                     styles.activeStatus,
-                    { color: isPromotionActive(promo.startDate, promo.endDate) ? '#10B981' : '#6B7280' }
+                    { color: isPromotionActive(promotion.startDate, promotion.endDate) ? '#22C55E' : '#EF4444' }
                   ]}>
-                    {isPromotionActive(promo.startDate, promo.endDate) ? 'En período activo' : 'Fuera de período'}
+                    {isPromotionActive(promotion.startDate, promotion.endDate) ? 'En período activo' : 'Fuera de período'}
                   </Text>
                 </View>
 
@@ -445,16 +630,17 @@ export default function AdminPromotions() {
                   <View style={styles.actionsRow}>
                     <TouchableOpacity
                       style={styles.invoiceButton}
-                      onPress={() => handleInvoicePromotion(promo)}
+                      onPress={() => handleInvoicePromotion(promotion)}
                     >
                       <FileText size={16} color="#FFFFFF" />
                       <Text style={styles.invoiceButtonText}>Facturar</Text>
                     </TouchableOpacity>
 
                     <Button
-                      title={promo.isActive ? 'Desactivar' : 'Activar'}
-                      onPress={() => handleTogglePromotion(promo.id, promo.isActive)}
-                      variant={promo.isActive ? 'outline' : 'primary'}
+                      title={promotion.isActive ? 'Desactivar' : 'Activar'}
+                      onPress={() => handleTogglePromotion(promotion.id, promotion.isActive)}
+                      variant={promotion.isActive ? 'outline' : 'primary'}
+                      size="medium"
                     />
                   </View>
                 </View>
@@ -464,120 +650,392 @@ export default function AdminPromotions() {
         </View>
       </ScrollView>
 
+      {/* Add Promotion Modal */}
       <Modal
         visible={showPromotionModal}
+        transparent
         animationType="slide"
-        transparent={true}
         onRequestClose={() => setShowPromotionModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <ScrollView
-            contentContainerStyle={styles.modalScrollContent}
-            showsVerticalScrollIndicator={false}
-          >
+          <ScrollView contentContainerStyle={styles.modalScrollContent}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Nueva Promoción</Text>
+                <Text style={styles.modalTitle}>Crear Nueva Promoción</Text>
                 <TouchableOpacity onPress={() => setShowPromotionModal(false)}>
                   <X size={24} color="#6B7280" />
                 </TouchableOpacity>
               </View>
 
+              <Input
+                label="Título de la promoción *"
+                placeholder="Ej: ¡50% de descuento en consultas!"
+                value={promoTitle}
+                onChangeText={setPromoTitle}
+              />
+
+              <Input
+                label="Descripción *"
+                placeholder="Describe la promoción..."
+                value={promoDescription}
+                onChangeText={setPromoDescription}
+                multiline
+                numberOfLines={3}
+              />
+
+              <Input
+                label="Porcentaje de descuento"
+                placeholder="Ej: 20 (opcional)"
+                value={promoDiscountPercentage}
+                onChangeText={setPromoDiscountPercentage}
+                keyboardType="numeric"
+              />
+
+              <Input
+                label="Texto del botón (CTA)"
+                placeholder="Ej: Ver oferta, Comprar ahora, Más información"
+                value={ctaText}
+                onChangeText={setCtaText}
+              />
+
+              {/* Image Selection */}
+              <View style={styles.imageSection}>
+                <Text style={styles.imageLabel}>Imagen de la promoción *</Text>
+
+                {promoImage ? (
+                  <View style={styles.imagePreviewContainer}>
+                    <Image source={{ uri: promoImage }} style={styles.selectedImage} />
+                    <TouchableOpacity
+                      style={styles.changeImageButton}
+                      onPress={() => setPromoImage(null)}
+                    >
+                      <Text style={styles.changeImageText}>Cambiar imagen</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.imageActions}>
+                    <TouchableOpacity style={styles.imageActionButton} onPress={handleTakePhoto}>
+                      <Text style={styles.imageActionIcon}>📷</Text>
+                      <Text style={styles.imageActionText}>Tomar foto</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.imageActionButton} onPress={handleSelectImage}>
+                      <Text style={styles.imageActionIcon}>🖼️</Text>
+                      <Text style={styles.imageActionText}>Galería</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+
+              {/* Date Selection */}
+              <View style={styles.dateSection}>
+                <Text style={styles.dateLabel}>Período de la promoción *</Text>
+
+                <View style={styles.dateRow}>
+                  <View style={styles.dateInput}>
+                    <Text style={styles.dateInputLabel}>Fecha de inicio</Text>
+                    <TouchableOpacity
+                      style={styles.dateButton}
+                      onPress={() => setShowStartDatePicker(true)}
+                    >
+                      <Calendar size={16} color="#6B7280" />
+                      <Text style={styles.dateButtonText}>
+                        {promoStartDate ? new Date(promoStartDate).toLocaleDateString() : 'Seleccionar'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.dateInput}>
+                    <Text style={styles.dateInputLabel}>Fecha de fin</Text>
+                    <TouchableOpacity
+                      style={styles.dateButton}
+                      onPress={() => setShowEndDatePicker(true)}
+                    >
+                      <Calendar size={16} color="#6B7280" />
+                      <Text style={styles.dateButtonText}>
+                        {promoEndDate ? new Date(promoEndDate).toLocaleDateString() : 'Seleccionar'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {showStartDatePicker && (
+                  <DateTimePicker
+                    value={promoStartDate ? new Date(promoStartDate) : new Date()}
+                    mode="date"
+                    display="default"
+                    onChange={(event, selectedDate) => {
+                      setShowStartDatePicker(false);
+                      if (selectedDate) {
+                        setPromoStartDate(selectedDate.toISOString());
+                      }
+                    }}
+                  />
+                )}
+
+                {showEndDatePicker && (
+                  <DateTimePicker
+                    value={promoEndDate ? new Date(promoEndDate) : new Date()}
+                    mode="date"
+                    display="default"
+                    onChange={(event, selectedDate) => {
+                      setShowEndDatePicker(false);
+                      if (selectedDate) {
+                        setPromoEndDate(selectedDate.toISOString());
+                      }
+                    }}
+                  />
+                )}
+              </View>
+
+              {/* Link Configuration */}
+              <View style={styles.linkSection}>
+                <Text style={styles.linkLabel}>Configuración de enlace</Text>
+
+                <View style={styles.linkTypeSelector}>
+                  <TouchableOpacity
+                    style={[styles.linkTypeOption, promoLinkType === 'none' && styles.selectedLinkType]}
+                    onPress={() => setPromoLinkType('none')}
+                  >
+                    <Text style={[styles.linkTypeText, promoLinkType === 'none' && styles.selectedLinkTypeText]}>
+                      Sin enlace
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.linkTypeOption, promoLinkType === 'external' && styles.selectedLinkType]}
+                    onPress={() => setPromoLinkType('external')}
+                  >
+                    <Text style={[styles.linkTypeText, promoLinkType === 'external' && styles.selectedLinkTypeText]}>
+                      Enlace externo
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.linkTypeOption, promoLinkType === 'internal' && styles.selectedLinkType]}
+                    onPress={() => setPromoLinkType('internal')}
+                  >
+                    <Text style={[styles.linkTypeText, promoLinkType === 'internal' && styles.selectedLinkTypeText]}>
+                      Enlace interno
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {promoLinkType === 'external' && (
+                  <Input
+                    label="URL externa"
+                    placeholder="https://ejemplo.com"
+                    value={promoUrl}
+                    onChangeText={setPromoUrl}
+                    leftIcon={<ExternalLink size={20} color="#6B7280" />}
+                  />
+                )}
+
+                {promoLinkType === 'internal' && (
+                  <View style={styles.internalLinkSection}>
+                    <Text style={styles.internalLinkLabel}>Tipo de enlace interno</Text>
+                    <View style={styles.internalTypeSelector}>
+                      <TouchableOpacity
+                        style={[styles.internalTypeOption, promoInternalType === 'service' && styles.selectedInternalType]}
+                        onPress={() => {
+                          setPromoInternalType('service');
+                          setSelectedProductId(null);
+                          setSelectedServiceId(null);
+                          setPromoInternalId('');
+                        }}
+                      >
+                        <Text style={[styles.internalTypeText, promoInternalType === 'service' && styles.selectedInternalTypeText]}>Servicio</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.internalTypeOption, promoInternalType === 'product' && styles.selectedInternalType]}
+                        onPress={() => {
+                          setPromoInternalType('product');
+                          setSelectedProductId(null);
+                          setSelectedServiceId(null);
+                          setPromoInternalId('');
+                        }}
+                      >
+                        <Text style={[styles.internalTypeText, promoInternalType === 'product' && styles.selectedInternalTypeText]}>Producto</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.internalTypeOption, promoInternalType === 'partner' && styles.selectedInternalType]}
+                        onPress={() => {
+                          setPromoInternalType('partner');
+                          setSelectedProductId(null);
+                          setSelectedServiceId(null);
+                          setPromoInternalId('');
+                        }}
+                      >
+                        <Text style={[styles.internalTypeText, promoInternalType === 'partner' && styles.selectedInternalTypeText]}>Aliado</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Service Selector */}
+                    {promoInternalType === 'service' && (
+                      <View style={styles.selectorSection}>
+                        <TouchableOpacity
+                          style={styles.selectorButton}
+                          onPress={() => setShowServiceModal(true)}
+                        >
+                          <Text style={styles.selectorButtonText}>
+                            {selectedService ? selectedService.name : 'Buscar y seleccionar servicio'}
+                          </Text>
+                          <Search size={16} color="#6B7280" />
+                        </TouchableOpacity>
+
+                        {selectedService && (
+                          <View style={styles.selectedItemInfo}>
+                            <Text style={styles.selectedItemName}>{selectedService.name}</Text>
+                            <Text style={styles.selectedItemPrice}>{formatPrice(selectedService.price)}</Text>
+                            <TouchableOpacity onPress={() => {
+                              setSelectedServiceId(null);
+                              setPromoInternalId('');
+                            }}>
+                              <Text style={styles.removeItemText}>✕</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </View>
+                    )}
+
+                    {/* Product Selector */}
+                    {promoInternalType === 'product' && (
+                      <View style={styles.selectorSection}>
+                        <TouchableOpacity
+                          style={styles.selectorButton}
+                          onPress={() => setShowProductModal(true)}
+                        >
+                          <Text style={styles.selectorButtonText}>
+                            {selectedProduct ? selectedProduct.name : 'Buscar y seleccionar producto'}
+                          </Text>
+                          <Search size={16} color="#6B7280" />
+                        </TouchableOpacity>
+
+                        {selectedProduct && (
+                          <View style={styles.selectedItemInfo}>
+                            <Text style={styles.selectedItemName}>{selectedProduct.name}</Text>
+                            <Text style={styles.selectedItemPrice}>{formatPrice(selectedProduct.price)}</Text>
+                            <TouchableOpacity onPress={() => {
+                              setSelectedProductId(null);
+                              setPromoInternalId('');
+                            }}>
+                              <Text style={styles.removeItemText}>✕</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </View>
+                    )}
+
+                    {/* Partner Selector for Internal Links */}
+                    {promoInternalType === 'partner' && (
+                      <View style={styles.selectorSection}>
+                        <TouchableOpacity
+                          style={styles.selectorButton}
+                          onPress={() => setShowPartnerModal(true)}
+                        >
+                          <Text style={styles.selectorButtonText}>
+                            {selectedPartner ? selectedPartner.business_name : 'Buscar y seleccionar aliado'}
+                          </Text>
+                          <Search size={16} color="#6B7280" />
+                        </TouchableOpacity>
+
+                        {selectedPartner && (
+                          <View style={styles.selectedItemInfo}>
+                            <Text style={styles.selectedItemIcon}>
+                              {getBusinessTypeIcon(selectedPartner.business_type)}
+                            </Text>
+                            <Text style={styles.selectedItemName}>{selectedPartner.business_name}</Text>
+                            <TouchableOpacity onPress={() => {
+                              setSelectedPartnerId(null);
+                              setPromoInternalId('');
+                            }}>
+                              <Text style={styles.removeItemText}>✕</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </View>
+                    )}
+
+                    <Input
+                      label={`ID del ${promoInternalType} (manual)`}
+                      placeholder={`O ingresa manualmente el ID del ${promoInternalType}`}
+                      value={promoInternalId}
+                      onChangeText={setPromoInternalId}
+                    />
+                  </View>
+                )}
+              </View>
+
+              {/* Partner Association */}
               <View style={styles.partnerSection}>
-                <Text style={styles.partnerLabel}>Aliado (opcional)</Text>
+                <Text style={styles.partnerLabel}>Aliado asociado (opcional)</Text>
                 <TouchableOpacity
                   style={styles.partnerSelector}
-                  onPress={() => setShowPartnerSelector(true)}
+                  onPress={() => setShowPartnerModal(true)}
                 >
-                  <Store size={20} color="#6B7280" />
+                  <Building size={20} color="#6B7280" />
                   <Text style={styles.partnerSelectorText}>
-                    {selectedPartnerInfo?.business_name || 'Seleccionar aliado'}
+                    {selectedPartner ? selectedPartner.business_name : 'Seleccionar aliado'}
                   </Text>
-                  <ChevronRight size={20} color="#6B7280" />
                 </TouchableOpacity>
 
-                {selectedPartnerInfo && (
+                {selectedPartner && (
                   <View style={styles.selectedPartnerInfo}>
                     <Text style={styles.selectedPartnerIcon}>
-                      {getBusinessTypeIcon(selectedPartnerInfo.business_type)}
+                      {getBusinessTypeIcon(selectedPartner.business_type)}
                     </Text>
                     <Text style={styles.selectedPartnerName}>
-                      {selectedPartnerInfo.business_name}
+                      {selectedPartner.business_name}
                     </Text>
-                    <TouchableOpacity onPress={() => {
-                      setSelectedPartnerId(null);
-                      setSelectedPartnerInfo(null);
-                    }}>
+                    <TouchableOpacity onPress={() => setSelectedPartnerId(null)}>
                       <Text style={styles.removePartnerText}>✕</Text>
                     </TouchableOpacity>
                   </View>
                 )}
               </View>
 
-              <Input
-                label="Título"
-                value={promoTitle}
-                onChangeText={setPromoTitle}
-                placeholder="Ej: Gran descuento en productos"
-              />
-
-              <Input
-                label="Descripción"
-                value={promoDescription}
-                onChangeText={setPromoDescription}
-                placeholder="Describe la promoción"
-                multiline
-                numberOfLines={4}
-              />
-
-              <View style={styles.imageSection}>
-                <Text style={styles.imageLabel}>Imagen de la promoción</Text>
+              {/* Descuento */}
+              <View style={styles.discountSection}>
                 <TouchableOpacity
-                  style={styles.imageButton}
-                  onPress={handlePickImage}
+                  style={styles.discountCheckbox}
+                  onPress={() => setHasDiscount(!hasDiscount)}
                 >
-                  <ImageIcon size={20} color="#DC2626" />
-                  <Text style={styles.imageButtonText}>
-                    {promoImage ? 'Cambiar imagen' : 'Seleccionar imagen'}
-                  </Text>
+                  <View style={[styles.checkbox, hasDiscount && styles.checkedCheckbox]}>
+                    {hasDiscount && <Text style={styles.checkmark}>✓</Text>}
+                  </View>
+                  <Text style={styles.discountCheckboxLabel}>Esta promoción incluye descuento</Text>
                 </TouchableOpacity>
 
-                {promoImage && (
-                  <Image source={{ uri: promoImage }} style={styles.previewImage} />
+                {hasDiscount && (
+                  <View style={styles.discountInputContainer}>
+                    <Input
+                      label="Porcentaje de descuento"
+                      placeholder="Ej: 15"
+                      value={discountPercentage}
+                      onChangeText={setDiscountPercentage}
+                      keyboardType="numeric"
+                    />
+                    <Text style={styles.discountHint}>
+                      Ingresa solo el número (ej: 15 para 15% de descuento)
+                    </Text>
+                  </View>
                 )}
               </View>
-
-              <Input
-                label="URL de destino (opcional)"
-                value={promoUrl}
-                onChangeText={setPromoUrl}
-                placeholder="https://ejemplo.com"
-              />
-
-              <Input
-                label="Fecha de inicio"
-                value={promoStartDate}
-                onChangeText={setPromoStartDate}
-                placeholder="YYYY-MM-DD"
-              />
-
-              <Input
-                label="Fecha de fin"
-                value={promoEndDate}
-                onChangeText={setPromoEndDate}
-                placeholder="YYYY-MM-DD"
-              />
 
               <View style={styles.modalActions}>
                 <Button
                   title="Cancelar"
-                  onPress={() => setShowPromotionModal(false)}
+                  onPress={() => {
+                    setShowPromotionModal(false);
+                    resetForm();
+                  }}
                   variant="outline"
+                  size="large"
                 />
                 <Button
-                  title={loading ? 'Creando...' : 'Crear Promoción'}
+                  title="Crear Promoción"
                   onPress={handleCreatePromotion}
-                  disabled={loading}
+                  size="large"
+                  loading={loading}
                 />
               </View>
             </View>
@@ -585,17 +1043,18 @@ export default function AdminPromotions() {
         </View>
       </Modal>
 
+      {/* Partner Selection Modal */}
       <Modal
-        visible={showPartnerSelector}
+        visible={showPartnerModal}
+        transparent
         animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowPartnerSelector(false)}
+        onRequestClose={() => setShowPartnerModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={styles.partnerModalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Seleccionar Aliado</Text>
-              <TouchableOpacity onPress={() => setShowPartnerSelector(false)}>
+              <TouchableOpacity onPress={() => setShowPartnerModal(false)}>
                 <X size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
@@ -607,32 +1066,146 @@ export default function AdminPromotions() {
               leftIcon={<Search size={20} color="#9CA3AF" />}
             />
 
-            <ScrollView style={styles.partnersList}>
-              {filteredPartners.length === 0 ? (
-                <Text style={styles.emptyText}>No se encontraron aliados</Text>
-              ) : (
-                filteredPartners.map(partner => (
-                  <TouchableOpacity
-                    key={partner.id}
-                    style={styles.partnerOption}
-                    onPress={() => handleSelectPartner(partner)}
-                  >
-                    <View style={styles.partnerOptionContent}>
-                      <Text style={styles.partnerOptionIcon}>
-                        {getBusinessTypeIcon(partner.business_type)}
+            <ScrollView style={styles.partnersList} showsVerticalScrollIndicator={false}>
+              <TouchableOpacity
+                style={styles.partnerOption}
+                onPress={() => {
+                  setSelectedPartnerId(null);
+                  setPartnerSearchQuery('');
+                  setShowPartnerModal(false);
+                }}
+              >
+                <Text style={styles.partnerOptionText}>Sin aliado asociado</Text>
+              </TouchableOpacity>
+
+              {filteredPartners.map((partner) => (
+                <TouchableOpacity
+                  key={partner.id}
+                  style={styles.partnerOption}
+                  onPress={() => handleSelectPartner(partner)}
+                >
+                  <View style={styles.partnerOptionContent}>
+                    <Text style={styles.partnerOptionIcon}>
+                      {getBusinessTypeIcon(partner.business_type)}
+                    </Text>
+                    <View style={styles.partnerOptionInfo}>
+                      <Text style={styles.partnerOptionName}>{partner.business_name}</Text>
+                      <Text style={styles.partnerOptionType}>
+                        {partner.business_type === 'veterinary' ? 'Veterinaria' :
+                         partner.business_type === 'grooming' ? 'Peluquería' :
+                         partner.business_type === 'walking' ? 'Paseador' :
+                         partner.business_type === 'boarding' ? 'Pensión' :
+                         partner.business_type === 'shop' ? 'Tienda' :
+                         partner.business_type === 'shelter' ? 'Refugio' : partner.business_type}
                       </Text>
-                      <View style={styles.partnerOptionInfo}>
-                        <Text style={styles.partnerOptionName}>
-                          {partner.business_name}
-                        </Text>
-                        <Text style={styles.partnerOptionType}>
-                          {partner.business_type}
-                        </Text>
-                      </View>
                     </View>
-                  </TouchableOpacity>
-                ))
-              )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Product Selection Modal */}
+      <Modal
+        visible={showProductModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowProductModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.partnerModalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Seleccionar Producto</Text>
+              <TouchableOpacity onPress={() => setShowProductModal(false)}>
+                <X size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            <Input
+              placeholder="Buscar producto..."
+              value={productSearchQuery}
+              onChangeText={setProductSearchQuery}
+              leftIcon={<Search size={20} color="#9CA3AF" />}
+            />
+
+            <ScrollView style={styles.partnersList} showsVerticalScrollIndicator={false}>
+              {filteredProducts.map((product) => (
+                <TouchableOpacity
+                  key={product.id}
+                  style={styles.partnerOption}
+                  onPress={() => handleSelectProduct(product)}
+                >
+                  <View style={styles.partnerOptionContent}>
+                    {product.images && product.images.length > 0 ? (
+                      <Image source={{ uri: product.images[0] }} style={styles.productImage} />
+                    ) : (
+                      <View style={styles.productImagePlaceholder}>
+                        <Text style={styles.productImagePlaceholderText}>📦</Text>
+                      </View>
+                    )}
+                    <View style={styles.partnerOptionInfo}>
+                      <Text style={styles.partnerOptionName}>{product.name}</Text>
+                      <Text style={styles.partnerOptionType}>
+                        {formatPrice(product.price)}
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Service Selection Modal */}
+      <Modal
+        visible={showServiceModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowServiceModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.partnerModalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Seleccionar Servicio</Text>
+              <TouchableOpacity onPress={() => setShowServiceModal(false)}>
+                <X size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            <Input
+              placeholder="Buscar servicio..."
+              value={serviceSearchQuery}
+              onChangeText={setServiceSearchQuery}
+              leftIcon={<Search size={20} color="#9CA3AF" />}
+            />
+
+            <ScrollView style={styles.partnersList} showsVerticalScrollIndicator={false}>
+              {filteredServices.map((service) => (
+                <TouchableOpacity
+                  key={service.id}
+                  style={styles.partnerOption}
+                  onPress={() => handleSelectService(service)}
+                >
+                  <View style={styles.partnerOptionContent}>
+                    {service.images && service.images.length > 0 ? (
+                      <Image source={{ uri: service.images[0] }} style={styles.productImage} />
+                    ) : (
+                      <View style={styles.productImagePlaceholder}>
+                        <Text style={styles.productImagePlaceholderText}>🛠️</Text>
+                      </View>
+                    )}
+                    <View style={styles.partnerOptionInfo}>
+                      <Text style={styles.partnerOptionName}>{service.name}</Text>
+                      <Text style={styles.partnerOptionType}>
+                        {formatPrice(service.price)}
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
             </ScrollView>
           </View>
         </View>
@@ -656,85 +1229,97 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingTop: 50,
+    paddingBottom: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
   title: {
-    fontSize: 24,
+    fontSize: 20,
     fontFamily: 'Inter-Bold',
     color: '#111827',
   },
   addButton: {
     backgroundColor: '#DC2626',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 8,
+    borderRadius: 20,
   },
   content: {
     flex: 1,
   },
   searchContainer: {
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingVertical: 16,
+    marginBottom: 8,
   },
   section: {
-    marginTop: 16,
+    marginBottom: 24,
   },
   sectionTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     marginBottom: 12,
   },
   promotionCard: {
     marginHorizontal: 16,
     marginBottom: 12,
-    padding: 16,
   },
-  partnerInfoHeader: {
+  promotionHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
   },
-  partnerIcon: {
-    fontSize: 16,
-    marginRight: 8,
-  },
-  partnerName: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+  promotionInfo: {
+    flex: 1,
+    marginRight: 12,
   },
   promotionTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   promotionDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
-    marginBottom: 12,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  partnerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  partnerIcon: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  partnerName: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#3B82F6',
+  },
+  promotionStatus: {
+    alignItems: 'flex-end',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  statusText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
   },
   promotionStats: {
     flexDirection: 'row',
-    marginBottom: 12,
-    gap: 16,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    gap: 8,
   },
   statText: {
     fontSize: 12,
@@ -802,13 +1387,6 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
   },
-  emptyText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-    padding: 20,
-  },
   accessDenied: {
     flex: 1,
     justifyContent: 'center',
@@ -841,7 +1419,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 20,
-    maxHeight: '90%',
+    width: '100%',
+    maxWidth: 500,
+    alignSelf: 'center',
+  },
+  partnerModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    height: '80%',
+    marginTop: '20%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -850,9 +1438,226 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: 'Inter-Bold',
     color: '#111827',
+  },
+  imageSection: {
+    marginBottom: 20,
+  },
+  imageLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  imagePreviewContainer: {
+    marginBottom: 12,
+  },
+  selectedImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  changeImageButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    alignSelf: 'center',
+  },
+  changeImageText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
+  },
+  imageActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    gap: 12,
+  },
+  imageActionButton: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 40,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
+  },
+  imageActionIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  imageActionText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  dateSection: {
+    marginBottom: 20,
+  },
+  dateLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dateInput: {
+    flex: 1,
+  },
+  dateInputLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    marginBottom: 6,
+  },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  dateButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    marginLeft: 8,
+  },
+  linkSection: {
+    marginBottom: 20,
+  },
+  linkLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  linkTypeSelector: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    gap: 8,
+  },
+  linkTypeOption: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+  },
+  selectedLinkType: {
+    backgroundColor: '#DC2626',
+    borderColor: '#DC2626',
+  },
+  linkTypeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+  },
+  selectedLinkTypeText: {
+    color: '#FFFFFF',
+  },
+  internalLinkSection: {
+    marginTop: 12,
+  },
+  internalLinkLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  internalTypeSelector: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    gap: 6,
+  },
+  internalTypeOption: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  selectedInternalType: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  internalTypeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+  },
+  selectedInternalTypeText: {
+    color: '#FFFFFF',
+  },
+  selectorSection: {
+    marginBottom: 16,
+  },
+  selectorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  selectorButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    flex: 1,
+  },
+  selectedItemInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EBF8FF',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  selectedItemIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  selectedItemName: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#1E40AF',
+    flex: 1,
+  },
+  selectedItemPrice: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#10B981',
+    marginRight: 8,
+  },
+  removeItemText: {
+    fontSize: 16,
+    color: '#6B7280',
+    padding: 4,
   },
   partnerSection: {
     marginBottom: 20,
@@ -903,40 +1708,8 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     padding: 4,
   },
-  imageSection: {
-    marginBottom: 20,
-  },
-  imageLabel: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  imageButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
-    borderRadius: 8,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  imageButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#DC2626',
-  },
-  previewImage: {
-    width: '100%',
-    height: 120,
-    borderRadius: 8,
-    marginTop: 12,
-    resizeMode: 'cover',
-  },
   modalActions: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: 12,
     marginTop: 20,
   },
@@ -971,6 +1744,72 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
+  },
+  partnerOptionText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    fontStyle: 'italic',
+  },
+  productImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  productImagePlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  productImagePlaceholderText: {
+    fontSize: 20,
+  },
+  discountSection: {
+    marginBottom: 20,
+  },
+  discountCheckbox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkedCheckbox: {
+    backgroundColor: '#DC2626',
+    borderColor: '#DC2626',
+  },
+  checkmark: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  discountCheckboxLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    marginLeft: 12,
+  },
+  discountInputContainer: {
+    marginTop: 8,
+  },
+  discountHint: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   loadingOverlay: {
     position: 'absolute',
