@@ -8,6 +8,7 @@ import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
 import { supabaseClient } from '../../lib/supabase';
+import { uploadImage as uploadImageUtil } from '../../utils/imageUpload';
 
 export default function EditProduct() {
   const { productId } = useLocalSearchParams<{ productId: string }>();
@@ -125,21 +126,7 @@ export default function EditProduct() {
   };
 
   const uploadImage = async (imageUri: string, path: string): Promise<string> => {
-    const response = await fetch(imageUri);
-    const blob = await response.blob();
-    
-    // Use Supabase storage instead of Firebase
-    const { data, error } = await supabaseClient.storage
-      .from('dogcatify')
-      .upload(path, blob);
-
-    if (error) throw error;
-
-    const { data: { publicUrl } } = supabaseClient.storage
-      .from('dogcatify')
-      .getPublicUrl(path);
-    
-    return publicUrl;
+    return uploadImageUtil(imageUri, path);
   };
 
   const handleRemoveImage = (index: number) => {

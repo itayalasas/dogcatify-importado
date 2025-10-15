@@ -9,6 +9,7 @@ import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { supabaseClient } from '../../lib/supabase';
+import { uploadImage } from '../../utils/imageUpload';
 
 interface BreedInfo {
   name: string;
@@ -171,38 +172,10 @@ export default function AddPet() {
   
   const uploadPetImage = async (): Promise<string | null> => {
     if (!petImage) return null;
-    
+
     try {
-      // Create a unique filename
       const filename = `pets/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-      
-      // Create form data for upload
-      const formData = new FormData();
-      formData.append('file', {
-        uri: petImage,
-        type: 'image/jpeg',
-        name: filename,
-      } as any);
-      
-      // Upload to Supabase storage
-      const { data, error } = await supabaseClient.storage
-        .from('dogcatify')
-        .upload(filename, formData, {
-          contentType: 'image/jpeg',
-          cacheControl: '3600',
-        });
-      
-      if (error) {
-        console.error('Error uploading image:', error);
-        return null;
-      }
-      
-      // Get public URL
-      const { data: { publicUrl } } = supabaseClient.storage
-        .from('dogcatify')
-        .getPublicUrl(filename);
-      
-      return publicUrl;
+      return await uploadImage(petImage, filename);
     } catch (error) {
       console.error('Error uploading pet image:', error);
       return null;

@@ -8,6 +8,7 @@ import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
 import { supabaseClient } from '../../lib/supabase';
+import { uploadImage as uploadImageUtil } from '../../utils/imageUpload';
 
 export default function AddAdoptionPet() {
   const { partnerId } = useLocalSearchParams<{ partnerId: string }>();
@@ -122,20 +123,7 @@ export default function AddAdoptionPet() {
   };
 
   const uploadImage = async (imageUri: string, path: string): Promise<string> => {
-    const response = await fetch(imageUri);
-    const blob = await response.blob();
-    
-    const { data, error } = await supabaseClient.storage
-      .from('dogcatify')
-      .upload(path, blob);
-
-    if (error) throw error;
-
-    const { data: { publicUrl } } = supabaseClient.storage
-      .from('dogcatify')
-      .getPublicUrl(path);
-    
-    return publicUrl;
+    return uploadImageUtil(imageUri, path);
   };
 
   const handleRemoveImage = (index: number) => {

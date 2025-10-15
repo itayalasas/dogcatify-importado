@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Card } from '../../components/ui/Card';
 import { launchImageLibraryAsync, launchCameraAsync, MediaTypeOptions, requestMediaLibraryPermissionsAsync, requestCameraPermissionsAsync, ImagePickerAsset } from 'expo-image-picker';
 import { supabaseClient } from '../../lib/supabase';
+import { uploadImage as uploadImageUtil } from '../../utils/imageUpload';
 
 export default function AddService() {
   const { partnerId, businessType } = useLocalSearchParams<{ partnerId: string; businessType: string }>();
@@ -207,54 +208,8 @@ export default function AddService() {
   };
 
   const uploadImage = async (imageUri: string, path: string): Promise<string> => {
-    try {
-      console.log('Starting image upload for:', imageUri);
-      console.log('Upload path:', path);
-      
-      // Create a unique filename
-      const filename = `partners/${partnerId}/services/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-      console.log('Generated filename:', filename);
-      
-      // Fetch the image and convert to blob
-      console.log('Fetching image from URI...');
-      const response = await fetch(imageUri);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.status}`);
-      }
-      
-      const blob = await response.blob();
-      console.log('Image converted to blob, size:', blob.size);
-      
-      // Upload blob to Supabase storage
-      console.log('Uploading blob to Supabase storage...');
-      const { data, error } = await supabaseClient.storage
-        .from('dogcatify')
-        .upload(filename, blob, {
-          contentType: 'image/jpeg',
-          cacheControl: '3600',
-          upsert: false
-        });
-      
-      if (error) {
-        console.error('Supabase storage error:', error);
-        throw new Error(`Storage upload failed: ${error.message}`);
-      }
-      
-      console.log('Upload successful, data:', data);
-      
-      // Get the public URL
-      const { data: urlData } = supabaseClient.storage
-        .from('dogcatify')
-        .getPublicUrl(filename);
-      
-      const publicUrl = urlData.publicUrl;
-      console.log('Generated public URL:', publicUrl);
-      
-      return publicUrl;
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      throw error;
-    }
+    const filename = `partners/${partnerId}/services/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+    return uploadImageUtil(imageUri, filename);
   };
 
   const handleSubmit = async () => {
