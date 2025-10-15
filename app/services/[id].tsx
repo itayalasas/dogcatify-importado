@@ -518,12 +518,6 @@ export default function ServiceDetail() {
                     ]}>
                       {category.name}
                     </Text>
-                    <Text style={[
-                      styles.categoryPrice,
-                      selectedCategory === category.id && styles.selectedCategoryText
-                    ]}>
-                      {formatPrice(category.price)}
-                    </Text>
                   </View>
                   <Text style={[
                     styles.categoryDescription,
@@ -531,11 +525,29 @@ export default function ServiceDetail() {
                   ]}>
                     {category.description}
                   </Text>
+                  <View style={styles.categoryFooter}>
+                    <Text style={[
+                      styles.categoryCapacity,
+                      selectedCategory === category.id && styles.selectedCategoryText
+                    ]}>
+                      Capacidad: {category.capacity} mascotas
+                    </Text>
+                    {service.petType && (
+                      <Text style={[
+                        styles.categoryPetType,
+                        selectedCategory === category.id && styles.selectedCategoryText
+                      ]}>
+                        {service.petType === 'dog' ? '🐶 Perros' :
+                         service.petType === 'cat' ? '🐱 Gatos' :
+                         service.petType === 'both' ? '🐶🐱 Perros y Gatos' : '🐾 Todas'}
+                      </Text>
+                    )}
+                  </View>
                   <Text style={[
-                    styles.categoryCapacity,
+                    styles.categoryPrice,
                     selectedCategory === category.id && styles.selectedCategoryText
                   ]}>
-                    Capacidad: {category.capacity} mascotas
+                    {formatPrice(category.price)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -1298,9 +1310,6 @@ const styles = StyleSheet.create({
     borderColor: '#3B82F6',
   },
   categoryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 8,
   },
   categoryName: {
@@ -1309,17 +1318,29 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   categoryPrice: {
-    fontSize: 20,
+    fontSize: 24,
     fontFamily: 'Inter-Bold',
     color: '#10B981',
+    marginTop: 12,
   },
   categoryDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
-    marginBottom: 6,
+    marginBottom: 8,
+  },
+  categoryFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
   },
   categoryCapacity: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#9CA3AF',
+  },
+  categoryPetType: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
     color: '#9CA3AF',
