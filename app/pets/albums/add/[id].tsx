@@ -10,6 +10,7 @@ import * as FileSystem from 'expo-file-system';
 import { supabaseClient } from '../../../../lib/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { detectPetInImage, validateImagesForPets } from '../../../../utils/petDetection';
+import { uploadImage } from '../../../../utils/imageUpload';
 
 export default function AddPhoto() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -162,50 +163,19 @@ export default function AddPhoto() {
   const uploadImageToStorage = async (imageAsset: ImagePicker.ImagePickerAsset): Promise<string> => {
     try {
       console.log('Starting upload for image:', imageAsset.uri);
-      
-      // Crear un nombre de archivo único
+
       const timestamp = Date.now();
       const randomId = Math.random().toString(36).substring(7);
       const filename = `pets/albums/${id}/${timestamp}-${randomId}.jpg`;
-      
+
       console.log('Upload filename:', filename);
-      
-      // Usar FormData para React Native (más compatible)
-      console.log('Creating FormData for upload...');
-      const formData = new FormData();
-      formData.append('file', {
-        uri: imageAsset.uri,
-        type: 'image/jpeg',
-        name: filename,
-      } as any);
-      
-      console.log('Uploading to Supabase Storage with FormData...');
-      
-      // Upload using FormData
-      const { data, error } = await supabaseClient.storage
-        .from('dogcatify')
-        .upload(filename, formData, {
-          contentType: 'image/jpeg',
-          cacheControl: '3600',
-          upsert: false
-        });
-      
-      if (error) {
-        console.error('Supabase upload error:', error);
-        throw new Error(`Storage upload failed: ${error.message}`);
-      }
-      
-      console.log('Upload successful, getting public URL...');
-      const { data: { publicUrl } } = supabaseClient.storage
-        .from('dogcatify')
-        .getPublicUrl(filename);
-      
+
+      const publicUrl = await uploadImage(imageAsset.uri, filename);
       console.log('Public URL generated:', publicUrl);
       return publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
-      
-      // Proporcionar un mensaje de error más específico
+
       if (error.message?.includes('Network request failed')) {
         throw new Error('Error de conexión. Verifica tu conexión a internet e intenta nuevamente.');
       } else if (error.message?.includes('timeout')) {

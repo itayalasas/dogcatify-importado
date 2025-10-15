@@ -8,6 +8,7 @@ import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
 import { supabaseClient } from '../../lib/supabase';
+import { uploadImage as uploadImageUtil } from '../../utils/imageUpload';
 
 const businessTypes = [
   { id: 'veterinary', name: 'Veterinaria', icon: '🏥', description: 'Servicios médicos para mascotas' },
@@ -303,26 +304,8 @@ export default function EditBusiness() {
 
   const uploadImage = async (imageAsset: ImagePicker.ImagePickerAsset): Promise<string> => {
     try {
-      const response = await fetch(imageAsset.uri);
-      const blob = await response.blob();
-      
       const filename = `partners/${businessId}/logo/${Date.now()}.jpg`;
-      
-      const { data, error } = await supabaseClient.storage
-        .from('dogcatify')
-        .upload(filename, blob, {
-          contentType: 'image/jpeg',
-          cacheControl: '3600',
-          upsert: false,
-        });
-
-      if (error) throw error;
-
-      const { data: urlData } = supabaseClient.storage
-        .from('dogcatify')
-        .getPublicUrl(filename);
-      
-      return urlData.publicUrl;
+      return await uploadImageUtil(imageAsset.uri, filename);
     } catch (error) {
       console.error('Error uploading image:', error);
       throw error;

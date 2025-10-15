@@ -8,6 +8,7 @@ import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
+import { uploadImage as uploadImageUtil } from '../../utils/imageUpload';
 
 const CATEGORIES = [
   { id: 'parques', name: 'Parques', icon: '🌳' },
@@ -87,21 +88,8 @@ export default function AddPlace() {
   };
 
   const uploadImage = async (imageUri: string): Promise<string> => {
-    const response = await fetch(imageUri);
-    const blob = await response.blob();
     const filename = `places/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-    
-    const { error } = await supabaseClient.storage
-      .from('dogcatify')
-      .upload(filename, blob);
-    
-    if (error) throw error;
-    
-    const { data: { publicUrl } } = supabaseClient.storage
-      .from('dogcatify')
-      .getPublicUrl(filename);
-    
-    return publicUrl;
+    return uploadImageUtil(imageUri, filename);
   };
 
   const handleSubmit = async () => {

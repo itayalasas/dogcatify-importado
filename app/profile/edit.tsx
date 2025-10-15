@@ -9,6 +9,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import * as ImagePicker from 'expo-image-picker';
 import { supabaseClient } from '../../lib/supabase';
+import { uploadImage } from '../../utils/imageUpload';
 
 export default function EditProfile() {
   const { currentUser, updateCurrentUser } = useAuth();
@@ -402,33 +403,7 @@ export default function EditProfile() {
     try {
       setUploadingImage(true);
       const filename = `profiles/${currentUser!.id}/${Date.now()}.jpg`;
-      
-      try {
-        const formData = new FormData();
-        formData.append('file', {
-          uri: imageAsset.uri,
-          type: 'image/jpeg',
-          name: filename,
-        } as any);
-
-        const { data, error } = await supabaseClient.storage
-          .from('dogcatify')
-          .upload(filename, formData, {
-            contentType: 'image/jpeg',
-            cacheControl: '3600',
-          });
-
-        if (error) throw error;
-
-        const { data: { publicUrl } } = supabaseClient.storage
-          .from('dogcatify')
-          .getPublicUrl(filename);
-        
-        return publicUrl;
-      } catch (error) {
-        console.error('Error uploading image:', error);
-        throw error;
-      }
+      return await uploadImage(imageAsset.uri, filename);
     } catch (error) {
       console.error('Error uploading image:', error);
       throw error;
