@@ -35,6 +35,39 @@ export default function ServiceDetail() {
   const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [boardingCategories, setBoardingCategories] = useState<any[]>([]);
+  const [categoryAvailability, setCategoryAvailability] = useState<{ [key: string]: number }>({});
+
+  // Función para calcular disponibilidad por categoría
+  const calculateCategoryAvailability = async (serviceId: string, categories: any[]) => {
+    try {
+      const availability: { [key: string]: number } = {};
+
+      for (const category of categories) {
+        // Contar reservas activas (pending, confirmed, in_progress) para esta categoría
+        const { data: bookingsData, error } = await supabaseClient
+          .from('bookings')
+          .select('id')
+          .eq('service_id', serviceId)
+          .eq('boarding_category', category.id)
+          .in('status', ['pending', 'confirmed', 'in_progress']);
+
+        if (error) {
+          console.error('Error counting bookings:', error);
+          availability[category.id] = category.capacity;
+          continue;
+        }
+
+        // Calcular disponibilidad = capacidad total - reservas activas
+        const bookedCount = bookingsData?.length || 0;
+        const available = Math.max(0, category.capacity - bookedCount);
+        availability[category.id] = available;
+      }
+
+      setCategoryAvailability(availability);
+    } catch (error) {
+      console.error('Error calculating availability:', error);
+    }
+  };
 
   useEffect(() => {
     fetchServiceDetails();
@@ -138,8 +171,11 @@ export default function ServiceDetail() {
             });
           }
           setBoardingCategories(categories);
+
+          // Calcular disponibilidad para cada categoría
+          await calculateCategoryAvailability(serviceData.id, categories);
         }
-        
+
         // Fetch partner info
         if (serviceData.partner_id) {
           const { data: partnerData, error: partnerError } = await supabaseClient
@@ -502,15 +538,19 @@ export default function ServiceDetail() {
           {boardingCategories.length > 0 ? (
             <View style={styles.categoriesContainer}>
               <Text style={styles.categoriesTitle}>Selecciona el tipo de hospedaje:</Text>
-              {boardingCategories.map((category) => (
-                <TouchableOpacity
-                  key={category.id}
-                  style={[
-                    styles.categoryOption,
-                    selectedCategory === category.id && styles.selectedCategoryOption
-                  ]}
-                  onPress={() => setSelectedCategory(category.id)}
-                >
+              {boardingCategories.map((category) => {
+                const isAvailable = categoryAvailability[category.id] === undefined || categoryAvailability[category.id] > 0;
+                return (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={[
+                      styles.categoryOption,
+                      selectedCategory === category.id && styles.selectedCategoryOption,
+                      !isAvailable && styles.disabledCategoryOption
+                    ]}
+                    onPress={() => isAvailable && setSelectedCategory(category.id)}
+                    disabled={!isAvailable}
+                  >
                   <View style={styles.categoryHeader}>
                     <Text style={[
                       styles.categoryName,
@@ -528,9 +568,18 @@ export default function ServiceDetail() {
                   <View style={styles.categoryFooter}>
                     <Text style={[
                       styles.categoryCapacity,
-                      selectedCategory === category.id && styles.selectedCategoryText
+                      selectedCategory === category.id && styles.selectedCategoryText,
+                      categoryAvailability[category.id] === 0 && styles.noAvailabilityText
                     ]}>
-                      Capacidad: {category.capacity} mascotas
+                      {categoryAvailability[category.id] !== undefined ? (
+                        categoryAvailability[category.id] > 0 ? (
+                          `Disponible: ${categoryAvailability[category.id]} de ${category.capacity} mascotas`
+                        ) : (
+                          '❌ Sin disponibilidad'
+                        )
+                      ) : (
+                        `Capacidad: ${category.capacity} mascotas`
+                      )}
                     </Text>
                     {service.petType && (
                       <Text style={[
@@ -550,7 +599,8 @@ export default function ServiceDetail() {
                     {formatPrice(category.price)}
                   </Text>
                 </TouchableOpacity>
-              ))}
+                );
+              })}
             </View>
           ) : (
             <>
@@ -575,13 +625,8 @@ export default function ServiceDetail() {
           )}
 
           <View style={styles.serviceDetails}>
-            <View style={styles.serviceDetail}>
-              <Clock size={16} color="#6B7280" />
-              <Text style={styles.serviceDetailText}>
-                {service.duration || 60} minutos
-              </Text>
-            </View>
-            
+            {/* Duración oculta - no aplica para servicios de pensión */}
+
             {averageRating > 0 && (
               <TouchableOpacity style={styles.ratingContainer} onPress={handleShowReviews}>
                 {renderStarRating(averageRating)}
@@ -1309,6 +1354,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#EFF6FF',
     borderColor: '#3B82F6',
   },
+  disabledCategoryOption: {
+    opacity: 0.5,
+    backgroundColor: '#F3F4F6',
+    borderColor: '#D1D5DB',
+  },
   categoryHeader: {
     marginBottom: 8,
   },
@@ -1339,6 +1389,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter-Medium',
     color: '#9CA3AF',
+  },
+  noAvailabilityText: {
+    color: '#EF4444',
+    fontFamily: 'Inter-SemiBold',
   },
   categoryPetType: {
     fontSize: 13,
