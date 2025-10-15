@@ -30,10 +30,11 @@ const documentTypes = [
 ];
 
 export default function ServiceBooking() {
-  const { serviceId, partnerId, petId } = useLocalSearchParams<{
+  const { serviceId, partnerId, petId, boardingCategory } = useLocalSearchParams<{
     serviceId: string;
     partnerId: string;
     petId: string;
+    boardingCategory?: string;
   }>();
   
   const { currentUser } = useAuth();
@@ -196,6 +197,27 @@ export default function ServiceBooking() {
     }).format(amount);
   };
 
+  const getServicePrice = () => {
+    if (!service) return 0;
+
+    if (boardingCategory) {
+      switch (boardingCategory) {
+        case 'Diario':
+          return service.price_daily || service.price || 0;
+        case 'Nocturno':
+          return service.price_overnight || service.price || 0;
+        case 'Fin de semana':
+          return service.price_weekend || service.price || 0;
+        case 'Semanal':
+          return service.price_weekly || service.price || 0;
+        default:
+          return service.price || 0;
+      }
+    }
+
+    return service.price || 0;
+  };
+
   // Card formatting functions
   const formatCardNumber = (value: string) => {
     const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
@@ -292,7 +314,7 @@ export default function ServiceBooking() {
         serviceName: service.name,
         partnerName: partner.business_name,
         petName: pet.name,
-        totalAmount: service.price,
+        totalAmount: getServicePrice(),
         customerInfo: {
           id: currentUser!.id,
           email: currentUser!.email,
@@ -390,7 +412,7 @@ export default function ServiceBooking() {
         
         Alert.alert(
           '¡Pago Exitoso! 🎉',
-          `Tu reserva ha sido confirmada:\n\n📅 ${selectedDate?.toLocaleDateString()}\n🕐 ${selectedTime}\n💰 ${formatCurrency(service?.price || 0)}\n\nRecibirás una confirmación por email.`,
+          `Tu reserva ha sido confirmada:\n\n📅 ${selectedDate?.toLocaleDateString()}\n🕐 ${selectedTime}\n💰 ${formatCurrency(getServicePrice())}\n\nRecibirás una confirmación por email.`,
           [{ text: 'Perfecto', onPress: () => router.replace('/(tabs)/services') }]
         );
       } else {
@@ -431,9 +453,14 @@ export default function ServiceBooking() {
         {/* Service Info */}
         <Card style={styles.serviceCard}>
           <Text style={styles.serviceName}>{service?.name}</Text>
+          {boardingCategory && (
+            <Text style={styles.boardingCategory}>Tipo: {boardingCategory}</Text>
+          )}
           <Text style={styles.partnerName}>{partner?.business_name}</Text>
           <Text style={styles.petName}>Para: {pet?.name}</Text>
-          <Text style={styles.servicePrice}>{formatCurrency(service?.price || 0)}</Text>
+          <Text style={styles.servicePrice}>
+            {formatCurrency(getServicePrice())}
+          </Text>
         </Card>
 
         {/* Date Selection */}
@@ -538,7 +565,7 @@ export default function ServiceBooking() {
               {selectedDate.toLocaleDateString()} a las {selectedTime}
             </Text>
             <Text style={styles.confirmPrice}>
-              {formatCurrency(service?.price || 0)}
+              {formatCurrency(getServicePrice())}
             </Text>
           </View>
           <Button
@@ -619,7 +646,7 @@ export default function ServiceBooking() {
                     {selectedDate?.toLocaleDateString()} a las {selectedTime}
                   </Text>
                   <Text style={styles.summaryTotal}>
-                    Total: {formatCurrency(service?.price || 0)}
+                    Total: {formatCurrency(getServicePrice())}
                   </Text>
                 </View>
 
@@ -750,7 +777,7 @@ export default function ServiceBooking() {
                     size="large"
                   />
                   <Button
-                    title={processing ? 'Procesando...' : `Pagar ${formatCurrency(service?.price || 0)}`}
+                    title={processing ? 'Procesando...' : `Pagar ${formatCurrency(getServicePrice())}`}
                     onPress={handleCardPayment}
                     loading={processing}
                     disabled={!validateCardForm() || processing}
@@ -852,6 +879,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     color: '#111827',
     marginBottom: 4,
+  },
+  boardingCategory: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#3B82F6',
+    marginBottom: 6,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
   },
   partnerName: {
     fontSize: 16,

@@ -252,8 +252,8 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
           
           <View style={styles.coverOverlay} />
           
-          {/* Price Badge */}
-          {service.price && (
+          {/* Price Badge - Only show for non-boarding services */}
+          {service.price && service.partnerType !== 'boarding' && (
             <View style={styles.priceBadge}>
               <DollarSign size={12} color="#FFFFFF" />
               <Text style={styles.priceText}>
