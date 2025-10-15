@@ -182,6 +182,9 @@ export default function ConfigureSchedulePage() {
   const createSchedules = async (days: number[]) => {
     setLoading(true);
     try {
+      // Determinar si es un negocio de pensión
+      const isBoarding = partnerProfile?.businessType === 'boarding';
+
       // Crear un horario para cada día seleccionado
       const promises = days.map(async (day) => {
         const scheduleData = {
