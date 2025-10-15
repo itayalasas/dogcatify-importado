@@ -1335,29 +1335,29 @@ export default function AdminPromotions() {
 
             {selectedPromotionForInvoice && (
               <>
-                <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={true}>
-                <View style={styles.invoiceSection}>
-                  <Text style={styles.invoiceSectionTitle}>Promoción</Text>
-                  <Text style={styles.invoiceSectionValue}>{selectedPromotionForInvoice.title}</Text>
-                </View>
+                <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={true} contentContainerStyle={styles.modalBodyContent}>
+                  <View style={styles.invoiceSection}>
+                    <Text style={styles.invoiceSectionTitle}>Promoción</Text>
+                    <Text style={styles.invoiceSectionValue}>{selectedPromotionForInvoice.title}</Text>
+                  </View>
 
-                <View style={styles.invoiceSection}>
-                  <Text style={styles.invoiceSectionTitle}>Estadísticas</Text>
-                  <View style={styles.statsRow}>
-                    <View style={styles.statItem}>
-                      <Text style={styles.statLabel}>Vistas</Text>
-                      <Text style={styles.statValue}>{selectedPromotionForInvoice.views || 0}</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                      <Text style={styles.statLabel}>Clics</Text>
-                      <Text style={styles.statValue}>{selectedPromotionForInvoice.clicks || 0}</Text>
+                  <View style={styles.invoiceSection}>
+                    <Text style={styles.invoiceSectionTitle}>Estadísticas</Text>
+                    <View style={styles.statsRow}>
+                      <View style={styles.statItem}>
+                        <Text style={styles.statLabel}>Vistas</Text>
+                        <Text style={styles.statValue}>{selectedPromotionForInvoice.views || 0}</Text>
+                      </View>
+                      <View style={styles.statItem}>
+                        <Text style={styles.statLabel}>Clics</Text>
+                        <Text style={styles.statValue}>{selectedPromotionForInvoice.clicks || 0}</Text>
+                      </View>
                     </View>
                   </View>
-                </View>
 
-                <View style={styles.invoiceSection}>
-                  <Text style={styles.invoiceSectionTitle}>Tipo de Facturación</Text>
-                  <View style={styles.invoiceTypeContainer}>
+                  <View style={styles.invoiceSection}>
+                    <Text style={styles.invoiceSectionTitle}>Tipo de Facturación</Text>
+                    <View style={styles.invoiceTypeContainer}>
                     <TouchableOpacity
                       style={[
                         styles.invoiceTypeButton,
@@ -1394,11 +1394,11 @@ export default function AdminPromotions() {
                         invoiceType === 'both' && styles.invoiceTypeButtonTextActive
                       ]}>Ambos</Text>
                     </TouchableOpacity>
+                    </View>
                   </View>
-                </View>
 
-                {invoiceType !== 'clicks' && (
-                  <View style={styles.invoiceSection}>
+                  {invoiceType !== 'clicks' && (
+                    <View style={styles.invoiceSection}>
                     <Text style={styles.invoiceSectionTitle}>Precio por Vista ($)</Text>
                     <Input
                       value={pricePerView}
@@ -1406,11 +1406,11 @@ export default function AdminPromotions() {
                       placeholder="0.00"
                       keyboardType="decimal-pad"
                     />
-                  </View>
-                )}
+                    </View>
+                  )}
 
-                {invoiceType !== 'views' && (
-                  <View style={styles.invoiceSection}>
+                  {invoiceType !== 'views' && (
+                    <View style={styles.invoiceSection}>
                     <Text style={styles.invoiceSectionTitle}>Precio por Clic ($)</Text>
                     <Input
                       value={pricePerClick}
@@ -1418,10 +1418,10 @@ export default function AdminPromotions() {
                       placeholder="0.00"
                       keyboardType="decimal-pad"
                     />
-                  </View>
-                )}
+                    </View>
+                  )}
 
-                <View style={styles.invoiceSection}>
+                  <View style={styles.invoiceSection}>
                   <Text style={styles.invoiceSectionTitle}>Email del destinatario</Text>
                   <Input
                     value={invoiceEmail}
@@ -1430,28 +1430,28 @@ export default function AdminPromotions() {
                     keyboardType="email-address"
                     autoCapitalize="none"
                   />
-                </View>
+                  </View>
 
-                {pricePerView && invoiceType !== 'clicks' && (
-                  <View style={styles.totalSection}>
+                  {pricePerView && invoiceType !== 'clicks' && (
+                    <View style={styles.totalSection}>
                     <Text style={styles.totalLabel}>Subtotal Vistas:</Text>
                     <Text style={styles.totalValue}>
                       ${((selectedPromotionForInvoice.views || 0) * parseFloat(pricePerView)).toFixed(2)}
                     </Text>
-                  </View>
-                )}
+                    </View>
+                  )}
 
-                {pricePerClick && invoiceType !== 'views' && (
-                  <View style={styles.totalSection}>
+                  {pricePerClick && invoiceType !== 'views' && (
+                    <View style={styles.totalSection}>
                     <Text style={styles.totalLabel}>Subtotal Clics:</Text>
                     <Text style={styles.totalValue}>
                       ${((selectedPromotionForInvoice.clicks || 0) * parseFloat(pricePerClick)).toFixed(2)}
                     </Text>
-                  </View>
-                )}
+                    </View>
+                  )}
 
-                {((pricePerView && invoiceType !== 'clicks') || (pricePerClick && invoiceType !== 'views')) && (
-                  <View style={styles.totalSectionMain}>
+                  {((pricePerView && invoiceType !== 'clicks') || (pricePerClick && invoiceType !== 'views')) && (
+                    <View style={styles.totalSectionMain}>
                     <Text style={styles.totalLabelMain}>Total:</Text>
                     <Text style={styles.totalValueMain}>
                       ${(
@@ -1459,9 +1459,9 @@ export default function AdminPromotions() {
                         (invoiceType !== 'views' ? (selectedPromotionForInvoice.clicks || 0) * parseFloat(pricePerClick || '0') : 0)
                       ).toFixed(2)}
                     </Text>
-                  </View>
-                )}
-              </ScrollView>
+                    </View>
+                  )}
+                </ScrollView>
 
               <View style={styles.modalFooter}>
                 <View style={styles.modalActions}>
@@ -1730,7 +1730,10 @@ const styles = StyleSheet.create({
   },
   modalBody: {
     flex: 1,
+  },
+  modalBodyContent: {
     paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   modalFooter: {
     paddingHorizontal: 20,
