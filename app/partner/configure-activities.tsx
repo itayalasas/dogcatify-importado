@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, Image } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Plus, Clock, DollarSign, X } from 'lucide-react-native';
+import { ArrowLeft, Plus, Clock, DollarSign, X, Edit } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -15,6 +15,8 @@ interface Activity {
   duration: number; // in minutes
   price: number;
   isActive: boolean;
+  category?: string;
+  images?: string[];
 }
 
 export default function ConfigureActivities() {
@@ -101,6 +103,7 @@ export default function ConfigureActivities() {
         duration: activity.duration || 0,
         price: activity.price || 0,
         isActive: activity.is_active,
+        category: activity.category || '',
         images: activity.images || []
       })) as Activity[];
       
@@ -226,6 +229,17 @@ export default function ConfigureActivities() {
       console.error('Error toggling activity:', error);
       Alert.alert('Error', 'No se pudo actualizar la actividad');
     }
+  };
+
+  const handleEditActivity = (activityId: string) => {
+    router.push({
+      pathname: '/partner/edit-service',
+      params: {
+        serviceId: activityId,
+        partnerId: partnerId || '',
+        businessType: businessType || ''
+      }
+    });
   };
 
   const handleDeleteActivity = (activityId: string) => {
@@ -359,23 +373,40 @@ export default function ConfigureActivities() {
                   </View>
                 </View>
 
-                <View style={styles.activityDetails}>
-                  <View style={styles.activityDetail}>
-                    <Clock size={16} color="#6B7280" />
-                    <Text style={styles.activityDetailText}>
-                      {activity.duration} min
-                    </Text>
+                {/* Solo mostrar duración y precio si NO es servicio de Pensión */}
+                {businessType !== 'boarding' && (
+                  <View style={styles.activityDetails}>
+                    <View style={styles.activityDetail}>
+                      <Clock size={16} color="#6B7280" />
+                      <Text style={styles.activityDetailText}>
+                        {activity.duration} min
+                      </Text>
+                    </View>
+                    <View style={styles.activityDetail}>
+                      <DollarSign size={16} color="#10B981" />
+                      <Text style={styles.activityDetailText}>
+                        ${activity.price.toLocaleString()}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.activityDetail}>
-                    <DollarSign size={16} color="#10B981" />
-                    <Text style={styles.activityDetailText}>
-                      ${activity.price.toLocaleString()}
-                    </Text>
+                )}
+
+                {/* Mostrar info de capacidad para Pensión */}
+                {businessType === 'boarding' && activity.category === 'Pensión' && (
+                  <View style={styles.boardingInfo}>
+                    <Text style={styles.boardingInfoText}>🏠 Hotel para mascotas</Text>
+                    <Text style={styles.boardingInfoSubtext}>Capacidad configurada por categoría</Text>
                   </View>
-                </View>
+                )}
 
                 <View style={styles.activityActions}>
                   <View style={styles.actionButtonsRow}>
+                    <TouchableOpacity
+                      style={styles.editButton}
+                      onPress={() => handleEditActivity(activity.id)}
+                    >
+                      <Edit size={16} color="#3B82F6" />
+                    </TouchableOpacity>
                     <View style={{ flex: 2 }}>
                       <Button
                         title={activity.isActive ? 'Desactivar' : 'Activar'}
@@ -688,6 +719,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  editButton: {
+    flex: 1,
+    padding: 12,
+    backgroundColor: '#EBF8FF',
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
   deleteButton: {
     flex: 1,
     padding: 12,
@@ -697,6 +738,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
+  },
+  boardingInfo: {
+    backgroundColor: '#F0FDF4',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  boardingInfoText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#065F46',
+    marginBottom: 2,
+  },
+  boardingInfoSubtext: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#047857',
   },
   modalOverlay: {
     flex: 1,
