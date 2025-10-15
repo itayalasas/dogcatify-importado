@@ -266,7 +266,21 @@ export default function ServiceBooking() {
     }
 
     setPaymentLoading(true);
+    setPaymentStep('processing');
+
     try {
+      console.log('=== Iniciando flujo de Mercado Pago ===');
+      console.log('Datos de la reserva:', {
+        serviceId: service.id,
+        partnerId: partner.id,
+        customerId: currentUser!.id,
+        petId: pet.id,
+        date: selectedDate.toISOString(),
+        time: selectedTime,
+        serviceName: service.name,
+        totalAmount: service.price
+      });
+
       const bookingData = {
         serviceId: service.id,
         partnerId: partner.id,
@@ -279,20 +293,64 @@ export default function ServiceBooking() {
         partnerName: partner.business_name,
         petName: pet.name,
         totalAmount: service.price,
-        customerInfo: currentUser!
+        customerInfo: {
+          id: currentUser!.id,
+          email: currentUser!.email,
+          displayName: currentUser!.displayName || 'Usuario',
+          phone: currentUser!.phone || null
+        }
       };
 
+      console.log('Llamando a createServiceBookingOrder...');
       const result = await createServiceBookingOrder(bookingData);
+      console.log('Resultado de createServiceBookingOrder:', result);
 
       if (result.success && result.paymentUrl) {
+        console.log('✅ Orden creada exitosamente');
+        console.log('URL de pago:', result.paymentUrl);
+        console.log('ID de orden:', result.orderId);
+
         setShowPaymentModal(false);
-        await Linking.openURL(result.paymentUrl);
+
+        Alert.alert(
+          'Redirigiendo a Mercado Pago',
+          'Se abrirá la página de pago de Mercado Pago. Una vez completado el pago, recibirás una confirmación por email.',
+          [
+            {
+              text: 'Continuar',
+              onPress: async () => {
+                try {
+                  await Linking.openURL(result.paymentUrl!);
+                  // Redirigir al usuario a la pantalla de servicios después de abrir MP
+                  router.replace('/(tabs)/services');
+                } catch (linkError) {
+                  console.error('Error abriendo URL de Mercado Pago:', linkError);
+                  Alert.alert('Error', 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.');
+                }
+              }
+            }
+          ]
+        );
       } else {
+        console.error('❌ Error en la respuesta:', result.error);
         throw new Error(result.error || 'Error creando la orden');
       }
-    } catch (error) {
-      console.error('Error with Mercado Pago payment:', error);
-      Alert.alert('Error', 'No se pudo procesar el pago con Mercado Pago');
+    } catch (error: any) {
+      console.error('❌ Error with Mercado Pago payment:', error);
+
+      let errorMessage = 'No se pudo procesar el pago con Mercado Pago';
+      if (error.message) {
+        errorMessage = error.message;
+      }
+
+      Alert.alert(
+        'Error al procesar el pago',
+        errorMessage + '\n\nPor favor verifica que el partner tenga Mercado Pago configurado e intenta nuevamente.',
+        [
+          { text: 'Reintentar', onPress: () => setPaymentStep('methods') },
+          { text: 'Cancelar', style: 'cancel', onPress: () => setShowPaymentModal(false) }
+        ]
+      );
     } finally {
       setPaymentLoading(false);
     }
