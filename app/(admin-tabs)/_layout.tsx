@@ -2,12 +2,20 @@ import { Tabs } from 'expo-router';
 import { ChartBar as BarChart3, Users, Volume2, Settings, MapPin, FileText, ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { View, Text } from 'react-native';
+import { useEffect } from 'react';
 
 export default function AdminTabLayout() {
   const { currentUser } = useAuth();
-  
+
   // Check if user is admin
   const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
+
+  useEffect(() => {
+    console.log('🔍 [AdminTabLayout] Debugging info:');
+    console.log('  - currentUser:', currentUser);
+    console.log('  - isAdmin:', isAdmin);
+    console.log('  - Available routes should include: analytics, promotions, partners, places, settings, requests');
+  }, [currentUser, isAdmin]);
   
   if (!currentUser) {
     return (
@@ -30,6 +38,8 @@ export default function AdminTabLayout() {
     );
   }
   
+  console.log('✅ [AdminTabLayout] Rendering Tabs component now...');
+
   return (
     <Tabs
       screenOptions={{
@@ -53,18 +63,20 @@ export default function AdminTabLayout() {
         name="analytics"
         options={{
           title: 'Analytics',
-          tabBarIcon: ({ size, color }) => (
-            <BarChart3 size={size} color={color} />
-          ),
+          tabBarIcon: ({ size, color }) => {
+            console.log('📊 [Tab Icon] analytics rendering');
+            return <BarChart3 size={size} color={color} />;
+          },
         }}
       />
       <Tabs.Screen
         name="promotions"
         options={{
           title: 'Promociones',
-          tabBarIcon: ({ size, color }) => (
-            <Volume2 size={size} color={color} />
-          ),
+          tabBarIcon: ({ size, color }) => {
+            console.log('📢 [Tab Icon] promotions rendering');
+            return <Volume2 size={size} color={color} />;
+          },
         }}
       />
       <Tabs.Screen
