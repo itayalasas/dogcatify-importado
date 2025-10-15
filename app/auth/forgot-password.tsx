@@ -55,11 +55,20 @@ export default function ForgotPassword() {
       );
 
       console.log('Custom password reset email sent successfully');
-      
+
       setResetSent(true);
       Alert.alert(
         '✅ Correo enviado',
-        `Se ha enviado un enlace para restablecer tu contraseña a ${email}.\n\nPor favor revisa tu bandeja de entrada (y la carpeta de spam) y haz clic en el enlace.\n\nEl enlace expira en 24 horas.`
+        `Se ha enviado un enlace para restablecer tu contraseña a ${email}.\n\nPor favor revisa tu bandeja de entrada (y la carpeta de spam) y haz clic en el enlace.\n\nEl enlace expira en 24 horas.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setEmail('');
+              setResetSent(false);
+            }
+          }
+        ]
       );
     } catch (error) {
       console.error('Error resetting password:', error);
