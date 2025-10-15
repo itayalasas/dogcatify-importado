@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, LogBox } from 'react-native';
-import { Search } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, LogBox, TextInput, Image, Dimensions } from 'react-native';
+import { Search, MapPin, Star, Phone } from 'lucide-react-native';
 import { FlatList } from 'react-native';
 import { ServiceCard } from '../../components/ServiceCard'; 
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -26,6 +26,7 @@ export default function Services() {
   const { t } = useLanguage();
   const { currentUser } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Configuración de paginación
   const ITEMS_PER_PAGE = 6;
@@ -205,22 +206,31 @@ export default function Services() {
   };
 
   const getFilteredPartners = () => {
-    if (selectedCategory === 'all') {
-      return displayedPartners;
-    }
-    
-    return displayedPartners.filter(partner => {
-      // Map category IDs to business types
+    let filtered = displayedPartners;
+
+    // Filter by category
+    if (selectedCategory !== 'all') {
       const categoryToBusinessType: Record<string, string> = {
         'consulta': 'veterinary',
         'baño': 'grooming',
         'paseo': 'walking',
         'hospedaje': 'boarding'
       };
-      
+
       const businessType = categoryToBusinessType[selectedCategory];
-      return partner.partnerType === businessType;
-    });
+      filtered = filtered.filter(partner => partner.partnerType === businessType);
+    }
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(partner =>
+        partner.businessName?.toLowerCase().includes(query) ||
+        partner.partnerType?.toLowerCase().includes(query)
+      );
+    }
+
+    return filtered;
   };
 
   const filteredPartners = getFilteredPartners();
@@ -247,6 +257,21 @@ export default function Services() {
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>{t('services')}</Text>
       </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputWrapper}>
+          <Search size={20} color="#9CA3AF" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar negocios..."
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
+      </View>
+
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.categories}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -276,36 +301,113 @@ export default function Services() {
               <Text style={styles.loadingText}>Cargando servicios...</Text>
             </View>
           )}
-          
+
           {!loading && error && (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyTitle}>Error</Text>
               <Text style={styles.emptySubtitle}>{error}</Text>
             </View>
           )}
-          
+
           {!loading && !error && !currentUser && (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyTitle}>{t('signIn')}</Text>
               <Text style={styles.emptySubtitle}>{t('signInToViewServices')}</Text>
             </View>
           )}
-          
+
           {!loading && !error && currentUser && filteredPartners.length === 0 && (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>{t('noServicesAvailable')}</Text>
-              <Text style={styles.emptySubtitle}>{t('noBusinessInCategory')}</Text>
+              <Text style={styles.emptyTitle}>
+                {searchQuery ? 'No se encontraron negocios' : t('noServicesAvailable')}
+              </Text>
+              <Text style={styles.emptySubtitle}>
+                {searchQuery ? 'Intenta con otro término de búsqueda' : t('noBusinessInCategory')}
+              </Text>
             </View>
           )}
-          
+
           {!loading && !error && currentUser && filteredPartners.length > 0 && (
-            <View style={styles.servicesGrid}>
+            <View style={styles.gridContainer}>
               {filteredPartners.map((item) => (
-                <ServiceCard
+                <TouchableOpacity
                   key={item.partnerId}
-                  service={item}
+                  style={styles.gridCard}
                   onPress={() => handlePartnerPress(item.partnerId)}
-                />
+                  activeOpacity={0.7}
+                >
+                  {/* Image */}
+                  <View style={styles.cardImageContainer}>
+                    {item.firstServiceImage ? (
+                      <Image
+                        source={{ uri: item.firstServiceImage }}
+                        style={styles.cardImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.cardImagePlaceholder}>
+                        <Text style={styles.placeholderEmoji}>🐾</Text>
+                      </View>
+                    )}
+                    {/* Logo Badge */}
+                    {item.partnerLogo && (
+                      <View style={styles.logoBadge}>
+                        <Image
+                          source={{ uri: item.partnerLogo }}
+                          style={styles.logoBadgeImage}
+                          resizeMode="cover"
+                        />
+                      </View>
+                    )}
+                    {/* Price Badge */}
+                    {item.firstServicePrice && (
+                      <View style={styles.priceBadge}>
+                        <Text style={styles.priceBadgeText}>
+                          $ {item.firstServicePrice.toLocaleString()}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Content */}
+                  <View style={styles.cardContent}>
+                    <Text style={styles.cardTitle} numberOfLines={1}>
+                      {item.businessName}
+                    </Text>
+
+                    <View style={styles.cardTypeContainer}>
+                      <View style={styles.typeBadge}>
+                        <Text style={styles.typeBadgeText}>
+                          {item.partnerType === 'veterinary' ? 'Veterinaria' :
+                           item.partnerType === 'grooming' ? 'Peluquería' :
+                           item.partnerType === 'boarding' ? 'Pensión' :
+                           item.partnerType === 'walking' ? 'Paseo' : 'Servicio'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {item.address && (
+                      <View style={styles.cardInfoRow}>
+                        <MapPin size={12} color="#6B7280" />
+                        <Text style={styles.cardInfoText} numberOfLines={1}>
+                          {item.address}
+                        </Text>
+                      </View>
+                    )}
+
+                    {(item.rating || item.reviewsCount > 0) && (
+                      <View style={styles.cardInfoRow}>
+                        <Star size={12} color="#F59E0B" fill="#F59E0B" />
+                        <Text style={styles.cardRatingText}>
+                          {item.rating?.toFixed(1) || '5.0'}
+                        </Text>
+                        <Text style={styles.cardReviewsText}>
+                          ({item.reviewsCount || 0})
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
               ))}
               {renderFooter()}
             </View>
@@ -336,6 +438,29 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: 'Inter-Bold',
     color: '#2D6A6F',
+  },
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    paddingVertical: 0,
   },
   content: {
     flex: 1,
@@ -376,6 +501,131 @@ const styles = StyleSheet.create({
   servicesGrid: {
     flex: 1,
     paddingBottom: 20,
+  },
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: 6,
+  },
+  gridCard: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+    overflow: 'hidden',
+  },
+  cardImageContainer: {
+    width: '100%',
+    height: 140,
+    position: 'relative',
+  },
+  cardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  cardImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderEmoji: {
+    fontSize: 48,
+  },
+  logoBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  logoBadgeImage: {
+    width: '100%',
+    height: '100%',
+  },
+  priceBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#10B981',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  priceBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+  },
+  cardContent: {
+    padding: 12,
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    marginBottom: 6,
+  },
+  cardTypeContainer: {
+    marginBottom: 8,
+  },
+  typeBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  typeBadgeText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    color: '#3B82F6',
+  },
+  cardInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  cardInfoText: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginLeft: 4,
+    flex: 1,
+  },
+  cardRatingText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginLeft: 4,
+  },
+  cardReviewsText: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginLeft: 2,
   },
   loadingContainer: {
     flex: 1,
