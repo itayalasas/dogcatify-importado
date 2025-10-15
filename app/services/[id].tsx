@@ -38,9 +38,6 @@ export default function ServiceDetail() {
 
   useEffect(() => {
     fetchServiceDetails();
-    if (currentUser) {
-      fetchUserPets();
-    }
 
     // Apply discount from promotion if provided
     if (discount) {
@@ -49,7 +46,14 @@ export default function ServiceDetail() {
         setAppliedDiscount(discountValue);
       }
     }
-  }, [id, currentUser, discount]);
+  }, [id, discount]);
+
+  // Fetch pets when service is loaded (to apply pet type filter)
+  useEffect(() => {
+    if (currentUser && service) {
+      fetchUserPets();
+    }
+  }, [currentUser, service]);
 
   const fetchServiceDetails = async () => {
     try {
@@ -249,21 +253,28 @@ export default function ServiceDetail() {
   const fetchUserPets = async () => {
     setLoadingPets(true);
     try {
-      let query = supabaseClient
+      const { data: petsData, error } = await supabaseClient
         .from('pets')
         .select('*')
         .eq('owner_id', currentUser!.id);
 
-      // Filter by pet type if it's a boarding service
+      if (error) {
+        console.error('Error fetching pets:', error);
+        setLoadingPets(false);
+        return;
+      }
+
+      // Filter by pet type on the client side if it's a boarding service
+      let filteredPets = petsData || [];
       if (service?.petType && service.petType !== 'both') {
-        query = query.eq('species', service.petType);
+        filteredPets = filteredPets.filter(pet => pet.species === service.petType);
       }
 
-      const { data: petsData, error } = query;
+      console.log('Fetched pets:', petsData?.length || 0);
+      console.log('Service pet type:', service?.petType);
+      console.log('Filtered pets:', filteredPets.length);
 
-      if (petsData && !error) {
-        setUserPets(petsData);
-      }
+      setUserPets(filteredPets);
     } catch (error) {
       console.error('Error fetching user pets:', error);
     } finally {
