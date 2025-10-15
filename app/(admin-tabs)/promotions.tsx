@@ -1726,13 +1726,14 @@ const styles = StyleSheet.create({
     maxWidth: 500,
     maxHeight: '90%',
     alignSelf: 'center',
-    overflow: 'hidden',
+    flexDirection: 'column',
   },
   modalBody: {
     flex: 1,
   },
   modalBodyContent: {
     paddingHorizontal: 20,
+    paddingTop: 20,
     paddingBottom: 20,
   },
   modalFooter: {
@@ -2134,8 +2135,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   invoiceSection: {
-    marginTop: 16,
-    marginBottom: 16,
+    marginBottom: 20,
   },
   invoiceSectionTitle: {
     fontSize: 14,
