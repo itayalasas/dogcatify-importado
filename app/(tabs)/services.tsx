@@ -346,19 +346,36 @@ export default function Services() {
                       />
                     ) : (
                       <View style={styles.cardImagePlaceholder}>
-                        <Text style={styles.placeholderEmoji}>🐾</Text>
+                        <View style={styles.noImageOverlay}>
+                          <Text style={styles.noImageText}>Sin foto</Text>
+                        </View>
                       </View>
                     )}
-                    {/* Logo Badge */}
-                    {item.partnerLogo && (
-                      <View style={styles.logoBadge}>
-                        <Image
-                          source={{ uri: item.partnerLogo }}
-                          style={styles.logoBadgeImage}
-                          resizeMode="cover"
-                        />
-                      </View>
-                    )}
+
+                    {/* Gradient Overlay for better logo visibility */}
+                    <View style={styles.imageGradient} />
+
+                    {/* Logo Badge - Facebook style */}
+                    <View style={styles.logoContainer}>
+                      {item.partnerLogo ? (
+                        <View style={styles.logoBadge}>
+                          <Image
+                            source={{ uri: item.partnerLogo }}
+                            style={styles.logoBadgeImage}
+                            resizeMode="cover"
+                          />
+                        </View>
+                      ) : (
+                        <View style={styles.logoBadge}>
+                          <View style={styles.logoPlaceholder}>
+                            <Text style={styles.logoPlaceholderText}>
+                              {item.businessName?.charAt(0).toUpperCase()}
+                            </Text>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+
                     {/* Price Badge */}
                     {item.firstServicePrice && (
                       <View style={styles.priceBadge}>
@@ -532,33 +549,63 @@ const styles = StyleSheet.create({
   cardImagePlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#E5E7EB',
+  },
+  noImageOverlay: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(107, 114, 128, 0.1)',
   },
-  placeholderEmoji: {
-    fontSize: 48,
+  noImageText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#9CA3AF',
+  },
+  imageGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 60,
+    backgroundColor: 'transparent',
+    backgroundImage: 'linear-gradient(to top, rgba(0,0,0,0.3), transparent)',
+  },
+  logoContainer: {
+    position: 'absolute',
+    bottom: -20,
+    left: 12,
+    zIndex: 10,
   },
   logoBadge: {
-    position: 'absolute',
-    bottom: 8,
-    left: 8,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#FFFFFF',
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: '#FFFFFF',
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 5,
   },
   logoBadgeImage: {
     width: '100%',
     height: '100%',
+  },
+  logoPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#2D6A6F',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoPlaceholderText: {
+    fontSize: 24,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
   },
   priceBadge: {
     position: 'absolute',
@@ -580,7 +627,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   cardContent: {
-    padding: 12,
+    paddingTop: 28,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
   },
   cardTitle: {
     fontSize: 15,
