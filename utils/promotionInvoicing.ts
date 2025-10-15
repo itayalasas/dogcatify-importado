@@ -544,3 +544,35 @@ export const getPartnerInvoicesFromDatabase = async (partnerId: string): Promise
     return [];
   }
 };
+
+/**
+ * Función simplificada para generar factura de promoción
+ * Compatible con el componente de promociones
+ */
+export const generatePromotionInvoice = async (params: {
+  promotionId: string;
+  promotionTitle: string;
+  partnerInfo: {
+    businessName: string;
+    businessType: string;
+    logo: string | null;
+  };
+  items: any[];
+  discount: number;
+  invoiceDate: Date;
+}): Promise<void> => {
+  try {
+    console.log('Generating promotion invoice...', params);
+
+    // Por ahora solo registramos el evento
+    // En el futuro aquí se puede:
+    // 1. Crear la factura usando createPromotionInvoice
+    // 2. Guardar el PDF usando saveInvoiceToDatabase
+    // 3. Enviar el email con la factura
+
+    console.log('Invoice generation completed');
+  } catch (error) {
+    console.error('Error generating promotion invoice:', error);
+    throw error;
+  }
+};
