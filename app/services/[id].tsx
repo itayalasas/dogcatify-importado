@@ -33,6 +33,8 @@ export default function ServiceDetail() {
   const [selectedPet, setSelectedPet] = useState<string | null>(null);
   const [loadingPets, setLoadingPets] = useState(false);
   const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [boardingCategories, setBoardingCategories] = useState<any[]>([]);
 
   useEffect(() => {
     fetchServiceDetails();
@@ -80,8 +82,59 @@ export default function ServiceDetail() {
           price: serviceData.price,
           duration: serviceData.duration,
           partnerId: serviceData.partner_id,
-          images: serviceData.images
+          images: serviceData.images,
+          petType: serviceData.pet_type,
+          priceDaily: serviceData.price_daily,
+          priceOvernight: serviceData.price_overnight,
+          priceWeekend: serviceData.price_weekend,
+          priceWeekly: serviceData.price_weekly,
+          capacityDaily: serviceData.capacity_daily,
+          capacityOvernight: serviceData.capacity_overnight,
+          capacityWeekend: serviceData.capacity_weekend,
+          capacityWeekly: serviceData.capacity_weekly
         });
+
+        // If it's a boarding service, build the categories
+        if (partnerInfo?.businessType === 'boarding' || serviceData.capacity_daily || serviceData.capacity_overnight) {
+          const categories = [];
+          if (serviceData.capacity_daily && serviceData.price_daily) {
+            categories.push({
+              id: 'Diario',
+              name: 'Hospedaje Diario',
+              price: serviceData.price_daily,
+              capacity: serviceData.capacity_daily,
+              description: 'Cuida a tu mascota durante el día'
+            });
+          }
+          if (serviceData.capacity_overnight && serviceData.price_overnight) {
+            categories.push({
+              id: 'Nocturno',
+              name: 'Hospedaje Nocturno',
+              price: serviceData.price_overnight,
+              capacity: serviceData.capacity_overnight,
+              description: 'Tu mascota se queda a dormir'
+            });
+          }
+          if (serviceData.capacity_weekend && serviceData.price_weekend) {
+            categories.push({
+              id: 'Fin de semana',
+              name: 'Hospedaje Fin de Semana',
+              price: serviceData.price_weekend,
+              capacity: serviceData.capacity_weekend,
+              description: 'Cuidado durante todo el fin de semana'
+            });
+          }
+          if (serviceData.capacity_weekly && serviceData.price_weekly) {
+            categories.push({
+              id: 'Semanal',
+              name: 'Hospedaje Semanal',
+              price: serviceData.price_weekly,
+              capacity: serviceData.capacity_weekly,
+              description: 'Una semana completa de cuidado'
+            });
+          }
+          setBoardingCategories(categories);
+        }
         
         // Fetch partner info
         if (serviceData.partner_id) {
@@ -196,11 +249,18 @@ export default function ServiceDetail() {
   const fetchUserPets = async () => {
     setLoadingPets(true);
     try {
-      const { data: petsData, error } = await supabaseClient
+      let query = supabaseClient
         .from('pets')
         .select('*')
         .eq('owner_id', currentUser!.id);
-      
+
+      // Filter by pet type if it's a boarding service
+      if (service?.petType && service.petType !== 'both') {
+        query = query.eq('species', service.petType);
+      }
+
+      const { data: petsData, error } = query;
+
       if (petsData && !error) {
         setUserPets(petsData);
       }
@@ -216,7 +276,13 @@ export default function ServiceDetail() {
       Alert.alert('Iniciar sesión', 'Debes iniciar sesión para reservar servicios');
       return;
     }
-    
+
+    // For boarding services, must select category first
+    if (boardingCategories.length > 0 && !selectedCategory) {
+      Alert.alert('Selecciona una categoría', 'Por favor selecciona el tipo de hospedaje antes de continuar');
+      return;
+    }
+
     setShowBookingModal(true);
   };
 
@@ -263,13 +329,20 @@ export default function ServiceDetail() {
       
       try {
         console.log('🚀 Ejecutando router.push...');
+        const params: any = {
+          serviceId: id,
+          partnerId: service.partnerId,
+          petId: petId
+        };
+
+        // Add boarding category if selected
+        if (selectedCategory) {
+          params.boardingCategory = selectedCategory;
+        }
+
         router.push({
           pathname: '/services/booking/[serviceId]',
-          params: {
-            serviceId: id,
-            partnerId: service.partnerId,
-            petId: petId
-          }
+          params
         });
         console.log('✅ router.push ejecutado exitosamente');
       } catch (navigationError) {
@@ -412,22 +485,68 @@ export default function ServiceDetail() {
           
           <Text style={styles.serviceName}>{service.name}</Text>
 
-          {/* Price with Discount */}
-          {appliedDiscount > 0 ? (
-            <View style={styles.priceContainer}>
-              <View style={styles.discountBadge}>
-                <Text style={styles.discountBadgeText}>-{appliedDiscount}%</Text>
-              </View>
-              <Text style={styles.originalPrice}>{formatPrice(service.price)}</Text>
-              <Text style={styles.discountedPrice}>
-                {formatPrice(service.price * (1 - appliedDiscount / 100))}
-              </Text>
-              <Text style={styles.savingsText}>
-                ¡Ahorras {formatPrice(service.price * (appliedDiscount / 100))}!
-              </Text>
+          {/* For boarding services, show categories */}
+          {boardingCategories.length > 0 ? (
+            <View style={styles.categoriesContainer}>
+              <Text style={styles.categoriesTitle}>Selecciona el tipo de hospedaje:</Text>
+              {boardingCategories.map((category) => (
+                <TouchableOpacity
+                  key={category.id}
+                  style={[
+                    styles.categoryOption,
+                    selectedCategory === category.id && styles.selectedCategoryOption
+                  ]}
+                  onPress={() => setSelectedCategory(category.id)}
+                >
+                  <View style={styles.categoryHeader}>
+                    <Text style={[
+                      styles.categoryName,
+                      selectedCategory === category.id && styles.selectedCategoryText
+                    ]}>
+                      {category.name}
+                    </Text>
+                    <Text style={[
+                      styles.categoryPrice,
+                      selectedCategory === category.id && styles.selectedCategoryText
+                    ]}>
+                      {formatPrice(category.price)}
+                    </Text>
+                  </View>
+                  <Text style={[
+                    styles.categoryDescription,
+                    selectedCategory === category.id && styles.selectedCategoryText
+                  ]}>
+                    {category.description}
+                  </Text>
+                  <Text style={[
+                    styles.categoryCapacity,
+                    selectedCategory === category.id && styles.selectedCategoryText
+                  ]}>
+                    Capacidad: {category.capacity} mascotas
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           ) : (
-            <Text style={styles.priceText}>{formatPrice(service.price)}</Text>
+            <>
+              {/* Price with Discount - for non-boarding services */}
+              {appliedDiscount > 0 ? (
+                <View style={styles.priceContainer}>
+                  <View style={styles.discountBadge}>
+                    <Text style={styles.discountBadgeText}>-{appliedDiscount}%</Text>
+                  </View>
+                  <Text style={styles.originalPrice}>{formatPrice(service.price)}</Text>
+                  <Text style={styles.discountedPrice}>
+                    {formatPrice(service.price * (1 - appliedDiscount / 100))}
+                  </Text>
+                  <Text style={styles.savingsText}>
+                    ¡Ahorras {formatPrice(service.price * (appliedDiscount / 100))}!
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.priceText}>{formatPrice(service.price)}</Text>
+              )}
+            </>
           )}
 
           <View style={styles.serviceDetails}>
@@ -467,7 +586,11 @@ export default function ServiceDetail() {
         
         <View style={styles.bookingButtonContainer}>
           <Button
-            title={`Reservar por ${formatPrice(appliedDiscount > 0 ? service.price * (1 - appliedDiscount / 100) : service.price)}`}
+            title={
+              boardingCategories.length > 0 && selectedCategory
+                ? `Reservar ${boardingCategories.find(c => c.id === selectedCategory)?.name}`
+                : `Reservar por ${formatPrice(appliedDiscount > 0 ? service.price * (1 - appliedDiscount / 100) : service.price)}`
+            }
             onPress={handleBookService}
             variant="primary"
           />
@@ -485,7 +608,9 @@ export default function ServiceDetail() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                Selecciona tu mascota
+                {boardingCategories.length > 0 && service?.petType && service.petType !== 'both'
+                  ? `Selecciona tu ${service.petType === 'dog' ? 'perro' : 'gato'}`
+                  : 'Selecciona tu mascota'}
               </Text>
               <TouchableOpacity onPress={() => setShowBookingModal(false)}>
                 <Text style={styles.modalCloseText}>✕</Text>
@@ -1137,5 +1262,56 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     textAlign: 'center',
+  },
+  categoriesContainer: {
+    marginTop: 16,
+  },
+  categoriesTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  categoryOption: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  selectedCategoryOption: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#3B82F6',
+  },
+  categoryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  categoryName: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  categoryPrice: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#10B981',
+  },
+  categoryDescription: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 6,
+  },
+  categoryCapacity: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#9CA3AF',
+  },
+  selectedCategoryText: {
+    color: '#3B82F6',
   },
 });
