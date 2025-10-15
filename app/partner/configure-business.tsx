@@ -306,64 +306,68 @@ export default function ConfigureBusiness() {
           </View>
         </Card>
 
-        {/* Configuración de Productos */}
-        <Card style={styles.featureCard}>
-          <View style={styles.featureHeader}> 
-            <Package size={24} color="#10B981" /> 
-            <Text style={styles.featureTitle}>Gestión de Productos</Text> 
-          </View>
-          <Text style={styles.featureDescription}>
-            Administra tu inventario, precios y categorías de productos
-          </Text>
-          
-          <View style={styles.servicesList}>
-            <Text style={styles.servicesTitle}>Categorías disponibles:</Text>
-            {(config.categories || config.products || []).map((category, index) => (
-              <View key={index} style={styles.serviceItem}> 
-                <Text style={styles.serviceText}>• {category}</Text> 
+        {/* Configuración de Productos - Solo para tiendas */}
+        {business.businessType === 'shop' && (
+          <Card style={styles.featureCard}>
+            <View style={styles.featureHeader}>
+              <Package size={24} color="#10B981" />
+              <Text style={styles.featureTitle}>Gestión de Productos</Text>
+            </View>
+            <Text style={styles.featureDescription}>
+              Administra tu inventario, precios y categorías de productos
+            </Text>
+
+            <View style={styles.servicesList}>
+              <Text style={styles.servicesTitle}>Categorías disponibles:</Text>
+              {(config.categories || config.products || []).map((category, index) => (
+                <View key={index} style={styles.serviceItem}>
+                  <Text style={styles.serviceText}>• {category}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.featureActions}>
+              <View style={styles.actionButtonContainer}>
+                <Button
+                  title="Gestionar Productos"
+                  onPress={handleConfigureProducts}
+                  variant="outline"
+                  size="medium"
+                />
               </View>
-            ))}
-          </View>
+              <View style={styles.actionButtonContainer}>
+                <Button
+                  title="Agregar Producto"
+                  onPress={handleAddProduct}
+                  size="medium"
+                />
+              </View>
+            </View>
+          </Card>
+        )}
 
-          <View style={styles.featureActions}>
-            <View style={styles.actionButtonContainer}>
-              <Button
-                title="Gestionar Productos"
-                onPress={handleConfigureProducts} 
-                variant="outline"
-                size="medium"
-              />
+        {/* Gestión de Pedidos - Solo para tiendas */}
+        {business.businessType === 'shop' && (
+          <Card style={styles.featureCard}>
+            <View style={styles.featureHeader}>
+              <Package size={24} color="#F59E0B" />
+              <Text style={styles.featureTitle}>Gestión de Pedidos</Text>
             </View>
-            <View style={styles.actionButtonContainer}>
-              <Button
-                title="Agregar Producto"
-                onPress={handleAddProduct}
-                size="medium"
-              />
-            </View>
-          </View>
-        </Card>
+            <Text style={styles.featureDescription}>
+              Administra los pedidos de tus clientes
+            </Text>
 
-        {/* Gestión de Pedidos */}
-        <Card style={styles.featureCard}>
-          <View style={styles.featureHeader}> 
-            <Package size={24} color="#F59E0B" /> 
-            <Text style={styles.featureTitle}>Gestión de Pedidos</Text> 
-          </View>
-          <Text style={styles.featureDescription}>
-            Administra los pedidos de tus clientes
-          </Text>
-          
-          <View style={styles.featureActions}>
-            <View style={styles.actionButtonContainer}>
-              <Button
-                title="Ver Pedidos"
-                onPress={handleViewOrders} 
-                size="large"
-              />
+            <View style={styles.featureActions}>
+              <View style={styles.actionButtonContainer}>
+                <Button
+                  title="Ver Pedidos"
+                  onPress={handleViewOrders}
+                  size="large"
+                />
+              </View>
             </View>
-          </View>
-        </Card>
+          </Card>
+        )}
 
         {/* Configuración de Adopciones */}
         {business.features.adoptions && (
@@ -405,28 +409,30 @@ export default function ConfigureBusiness() {
           </Card>
         )}
 
-        {/* Configuración General */}
+        {/* Configuración General - Comentado hasta implementar */}
+        {/*
         <Card style={styles.generalCard}>
           <View style={styles.generalHeader}>
             <Settings size={24} color="#6B7280" />
             <Text style={styles.generalTitle}>Configuración General</Text>
           </View>
-          
+
           <TouchableOpacity style={styles.configOption}>
             <Users size={20} color="#6B7280" />
             <Text style={styles.configOptionText}>Gestionar Equipo</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={styles.configOption}>
             <Clock size={20} color="#6B7280" />
             <Text style={styles.configOptionText}>Horarios de Atención</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={styles.configOption}>
             <Settings size={20} color="#6B7280" />
             <Text style={styles.configOptionText}>Configuración Avanzada</Text>
           </TouchableOpacity>
         </Card>
+        */}
       </ScrollView>
     </SafeAreaView>
   );

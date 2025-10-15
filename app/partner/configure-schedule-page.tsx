@@ -129,8 +129,17 @@ export default function ConfigureSchedulePage() {
   };
 
   const handleAddSchedule = async () => {
-    if (!startTime || !endTime || !maxSlots || !slotDuration || selectedDays.length === 0) {
+    // Validar campos según el tipo de negocio
+    const isBoarding = partnerProfile?.businessType === 'boarding';
+
+    if (!startTime || !endTime || selectedDays.length === 0) {
       Alert.alert('Error', 'Por favor completa todos los campos y selecciona al menos un día');
+      return;
+    }
+
+    // Solo validar estos campos si NO es boarding
+    if (!isBoarding && (!maxSlots || !slotDuration)) {
+      Alert.alert('Error', 'Por favor completa todos los campos');
       return;
     }
 
@@ -180,8 +189,8 @@ export default function ConfigureSchedulePage() {
           day_of_week: day,
           start_time: startTime,
           end_time: endTime,
-          max_slots: parseInt(maxSlots),
-          slot_duration: parseInt(slotDuration),
+          max_slots: isBoarding ? 0 : parseInt(maxSlots),
+          slot_duration: isBoarding ? 0 : parseInt(slotDuration),
           is_active: true,
           created_at: new Date().toISOString(),
         };
@@ -368,21 +377,26 @@ export default function ConfigureSchedulePage() {
             </View>
           </View>
 
-          <Input
-            label="Máximo de citas por día"
-            placeholder="8"
-            value={maxSlots}
-            onChangeText={setMaxSlots}
-            keyboardType="numeric"
-          />
+          {/* Solo mostrar estos campos si NO es negocio de pensión */}
+          {partnerProfile?.businessType !== 'boarding' && (
+            <>
+              <Input
+                label="Máximo de citas por día"
+                placeholder="8"
+                value={maxSlots}
+                onChangeText={setMaxSlots}
+                keyboardType="numeric"
+              />
 
-          <Input
-            label="Duración por cita (minutos)"
-            placeholder="60"
-            value={slotDuration}
-            onChangeText={setSlotDuration}
-            keyboardType="numeric"
-          />
+              <Input
+                label="Duración por cita (minutos)"
+                placeholder="60"
+                value={slotDuration}
+                onChangeText={setSlotDuration}
+                keyboardType="numeric"
+              />
+            </>
+          )}
 
           <View style={styles.buttonContainer}>
             <TouchableOpacity 
@@ -430,14 +444,16 @@ export default function ConfigureSchedulePage() {
                     </View>
                   </View>
 
-                  <View style={styles.scheduleDetails}>
-                    <Text style={styles.scheduleDetail}>
-                      Máximo {item.maxSlots} citas por día
-                    </Text>
-                    <Text style={styles.scheduleDetail}>
-                      Duración por cita: {item.slotDuration} minutos
-                    </Text>
-                  </View>
+                  {partnerProfile?.businessType !== 'boarding' && (
+                    <View style={styles.scheduleDetails}>
+                      <Text style={styles.scheduleDetail}>
+                        Máximo {item.maxSlots} citas por día
+                      </Text>
+                      <Text style={styles.scheduleDetail}>
+                        Duración por cita: {item.slotDuration} minutos
+                      </Text>
+                    </View>
+                  )}
 
                   <View style={styles.scheduleActions}>
                     <Button
