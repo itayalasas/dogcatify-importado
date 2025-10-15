@@ -206,9 +206,11 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
   };
 
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('es-AR', {
+    return new Intl.NumberFormat('es-UY', {
       style: 'currency',
-      currency: 'ARS',
+      currency: 'UYU',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     }).format(price);
   };
 

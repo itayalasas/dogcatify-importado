@@ -409,6 +409,8 @@ export default function PartnerServices() {
     return new Intl.NumberFormat('es-UY', {
       style: 'currency',
       currency: 'UYU',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     }).format(price);
   };
 
@@ -631,7 +633,7 @@ export default function PartnerServices() {
           </Text>
           {(pet.adoptionFee || pet.price) > 0 && (
             <Text style={styles.adoptionFee}>
-              ${(pet.adoptionFee || pet.price).toLocaleString()}
+              ${(pet.adoptionFee || pet.price).toLocaleString('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
             </Text>
           )}
         </View>
