@@ -409,21 +409,9 @@ export default function PartnerRegister() {
         throw new Error('URI de imagen inválida');
       }
 
-      // Crear un FormData para la subida
-      const formData = new FormData();
-
       // Determinar el tipo de archivo
       const fileExtension = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
       const mimeType = fileExtension === 'png' ? 'image/png' : 'image/jpeg';
-
-      // Agregar el archivo al FormData
-      const file: any = {
-        uri: imageUri,
-        type: mimeType,
-        name: `image.${fileExtension}`,
-      };
-
-      console.log(`File info:`, file);
 
       // Fetch the image and convert to blob
       const response = await fetch(imageUri);
@@ -439,10 +427,26 @@ export default function PartnerRegister() {
         throw new Error('La imagen está vacía');
       }
 
-      // Upload blob to Supabase storage
+      // Convert blob to ArrayBuffer for React Native compatibility
+      const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (reader.result instanceof ArrayBuffer) {
+            resolve(reader.result);
+          } else {
+            reject(new Error('Failed to convert blob to ArrayBuffer'));
+          }
+        };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(blob);
+      });
+
+      console.log(`ArrayBuffer size: ${arrayBuffer.byteLength} bytes`);
+
+      // Upload ArrayBuffer to Supabase storage
       const { data, error } = await supabaseClient.storage
         .from('dogcatify')
-        .upload(path, blob, {
+        .upload(path, arrayBuffer, {
           contentType: mimeType,
           cacheControl: '3600',
           upsert: true,
