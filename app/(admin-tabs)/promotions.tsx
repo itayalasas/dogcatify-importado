@@ -1334,7 +1334,8 @@ export default function AdminPromotions() {
             </View>
 
             {selectedPromotionForInvoice && (
-              <ScrollView style={styles.modalBody}>
+              <>
+                <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={true}>
                 <View style={styles.invoiceSection}>
                   <Text style={styles.invoiceSectionTitle}>Promoción</Text>
                   <Text style={styles.invoiceSectionValue}>{selectedPromotionForInvoice.title}</Text>
@@ -1460,7 +1461,9 @@ export default function AdminPromotions() {
                     </Text>
                   </View>
                 )}
+              </ScrollView>
 
+              <View style={styles.modalFooter}>
                 <View style={styles.modalActions}>
                   <Button
                     title="Cancelar"
@@ -1475,7 +1478,8 @@ export default function AdminPromotions() {
                     disabled={loading}
                   />
                 </View>
-              </ScrollView>
+              </View>
+            </>
             )}
           </View>
         </View>
@@ -1718,10 +1722,22 @@ const styles = StyleSheet.create({
   modalContent: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    padding: 20,
     width: '100%',
     maxWidth: 500,
+    maxHeight: '90%',
     alignSelf: 'center',
+    overflow: 'hidden',
+  },
+  modalBody: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  modalFooter: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
   },
   partnerModalContent: {
     backgroundColor: '#FFFFFF',
@@ -1735,7 +1751,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
   modalTitle: {
     fontSize: 18,
@@ -2011,7 +2031,6 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: 'column',
     gap: 12,
-    marginTop: 20,
   },
   partnersList: {
     maxHeight: 400,
@@ -2112,7 +2131,8 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   invoiceSection: {
-    marginBottom: 20,
+    marginTop: 16,
+    marginBottom: 16,
   },
   invoiceSectionTitle: {
     fontSize: 14,
@@ -2206,7 +2226,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#DC2626',
     borderRadius: 8,
     marginTop: 8,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   totalLabelMain: {
     fontSize: 16,
