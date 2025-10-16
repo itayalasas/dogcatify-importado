@@ -769,12 +769,6 @@ export default function Home() {
         newVisibleIds.add(item.item.data.id);
       }
     });
-
-    console.log('👁️ Viewable items changed:', {
-      visibleCount: newVisibleIds.size,
-      visibleIds: Array.from(newVisibleIds)
-    });
-
     setVisiblePostIds(newVisibleIds);
   }).current;
 
