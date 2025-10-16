@@ -107,27 +107,45 @@ const FeedLoader = () => {
   );
 };
 
+// Set para trackear promociones ya vistas en esta sesión
+const viewedPromotions = new Set<string>();
+
 // Componente wrapper para manejar las vistas de promociones
-const PromotionWrapper = ({ promotion, onPress, onLike }: { promotion: any; onPress: () => void; onLike: (promotionId: string) => void }) => {
+const PromotionWrapper = React.memo(({ promotion, onPress, onLike }: { promotion: any; onPress: () => void; onLike: (promotionId: string) => void }) => {
+  const [hasIncrementedView, setHasIncrementedView] = useState(false);
+
   useEffect(() => {
-    // Incrementar vistas cuando la promoción se renderiza
+    // Solo incrementar vistas una vez por sesión
+    if (hasIncrementedView || viewedPromotions.has(promotion.id)) {
+      return;
+    }
+
     const incrementViews = async () => {
       try {
+        // Marcar como vista inmediatamente para evitar múltiples llamadas
+        viewedPromotions.add(promotion.id);
+        setHasIncrementedView(true);
+
         const { error } = await supabaseClient
           .from('promotions')
-          .update({ 
-            views: (promotion.views || 0) + 1 
+          .update({
+            views: (promotion.views || 0) + 1
           })
           .eq('id', promotion.id);
 
         if (error) throw error;
       } catch (error) {
         console.error('Error incrementing promotion views:', error);
+        // Si falla, remover del Set para reintentar
+        viewedPromotions.delete(promotion.id);
+        setHasIncrementedView(false);
       }
     };
 
-    incrementViews();
-  }, [promotion.id]);
+    // Delay para evitar múltiples actualizaciones durante scroll rápido
+    const timer = setTimeout(incrementViews, 500);
+    return () => clearTimeout(timer);
+  }, [promotion.id, hasIncrementedView]);
 
   return (
     <PromotionCard
@@ -136,7 +154,12 @@ const PromotionWrapper = ({ promotion, onPress, onLike }: { promotion: any; onPr
       onLike={onLike}
     />
   );
-};
+}, (prevProps, nextProps) => {
+  // Solo re-renderizar si cambia el ID de la promoción o sus likes
+  return prevProps.promotion.id === nextProps.promotion.id &&
+         prevProps.promotion.liked === nextProps.promotion.liked &&
+         prevProps.promotion.likes === nextProps.promotion.likes;
+});
 
 export default function Home() {
   const [posts, setPosts] = useState<any[]>([]);
@@ -711,11 +734,10 @@ export default function Home() {
     fetchMorePosts();
   };
 
-  const renderFeedItem = ({ item, index }: { item: any; index: number }) => {
+  const renderFeedItem = ({ item }: { item: any; index: number }) => {
     if (item.type === 'promotion') {
       return (
         <PromotionWrapper
-          key={`promotion-${item.data.id}-${index}`}
           promotion={item.data}
           onPress={() => handlePromotionPress(item.data)}
           onLike={handlePromotionLike}
@@ -724,7 +746,6 @@ export default function Home() {
     } else {
       return (
         <PostCard
-          key={`post-${item.data.id}-${index}`}
           post={item.data}
           onLike={handleLike}
           onComment={handleComment}
@@ -786,7 +807,7 @@ export default function Home() {
       <FlatList
         data={feedItems}
         renderItem={renderFeedItem}
-        keyExtractor={(item, index) => `${item.type}-${item.data.id}-${index}`}
+        keyExtractor={(item) => `${item.type}-${item.data.id}`}
         style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -798,15 +819,21 @@ export default function Home() {
           />
         }
         onEndReached={handleEndReached}
-        onEndReachedThreshold={0.3} // Cargar más cuando esté al 70% del scroll
+        onEndReachedThreshold={0.3}
         ListHeaderComponent={<MedicalAlertsWidget />}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmpty}
         initialNumToRender={INITIAL_LOAD}
         maxToRenderPerBatch={POSTS_PER_PAGE}
         windowSize={10}
-        removeClippedSubviews={true}
-        getItemLayout={undefined} // Let FlatList calculate automatically
+        removeClippedSubviews={Platform.OS === 'android'}
+        maintainVisibleContentPosition={
+          Platform.OS === 'ios' ? {
+            minIndexForVisible: 0,
+            autoscrollToTopThreshold: 10
+          } : undefined
+        }
+        getItemLayout={undefined}
       />
     </SafeAreaView>
   );

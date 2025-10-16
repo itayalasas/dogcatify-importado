@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Heart, ExternalLink } from 'lucide-react-native';
 import { Card } from './ui/Card';
@@ -22,7 +22,7 @@ interface PromotionCardProps {
   onLike?: (promotionId: string) => void;
 }
 
-export default function PromotionCard({ promotion, onPress, onLike }: PromotionCardProps) {
+const PromotionCard = memo(({ promotion, onPress, onLike }: PromotionCardProps) => {
   const { currentUser } = useAuth();
   const [isLiking, setIsLiking] = useState(false);
 
@@ -109,7 +109,17 @@ export default function PromotionCard({ promotion, onPress, onLike }: PromotionC
       </View>
     </Card>
   );
-}
+}, (prevProps, nextProps) => {
+  // Solo re-renderizar si cambian propiedades importantes
+  return (
+    prevProps.promotion.id === nextProps.promotion.id &&
+    prevProps.promotion.likes?.length === nextProps.promotion.likes?.length &&
+    prevProps.promotion.title === nextProps.promotion.title &&
+    prevProps.promotion.imageURL === nextProps.promotion.imageURL
+  );
+});
+
+export default PromotionCard;
 
 const styles = StyleSheet.create({
   container: {
