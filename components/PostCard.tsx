@@ -434,20 +434,27 @@ const PostCard: React.FC<PostCardProps> = ({
       const isAlbum = post.type === 'album';
       const contentType = isAlbum ? 'álbum' : 'publicación';
 
+      // Store links
+      const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.dogcatify.app';
+      const APP_STORE_URL = 'https://apps.apple.com/app/dogcatify/id6738697623';
+
       // Create deep link URL
       const deepLink = isAlbum
         ? `dogcatify://album/${post.album_id || post.id}`
         : `dogcatify://post/${post.id}`;
 
-      // Create universal link (fallback to website/store)
-      const universalLink = isAlbum
-        ? `https://dogcatify.app/album/${post.album_id || post.id}`
-        : `https://dogcatify.app/post/${post.id}`;
-
-      // Prepare share message with link
-      const shareMessage = isAlbum
-        ? `🐾 ¡Mira este ${contentType} de ${post.pet?.name || 'mascota'} compartido por ${post.author?.name} en DogCatiFy!\n\n📸 ${post.album_images?.length || 1} foto(s)\n\n${universalLink}`
-        : `🐾 ¡Mira esta ${contentType} de ${post.author?.name} en DogCatiFy!\n\n${universalLink}`;
+      // Prepare share message with deep link and store fallback
+      const shareMessage = Platform.OS === 'android'
+        ? isAlbum
+          ? `🐾 ¡Mira este ${contentType} de ${post.pet?.name || 'mascota'} compartido por ${post.author?.name} en DogCatiFy!\n\n📸 ${post.album_images?.length || 1} foto(s)\n\n${deepLink}\n\n¿No tienes la app? Descárgala aquí:\n${PLAY_STORE_URL}`
+          : `🐾 ¡Mira esta ${contentType} de ${post.author?.name} en DogCatiFy!\n\n${deepLink}\n\n¿No tienes la app? Descárgala aquí:\n${PLAY_STORE_URL}`
+        : Platform.OS === 'ios'
+        ? isAlbum
+          ? `🐾 ¡Mira este ${contentType} de ${post.pet?.name || 'mascota'} compartido por ${post.author?.name} en DogCatiFy!\n\n📸 ${post.album_images?.length || 1} foto(s)\n\n${deepLink}\n\n¿No tienes la app? Descárgala aquí:\n${APP_STORE_URL}`
+          : `🐾 ¡Mira esta ${contentType} de ${post.author?.name} en DogCatiFy!\n\n${deepLink}\n\n¿No tienes la app? Descárgala aquí:\n${APP_STORE_URL}`
+        : isAlbum
+        ? `🐾 ¡Mira este ${contentType} de ${post.pet?.name || 'mascota'} compartido por ${post.author?.name} en DogCatiFy!\n\n📸 ${post.album_images?.length || 1} foto(s)\n\n${deepLink}`
+        : `🐾 ¡Mira esta ${contentType} de ${post.author?.name} en DogCatiFy!\n\n${deepLink}`;
 
       // Share implementation
       if (Platform.OS === 'web') {
@@ -456,7 +463,6 @@ const PostCard: React.FC<PostCardProps> = ({
           await navigator.share({
             title: `DogCatiFy - ${contentType}`,
             text: shareMessage,
-            url: universalLink,
           });
         } else {
           // Copy to clipboard
@@ -467,7 +473,6 @@ const PostCard: React.FC<PostCardProps> = ({
         // For mobile, use native share
         await Share.share({
           message: shareMessage,
-          url: universalLink,
           title: `DogCatiFy - ${contentType}`,
         });
       }
