@@ -374,9 +374,9 @@ export default function ProductDetail() {
           )}
           
           {/* Store Info */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.storeContainer}
-            onPress={() => router.push(`/services/partner/${partnerInfo?.id}`)}
+            onPress={() => router.push(`/partner/store-products/${partnerInfo?.id}`)}
           >
             <View style={styles.storeInfo}>
               {partnerInfo?.logo ? (
@@ -596,10 +596,18 @@ const styles = StyleSheet.create({
   imageContainer: {
     position: 'relative',
     backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
   },
   productImage: {
     width: 400,
-    height: 400,
+    height: 380,
     resizeMode: 'cover',
   },
   paginationContainer: {
@@ -728,6 +736,10 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: '#F3F4F6',
+    backgroundColor: '#F9FAFB',
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 12,
   },
   storeInfo: {
     flexDirection: 'row',
@@ -767,6 +779,12 @@ const styles = StyleSheet.create({
   detailsCard: {
     margin: 16,
     marginTop: 8,
+    borderRadius: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
   sectionTitle: {
     fontSize: 18,
@@ -805,6 +823,12 @@ const styles = StyleSheet.create({
   quantityCard: {
     marginHorizontal: 16,
     marginBottom: 16,
+    borderRadius: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
   quantityTitle: {
     fontSize: 16,
