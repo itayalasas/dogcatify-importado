@@ -5,6 +5,7 @@ import { ArrowLeft, Calendar, Clock, CreditCard, X, Lock, User, FileText, Circle
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
+import { LoadingScreen } from '../../../components/ui/LoadingScreen';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 import { createServiceBookingOrder } from '../../../utils/mercadoPago';
@@ -529,13 +530,7 @@ export default function ServiceBooking() {
   };
 
   if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando información de la reserva...</Text>
-        </View>
-      </SafeAreaView>
-    );
+    return <LoadingScreen message="Cargando información de la reserva..." />;
   }
 
   return (
@@ -994,16 +989,6 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     paddingBottom: 120,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
   },
   serviceCard: {
     marginBottom: 16,
