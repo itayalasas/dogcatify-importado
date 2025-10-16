@@ -1,14 +1,19 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { useAuth } from './AuthContext';
 import { supabaseClient } from '../lib/supabase';
 
-// Only configure notifications if not in Expo Go
+// Only import and configure notifications if not in Expo Go
 const isExpoGo = Constants.appOwnership === 'expo';
-if (!isExpoGo) {
+
+let Notifications: any = null;
+let Device: any = null;
+
+if (!isExpoGo && Platform.OS !== 'web') {
+  Notifications = require('expo-notifications');
+  Device = require('expo-device');
+
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
@@ -20,8 +25,10 @@ if (!isExpoGo) {
 
 interface NotificationContextType {
   expoPushToken: string | null;
-  notification: Notifications.Notification | null;
+  notification: any;
+  notificationsEnabled: boolean;
   registerForPushNotifications: () => Promise<string | null>;
+  disableNotifications: () => Promise<void>;
   sendNotificationToUser: (userId: string, title: string, body: string, data?: any) => Promise<void>;
   sendNotificationToAdmin: (title: string, body: string, data?: any) => Promise<void>;
 }
@@ -38,38 +45,51 @@ export const useNotifications = () => {
 
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
-  const [notification, setNotification] = useState<Notifications.Notification | null>(null);
+  const [notification, setNotification] = useState<any>(null);
   const { currentUser } = useAuth();
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
-  // Auto-register push token when user is authenticated
+  // Check if notifications are enabled on mount
   useEffect(() => {
-    // Don't auto-register in Expo Go only
-    const isExpoGo = Constants.appOwnership === 'expo';
-    if (currentUser && !expoPushToken && !isExpoGo) {
-      console.log('User authenticated, auto-registering push notifications...');
-      registerForPushNotifications().catch(err => {
-        console.log('Push notification registration failed:', err.message);
-      });
-    } else if (isExpoGo) {
-      console.log('Skipping auto-registration in Expo Go - notifications not supported');
+    if (isExpoGo || Platform.OS === 'web' || !Notifications) {
+      console.log('Notifications not available in this environment');
+      return;
     }
-  }, [currentUser, expoPushToken]);
-  useEffect(() => {
-    // Only set up notification listeners if not in Expo Go
-    const isExpoGo = Constants.appOwnership === 'expo';
 
-    if (isExpoGo) {
-      console.log('Skipping notification listeners in Expo Go');
+    // Check stored notification preference
+    if (currentUser) {
+      checkNotificationStatus();
+    }
+  }, [currentUser]);
+
+  const checkNotificationStatus = async () => {
+    try {
+      const { data } = await supabaseClient
+        .from('profiles')
+        .select('push_token, notification_preferences')
+        .eq('id', currentUser!.id)
+        .single();
+
+      if (data?.push_token) {
+        setExpoPushToken(data.push_token);
+        setNotificationsEnabled(true);
+      }
+    } catch (error) {
+      console.log('Error checking notification status:', error);
+    }
+  };
+  useEffect(() => {
+    if (isExpoGo || Platform.OS === 'web' || !Notifications) {
       return;
     }
 
     // Set up notification listeners
-    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
+    const notificationListener = Notifications.addNotificationReceivedListener((notification: any) => {
       console.log('Notification received:', notification);
       setNotification(notification);
     });
 
-    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+    const responseListener = Notifications.addNotificationResponseReceivedListener((response: any) => {
       console.log('Notification response:', response);
       // Handle notification tap here
     });
@@ -82,39 +102,28 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const registerForPushNotifications = async (): Promise<string | null> => {
     try {
-      console.log('=== DETAILED PUSH NOTIFICATION REGISTRATION DEBUG ===');
-      console.log('Starting push notification registration...');
-      console.log('App ownership:', Constants.appOwnership);
-      console.log('Is device:', Device.isDevice);
-      console.log('Platform:', Platform.OS);
-      console.log('Constants.platform:', Constants.platform);
-      console.log('Constants.expoConfig:', Constants.expoConfig);
-      console.log('EAS Project ID:', Constants.expoConfig?.extra?.eas?.projectId);
-      
-      // Only skip in Expo Go, not in development builds
-      const isExpoGo = Constants.appOwnership === 'expo';
+      console.log('=== PUSH NOTIFICATION REGISTRATION ===');
+
+      // Check environment
       if (isExpoGo) {
-        console.log('Running in Expo Go - push notifications not supported');
-        return null;
+        console.log('❌ Running in Expo Go - notifications not supported');
+        throw new Error('Las notificaciones no están disponibles en Expo Go. Necesitas una build de desarrollo o producción.');
       }
-      
-      // For web, skip push notifications
+
       if (Platform.OS === 'web') {
-        console.log('Web platform - push notifications not supported');
-        return null;
+        console.log('❌ Web platform - notifications not supported');
+        throw new Error('Las notificaciones push no están disponibles en la web.');
+      }
+
+      if (!Notifications || !Device) {
+        console.log('❌ Notification modules not available');
+        throw new Error('Los módulos de notificación no están disponibles.');
       }
 
       // Check if device supports push notifications
       if (!Device.isDevice) {
         console.log('❌ Must use physical device for Push Notifications');
-        console.log('Device info:', {
-          isDevice: Device.isDevice,
-          deviceType: Device.deviceType,
-          modelName: Device.modelName,
-          osName: Device.osName,
-          osVersion: Device.osVersion
-        });
-        return null;
+        throw new Error('Las notificaciones solo funcionan en dispositivos físicos, no en simuladores.');
       }
 
       console.log('Device check passed, requesting permissions...');
@@ -199,13 +208,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               enableLights: true,
               lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
               bypassDnd: false,
+              description: 'Notificaciones generales de DogCatiFy',
             });
-            console.log('✅ Android notification channel configured');
+            console.log('✅ Android notification channel configured with custom icon');
           } catch (channelError) {
             console.error('❌ Error setting up notification channel:', channelError);
             // Don't fail registration if channel setup fails
           }
-          
+
           // Add additional channels for different notification types
           try {
             await Notifications.setNotificationChannelAsync('chat', {
@@ -213,19 +223,21 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               importance: Notifications.AndroidImportance.HIGH,
               vibrationPattern: [0, 250, 250, 250],
               sound: 'default',
+              lightColor: '#2D6A6F',
               description: 'Notificaciones de mensajes de chat y adopción',
             });
             console.log('✅ Chat notification channel configured');
           } catch (chatChannelError) {
             console.error('❌ Error setting up chat channel:', chatChannelError);
           }
-          
+
           try {
             await Notifications.setNotificationChannelAsync('bookings', {
               name: 'Reservas y Citas',
               importance: Notifications.AndroidImportance.HIGH,
               vibrationPattern: [0, 500, 250, 500],
               sound: 'default',
+              lightColor: '#2D6A6F',
               description: 'Notificaciones de reservas y confirmaciones',
             });
             console.log('✅ Bookings notification channel configured');
@@ -237,76 +249,66 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         // Store token in user profile if user is logged in
         if (currentUser && tokenData.data) {
           console.log('Storing push token in user profile...');
-          try {
-            // First check if user already has a different token
-            const { data: existingProfile, error: fetchError } = await supabaseClient
-              .from('profiles')
-              .select('push_token')
-              .eq('id', currentUser.id);
-            
-            if (fetchError) {
-              console.error('Error fetching existing profile:', fetchError);
-            } else {
-              const currentToken = existingProfile?.[0]?.push_token;
-              console.log('Current stored token exists:', !!currentToken);
-              console.log('New token exists:', !!tokenData.data);
-              console.log('Tokens are different:', currentToken !== tokenData.data);
-              
-              if (currentToken !== tokenData.data) {
-                console.log('Token changed, updating in database...');
-                const { error: updateError } = await supabaseClient
-                  .from('profiles')
-                  .update({ 
-                    push_token: tokenData.data,
-                    notification_preferences: {
-                      push: true,
-                      email: true
-                    },
-                    updated_at: new Date().toISOString()
-                  })
-                  .eq('id', currentUser.id);
-                
-                if (updateError) {
-                  console.error('Error updating push token:', updateError);
-                } else {
-                  console.log('Push token updated successfully in profile');
-                }
-              } else {
-                console.log('Token unchanged, no update needed');
-              }
-            }
-          } catch (dbError) {
-            console.error('Database error managing push token:', dbError);
-            // Don't fail registration if database update fails
-            console.log('Continuing with token registration despite database error');
+
+          const { error: updateError } = await supabaseClient
+            .from('profiles')
+            .update({
+              push_token: tokenData.data,
+              notification_preferences: {
+                push: true,
+                email: true
+              },
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', currentUser.id);
+
+          if (updateError) {
+            console.error('Error updating push token:', updateError);
+            throw new Error('No se pudo guardar el token de notificación.');
           }
+
+          console.log('✅ Push token saved successfully');
         }
 
         setExpoPushToken(tokenData.data);
-        console.log('✅ Push notification registration completed successfully!');
-        console.log('=== END DETAILED PUSH NOTIFICATION REGISTRATION DEBUG ===');
+        setNotificationsEnabled(true);
+        console.log('✅ Push notification registration completed!');
         return tokenData.data;
-      } catch (tokenError) {
+      } catch (tokenError: any) {
         console.error('❌ Error getting push token:', tokenError);
-        console.error('Token error details:', JSON.stringify(tokenError, null, 2));
-        console.log('=== END DETAILED PUSH NOTIFICATION REGISTRATION DEBUG ===');
-        return null;
+        throw tokenError;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error in registerForPushNotifications:', error);
-      console.error('Registration error details:', JSON.stringify(error, null, 2));
-      console.log('=== END DETAILED PUSH NOTIFICATION REGISTRATION DEBUG ===');
-      return null;
+      throw error;
     }
   };
 
   const sendNotificationToUser = async (
-    userId: string, 
-    title: string, 
-    body: string, 
+    userId: string,
+    title: string,
+    body: string,
     data?: any
   ): Promise<void> => {
     try {
+      // Check if target user has notifications enabled
+      const { data: profile } = await supabaseClient
+        .from('profiles')
+        .select('push_token, notification_preferences')
+        .eq('id', userId)
+        .single();
+
+      if (!profile?.push_token) {
+        console.log('❌ User does not have push notifications enabled');
+        return;
+      }
+
+      const preferences = profile.notification_preferences || {};
+      if (preferences.push === false) {
+        console.log('❌ User has disabled push notifications');
+        return;
+      }
+
       console.log('🚀 Sending push notification via Edge Function...');
       console.log('Target user ID:', userId);
       console.log('Title:', title);
@@ -362,12 +364,39 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   };
 
+  const disableNotifications = async (): Promise<void> => {
+    try {
+      if (currentUser) {
+        await supabaseClient
+          .from('profiles')
+          .update({
+            push_token: null,
+            notification_preferences: {
+              push: false,
+              email: true
+            },
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', currentUser.id);
+      }
+
+      setExpoPushToken(null);
+      setNotificationsEnabled(false);
+      console.log('✅ Notifications disabled successfully');
+    } catch (error) {
+      console.error('Error disabling notifications:', error);
+      throw error;
+    }
+  };
+
   return (
     <NotificationContext.Provider
       value={{
         expoPushToken,
         notification,
+        notificationsEnabled,
         registerForPushNotifications,
+        disableNotifications,
         sendNotificationToUser,
         sendNotificationToAdmin,
       }}

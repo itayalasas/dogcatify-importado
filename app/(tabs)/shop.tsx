@@ -154,12 +154,9 @@ export default function Shop() {
         ) : filteredProducts.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Package size={64} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>{t('noProductsAvailable')}</Text> 
+            <Text style={styles.emptyTitle}>{t('noProductsAvailable')}</Text>
             <Text style={styles.emptySubtitle}>
-              placeholder={t('search') + ' productos...'}
-                ? t('noProductsAvailable')
-                : t('noProductsInCategory')
-              }
+              {searchQuery ? t('noProductsAvailable') : t('noProductsInCategory')}
             </Text>
           </View>
         ) : (
