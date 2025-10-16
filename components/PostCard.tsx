@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions, Modal, TextInput, FlatList, ActivityIndicator, ScrollView, Image, Share } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions, Modal, TextInput, FlatList, ActivityIndicator, ScrollView, Image, Share, Platform } from 'react-native';
 import { Heart, MessageCircle, Share2, MoveHorizontal as MoreHorizontal, ArrowLeft, Send } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { supabaseClient } from '../lib/supabase';
@@ -430,20 +430,48 @@ const PostCard: React.FC<PostCardProps> = ({
   );
   const handleSharePost = async () => {
     try {
-      // Prepare content to share
-      const shareMessage = `¡Mira esta publicación de ${post.author?.name} en DogCatiFy!`;
-      
-      // Simple share implementation
+      // Determine if it's an album or regular post
+      const isAlbum = post.type === 'album';
+      const contentType = isAlbum ? 'álbum' : 'publicación';
+
+      // Create deep link URL
+      const deepLink = isAlbum
+        ? `dogcatify://album/${post.album_id || post.id}`
+        : `dogcatify://post/${post.id}`;
+
+      // Create universal link (fallback to website/store)
+      const universalLink = isAlbum
+        ? `https://dogcatify.app/album/${post.album_id || post.id}`
+        : `https://dogcatify.app/post/${post.id}`;
+
+      // Prepare share message with link
+      const shareMessage = isAlbum
+        ? `🐾 ¡Mira este ${contentType} de ${post.pet?.name || 'mascota'} compartido por ${post.author?.name} en DogCatiFy!\n\n📸 ${post.album_images?.length || 1} foto(s)\n\n${universalLink}`
+        : `🐾 ¡Mira esta ${contentType} de ${post.author?.name} en DogCatiFy!\n\n${universalLink}`;
+
+      // Share implementation
       if (Platform.OS === 'web') {
-        // For web, copy to clipboard or show alert
-        Alert.alert('Compartir', shareMessage);
+        // For web, try to use Web Share API or fallback to clipboard
+        if (navigator.share) {
+          await navigator.share({
+            title: `DogCatiFy - ${contentType}`,
+            text: shareMessage,
+            url: universalLink,
+          });
+        } else {
+          // Copy to clipboard
+          await navigator.clipboard.writeText(shareMessage);
+          Alert.alert('¡Copiado!', 'El enlace se copió al portapapeles');
+        }
       } else {
         // For mobile, use native share
         await Share.share({
           message: shareMessage,
+          url: universalLink,
+          title: `DogCatiFy - ${contentType}`,
         });
       }
-      
+
       // Call the onShare callback
       onShare(post.id);
     } catch (error) {
