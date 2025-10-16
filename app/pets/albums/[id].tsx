@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Modal } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Modal, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Camera, Trash2, Share, X, CreditCard as Edit } from 'lucide-react-native';
+import { ArrowLeft, Camera, Trash2, Share, X, CreditCard as Edit, Video as VideoIcon, Play } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
@@ -9,6 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { supabaseClient } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
+import { detectPetInVideo, validateVideoDuration } from '../../../utils/petDetection';
 
 export default function AlbumDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -20,9 +21,13 @@ export default function AlbumDetail() {
   const [description, setDescription] = useState('');
   const [isShared, setIsShared] = useState(false);
   const [selectedImages, setSelectedImages] = useState<ImagePicker.ImagePickerAsset[]>([]);
+  const [selectedVideo, setSelectedVideo] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [validatingVideo, setValidatingVideo] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [imageToDelete, setImageToDelete] = useState<string | null>(null);
+  const [showMediaTypeModal, setShowMediaTypeModal] = useState(false);
 
   useEffect(() => {
     fetchAlbumDetails();
@@ -39,24 +44,30 @@ export default function AlbumDetail() {
       if (error) throw error;
       
       if (data) {
-        // Process image URLs to ensure they're complete
-        let processedImages = data.images || [];
-        if (processedImages.length > 0) {
-          processedImages = processedImages.map((img: string) => {
-            if (img && img.startsWith('/storage/v1/object/public/')) {
+        // Process media URLs (images and videos) to ensure they're complete
+        let processedMedia = data.images || [];
+        if (processedMedia.length > 0) {
+          processedMedia = processedMedia.map((media: string) => {
+            // Check if it's a video (has VIDEO: prefix)
+            const isVideo = media.startsWith('VIDEO:');
+            const actualUrl = isVideo ? media.replace('VIDEO:', '') : media;
+
+            // Process URL if it's a relative path
+            if (actualUrl && actualUrl.startsWith('/storage/v1/object/public/')) {
               const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-              return `${supabaseUrl}${img}`;
+              const fullUrl = `${supabaseUrl}${actualUrl}`;
+              return isVideo ? `VIDEO:${fullUrl}` : fullUrl;
             }
-            return img;
+            return media;
           });
         }
-        
+
         setAlbum({
           ...data,
-          images: processedImages,
+          images: processedMedia,
           createdAt: new Date(data.created_at)
         });
-        
+
         setTitle(data.title || '');
         setDescription(data.description || '');
         setIsShared(data.is_shared || false);
@@ -72,7 +83,7 @@ export default function AlbumDetail() {
   const handleSelectPhotos = async () => {
     try {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
+
       if (permissionResult.granted === false) {
         Alert.alert('Permisos requeridos', 'Se necesitan permisos para acceder a la galería');
         return;
@@ -83,7 +94,7 @@ export default function AlbumDetail() {
         allowsMultipleSelection: true,
         quality: 0.8,
         aspect: [1, 1],
-        selectionLimit: 10, // Limit to 10 photos
+        selectionLimit: 10,
       });
 
       if (!result.canceled && result.assets) {
@@ -95,25 +106,95 @@ export default function AlbumDetail() {
     }
   };
 
+  const handleSelectVideo = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (permissionResult.granted === false) {
+        Alert.alert('Permisos requeridos', 'Se necesitan permisos para acceder a la galería');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsMultipleSelection: false,
+        quality: 1,
+        videoMaxDuration: 180,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const video = result.assets[0];
+
+        setValidatingVideo(true);
+
+        try {
+          const durationValidation = await validateVideoDuration(video.uri);
+
+          if (!durationValidation.isValid) {
+            Alert.alert(
+              'Video muy largo',
+              `El video dura ${Math.floor(durationValidation.duration / 60)}:${(durationValidation.duration % 60).toString().padStart(2, '0')} minutos.\n\nDuración máxima: 3 minutos (180 segundos)`,
+              [{ text: 'OK' }]
+            );
+            setValidatingVideo(false);
+            return;
+          }
+
+          const hasPet = await detectPetInVideo(video.uri);
+
+          if (!hasPet) {
+            Alert.alert(
+              'No se detectó mascota',
+              '¿Deseas subir el video de todos modos?',
+              [
+                { text: 'Cancelar', style: 'cancel', onPress: () => setValidatingVideo(false) },
+                {
+                  text: 'Subir',
+                  onPress: () => {
+                    setSelectedVideo(video);
+                    setValidatingVideo(false);
+                  }
+                }
+              ]
+            );
+          } else {
+            setSelectedVideo(video);
+            setValidatingVideo(false);
+          }
+        } catch (error) {
+          console.error('Error validating video:', error);
+          Alert.alert('Error', 'No se pudo validar el video');
+          setValidatingVideo(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error selecting video:', error);
+      Alert.alert('Error', 'No se pudo seleccionar el video');
+      setValidatingVideo(false);
+    }
+  };
+
+  const handleAddMediaClick = () => {
+    setShowMediaTypeModal(true);
+  };
+
   const uploadImageToStorage = async (imageAsset: ImagePicker.ImagePickerAsset) => {
     try {
       console.log('Starting upload for album image:', imageAsset.uri);
-      
-      // Crear nombre de archivo único
+
       const timestamp = Date.now();
       const randomId = Math.random().toString(36).substring(7);
       const filename = `pets/albums/${album.pet_id}/${timestamp}-${randomId}.jpg`;
-      
+
       console.log('Uploading to Supabase with filename:', filename);
-      
-      // Usar FormData para React Native
+
       const formData = new FormData();
       formData.append('file', {
         uri: imageAsset.uri,
         type: 'image/jpeg',
         name: filename,
       } as any);
-      
+
       const { data, error } = await supabaseClient.storage
         .from('dogcatify')
         .upload(filename, formData, {
@@ -121,19 +202,153 @@ export default function AlbumDetail() {
           cacheControl: '3600',
           upsert: false,
         });
-      
+
       if (error) {
         throw error;
       }
-      
+
       const { data: { publicUrl } } = supabaseClient.storage
         .from('dogcatify')
         .getPublicUrl(filename);
-      
+
       return publicUrl;
     } catch (error) {
       console.error('Error uploading image:', error);
       throw error;
+    }
+  };
+
+  const uploadVideoToStorage = async (videoAsset: ImagePicker.ImagePickerAsset) => {
+    try {
+      console.log('Starting upload for album video:', videoAsset.uri);
+
+      const timestamp = Date.now();
+      const randomId = Math.random().toString(36).substring(7);
+      const filename = `pets/albums/${album.pet_id}/${timestamp}-${randomId}.mp4`;
+
+      console.log('Uploading video to Supabase with filename:', filename);
+
+      const formData = new FormData();
+      formData.append('file', {
+        uri: videoAsset.uri,
+        type: 'video/mp4',
+        name: filename,
+      } as any);
+
+      const { data, error } = await supabaseClient.storage
+        .from('dogcatify')
+        .upload(filename, formData, {
+          contentType: 'video/mp4',
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      const { data: { publicUrl } } = supabaseClient.storage
+        .from('dogcatify')
+        .getPublicUrl(filename);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Error uploading video:', error);
+      throw error;
+    }
+  };
+
+  const handleAddVideo = async () => {
+    if (!selectedVideo) {
+      Alert.alert('Error', 'Por favor selecciona un video');
+      return;
+    }
+
+    setUploadingVideo(true);
+    try {
+      console.log('Starting to upload video...');
+
+      const videoUrl = await uploadVideoToStorage(selectedVideo);
+
+      const currentImages = album.images || [];
+
+      const videoUrlWithMarker = `VIDEO:${videoUrl}`;
+
+      const { error } = await supabaseClient
+        .from('pet_albums')
+        .update({
+          images: [...currentImages, videoUrlWithMarker]
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setAlbum({
+        ...album,
+        images: [...currentImages, videoUrlWithMarker]
+      });
+
+      setSelectedVideo(null);
+
+      if (album.is_shared) {
+        console.log('Album is shared, creating new post for added video...');
+
+        try {
+          const { data: petData, error: petError } = await supabaseClient
+            .from('pets')
+            .select('*')
+            .eq('id', album.pet_id)
+            .maybeSingle();
+
+          if (petData && !petError) {
+            const { data: userData, error: userError } = await supabaseClient
+              .from('profiles')
+              .select('display_name, photo_url')
+              .eq('id', currentUser.id)
+              .maybeSingle();
+
+            const postData = {
+              user_id: currentUser.id,
+              pet_id: album.pet_id,
+              content: `Nuevo video agregado al \u00e1lbum "${album.title}" \ud83c\udfa5`,
+              image_url: videoUrl,
+              album_images: [videoUrl],
+              type: 'album_video',
+              author: {
+                name: userData?.display_name || currentUser.displayName || 'Usuario',
+                avatar: userData?.photo_url || currentUser.photoURL || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100'
+              },
+              pet: {
+                name: petData.name,
+                species: petData.species === 'dog' ? 'Perro' : 'Gato'
+              },
+              likes: [],
+              created_at: new Date().toISOString()
+            };
+
+            const { error: postError } = await supabaseClient
+              .from('posts')
+              .insert(postData);
+
+            if (postError) {
+              console.error('Error creating feed post:', postError);
+              Alert.alert('\u00c9xito', 'Video agregado correctamente');
+            } else {
+              Alert.alert('\u00c9xito', 'Video agregado y compartido en el feed \ud83c\udfa5');
+            }
+          }
+        } catch (feedError) {
+          console.error('Error creating feed post:', feedError);
+          Alert.alert('\u00c9xito', 'Video agregado correctamente');
+        }
+      } else {
+        Alert.alert('\u00c9xito', 'Video agregado correctamente');
+      }
+    } catch (error) {
+      console.error('Error adding video:', error);
+      Alert.alert('Error', 'No se pudo agregar el video');
+    } finally {
+      setUploadingVideo(false);
     }
   };
 
@@ -563,11 +778,54 @@ export default function AlbumDetail() {
         )}
 
         <View style={styles.addPhotosSection}>
-          <TouchableOpacity style={styles.addPhotosButton} onPress={handleSelectPhotos}>
-            <Camera size={24} color="#3B82F6" />
-            <Text style={styles.addPhotosText}>Agregar Fotos</Text>
-          </TouchableOpacity>
-          
+          <View style={styles.addMediaButtons}>
+            <TouchableOpacity style={styles.addPhotosButton} onPress={handleSelectPhotos}>
+              <Camera size={24} color="#3B82F6" />
+              <Text style={styles.addPhotosText}>Agregar Fotos</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.addVideoButton} onPress={handleSelectVideo} disabled={validatingVideo}>
+              {validatingVideo ? (
+                <ActivityIndicator size="small" color="#10B981" />
+              ) : (
+                <VideoIcon size={24} color="#10B981" />
+              )}
+              <Text style={styles.addVideoText}>
+                {validatingVideo ? 'Validando...' : 'Agregar Video'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {selectedVideo && (
+            <View style={styles.selectedPhotosContainer}>
+              <Text style={styles.selectedPhotosTitle}>Video seleccionado:</Text>
+              <View style={styles.selectedVideoContainer}>
+                <View style={styles.selectedVideoPreview}>
+                  <VideoIcon size={40} color="#10B981" />
+                  <Text style={styles.videoFileName}>
+                    {selectedVideo.fileName || 'video.mp4'}
+                  </Text>
+                  <Text style={styles.videoDurationText}>
+                    {selectedVideo.duration ? `${Math.floor(selectedVideo.duration / 1000)}s` : ''}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.removeSelectedPhoto}
+                  onPress={() => setSelectedVideo(null)}
+                >
+                  <X size={16} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+
+              <Button
+                title="Subir Video al Álbum"
+                onPress={handleAddVideo}
+                loading={uploadingVideo}
+                size="medium"
+              />
+            </View>
+          )}
+
           {selectedImages.length > 0 && (
             <View style={styles.selectedPhotosContainer}>
               <Text style={styles.selectedPhotosTitle}>
@@ -598,17 +856,39 @@ export default function AlbumDetail() {
         </View>
 
         <View style={styles.photosGrid}>
-          {album.images && album.images.map((imageUrl: string, index: number) => (
-            <View key={index} style={styles.photoContainer}>
-              <Image source={{ uri: imageUrl }} style={styles.photo} />
-              <TouchableOpacity 
-                style={styles.deletePhotoButton}
-                onPress={() => confirmDeleteImage(imageUrl)}
-              >
-                <Trash2 size={16} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-          ))}
+          {album.images && album.images.map((mediaUrl: string, index: number) => {
+            const isVideo = mediaUrl.startsWith('VIDEO:');
+            const actualUrl = isVideo ? mediaUrl.replace('VIDEO:', '') : mediaUrl;
+
+            return (
+              <View key={index} style={styles.photoContainer}>
+                {isVideo ? (
+                  <View style={styles.videoThumbnailContainer}>
+                    <View style={styles.videoPlaceholder}>
+                      <VideoIcon size={48} color="#10B981" />
+                      <Text style={styles.videoLabel}>Video</Text>
+                    </View>
+                    <View style={styles.videoOverlay}>
+                      <Play size={32} color="#FFFFFF" />
+                    </View>
+                  </View>
+                ) : (
+                  <Image source={{ uri: actualUrl }} style={styles.photo} />
+                )}
+                <TouchableOpacity
+                  style={styles.deletePhotoButton}
+                  onPress={() => confirmDeleteImage(mediaUrl)}
+                >
+                  <Trash2 size={16} color="#FFFFFF" />
+                </TouchableOpacity>
+                {isVideo && (
+                  <View style={styles.videoBadge}>
+                    <VideoIcon size={12} color="#FFFFFF" />
+                  </View>
+                )}
+              </View>
+            );
+          })}
         </View>
       </ScrollView>
 
@@ -675,9 +955,15 @@ export default function AlbumDetail() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.deleteConfirmModal}>
-            <Text style={styles.confirmTitle}>Eliminar Imagen</Text>
-            <Text style={styles.confirmText}>¿Estás seguro de que quieres eliminar esta imagen?</Text>
-            
+            <Text style={styles.confirmTitle}>
+              {imageToDelete?.startsWith('VIDEO:') ? 'Eliminar Video' : 'Eliminar Imagen'}
+            </Text>
+            <Text style={styles.confirmText}>
+              {imageToDelete?.startsWith('VIDEO:')
+                ? '¿Estás seguro de que quieres eliminar este video?'
+                : '¿Estás seguro de que quieres eliminar esta imagen?'}
+            </Text>
+
             <View style={styles.confirmActions}>
               <Button
                 title="Cancelar"
@@ -752,7 +1038,13 @@ const styles = StyleSheet.create({
   addPhotosSection: {
     marginBottom: 16,
   },
+  addMediaButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
   addPhotosButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -764,9 +1056,27 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   addPhotosText: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: 'Inter-Medium',
     color: '#3B82F6',
+    marginLeft: 8,
+  },
+  addVideoButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#D1FAE5',
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#10B981',
+    borderStyle: 'dashed',
+  },
+  addVideoText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#10B981',
     marginLeft: 8,
   },
   selectedPhotosContainer: {
@@ -948,5 +1258,73 @@ const styles = StyleSheet.create({
   },
   confirmButton: {
     width: '100%',
+  },
+  selectedVideoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  selectedVideoPreview: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  videoFileName: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  videoDurationText: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  videoThumbnailContainer: {
+    width: '100%',
+    height: 150,
+    borderRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  videoPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#D1FAE5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#10B981',
+    marginTop: 8,
+  },
+  videoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.9)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
