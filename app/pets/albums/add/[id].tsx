@@ -509,14 +509,18 @@ export default function AddPhoto() {
             .single();
           
           const albumId = createdAlbum?.id;
-          
+
+          // Separate images and videos for the post
+          const onlyImages = mediaUrls.filter(url => !url.startsWith('VIDEO:'));
+          const firstMedia = onlyImages.length > 0 ? onlyImages[0] : mediaUrls[0].replace('VIDEO:', '');
+
           // Create post with complete author information
           const postData = {
             user_id: currentUser.id,
             pet_id: id,
             content: photoDescription || `Nuevas fotos de ${petData.name} 📸`,
-            image_url: imageUrls[0],
-            album_images: imageUrls,
+            image_url: firstMedia,
+            album_images: mediaUrls,
             type: 'album',
             album_id: albumId, // Reference to the album
             author: {
@@ -539,23 +543,43 @@ export default function AddPhoto() {
             
           if (postResult.error) {
             console.error('Error creating post:', postResult.error);
+
+            const mediaTypes = [];
+            if (selectedImages.length > 0) mediaTypes.push('fotos');
+            if (selectedVideos.length > 0) mediaTypes.push('videos');
+            const mediaText = mediaTypes.join(' y ');
+
             Alert.alert(
               'Advertencia',
-              'Las fotos se guardaron correctamente, pero no se pudo compartir en el feed. ¿Deseas intentar compartir manualmente más tarde?',
+              `Las ${mediaText} se guardaron correctamente, pero no se pudo compartir en el feed. ¿Deseas intentar compartir manualmente más tarde?`,
               [{ text: 'Entendido' }]
             );
           } else {
             console.log('Post created successfully');
+
+            const mediaTypes = [];
+            if (selectedImages.length > 0) mediaTypes.push(`${selectedImages.length} foto(s)`);
+            if (selectedVideos.length > 0) mediaTypes.push(`${selectedVideos.length} video(s)`);
+            const mediaText = mediaTypes.join(' y ');
+
             Alert.alert(
               '¡Éxito!',
-              `${successMessage}\n\n📸 Las fotos también se compartieron en el feed para que otros usuarios puedan verlas.`,
+              `${successMessage}\n\n🚀 Tu álbum con ${mediaText} se ha compartido en el feed!`,
               [{ text: 'Perfecto' }]
             );
           }
         }
       } else {
         // Si no se comparte, solo mostrar mensaje de éxito normal
-        Alert.alert('¡Éxito!', successMessage);
+        const mediaTypes = [];
+        if (selectedImages.length > 0) mediaTypes.push(`${selectedImages.length} foto(s)`);
+        if (selectedVideos.length > 0) mediaTypes.push(`${selectedVideos.length} video(s)`);
+        const mediaText = mediaTypes.join(' y ');
+
+        Alert.alert(
+          '¡Éxito!',
+          `${successMessage}\n\n📸 Tu álbum con ${mediaText} está listo!`
+        );
       }
 
       router.push({
