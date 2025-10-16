@@ -51,7 +51,7 @@ export default function Services() {
       const [partnersResult, servicesResult] = await Promise.all([
         supabaseClient
           .from('partners')
-          .select('id, business_name, address, logo, business_type, rating, reviews_count')
+          .select('id, business_name, address, phone, logo, business_type, rating, reviews_count')
           .eq('is_verified', true)
           .eq('is_active', true)
           .order('created_at', { ascending: false }),
@@ -95,6 +95,7 @@ export default function Services() {
                 partnerId: partner.id,
                 partnerName: partner.business_name,
                 partnerAddress: partner.address,
+                partnerPhone: partner.phone,
                 partnerLogo: partner.logo,
                 partnerType: partner.business_type,
                 rating: partner.rating || 0,
@@ -118,6 +119,7 @@ export default function Services() {
                 partnerId: partner.id,
                 partnerName: partner.business_name,
                 partnerAddress: partner.address,
+                partnerPhone: partner.phone,
                 partnerLogo: partner.logo,
                 partnerType: partner.business_type,
                 rating: partner.rating || 0,
@@ -224,6 +226,27 @@ export default function Services() {
       default:
         return <Star size={28} color="#FFFFFF" strokeWidth={2.5} />;
     }
+  };
+
+  const getServiceImage = (item: any) => {
+    // Primero intentar cargar imagen del servicio
+    if (item.serviceImages && item.serviceImages.length > 0) {
+      return item.serviceImages[0];
+    }
+    if (item.images && item.images.length > 0) {
+      return item.images[0];
+    }
+
+    // Fallback: imágenes de Pexels según el tipo de negocio
+    const fallbackImages = {
+      veterinary: 'https://images.pexels.com/photos/6235086/pexels-photo-6235086.jpeg?auto=compress&cs=tinysrgb&w=600',
+      grooming: 'https://images.pexels.com/photos/6816858/pexels-photo-6816858.jpeg?auto=compress&cs=tinysrgb&w=600',
+      boarding: 'https://images.pexels.com/photos/7210704/pexels-photo-7210704.jpeg?auto=compress&cs=tinysrgb&w=600',
+      walking: 'https://images.pexels.com/photos/2253275/pexels-photo-2253275.jpeg?auto=compress&cs=tinysrgb&w=600',
+      shelter: 'https://images.pexels.com/photos/4498185/pexels-photo-4498185.jpeg?auto=compress&cs=tinysrgb&w=600',
+    };
+
+    return fallbackImages[item.partnerType as keyof typeof fallbackImages] || fallbackImages.veterinary;
   };
 
   const getFilteredPartners = () => {
@@ -358,15 +381,11 @@ export default function Services() {
                   >
                     {/* Image Background */}
                     <View style={styles.cardImageContainer}>
-                      {item.firstServiceImage ? (
-                        <Image
-                          source={{ uri: item.firstServiceImage }}
-                          style={styles.cardImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={styles.cardImagePlaceholder} />
-                      )}
+                      <Image
+                        source={{ uri: getServiceImage(item) }}
+                        style={styles.cardImage}
+                        resizeMode="cover"
+                      />
 
                       {/* Dark overlay for better text readability */}
                       <View style={styles.darkOverlay} />
@@ -393,7 +412,7 @@ export default function Services() {
                       {/* Business Name on Image */}
                       <View style={styles.businessNameContainer}>
                         <Text style={styles.businessNameText} numberOfLines={2}>
-                          {item.businessName}
+                          {item.partnerName}
                         </Text>
                         <View style={styles.typeTagInline}>
                           <Text style={styles.typeTagText}>
@@ -406,10 +425,10 @@ export default function Services() {
                       </View>
 
                       {/* Price Badge */}
-                      {item.firstServicePrice && (
+                      {item.price && (
                         <View style={styles.priceBadge}>
                           <Text style={styles.priceBadgeText}>
-                            ${item.firstServicePrice.toLocaleString()}
+                            ${item.price.toLocaleString()}
                           </Text>
                         </View>
                       )}
@@ -418,16 +437,25 @@ export default function Services() {
 
                   {/* Bottom Content */}
                   <View style={styles.cardBottomContent}>
-                    {item.address && (
-                      <View style={styles.addressRow}>
-                        <MapPin size={13} color="#6B7280" strokeWidth={2} />
-                        <Text style={styles.addressText} numberOfLines={1}>
-                          {item.address}
+                    {item.partnerPhone && (
+                      <View style={styles.infoRow}>
+                        <Phone size={13} color="#6B7280" strokeWidth={2} />
+                        <Text style={styles.infoText} numberOfLines={1}>
+                          {item.partnerPhone}
                         </Text>
                       </View>
                     )}
 
-                    {(item.rating || item.reviewsCount >= 0) && (
+                    {item.partnerAddress && (
+                      <View style={styles.infoRow}>
+                        <MapPin size={13} color="#6B7280" strokeWidth={2} />
+                        <Text style={styles.infoText} numberOfLines={1}>
+                          {item.partnerAddress}
+                        </Text>
+                      </View>
+                    )}
+
+                    {(item.rating || item.reviews >= 0) && (
                       <TouchableOpacity
                         style={styles.ratingRow}
                         onPress={() => handleRatingPress(item)}
@@ -438,7 +466,7 @@ export default function Services() {
                           {item.rating?.toFixed(1) || '5.0'}
                         </Text>
                         <Text style={styles.ratingCount}>
-                          ({item.reviewsCount || 0} reseñas)
+                          ({item.reviews || 0})
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -568,7 +596,7 @@ const styles = StyleSheet.create({
   cardImagePlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#2D6A6F',
+    backgroundColor: '#E5E7EB',
   },
   darkOverlay: {
     position: 'absolute',
@@ -659,14 +687,14 @@ const styles = StyleSheet.create({
   cardBottomContent: {
     padding: 12,
     backgroundColor: '#FFFFFF',
+    gap: 6,
   },
-  addressRow: {
+  infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
   },
-  addressText: {
-    fontSize: 12,
+  infoText: {
+    fontSize: 11,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     marginLeft: 6,
@@ -675,11 +703,12 @@ const styles = StyleSheet.create({
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
     backgroundColor: '#FEF3C7',
     borderRadius: 8,
     alignSelf: 'flex-start',
+    marginTop: 4,
   },
   ratingValue: {
     fontSize: 13,
