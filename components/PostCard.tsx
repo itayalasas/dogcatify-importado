@@ -770,14 +770,14 @@ const PostCard: React.FC<PostCardProps> = ({
               {post.albumImages.map((mediaUrl: string, index: number) => {
                 const isVideo = isVideoUrl(mediaUrl);
                 const cleanUrl = getCleanUrl(mediaUrl);
-                const isNearCurrent = Math.abs(index - currentImageIndex) <= 1;
+                const isCurrent = index === currentImageIndex;
 
                 return (
                   <View
                     key={index}
                     style={styles.albumImageWrapper}
                   >
-                    {isVideo && isNearCurrent ? (
+                    {isVideo && isCurrent ? (
                       <VideoPlayer
                         videoRef={(ref) => {
                           videoRefs.current[index] = ref;
