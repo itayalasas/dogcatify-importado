@@ -709,9 +709,9 @@ export default function AddPhoto() {
           <Button
             title="Guardar en Álbum"
             onPress={handleSavePhotos}
-            loading={loading || validatingImages}
+            loading={loading || validatingImages || validatingVideo}
             size="large"
-            disabled={selectedImages.length === 0 || validatingImages}
+            disabled={(selectedImages.length === 0 && selectedVideos.length === 0) || validatingImages || validatingVideo}
           />
         </Card>
       </ScrollView>
