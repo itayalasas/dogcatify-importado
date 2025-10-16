@@ -1,28 +1,107 @@
 import React from 'react';
-import { TextInput, View, Text, StyleSheet, ViewStyle, TextInputProps } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ViewStyle, TextStyle } from 'react-native';
+import { Eye, EyeOff } from 'lucide-react-native';
 
-interface InputProps extends TextInputProps {
+interface InputProps {
   label?: string;
-  error?: string;
-  containerStyle?: ViewStyle;
+  placeholder?: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
+  keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad';
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  multiline?: boolean;
+  numberOfLines?: number;
+  editable?: boolean;
+  style?: ViewStyle;
+  secureTextEntry?: boolean;
+  showPasswordToggle?: boolean;
+  isPasswordVisible?: boolean;
+  onTogglePasswordVisibility?: () => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
 }
 
 export const Input: React.FC<InputProps> = ({
   label,
-  error,
-  containerStyle,
+  placeholder,
+  value,
+  onChangeText,
+  leftIcon,
+  rightIcon,
+  keyboardType = 'default',
+  autoCapitalize = 'sentences',
+  multiline = false,
+  numberOfLines = 1,
+  editable = true,
   style,
-  ...props
+  secureTextEntry = false,
+  showPasswordToggle = false,
+  isPasswordVisible = false,
+  onTogglePasswordVisibility,
+  onFocus,
+  onBlur,
 }) => {
+  const inputStyle: TextStyle[] = [
+    styles.input,
+    leftIcon && styles.inputWithLeftIcon,
+    (rightIcon || showPasswordToggle) && styles.inputWithRightIcon,
+    multiline && styles.multilineInput,
+    !editable && styles.disabledInput,
+    style,
+  ];
+
+  const containerStyle: ViewStyle[] = [
+    styles.container,
+    !editable && styles.disabledContainer,
+  ];
+
   return (
-    <View style={[styles.container, containerStyle]}>
+    <View style={containerStyle}>
       {label && <Text style={styles.label}>{label}</Text>}
-      <TextInput
-        style={[styles.input, error && styles.inputError, style]}
-        placeholderTextColor="#999999"
-        {...props}
-      />
-      {error && <Text style={styles.errorText}>{error}</Text>}
+      <View style={styles.inputContainer}>
+        {leftIcon && (
+          <View style={styles.leftIconContainer}>
+            {leftIcon}
+          </View>
+        )}
+        
+        <TextInput
+          style={inputStyle}
+          placeholder={placeholder}
+          placeholderTextColor="#9CA3AF"
+          value={value}
+          onChangeText={onChangeText}
+          keyboardType={keyboardType}
+          autoCapitalize={autoCapitalize}
+          multiline={multiline}
+          numberOfLines={numberOfLines}
+          editable={editable}
+          secureTextEntry={secureTextEntry}
+          onFocus={onFocus}
+          onBlur={onBlur}
+        />
+        
+        {showPasswordToggle && (
+          <TouchableOpacity
+            style={styles.rightIconContainer}
+            onPress={onTogglePasswordVisibility}
+          >
+            {isPasswordVisible ? (
+              <EyeOff size={20} color="#6B7280" />
+            ) : (
+              <Eye size={20} color="#6B7280" />
+            )}
+          </TouchableOpacity>
+        )}
+        
+        {rightIcon && !showPasswordToggle && (
+          <View style={styles.rightIconContainer}>
+            {rightIcon}
+          </View>
+        )}
+      </View>
     </View>
   );
 };
@@ -31,28 +110,55 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: 16,
   },
+  disabledContainer: {
+    opacity: 0.6,
+  },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333333',
-    marginBottom: 8,
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  inputContainer: {
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#DDDDDD',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
+    flex: 1,
     backgroundColor: '#FFFFFF',
-    color: '#000000',
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    minHeight: 50,
   },
-  inputError: {
-    borderColor: '#FF3B30',
+  inputWithLeftIcon: {
+    paddingLeft: 48,
   },
-  errorText: {
-    fontSize: 12,
-    color: '#FF3B30',
-    marginTop: 4,
+  inputWithRightIcon: {
+    paddingRight: 48,
+  },
+  multilineInput: {
+    textAlignVertical: 'top',
+    paddingTop: 14,
+  },
+  disabledInput: {
+    backgroundColor: '#F9FAFB',
+    color: '#9CA3AF',
+  },
+  leftIconContainer: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 1,
+  },
+  rightIconContainer: {
+    position: 'absolute',
+    right: 16,
+    zIndex: 1,
   },
 });
