@@ -283,6 +283,11 @@ export default function AddPhoto() {
       
       console.log(`Successfully uploaded ${imageUrls.length} of ${selectedImages.length} images`);
 
+      // Prepare success message
+      const successMessage = imageUrls.length === selectedImages.length
+        ? `Se guardaron exitosamente ${imageUrls.length} foto(s) en el álbum`
+        : `Se guardaron ${imageUrls.length} de ${selectedImages.length} foto(s). Algunas imágenes no se pudieron subir.`;
+
       console.log('Saving album to database...');
       // Save album to database
       const albumResult = await supabaseClient
