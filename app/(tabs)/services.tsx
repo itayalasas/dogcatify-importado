@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, LogBox, TextInput, Image, Dimensions } from 'react-native';
-import { Search, MapPin, Star, Phone } from 'lucide-react-native';
+import { Search, MapPin, Star, Phone, Stethoscope, Scissors, Home, Dog } from 'lucide-react-native';
 import { FlatList } from 'react-native';
 import { ServiceCard } from '../../components/ServiceCard'; 
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -186,23 +186,44 @@ export default function Services() {
   }, []);
 
   const handlePartnerPress = (partnerId: string) => {
-    // Validate partner ID before navigation
     if (!partnerId || typeof partnerId !== 'string') {
       console.error('Invalid partner ID for navigation:', partnerId);
       Alert.alert('Error', 'ID de partner inválido');
       return;
     }
-    
-    // Check if ID is a valid UUID format
+
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(partnerId)) {
       console.error('Partner ID is not a valid UUID for navigation:', partnerId);
       Alert.alert('Error', 'ID de partner no válido');
       return;
     }
-    
+
     console.log('Navigating to partner with valid UUID:', partnerId);
     router.push(`/services/partner/${partnerId}`);
+  };
+
+  const handleRatingPress = (item: any) => {
+    if (item.reviewsCount > 0) {
+      router.push(`/services/partner/${item.partnerId}?tab=reviews`);
+    } else {
+      Alert.alert('Sin reseñas', 'Este negocio aún no tiene reseñas.');
+    }
+  };
+
+  const getDefaultIcon = (businessType: string) => {
+    switch(businessType) {
+      case 'veterinary':
+        return <Stethoscope size={28} color="#FFFFFF" strokeWidth={2.5} />;
+      case 'grooming':
+        return <Scissors size={28} color="#FFFFFF" strokeWidth={2.5} />;
+      case 'boarding':
+        return <Home size={28} color="#FFFFFF" strokeWidth={2.5} />;
+      case 'walking':
+        return <Dog size={28} color="#FFFFFF" strokeWidth={2.5} />;
+      default:
+        return <Star size={28} color="#FFFFFF" strokeWidth={2.5} />;
+    }
   };
 
   const getFilteredPartners = () => {
@@ -330,101 +351,99 @@ export default function Services() {
           {!loading && !error && currentUser && filteredPartners.length > 0 && (
             <View style={styles.gridContainer}>
               {filteredPartners.map((item) => (
-                <TouchableOpacity
-                  key={item.partnerId}
-                  style={styles.gridCard}
-                  onPress={() => handlePartnerPress(item.partnerId)}
-                  activeOpacity={0.7}
-                >
-                  {/* Image */}
-                  <View style={styles.cardImageContainer}>
-                    {item.firstServiceImage ? (
-                      <Image
-                        source={{ uri: item.firstServiceImage }}
-                        style={styles.cardImage}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={styles.cardImagePlaceholder}>
-                        <View style={styles.noImageOverlay}>
-                          <Text style={styles.noImageText}>Sin foto</Text>
+                <View key={item.partnerId} style={styles.gridCard}>
+                  <TouchableOpacity
+                    onPress={() => handlePartnerPress(item.partnerId)}
+                    activeOpacity={0.9}
+                  >
+                    {/* Image Background */}
+                    <View style={styles.cardImageContainer}>
+                      {item.firstServiceImage ? (
+                        <Image
+                          source={{ uri: item.firstServiceImage }}
+                          style={styles.cardImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.cardImagePlaceholder} />
+                      )}
+
+                      {/* Dark overlay for better text readability */}
+                      <View style={styles.darkOverlay} />
+
+                      {/* Logo Badge */}
+                      <View style={styles.logoContainer}>
+                        {item.partnerLogo ? (
+                          <View style={styles.logoBadge}>
+                            <Image
+                              source={{ uri: item.partnerLogo }}
+                              style={styles.logoBadgeImage}
+                              resizeMode="cover"
+                            />
+                          </View>
+                        ) : (
+                          <View style={styles.logoBadge}>
+                            <View style={styles.logoPlaceholder}>
+                              {getDefaultIcon(item.partnerType)}
+                            </View>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Business Name on Image */}
+                      <View style={styles.businessNameContainer}>
+                        <Text style={styles.businessNameText} numberOfLines={2}>
+                          {item.businessName}
+                        </Text>
+                        <View style={styles.typeTagInline}>
+                          <Text style={styles.typeTagText}>
+                            {item.partnerType === 'veterinary' ? 'Veterinaria' :
+                             item.partnerType === 'grooming' ? 'Peluquería' :
+                             item.partnerType === 'boarding' ? 'Pensión' :
+                             item.partnerType === 'walking' ? 'Paseo' : 'Servicio'}
+                          </Text>
                         </View>
                       </View>
-                    )}
 
-                    {/* Gradient Overlay for better logo visibility */}
-                    <View style={styles.imageGradient} />
-
-                    {/* Logo Badge - Facebook style */}
-                    <View style={styles.logoContainer}>
-                      {item.partnerLogo ? (
-                        <View style={styles.logoBadge}>
-                          <Image
-                            source={{ uri: item.partnerLogo }}
-                            style={styles.logoBadgeImage}
-                            resizeMode="cover"
-                          />
-                        </View>
-                      ) : (
-                        <View style={styles.logoBadge}>
-                          <View style={styles.logoPlaceholder}>
-                            <Text style={styles.logoPlaceholderText}>
-                              {item.businessName?.charAt(0).toUpperCase()}
-                            </Text>
-                          </View>
+                      {/* Price Badge */}
+                      {item.firstServicePrice && (
+                        <View style={styles.priceBadge}>
+                          <Text style={styles.priceBadgeText}>
+                            ${item.firstServicePrice.toLocaleString()}
+                          </Text>
                         </View>
                       )}
                     </View>
+                  </TouchableOpacity>
 
-                    {/* Price Badge */}
-                    {item.firstServicePrice && (
-                      <View style={styles.priceBadge}>
-                        <Text style={styles.priceBadgeText}>
-                          $ {item.firstServicePrice.toLocaleString()}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-
-                  {/* Content */}
-                  <View style={styles.cardContent}>
-                    <Text style={styles.cardTitle} numberOfLines={1}>
-                      {item.businessName}
-                    </Text>
-
-                    <View style={styles.cardTypeContainer}>
-                      <View style={styles.typeBadge}>
-                        <Text style={styles.typeBadgeText}>
-                          {item.partnerType === 'veterinary' ? 'Veterinaria' :
-                           item.partnerType === 'grooming' ? 'Peluquería' :
-                           item.partnerType === 'boarding' ? 'Pensión' :
-                           item.partnerType === 'walking' ? 'Paseo' : 'Servicio'}
-                        </Text>
-                      </View>
-                    </View>
-
+                  {/* Bottom Content */}
+                  <View style={styles.cardBottomContent}>
                     {item.address && (
-                      <View style={styles.cardInfoRow}>
-                        <MapPin size={12} color="#6B7280" />
-                        <Text style={styles.cardInfoText} numberOfLines={1}>
+                      <View style={styles.addressRow}>
+                        <MapPin size={13} color="#6B7280" strokeWidth={2} />
+                        <Text style={styles.addressText} numberOfLines={1}>
                           {item.address}
                         </Text>
                       </View>
                     )}
 
-                    {(item.rating || item.reviewsCount > 0) && (
-                      <View style={styles.cardInfoRow}>
-                        <Star size={12} color="#F59E0B" fill="#F59E0B" />
-                        <Text style={styles.cardRatingText}>
+                    {(item.rating || item.reviewsCount >= 0) && (
+                      <TouchableOpacity
+                        style={styles.ratingRow}
+                        onPress={() => handleRatingPress(item)}
+                        activeOpacity={0.7}
+                      >
+                        <Star size={14} color="#F59E0B" fill="#F59E0B" strokeWidth={2} />
+                        <Text style={styles.ratingValue}>
                           {item.rating?.toFixed(1) || '5.0'}
                         </Text>
-                        <Text style={styles.cardReviewsText}>
-                          ({item.reviewsCount || 0})
+                        <Text style={styles.ratingCount}>
+                          ({item.reviewsCount || 0} reseñas)
                         </Text>
-                      </View>
+                      </TouchableOpacity>
                     )}
                   </View>
-                </TouchableOpacity>
+                </View>
               ))}
               {renderFooter()}
             </View>
@@ -531,15 +550,15 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 4,
     overflow: 'hidden',
   },
   cardImageContainer: {
     width: '100%',
-    height: 140,
+    height: 180,
     position: 'relative',
   },
   cardImage: {
@@ -549,47 +568,35 @@ const styles = StyleSheet.create({
   cardImagePlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#2D6A6F',
   },
-  noImageOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(107, 114, 128, 0.1)',
-  },
-  noImageText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#9CA3AF',
-  },
-  imageGradient: {
+  darkOverlay: {
     position: 'absolute',
-    bottom: 0,
+    top: 0,
     left: 0,
     right: 0,
-    height: 60,
-    backgroundColor: 'transparent',
-    backgroundImage: 'linear-gradient(to top, rgba(0,0,0,0.3), transparent)',
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
   },
   logoContainer: {
     position: 'absolute',
-    bottom: -20,
+    top: 12,
     left: 12,
     zIndex: 10,
   },
   logoBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: '#FFFFFF',
     borderWidth: 3,
     borderColor: '#FFFFFF',
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 6,
-    elevation: 5,
+    elevation: 6,
   },
   logoBadgeImage: {
     width: '100%',
@@ -602,79 +609,89 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  logoPlaceholderText: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
-  },
-  priceBadge: {
+  businessNameContainer: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: '#10B981',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
+    bottom: 12,
+    left: 12,
+    right: 12,
+    zIndex: 5,
   },
-  priceBadgeText: {
-    fontSize: 12,
+  businessNameText: {
+    fontSize: 16,
     fontFamily: 'Inter-Bold',
     color: '#FFFFFF',
+    marginBottom: 4,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
-  cardContent: {
-    paddingTop: 28,
-    paddingHorizontal: 12,
-    paddingBottom: 12,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 6,
-  },
-  cardTypeContainer: {
-    marginBottom: 8,
-  },
-  typeBadge: {
-    backgroundColor: '#EFF6FF',
+  typeTagInline: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
     alignSelf: 'flex-start',
   },
-  typeBadgeText: {
-    fontSize: 11,
+  typeTagText: {
+    fontSize: 10,
     fontFamily: 'Inter-SemiBold',
-    color: '#3B82F6',
+    color: '#2D6A6F',
   },
-  cardInfoRow: {
+  priceBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: '#10B981',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  priceBadgeText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+  },
+  cardBottomContent: {
+    padding: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  addressRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    marginBottom: 8,
   },
-  cardInfoText: {
-    fontSize: 11,
+  addressText: {
+    fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
-    marginLeft: 4,
+    marginLeft: 6,
     flex: 1,
   },
-  cardRatingText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  ratingValue: {
+    fontSize: 13,
+    fontFamily: 'Inter-Bold',
+    color: '#92400E',
     marginLeft: 4,
   },
-  cardReviewsText: {
+  ratingCount: {
     fontSize: 11,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 2,
+    color: '#92400E',
+    marginLeft: 4,
   },
   loadingContainer: {
     flex: 1,
