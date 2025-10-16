@@ -45,19 +45,7 @@ export default function PartnerServices() {
     }
   }, [partner]);
 
-  // Auto-navigate if only one service available
-  useEffect(() => {
-    if (services.length === 1 && partner?.business_type !== 'shelter') {
-      console.log('Only one service available, navigating directly...');
-      const service = services[0];
-      if (service.id) {
-        // Small delay to ensure smooth navigation
-        setTimeout(() => {
-          handleServicePress(service.id);
-        }, 300);
-      }
-    }
-  }, [services, partner]);
+  // Removed auto-navigation - User should manually select service even if only one is available
 
   useEffect(() => {
     if (searchQuery.trim()) {
