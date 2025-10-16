@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, MapPin, Clock, Phone, Calendar, Star, User } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { LoadingScreen } from '../../components/ui/LoadingScreen';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
@@ -449,11 +450,7 @@ export default function ServiceDetail() {
   };
 
   if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <LoadingSpinner message="Cargando detalles del servicio..." />
-      </SafeAreaView>
-    );
+    return <LoadingScreen message="Cargando detalles del servicio..." />;
   }
 
   if (!service) {
@@ -699,9 +696,7 @@ export default function ServiceDetail() {
             </View>
             
             {loadingPets ? (
-              <View style={styles.loadingPetsContainer}>
-                <Text style={styles.loadingPetsText}>Cargando mascotas...</Text>
-              </View>
+              <LoadingSpinner message="Cargando mascotas..." />
             ) : userPets.length === 0 ? (
               <View style={styles.noPetsContainer}>
                 <Text style={styles.noPetsTitle}>No tienes mascotas registradas</Text>
@@ -1170,15 +1165,6 @@ const styles = StyleSheet.create({
   },
   modalCloseText: {
     fontSize: 18,
-    color: '#6B7280',
-  },
-  loadingPetsContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  loadingPetsText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
     color: '#6B7280',
   },
   noPetsContainer: {
