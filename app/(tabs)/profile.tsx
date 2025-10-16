@@ -16,7 +16,7 @@ import { supabaseClient } from '../../lib/supabase';
 export default function Profile() {
   const { currentUser, logout } = useAuth();
   const { t, language, setLanguage } = useLanguage();
-  const { expoPushToken, registerForPushNotifications } = useNotifications();
+  const { expoPushToken, notificationsEnabled, registerForPushNotifications, disableNotifications } = useNotifications();
   const { 
     isBiometricSupported, 
     isBiometricEnabled, 
@@ -34,13 +34,11 @@ export default function Profile() {
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
-  
+
   // Computed values for notifications
   const isExpoGo = Constants.appOwnership === 'expo';
   const isPhysicalDevice = Device.isDevice;
-  const hasNotificationToken = !!expoPushToken;
   const notificationsSupported = !isExpoGo && isPhysicalDevice;
-  const notificationsEnabled = notificationsSupported && hasNotificationToken;
 
   useEffect(() => {
     if (currentUser) {
@@ -354,50 +352,45 @@ export default function Profile() {
 
   const handleToggleNotifications = async () => {
     try {
-      if (Constants.appOwnership === 'expo') {
-        Alert.alert(
-          'No disponible en Expo Go',
-          'Las notificaciones push no están disponibles en Expo Go. Necesitas una build de desarrollo o producción.',
-          [{ text: 'Entendido' }]
-        );
-        return;
-      }
+      if (!notificationsSupported) {
+        const message = isExpoGo
+          ? 'Las notificaciones push no están disponibles en Expo Go. Necesitas instalar una build de desarrollo o producción para usar esta función.'
+          : 'Las notificaciones push solo funcionan en dispositivos físicos, no en simuladores.';
 
-      if (!Device.isDevice) {
-        Alert.alert(
-          'Dispositivo no compatible',
-          'Las notificaciones push solo funcionan en dispositivos físicos, no en simuladores.',
-          [{ text: 'Entendido' }]
-        );
+        Alert.alert('No disponible', message, [{ text: 'Entendido' }]);
         return;
       }
 
       if (notificationsEnabled) {
-        // Notificaciones ya habilitadas - mostrar opciones
+        // Deshabilitar notificaciones
         Alert.alert(
-          'Notificaciones Habilitadas ✅',
-          `Las notificaciones push están funcionando correctamente.\n\n📱 Token configurado\n🔔 Permisos concedidos\n\n¿Qué quieres hacer?`,
+          'Deshabilitar Notificaciones',
+          '¿Estás seguro de que quieres deshabilitar las notificaciones push? Ya no recibirás actualizaciones sobre reservas, pedidos y mensajes.',
           [
-            { text: 'Cerrar', style: 'cancel' },
-            { 
-              text: 'Probar Notificación', 
-              onPress: () => testPushNotification()
-            },
+            { text: 'Cancelar', style: 'cancel' },
             {
-              text: 'Ver Detalles',
-              onPress: () => showNotificationDetails()
+              text: 'Deshabilitar',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await disableNotifications();
+                  Alert.alert('Deshabilitadas', 'Las notificaciones push han sido deshabilitadas correctamente.');
+                } catch (error: any) {
+                  Alert.alert('Error', error.message || 'No se pudieron deshabilitar las notificaciones');
+                }
+              }
             }
           ]
         );
       } else {
-        // Intentar habilitar notificaciones
+        // Habilitar notificaciones
         Alert.alert(
           'Habilitar Notificaciones',
           '¿Quieres habilitar las notificaciones push para recibir actualizaciones importantes sobre reservas, pedidos y mensajes?',
           [
             { text: 'Cancelar', style: 'cancel' },
-            { 
-              text: 'Habilitar', 
+            {
+              text: 'Habilitar',
               onPress: () => enableNotifications()
             }
           ]
@@ -427,35 +420,31 @@ export default function Profile() {
     setNotificationsLoading(true);
     try {
       console.log('🔔 Attempting to enable notifications...');
-      
+
       const token = await registerForPushNotifications();
-      
+
       if (token) {
         console.log('✅ Notifications enabled successfully');
         Alert.alert(
           '¡Notificaciones Habilitadas! 🎉',
-          `✅ Las notificaciones push han sido configuradas correctamente.\n\n📱 Ahora recibirás notificaciones sobre:\n• Reservas confirmadas\n• Pedidos actualizados\n• Mensajes de adopción\n• Recordatorios médicos\n\n¿Quieres probar enviando una notificación?`,
-          [
-            { text: 'Más tarde', style: 'cancel' },
-            { 
-              text: 'Probar Ahora', 
-              onPress: () => testPushNotification()
-            }
-          ]
-        );
-      } else {
-        console.log('❌ Failed to get notification token');
-        Alert.alert(
-          'No se pudieron habilitar',
-          'Las notificaciones no se pudieron configurar.\n\nPosibles causas:\n• Permisos denegados por el usuario\n• Error de configuración del proyecto\n• Problema de conectividad\n\nPuedes intentar habilitarlas desde la configuración del dispositivo o contactar soporte.',
-          [{ text: 'Entendido' }]
+          'Las notificaciones push han sido configuradas correctamente.\n\nAhora recibirás actualizaciones sobre:\n• Reservas confirmadas\n• Pedidos actualizados\n• Mensajes de adopción\n• Recordatorios médicos\n• Ofertas especiales',
+          [{ text: 'Perfecto' }]
         );
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error enabling notifications:', error);
+
+      let errorMessage = 'No se pudieron configurar las notificaciones.';
+      let suggestions = '\n\nPuedes intentar:\n• Verificar permisos en configuración\n• Reiniciar la app\n• Contactar soporte si persiste';
+
+      if (error.message) {
+        errorMessage = error.message;
+        suggestions = '';
+      }
+
       Alert.alert(
-        'Error al Habilitar',
-        `Hubo un problema técnico al habilitar las notificaciones.\n\nError: ${error.message || 'Desconocido'}\n\nPuedes intentar:\n• Verificar permisos en configuración\n• Reiniciar la app\n• Contactar soporte si persiste`,
+        'No se pudieron habilitar',
+        errorMessage + suggestions,
         [{ text: 'Entendido' }]
       );
     } finally {
@@ -713,14 +702,13 @@ export default function Profile() {
               <View style={styles.notificationInfo}>
                 <Text style={styles.notificationTitle}>Notificaciones Push v2</Text>
                 <Text style={styles.notificationDescription}>
-                  {notificationsEnabled ? 
-                    '🔔 Habilita para recibir actualizaciones importantes' :
-                    notificationsSupported ?
-                      '🔔 Habilita para recibir notificaciones' :
-                      isExpoGo ? 
-                        '❌ No disponible en Expo Go' :
-                        '❌ Dispositivo no compatible'
-                  }
+                  {notificationsEnabled
+                    ? '🔔 Habilita para recibir notificaciones'
+                    : notificationsSupported
+                    ? '🔔 Habilita para recibir notificaciones'
+                    : isExpoGo
+                    ? '❌ No disponible en Expo Go'
+                    : '❌ Dispositivo no compatible'}
                 </Text>
               </View>
               <TouchableOpacity
