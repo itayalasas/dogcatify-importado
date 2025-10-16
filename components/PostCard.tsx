@@ -517,18 +517,37 @@ const PostCard: React.FC<PostCardProps> = ({
   };
 
   const toggleVideoPlayback = async (index: number) => {
+    console.log('🎬 toggleVideoPlayback called for index:', index);
     const videoRef = videoRefs.current[index];
+    console.log('🎬 videoRef:', videoRef ? 'exists' : 'null');
+
     if (videoRef) {
-      const status = await videoRef.getStatusAsync();
-      if (status.isLoaded) {
-        if (status.isPlaying) {
-          await videoRef.pauseAsync();
-          setIsVideoPlaying(false);
+      try {
+        const status = await videoRef.getStatusAsync();
+        console.log('🎬 Video status:', {
+          isLoaded: status.isLoaded,
+          isPlaying: status.isPlaying,
+          uri: status.isLoaded ? status.uri : 'not loaded'
+        });
+
+        if (status.isLoaded) {
+          if (status.isPlaying) {
+            await videoRef.pauseAsync();
+            setIsVideoPlaying(false);
+            console.log('⏸️ Video paused');
+          } else {
+            await videoRef.playAsync();
+            setIsVideoPlaying(true);
+            console.log('▶️ Video playing');
+          }
         } else {
-          await videoRef.playAsync();
-          setIsVideoPlaying(true);
+          console.log('⚠️ Video not loaded yet');
         }
+      } catch (error) {
+        console.error('❌ Error toggling video playback:', error);
       }
+    } else {
+      console.log('⚠️ No video ref found for index:', index);
     }
   };
 
@@ -695,6 +714,7 @@ const PostCard: React.FC<PostCardProps> = ({
                         <Video
                           ref={(ref) => {
                             videoRefs.current[index] = ref;
+                            console.log(`🎥 Video ref set for index ${index}:`, ref ? 'exists' : 'null');
                           }}
                           source={{ uri: cleanUrl }}
                           style={styles.albumMainImage}
@@ -709,7 +729,13 @@ const PostCard: React.FC<PostCardProps> = ({
                             }
                           }}
                           onReadyForDisplay={() => {
-                            console.log('Video ready for display in album');
+                            console.log(`✅ Video ready for display in album at index ${index}, URL:`, cleanUrl);
+                          }}
+                          onError={(error) => {
+                            console.error(`❌ Video error at index ${index}:`, error);
+                          }}
+                          onLoad={(data) => {
+                            console.log(`📼 Video loaded at index ${index}:`, data);
                           }}
                         />
                         <View style={styles.videoOverlay}>
