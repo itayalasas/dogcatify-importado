@@ -123,21 +123,17 @@ export default function Login() {
       // Only attempt once and if biometric is enabled
       if (!biometricAttempted && isBiometricEnabled && isBiometricSupported) {
         setBiometricAttempted(true);
-        console.log('Auto-attempting biometric login...');
         
         try {
           const credentials = await authenticateWithBiometric();
           if (credentials) {
-            console.log('Biometric authentication successful, logging in...');
             setEmail(credentials.email);
             setPassword(credentials.password);
             // Auto-login with biometric credentials
             await handleLogin(credentials.email, credentials.password);
           } else {
-            console.log('Biometric authentication cancelled or failed');
           }
         } catch (error) {
-          console.log('Biometric authentication error:', error);
           // If biometric fails, just continue with normal login
         }
       }
@@ -171,11 +167,9 @@ export default function Login() {
           setEmail(savedEmail);
           setPassword(savedPassword);
           setRememberCredentials(true);
-          console.log('Loaded saved credentials for:', savedEmail);
         }
       }
     } catch (error) {
-      console.error('Error loading saved credentials:', error);
     }
   };
 
@@ -183,18 +177,14 @@ export default function Login() {
     try {
       const credentials = { email, password };
       await AsyncStorage.setItem(SAVED_CREDENTIALS_KEY, JSON.stringify(credentials));
-      console.log('Credentials saved successfully');
     } catch (error) {
-      console.error('Error saving credentials:', error);
     }
   };
 
   const clearSavedCredentials = async () => {
     try {
       await AsyncStorage.removeItem(SAVED_CREDENTIALS_KEY);
-      console.log('Saved credentials cleared');
     } catch (error) {
-      console.error('Error clearing saved credentials:', error);
     }
   };
 
@@ -212,11 +202,9 @@ export default function Login() {
     clearAuthError();
 
     try {
-      console.log('Attempting login with credentials:', loginEmail);
       const result = await login(loginEmail, loginPassword);
       
       if (result) {
-        console.log('Login successful');
         
         // Save credentials if user opted to remember them
         if (rememberCredentials) {
@@ -243,7 +231,6 @@ export default function Login() {
         }
       }
     } catch (error: any) {
-      console.error('Login error:', error);
       
       // Verificar si es error de email no confirmado
       if (error.message?.includes('confirmar tu correo') || error.message?.includes('Email not confirmed')) {
@@ -292,7 +279,6 @@ export default function Login() {
         Alert.alert('Error', result.error || 'No se pudo reenviar el correo');
       }
     } catch (error) {
-      console.error('Resend email error:', error);
       Alert.alert('Error', 'No se pudo reenviar el correo de confirmación');
     } finally {
       setResendingEmail(false);

@@ -135,7 +135,6 @@ const PromotionWrapper = React.memo(({ promotion, onPress, onLike }: { promotion
 
         if (error) throw error;
       } catch (error) {
-        console.error('Error incrementing promotion views:', error);
         // Si falla, remover del Set para reintentar
         viewedPromotions.delete(promotion.id);
         setHasIncrementedView(false);
@@ -206,7 +205,6 @@ export default function Home() {
         fetchPromotions();
       }, 100);
     } catch (error) {
-      console.error('Error fetching feed data:', error);
     } finally {
       setLoading(false);
       // Reduce initial loading time
@@ -218,7 +216,6 @@ export default function Home() {
 
   const fetchInitialPosts = async () => {
     try {
-      console.log('🔄 Fetching initial posts...');
       const { data: postsData, error } = await supabaseClient
         .from('posts')
         .select('*')
@@ -242,18 +239,13 @@ export default function Home() {
         type: post.type || 'single'
       })) || [];
 
-      console.log('📊 Posts data from DB:', postsData);
-      console.log('📊 Processed posts:', processedPosts);
-      console.log('📊 First post album_images:', processedPosts[0]?.albumImages);
 
       setPosts(processedPosts);
       setCurrentPage(1); // Ya cargamos la primera "página"
       setHasMorePosts(processedPosts.length === INITIAL_LOAD);
       setPostsLoaded(true);
 
-      console.log(`✅ Initial posts loaded: ${processedPosts.length}`);
     } catch (error) {
-      console.error('Error fetching posts:', error);
     } finally {
       setPostsLoaded(true);
     }
@@ -261,11 +253,9 @@ export default function Home() {
 
   const fetchMorePosts = async () => {
     if (loadingMore || !hasMorePosts || allPostsLoaded) {
-      console.log('⏭️ Skipping fetch more posts:', { loadingMore, hasMorePosts, allPostsLoaded });
       return;
     }
 
-    console.log(`🔄 Fetching more posts - Page ${currentPage + 1}...`);
     setLoadingMore(true);
     
     try {
@@ -280,7 +270,6 @@ export default function Home() {
       if (error) throw error;
 
       if (!morePosts || morePosts.length === 0) {
-        console.log('📄 No more posts to load');
         setHasMorePosts(false);
         setAllPostsLoaded(true);
         return;
@@ -307,14 +296,11 @@ export default function Home() {
       
       // Check if we got fewer posts than requested (end of data)
       if (morePosts.length < POSTS_PER_PAGE) {
-        console.log('📄 Reached end of posts');
         setHasMorePosts(false);
         setAllPostsLoaded(true);
       }
       
-      console.log(`✅ Loaded ${morePosts.length} more posts. Total: ${posts.length + processedNewPosts.length}`);
     } catch (error) {
-      console.error('Error fetching more posts:', error);
       setHasMorePosts(false);
     } finally {
       setLoadingMore(false);
@@ -323,7 +309,6 @@ export default function Home() {
 
   const fetchPromotions = async () => {
     try {
-      console.log('🎯 Fetching promotions...');
       const now = new Date();
       const nowISO = now.toISOString();
       
@@ -355,17 +340,14 @@ export default function Home() {
         discounted_price: promo.discounted_price || 0
       })) || [];
 
-      console.log(`✅ Promotions loaded: ${processedPromotions.length}`);
 
       // Debug: Log promotions with discounts
       const promotionsWithDiscount = processedPromotions.filter(p => p.discount_percentage > 0);
       if (promotionsWithDiscount.length > 0) {
-        console.log('🎁 Promotions with discount:', promotionsWithDiscount);
       }
       setPromotions(processedPromotions);
       setPromotionsLoaded(true);
     } catch (error) {
-      console.error('Error fetching promotions:', error);
     } finally {
       setPromotionsLoaded(true);
     }
@@ -376,7 +358,6 @@ export default function Home() {
     // Only process when both data sources are loaded
     if (!postsLoaded || !promotionsLoaded) return;
     
-    console.log(`🔄 Interleaving feed: ${posts.length} posts, ${promotions.length} promotions`);
     
     const interleaveFeedItems = () => {
       const items = [];
@@ -526,7 +507,6 @@ export default function Home() {
         )
       );
     } catch (error) {
-      console.error('Error updating like:', error);
       Alert.alert('Error', 'No se pudo actualizar el me gusta. Intenta nuevamente.');
     }
   };
@@ -596,29 +576,21 @@ export default function Home() {
         )
       );
     } catch (error) {
-      console.error('Error updating promotion like:', error);
       Alert.alert('Error', 'No se pudo actualizar el me gusta. Intenta nuevamente.');
     }
   };
 
   const handleComment = (postId: string, post?: any) => {
     // Navigate to comments screen or open comments modal
-    console.log('Open comments for post:', postId);
   };
 
   const handleShare = (postId: string) => {
     // Handle share functionality
-    console.log('Share post:', postId);
   };
 
   const handlePromotionPress = async (promotion: any) => {
     try {
       // Debug promotion data
-      console.log('=== Promotion Press Debug ===');
-      console.log('Promotion:', promotion);
-      console.log('Discount percentage:', promotion.discount_percentage);
-      console.log('CTA URL:', promotion.ctaUrl);
-      console.log('=========================');
 
       // Increment clicks
       const newClicksCount = (promotion.clicks || 0) + 1;
@@ -630,7 +602,6 @@ export default function Home() {
         .eq('id', promotion.id)
         .then(({ error }) => {
           if (error) {
-            console.error('Error incrementing clicks:', error);
           }
         });
       
@@ -681,7 +652,6 @@ export default function Home() {
               router.push(`/services/partner/${id}`);
               break;
             default:
-              console.warn('Unknown internal link type:', type);
           }
         } else if (promotion.ctaUrl.startsWith('http')) {
           // Handle external links

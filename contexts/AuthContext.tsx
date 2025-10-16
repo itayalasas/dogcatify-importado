@@ -48,19 +48,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       async (event, session) => {
         if (!mounted) return;
         
-        console.log('AuthContext - Auth state changed:', event, session?.user?.email || 'No user');
-        
         // Handle different auth events
         if (event === 'SIGNED_UP') {
-          console.log('AuthContext - SIGNED_UP event detected, signing out immediately');
           // Since we're not using signUp anymore, this shouldn't happen
           // But if it does, just ignore it
-          console.log('Ignoring SIGNED_UP event - using custom registration');
           return;
         }
         
         if (event === 'SIGNED_OUT' || !session) {
-          console.log('AuthContext - User signed out or session expired');
           if (!mounted) return;
           setCurrentUser(null);
           setSession(null);
@@ -211,7 +206,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (profile) {
           if (!mounted) return;
-          console.log('AuthContext - User profile loaded:', profile.display_name);
           setCurrentUser({
             id: userId,
             email: userEmail,
@@ -230,7 +224,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
         } else {
           // Create user profile if it doesn't exist
-          console.log('AuthContext - Creating new user profile for:', userEmail);
           if (!mounted) return;
           const newUser: Omit<User, 'id'> = {
             email: userEmail,
