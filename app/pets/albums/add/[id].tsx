@@ -459,12 +459,11 @@ export default function AddPhoto() {
         .from('pet_albums')
         .insert({
           pet_id: id,
-          owner_id: currentUser.id,
+          user_id: currentUser.id,
           title: photoTitle.trim() || 'Álbum sin título',
           description: photoDescription.trim() || '',
           images: mediaUrls,
-          is_shared: isShared,
-          created_at: new Date().toISOString()
+          is_shared: isShared
         });
 
       console.log('Album save result:', albumResult);
@@ -503,7 +502,7 @@ export default function AddPhoto() {
             .from('pet_albums')
             .select('id')
             .eq('pet_id', id)
-            .eq('owner_id', currentUser.id)
+            .eq('user_id', currentUser.id)
             .eq('title', photoTitle.trim() || 'Álbum sin título')
             .order('created_at', { ascending: false })
             .limit(1)
