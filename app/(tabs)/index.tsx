@@ -241,11 +241,15 @@ export default function Home() {
         type: post.type || 'single'
       })) || [];
 
+      console.log('📊 Posts data from DB:', postsData);
+      console.log('📊 Processed posts:', processedPosts);
+      console.log('📊 First post album_images:', processedPosts[0]?.albumImages);
+
       setPosts(processedPosts);
       setCurrentPage(1); // Ya cargamos la primera "página"
       setHasMorePosts(processedPosts.length === INITIAL_LOAD);
       setPostsLoaded(true);
-      
+
       console.log(`✅ Initial posts loaded: ${processedPosts.length}`);
     } catch (error) {
       console.error('Error fetching posts:', error);
