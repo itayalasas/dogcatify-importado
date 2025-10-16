@@ -41,12 +41,8 @@ const VideoPlayer = memo(({
         shouldPlay={isInViewport && isPlaying}
         isMuted={false}
         useNativeControls={false}
-        onReadyForDisplay={() => {
-          console.log(`✅ Video ready at index ${index}`);
-        }}
-        onError={(error) => {
-          console.error(`❌ Video error at index ${index}:`, error);
-        }}
+        onReadyForDisplay={() => {}}
+        onError={() => {}}
       />
       <View style={styles.videoControlsOverlay}>
         <TouchableOpacity
@@ -139,25 +135,15 @@ const PostCard: React.FC<PostCardProps> = ({
 
   // Pause all videos when post is not in viewport
   useEffect(() => {
-    const videoCount = Object.keys(videoRefs.current).length;
-    console.log(`🎬 Post ${post.id} viewport changed:`, {
-      isInViewport,
-      videoCount,
-      hasVideos: videoCount > 0
-    });
-
-    if (!isInViewport && videoCount > 0) {
-      console.log(`📴 Post ${post.id} out of viewport, pausing ${videoCount} videos`);
+    if (!isInViewport) {
       Object.values(videoRefs.current).forEach((ref) => {
         if (ref) {
-          ref.pauseAsync().catch((error) => {
-            console.log('Pause error (ignore):', error);
-          });
+          ref.pauseAsync().catch(() => {});
         }
       });
       setPlayingVideos({});
     }
-  }, [isInViewport, post.id]);
+  }, [isInViewport]);
 
   // Separate effect for modal comments
   useEffect(() => {
@@ -621,37 +607,20 @@ const PostCard: React.FC<PostCardProps> = ({
   };
 
   const toggleVideoPlayback = useCallback(async (index: number) => {
-    console.log('🎬 toggleVideoPlayback called for index:', index);
     const videoRef = videoRefs.current[index];
-    console.log('🎬 videoRef:', videoRef ? 'exists' : 'null');
-
     if (videoRef) {
       try {
         const status = await videoRef.getStatusAsync();
-        console.log('🎬 Video status:', {
-          isLoaded: status.isLoaded,
-          isPlaying: status.isPlaying,
-          uri: status.isLoaded ? status.uri : 'not loaded'
-        });
-
         if (status.isLoaded) {
           if (status.isPlaying) {
             await videoRef.pauseAsync();
             setPlayingVideos(prev => ({ ...prev, [index]: false }));
-            console.log('⏸️ Video paused');
           } else {
             await videoRef.playAsync();
             setPlayingVideos(prev => ({ ...prev, [index]: true }));
-            console.log('▶️ Video playing');
           }
-        } else {
-          console.log('⚠️ Video not loaded yet');
         }
-      } catch (error) {
-        console.error('❌ Error toggling video playback:', error);
-      }
-    } else {
-      console.log('⚠️ No video ref found for index:', index);
+      } catch (error) {}
     }
   }, []);
 
@@ -663,13 +632,9 @@ const PostCard: React.FC<PostCardProps> = ({
         const speeds = [1, 1.5, 2, 0.5];
         const currentIndex = speeds.indexOf(currentSpeed);
         const nextSpeed = speeds[(currentIndex + 1) % speeds.length];
-
         await videoRef.setRateAsync(nextSpeed, true);
         setVideoSpeeds(prev => ({ ...prev, [index]: nextSpeed }));
-        console.log(`🎛️ Video speed changed to ${nextSpeed}x`);
-      } catch (error) {
-        console.error('❌ Error changing video speed:', error);
-      }
+      } catch (error) {}
     }
   }, [videoSpeeds]);
 
@@ -805,18 +770,17 @@ const PostCard: React.FC<PostCardProps> = ({
               {post.albumImages.map((mediaUrl: string, index: number) => {
                 const isVideo = isVideoUrl(mediaUrl);
                 const cleanUrl = getCleanUrl(mediaUrl);
+                const isNearCurrent = Math.abs(index - currentImageIndex) <= 1;
 
                 return (
                   <View
                     key={index}
                     style={styles.albumImageWrapper}
                   >
-                    {isVideo ? (
+                    {isVideo && isNearCurrent ? (
                       <VideoPlayer
                         videoRef={(ref) => {
                           videoRefs.current[index] = ref;
-                          console.log(`🎥 Video ref set for index ${index}:`, ref ? 'exists' : 'null');
-                          // Initialize as playing if in viewport and is current image
                           if (ref && isInViewport && currentImageIndex === index && playingVideos[index] === undefined) {
                             setPlayingVideos(prev => ({ ...prev, [index]: true }));
                           }
@@ -830,6 +794,10 @@ const PostCard: React.FC<PostCardProps> = ({
                         isInViewport={isInViewport && currentImageIndex === index}
                         index={index}
                       />
+                    ) : isVideo ? (
+                      <View style={[styles.albumMainImage, styles.videoPlaceholder]}>
+                        <Play size={48} color="#FFFFFF" />
+                      </View>
                     ) : (
                       <TouchableOpacity
                         activeOpacity={0.9}
@@ -1121,6 +1089,11 @@ const styles = StyleSheet.create({
     width: width,
     height: width,
     position: 'relative',
+  },
+  videoPlaceholder: {
+    backgroundColor: '#1A1A1A',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   videoOverlay: {
     position: 'absolute',
