@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Calendar, Scale, Syringe, Heart, TriangleAlert as AlertTriangle, Pill, Camera, Plus, CreditCard as Edit, Trash2 } from 'lucide-react-native';
+import { ArrowLeft, Calendar, Scale, Syringe, Heart, TriangleAlert as AlertTriangle, Pill, Camera, Plus, CreditCard as Edit, Trash2, Play } from 'lucide-react-native';
+import { Video } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -825,34 +826,76 @@ export default function PetDetail() {
     </View>
   );
 
+  const isVideoUrl = (url: string): boolean => {
+    return url.startsWith('VIDEO:');
+  };
+
+  const getCleanUrl = (url: string): string => {
+    return url.replace('VIDEO:', '');
+  };
+
+  const countMediaTypes = (images: string[]) => {
+    const videos = images.filter(url => isVideoUrl(url)).length;
+    const photos = images.length - videos;
+    return { photos, videos };
+  };
+
   const renderAlbumsTab = () => (
     <View style={styles.albumsContainer}>
       <TouchableOpacity style={styles.addAlbumButton} onPress={handleAddPhoto}>
         <Camera size={24} color="#3B82F6" />
         <Text style={styles.addAlbumText}>Agregar Fotos</Text>
       </TouchableOpacity>
-      
+
       {albums.length === 0 ? (
         <Text style={styles.emptyAlbumsText}>No hay álbumes creados</Text>
       ) : (
         <View style={styles.albumsGrid}>
-          {albums.map((album) => (
-            <TouchableOpacity 
-              key={album.id} 
-              style={styles.albumItem}
-              onPress={() => router.push(`/pets/albums/${album.id}`)}
-            >
-              {album.images && album.images.length > 0 ? (
-                <Image source={{ uri: album.images[0] }} style={styles.albumCover} />
-              ) : (
-                <View style={styles.albumPlaceholder}>
-                  <Camera size={24} color="#9CA3AF" />
-                </View>
-              )}
-              <Text style={styles.albumTitle} numberOfLines={1}>{album.title}</Text>
-              <Text style={styles.albumCount}>{album.images?.length || 0} fotos</Text>
-            </TouchableOpacity>
-          ))}
+          {albums.map((album) => {
+            const firstMedia = album.images && album.images.length > 0 ? album.images[0] : null;
+            const isVideo = firstMedia && isVideoUrl(firstMedia);
+            const cleanUrl = firstMedia ? getCleanUrl(firstMedia) : null;
+            const { photos, videos } = countMediaTypes(album.images || []);
+
+            return (
+              <TouchableOpacity
+                key={album.id}
+                style={styles.albumItem}
+                onPress={() => router.push(`/pets/albums/${album.id}`)}
+              >
+                {cleanUrl ? (
+                  <View style={styles.albumCoverContainer}>
+                    {isVideo ? (
+                      <>
+                        <Video
+                          source={{ uri: cleanUrl }}
+                          style={styles.albumCover}
+                          resizeMode="cover"
+                          shouldPlay={false}
+                          isMuted
+                        />
+                        <View style={styles.videoIndicator}>
+                          <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
+                        </View>
+                      </>
+                    ) : (
+                      <Image source={{ uri: cleanUrl }} style={styles.albumCover} />
+                    )}
+                  </View>
+                ) : (
+                  <View style={styles.albumPlaceholder}>
+                    <Camera size={24} color="#9CA3AF" />
+                  </View>
+                )}
+                <Text style={styles.albumTitle} numberOfLines={1}>{album.title}</Text>
+                <Text style={styles.albumCount}>
+                  {photos > 0 && `${photos} foto${photos > 1 ? 's' : ''}`}
+                  {photos > 0 && videos > 0 && ' • '}
+                  {videos > 0 && `${videos} video${videos > 1 ? 's' : ''}`}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       )}
     </View>
@@ -1499,11 +1542,17 @@ const styles = StyleSheet.create({
     width: '48%',
     marginBottom: 16,
   },
-  albumCover: {
+  albumCoverContainer: {
     width: '100%',
     height: 150,
     borderRadius: 8,
     marginBottom: 8,
+    position: 'relative',
+  },
+  albumCover: {
+    width: '100%',
+    height: 150,
+    borderRadius: 8,
   },
   albumPlaceholder: {
     width: '100%',
@@ -1513,6 +1562,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
+  },
+  videoIndicator: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -20 }, { translateY: -20 }],
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   albumTitle: {
     fontSize: 14,

@@ -622,10 +622,15 @@ const PostCard: React.FC<PostCardProps> = ({
                   resizeMode={ResizeMode.COVER}
                   isLooping
                   shouldPlay={false}
+                  isMuted={!isVideoPlaying}
+                  useNativeControls={false}
                   onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
                     if (status.isLoaded) {
                       setIsVideoPlaying(status.isPlaying);
                     }
+                  }}
+                  onReadyForDisplay={() => {
+                    console.log('Video ready for display');
                   }}
                 />
                 <View style={styles.videoOverlay}>
@@ -696,10 +701,15 @@ const PostCard: React.FC<PostCardProps> = ({
                           resizeMode={ResizeMode.COVER}
                           isLooping
                           shouldPlay={false}
+                          isMuted={!isVideoPlaying}
+                          useNativeControls={false}
                           onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
                             if (status.isLoaded) {
                               setIsVideoPlaying(status.isPlaying);
                             }
+                          }}
+                          onReadyForDisplay={() => {
+                            console.log('Video ready for display in album');
                           }}
                         />
                         <View style={styles.videoOverlay}>
