@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions, Modal, TextInput, FlatList, ActivityIndicator, ScrollView, Image, Share, Platform } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Heart, MessageCircle, Share2, MoveHorizontal as MoreHorizontal, ArrowLeft, Send, Play, Pause } from 'lucide-react-native';
@@ -7,6 +7,55 @@ import { supabaseClient } from '../lib/supabase';
 import { FollowButton } from './FollowButton';
 
 const { width } = Dimensions.get('window');
+
+// Memoized video component to prevent unnecessary re-renders
+const VideoPlayer = memo(({
+  videoRef,
+  source,
+  style,
+  onTogglePlay,
+  isPlaying,
+  index
+}: {
+  videoRef: (ref: Video | null) => void;
+  source: { uri: string };
+  style: any;
+  onTogglePlay: () => void;
+  isPlaying: boolean;
+  index: number;
+}) => {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={onTogglePlay}
+      style={styles.videoContainer}
+    >
+      <Video
+        ref={videoRef}
+        source={source}
+        style={style}
+        resizeMode={ResizeMode.COVER}
+        isLooping
+        shouldPlay={false}
+        isMuted={false}
+        useNativeControls={false}
+        onReadyForDisplay={() => {
+          console.log(`✅ Video ready at index ${index}`);
+        }}
+        onError={(error) => {
+          console.error(`❌ Video error at index ${index}:`, error);
+        }}
+      />
+      <View style={styles.videoOverlay}>
+        {!isPlaying && (
+          <View style={styles.playButton}>
+            <Play size={48} color="#FFFFFF" fill="#FFFFFF" />
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 interface PostCardProps {
   post: any;
@@ -35,7 +84,7 @@ const PostCard: React.FC<PostCardProps> = ({
   const [doubleTapTimer, setDoubleTapTimer] = useState<NodeJS.Timeout | null>(null);
   const [showLikeAnimation, setShowLikeAnimation] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [playingVideos, setPlayingVideos] = useState<{[key: number]: boolean}>({});
   const videoRefs = useRef<{[key: number]: Video | null}>({});
 
   useEffect(() => {
@@ -516,7 +565,7 @@ const PostCard: React.FC<PostCardProps> = ({
     return url.replace('VIDEO:', '');
   };
 
-  const toggleVideoPlayback = async (index: number) => {
+  const toggleVideoPlayback = useCallback(async (index: number) => {
     console.log('🎬 toggleVideoPlayback called for index:', index);
     const videoRef = videoRefs.current[index];
     console.log('🎬 videoRef:', videoRef ? 'exists' : 'null');
@@ -533,11 +582,11 @@ const PostCard: React.FC<PostCardProps> = ({
         if (status.isLoaded) {
           if (status.isPlaying) {
             await videoRef.pauseAsync();
-            setIsVideoPlaying(false);
+            setPlayingVideos(prev => ({ ...prev, [index]: false }));
             console.log('⏸️ Video paused');
           } else {
             await videoRef.playAsync();
-            setIsVideoPlaying(true);
+            setPlayingVideos(prev => ({ ...prev, [index]: true }));
             console.log('▶️ Video playing');
           }
         } else {
@@ -549,7 +598,7 @@ const PostCard: React.FC<PostCardProps> = ({
     } else {
       console.log('⚠️ No video ref found for index:', index);
     }
-  };
+  }, []);
 
   const handleImagePress = () => {
     if (doubleTapTimer) {
@@ -627,39 +676,16 @@ const PostCard: React.FC<PostCardProps> = ({
         {(!post.albumImages || post.albumImages.length === 0) && post.imageURL && (
           <>
             {isVideoUrl(post.imageURL) ? (
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={() => toggleVideoPlayback(0)}
-                style={styles.videoContainer}
-              >
-                <Video
-                  ref={(ref) => {
-                    videoRefs.current[0] = ref;
-                  }}
-                  source={{ uri: getCleanUrl(post.imageURL) }}
-                  style={styles.singleImage}
-                  resizeMode={ResizeMode.COVER}
-                  isLooping
-                  shouldPlay={false}
-                  isMuted={!isVideoPlaying}
-                  useNativeControls={false}
-                  onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
-                    if (status.isLoaded) {
-                      setIsVideoPlaying(status.isPlaying);
-                    }
-                  }}
-                  onReadyForDisplay={() => {
-                    console.log('Video ready for display');
-                  }}
-                />
-                <View style={styles.videoOverlay}>
-                  {!isVideoPlaying && (
-                    <View style={styles.playButton}>
-                      <Play size={48} color="#FFFFFF" fill="#FFFFFF" />
-                    </View>
-                  )}
-                </View>
-              </TouchableOpacity>
+              <VideoPlayer
+                videoRef={(ref) => {
+                  videoRefs.current[0] = ref;
+                }}
+                source={{ uri: getCleanUrl(post.imageURL) }}
+                style={styles.singleImage}
+                onTogglePlay={() => toggleVideoPlayback(0)}
+                isPlaying={!!playingVideos[0]}
+                index={0}
+              />
             ) : (
               <TouchableOpacity activeOpacity={0.9} onPress={handleImagePress}>
                 <Image source={{ uri: post.imageURL }} style={styles.singleImage} />
@@ -693,7 +719,7 @@ const PostCard: React.FC<PostCardProps> = ({
                     ref.pauseAsync();
                   }
                 });
-                setIsVideoPlaying(false);
+                setPlayingVideos({});
               }}
             >
               {post.albumImages.map((mediaUrl: string, index: number) => {
@@ -706,46 +732,17 @@ const PostCard: React.FC<PostCardProps> = ({
                     style={styles.albumImageWrapper}
                   >
                     {isVideo ? (
-                      <TouchableOpacity
-                        activeOpacity={0.9}
-                        onPress={() => toggleVideoPlayback(index)}
-                        style={styles.videoContainer}
-                      >
-                        <Video
-                          ref={(ref) => {
-                            videoRefs.current[index] = ref;
-                            console.log(`🎥 Video ref set for index ${index}:`, ref ? 'exists' : 'null');
-                          }}
-                          source={{ uri: cleanUrl }}
-                          style={styles.albumMainImage}
-                          resizeMode={ResizeMode.COVER}
-                          isLooping
-                          shouldPlay={false}
-                          isMuted={!isVideoPlaying}
-                          useNativeControls={false}
-                          onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
-                            if (status.isLoaded) {
-                              setIsVideoPlaying(status.isPlaying);
-                            }
-                          }}
-                          onReadyForDisplay={() => {
-                            console.log(`✅ Video ready for display in album at index ${index}, URL:`, cleanUrl);
-                          }}
-                          onError={(error) => {
-                            console.error(`❌ Video error at index ${index}:`, error);
-                          }}
-                          onLoad={(data) => {
-                            console.log(`📼 Video loaded at index ${index}:`, data);
-                          }}
-                        />
-                        <View style={styles.videoOverlay}>
-                          {!isVideoPlaying && (
-                            <View style={styles.playButton}>
-                              <Play size={48} color="#FFFFFF" fill="#FFFFFF" />
-                            </View>
-                          )}
-                        </View>
-                      </TouchableOpacity>
+                      <VideoPlayer
+                        videoRef={(ref) => {
+                          videoRefs.current[index] = ref;
+                          console.log(`🎥 Video ref set for index ${index}:`, ref ? 'exists' : 'null');
+                        }}
+                        source={{ uri: cleanUrl }}
+                        style={styles.albumMainImage}
+                        onTogglePlay={() => toggleVideoPlayback(index)}
+                        isPlaying={!!playingVideos[index]}
+                        index={index}
+                      />
                     ) : (
                       <TouchableOpacity
                         activeOpacity={0.9}
