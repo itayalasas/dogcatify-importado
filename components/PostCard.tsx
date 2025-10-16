@@ -30,10 +30,25 @@ const VideoPlayer = memo(({
   isInViewport: boolean;
   index: number;
 }) => {
+  const internalRef = useRef<Video | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (internalRef.current) {
+        internalRef.current.unloadAsync().catch(() => {});
+      }
+    };
+  }, []);
+
+  const handleRef = (ref: Video | null) => {
+    internalRef.current = ref;
+    videoRef(ref);
+  };
+
   return (
     <View style={styles.videoContainer}>
       <Video
-        ref={videoRef}
+        ref={handleRef}
         source={source}
         style={style}
         resizeMode={ResizeMode.COVER}
@@ -41,6 +56,7 @@ const VideoPlayer = memo(({
         shouldPlay={isInViewport && isPlaying}
         isMuted={false}
         useNativeControls={false}
+        progressUpdateIntervalMillis={500}
         onReadyForDisplay={() => {}}
         onError={() => {}}
       />
@@ -120,17 +136,15 @@ const PostCard: React.FC<PostCardProps> = ({
     fetchCommentsCount();
   }, [post.likes, currentUser]);
 
-  // Pause videos that are not in the current view when scrolling albums
+  // Clean up video refs when changing slides
   useEffect(() => {
-    Object.entries(videoRefs.current).forEach(([indexStr, ref]) => {
+    Object.keys(videoRefs.current).forEach((indexStr) => {
       const index = parseInt(indexStr);
-      if (ref && index !== currentImageIndex) {
-        ref.pauseAsync().catch(() => {
-          // Ignore errors
-        });
-        setPlayingVideos(prev => ({ ...prev, [index]: false }));
+      if (index !== currentImageIndex) {
+        delete videoRefs.current[index];
       }
     });
+    setPlayingVideos({});
   }, [currentImageIndex]);
 
   // Pause all videos when post is not in viewport
@@ -715,6 +729,7 @@ const PostCard: React.FC<PostCardProps> = ({
           <>
             {isVideoUrl(post.imageURL) ? (
               <VideoPlayer
+                key={`video-${post.id}-single`}
                 videoRef={(ref) => {
                   videoRefs.current[0] = ref;
                   // Initialize as playing if in viewport
@@ -779,6 +794,7 @@ const PostCard: React.FC<PostCardProps> = ({
                   >
                     {isVideo && isCurrent ? (
                       <VideoPlayer
+                        key={`video-${post.id}-${index}`}
                         videoRef={(ref) => {
                           videoRefs.current[index] = ref;
                           if (ref && isInViewport && currentImageIndex === index && playingVideos[index] === undefined) {
