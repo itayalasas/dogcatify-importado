@@ -17,6 +17,7 @@ const VideoPlayer = memo(({
   onChangeSpeed,
   isPlaying,
   playbackRate,
+  isInViewport,
   index
 }: {
   videoRef: (ref: Video | null) => void;
@@ -26,6 +27,7 @@ const VideoPlayer = memo(({
   onChangeSpeed: () => void;
   isPlaying: boolean;
   playbackRate: number;
+  isInViewport: boolean;
   index: number;
 }) => {
   return (
@@ -36,7 +38,7 @@ const VideoPlayer = memo(({
         style={style}
         resizeMode={ResizeMode.COVER}
         isLooping
-        shouldPlay={true}
+        shouldPlay={isInViewport && isPlaying}
         isMuted={false}
         useNativeControls={false}
         onReadyForDisplay={() => {
@@ -102,6 +104,7 @@ const PostCard: React.FC<PostCardProps> = ({
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [playingVideos, setPlayingVideos] = useState<{[key: number]: boolean}>({});
   const [videoSpeeds, setVideoSpeeds] = useState<{[key: number]: number}>({});
+  const [videosInitialized, setVideosInitialized] = useState<{[key: number]: boolean}>({});
   const videoRefs = useRef<{[key: number]: Video | null}>({});
 
   useEffect(() => {
@@ -749,6 +752,7 @@ const PostCard: React.FC<PostCardProps> = ({
                 onChangeSpeed={() => changeVideoSpeed(0)}
                 isPlaying={playingVideos[0] !== false}
                 playbackRate={videoSpeeds[0] || 1}
+                isInViewport={isInViewport}
                 index={0}
               />
             ) : (
@@ -808,6 +812,7 @@ const PostCard: React.FC<PostCardProps> = ({
                         onChangeSpeed={() => changeVideoSpeed(index)}
                         isPlaying={playingVideos[index] !== false}
                         playbackRate={videoSpeeds[index] || 1}
+                        isInViewport={isInViewport && currentImageIndex === index}
                         index={index}
                       />
                     ) : (
