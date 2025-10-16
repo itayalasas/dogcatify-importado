@@ -28,27 +28,32 @@ export default function MercadoPagoConfig() {
   const loadPartnerData = async () => {
     try {
       console.log('Loading partner data for user:', currentUser?.id);
-      
-      const { data: partnerData, error } = await supabaseClient
+
+      const { data: partnersData, error } = await supabaseClient
         .from('partners')
         .select('*')
         .eq('user_id', currentUser!.id)
         .eq('is_verified', true)
-        .single();
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error loading partner data:', error);
-        if (error.code === 'PGRST116') {
-          // No partner found
-          Alert.alert(
-            'Sin negocio verificado',
-            'Necesitas tener un negocio verificado para configurar Mercado Pago.',
-            [{ text: 'OK', onPress: () => router.back() }]
-          );
-        }
+        Alert.alert('Error', 'No se pudo cargar la información del negocio');
+        router.back();
         return;
       }
 
+      if (!partnersData || partnersData.length === 0) {
+        Alert.alert(
+          'Sin negocio verificado',
+          'Necesitas tener un negocio verificado para configurar Mercado Pago.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+        return;
+      }
+
+      // Si tiene múltiples negocios, usar el primero (más reciente)
+      const partnerData = partnersData[0];
       console.log('Partner data loaded:', partnerData);
       setPartner(partnerData);
       
