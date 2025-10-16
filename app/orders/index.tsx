@@ -41,6 +41,7 @@ export default function MyOrders() {
         customerId: order.customer_id,
         items: order.items || [],
         status: order.status || 'pending',
+        orderType: order.order_type || 'product_purchase',
         totalAmount: order.total_amount || 0,
         shippingAddress: order.shipping_address || '',
         createdAt: new Date(order.created_at),

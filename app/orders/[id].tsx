@@ -47,6 +47,7 @@ export default function OrderDetail() {
           customerId: data.customer_id,
           items: data.items || [],
           status: data.status || 'pending',
+          orderType: data.order_type || 'product_purchase',
           totalAmount: data.total_amount || 0,
           shippingAddress: data.shipping_address || '',
           createdAt: new Date(data.created_at),
@@ -179,6 +180,7 @@ export default function OrderDetail() {
           <Text style={styles.sectionTitle}>Seguimiento del Pedido</Text>
           <OrderTracking
             orderStatus={order.status}
+            orderType={order.orderType}
             orderDate={order.createdAt}
             cancelledDate={order.status === 'cancelled' ? order.updatedAt : undefined}
           />

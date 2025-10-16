@@ -13,19 +13,78 @@ interface TrackingStep {
 
 interface OrderTrackingProps {
   orderStatus: string;
+  orderType?: 'product_purchase' | 'service_booking';
   orderDate?: Date;
   cancelledDate?: Date;
 }
 
 export const OrderTracking: React.FC<OrderTrackingProps> = ({
   orderStatus,
+  orderType = 'product_purchase',
   orderDate,
   cancelledDate
 }) => {
   const getTrackingSteps = (): TrackingStep[] => {
     const isCancelled = orderStatus === 'cancelled';
+    const isServiceBooking = orderType === 'service_booking';
 
-    const baseSteps: TrackingStep[] = [
+    // Para servicios (reservas), solo mostrar estados simples
+    if (isServiceBooking) {
+      const serviceSteps: TrackingStep[] = [
+        {
+          id: 'pending',
+          label: 'Pedido recibido',
+          description: 'Tu pedido ha sido registrado',
+          icon: Clock,
+          status: 'completed',
+          date: orderDate?.toLocaleDateString('es-ES', {
+            day: '2-digit',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        },
+        {
+          id: 'confirmed',
+          label: 'Pedido confirmado',
+          description: 'El vendedor confirmó tu pedido',
+          icon: CheckCircle,
+          status: orderStatus === 'pending' ? 'pending' :
+                  isCancelled ? 'cancelled' :
+                  orderStatus === 'confirmed' ? 'active' :
+                  'completed'
+        }
+      ];
+
+      if (isCancelled) {
+        serviceSteps.push({
+          id: 'cancelled',
+          label: 'Pedido cancelado',
+          description: 'El pedido fue cancelado',
+          icon: XCircle,
+          status: 'cancelled',
+          date: cancelledDate?.toLocaleDateString('es-ES', {
+            day: '2-digit',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        });
+      } else {
+        serviceSteps.push({
+          id: 'completed',
+          label: 'Completado',
+          description: '¡Servicio completado!',
+          icon: Home,
+          status: orderStatus === 'completed' ? 'completed' : 'pending'
+        });
+      }
+
+      return serviceSteps;
+    }
+
+    // Para productos, mostrar seguimiento completo
+    const productSteps: TrackingStep[] = [
       {
         id: 'pending',
         label: 'Pedido recibido',
@@ -73,14 +132,14 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
         label: 'Entregado',
         description: '¡Tu pedido ha sido entregado!',
         icon: Home,
-        status: orderStatus === 'delivered' ? 'completed' :
+        status: orderStatus === 'delivered' || orderStatus === 'completed' ? 'completed' :
                 isCancelled ? 'cancelled' :
                 'pending'
       }
     ];
 
     if (isCancelled) {
-      baseSteps.push({
+      productSteps.push({
         id: 'cancelled',
         label: 'Pedido cancelado',
         description: 'El pedido fue cancelado',
@@ -95,7 +154,7 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
       });
     }
 
-    return baseSteps;
+    return productSteps;
   };
 
   const steps = getTrackingSteps();
