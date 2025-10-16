@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions, Modal, TextInput, FlatList, ActivityIndicator, ScrollView, Image, Share, Platform } from 'react-native';
-import { Heart, MessageCircle, Share2, MoveHorizontal as MoreHorizontal, ArrowLeft, Send } from 'lucide-react-native';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { Heart, MessageCircle, Share2, MoveHorizontal as MoreHorizontal, ArrowLeft, Send, Play, Pause } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { supabaseClient } from '../lib/supabase';
 import { FollowButton } from './FollowButton';
@@ -34,6 +35,8 @@ const PostCard: React.FC<PostCardProps> = ({
   const [doubleTapTimer, setDoubleTapTimer] = useState<NodeJS.Timeout | null>(null);
   const [showLikeAnimation, setShowLikeAnimation] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const videoRefs = useRef<{[key: number]: Video | null}>({});
 
   useEffect(() => {
     if (currentUser && post.likes) {
@@ -505,6 +508,30 @@ const PostCard: React.FC<PostCardProps> = ({
     onLike(post.id, true);
   };
   
+  const isVideoUrl = (url: string): boolean => {
+    return url.startsWith('VIDEO:');
+  };
+
+  const getCleanUrl = (url: string): string => {
+    return url.replace('VIDEO:', '');
+  };
+
+  const toggleVideoPlayback = async (index: number) => {
+    const videoRef = videoRefs.current[index];
+    if (videoRef) {
+      const status = await videoRef.getStatusAsync();
+      if (status.isLoaded) {
+        if (status.isPlaying) {
+          await videoRef.pauseAsync();
+          setIsVideoPlaying(false);
+        } else {
+          await videoRef.playAsync();
+          setIsVideoPlaying(true);
+        }
+      }
+    }
+  };
+
   const handleImagePress = () => {
     if (doubleTapTimer) {
       // This is a double tap
@@ -577,24 +604,57 @@ const PostCard: React.FC<PostCardProps> = ({
 
       {/* Images */}
       <View style={styles.imageContainer}>
-        {/* Single Image */}
+        {/* Single Image or Video */}
         {(!post.albumImages || post.albumImages.length === 0) && post.imageURL && (
-          <TouchableOpacity activeOpacity={0.9} onPress={handleImagePress}>
-            <Image source={{ uri: post.imageURL }} style={styles.singleImage} />
-            {showLikeAnimation && (
-              <View style={styles.likeAnimationContainer}>
-                <Heart size={80} color="#FFFFFF" fill="#FFFFFF" />
-              </View>
+          <>
+            {isVideoUrl(post.imageURL) ? (
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => toggleVideoPlayback(0)}
+                style={styles.videoContainer}
+              >
+                <Video
+                  ref={(ref) => {
+                    videoRefs.current[0] = ref;
+                  }}
+                  source={{ uri: getCleanUrl(post.imageURL) }}
+                  style={styles.singleImage}
+                  resizeMode={ResizeMode.COVER}
+                  isLooping
+                  shouldPlay={false}
+                  onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
+                    if (status.isLoaded) {
+                      setIsVideoPlaying(status.isPlaying);
+                    }
+                  }}
+                />
+                <View style={styles.videoOverlay}>
+                  {!isVideoPlaying && (
+                    <View style={styles.playButton}>
+                      <Play size={48} color="#FFFFFF" fill="#FFFFFF" />
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity activeOpacity={0.9} onPress={handleImagePress}>
+                <Image source={{ uri: post.imageURL }} style={styles.singleImage} />
+                {showLikeAnimation && (
+                  <View style={styles.likeAnimationContainer}>
+                    <Heart size={80} color="#FFFFFF" fill="#FFFFFF" />
+                  </View>
+                )}
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
+          </>
         )}
 
         {/* Album Images */}
         {post.albumImages && post.albumImages.length > 0 && (
           <View style={styles.albumContainer}>
-            <ScrollView 
-              horizontal 
-              pagingEnabled 
+            <ScrollView
+              horizontal
+              pagingEnabled
               showsHorizontalScrollIndicator={false}
               onMomentumScrollEnd={(e) => {
                 const contentOffset = e.nativeEvent.contentOffset;
@@ -602,25 +662,73 @@ const PostCard: React.FC<PostCardProps> = ({
                 const pageNum = Math.floor(contentOffset.x / viewSize.width);
                 setCurrentImageIndex(pageNum);
               }}
+              onScrollBeginDrag={() => {
+                // Pause all videos when user starts scrolling
+                Object.values(videoRefs.current).forEach((ref) => {
+                  if (ref) {
+                    ref.pauseAsync();
+                  }
+                });
+                setIsVideoPlaying(false);
+              }}
             >
-              {post.albumImages.map((imageUrl: string, index: number) => (
-                <TouchableOpacity 
-                  key={index}
-                  activeOpacity={0.9} 
-                  onPress={handleImagePress} 
-                  style={styles.albumImageWrapper}
-                >
-                  <Image 
-                    source={{ uri: imageUrl }} 
-                    style={styles.albumMainImage} 
-                  />
-                  {showLikeAnimation && currentImageIndex === index && (
-                    <View style={styles.likeAnimationContainer}>
-                      <Heart size={80} color="#FFFFFF" fill="#FFFFFF" />
-                    </View>
-                  )}
-                </TouchableOpacity>
-              ))}
+              {post.albumImages.map((mediaUrl: string, index: number) => {
+                const isVideo = isVideoUrl(mediaUrl);
+                const cleanUrl = getCleanUrl(mediaUrl);
+
+                return (
+                  <View
+                    key={index}
+                    style={styles.albumImageWrapper}
+                  >
+                    {isVideo ? (
+                      <TouchableOpacity
+                        activeOpacity={0.9}
+                        onPress={() => toggleVideoPlayback(index)}
+                        style={styles.videoContainer}
+                      >
+                        <Video
+                          ref={(ref) => {
+                            videoRefs.current[index] = ref;
+                          }}
+                          source={{ uri: cleanUrl }}
+                          style={styles.albumMainImage}
+                          resizeMode={ResizeMode.COVER}
+                          isLooping
+                          shouldPlay={false}
+                          onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
+                            if (status.isLoaded) {
+                              setIsVideoPlaying(status.isPlaying);
+                            }
+                          }}
+                        />
+                        <View style={styles.videoOverlay}>
+                          {!isVideoPlaying && (
+                            <View style={styles.playButton}>
+                              <Play size={48} color="#FFFFFF" fill="#FFFFFF" />
+                            </View>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        activeOpacity={0.9}
+                        onPress={handleImagePress}
+                      >
+                        <Image
+                          source={{ uri: cleanUrl }}
+                          style={styles.albumMainImage}
+                        />
+                      </TouchableOpacity>
+                    )}
+                    {showLikeAnimation && currentImageIndex === index && (
+                      <View style={styles.likeAnimationContainer}>
+                        <Heart size={80} color="#FFFFFF" fill="#FFFFFF" />
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
             </ScrollView>
             
             {post.albumImages.length > 1 && (
@@ -638,7 +746,10 @@ const PostCard: React.FC<PostCardProps> = ({
             )}
                         
             <View style={styles.albumOverlay}>
-              <Text style={styles.albumCount}>{currentImageIndex + 1}/{post.albumImages.length}</Text>
+              <Text style={styles.albumCount}>
+                {isVideoUrl(post.albumImages[currentImageIndex]) ? '🎥 ' : '📸 '}
+                {currentImageIndex + 1}/{post.albumImages.length}
+              </Text>
             </View>
           </View>
         )}
@@ -885,6 +996,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.2)',
+  },
+  videoContainer: {
+    width: width,
+    height: width,
+    position: 'relative',
+  },
+  videoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.1)',
+  },
+  playButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   actions: {
     flexDirection: 'row',
