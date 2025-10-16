@@ -157,7 +157,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       // Get the push token
       try {
         // Use the exact project ID
-        const projectId = '0618d9ae-6714-46bb-adce-f4ee57fff324';
+        const projectId = '3fb652b1-d582-40c8-a074-a1aa9358d666';
         
         console.log('📋 Using project ID:', projectId);
         console.log('📋 Constants project ID:', Constants.expoConfig?.extra?.eas?.projectId);
