@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator, Dimensions, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Dimensions, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Plus } from 'lucide-react-native';
-import { PetCard } from '../../components/PetCard'; 
+import { PetCard } from '../../components/PetCard';
+import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { getPets, supabaseClient, deletePet } from '../../lib/supabase';
@@ -331,8 +332,7 @@ export default function Pets() {
           </TouchableOpacity>
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#10B981" />
-          <Text style={styles.loadingText}>{t('loadingPets')}</Text>
+          <LoadingSpinner message="Cargando mascotas..." size="medium" />
         </View>
       </SafeAreaView>
     );

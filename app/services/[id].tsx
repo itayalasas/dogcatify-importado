@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, MapPin, Clock, Phone, Calendar, Star, User } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 
@@ -450,9 +451,7 @@ export default function ServiceDetail() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando detalles del servicio...</Text>
-        </View>
+        <LoadingSpinner message="Cargando detalles del servicio..." />
       </SafeAreaView>
     );
   }

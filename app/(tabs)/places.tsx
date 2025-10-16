@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { MapPin, Star, Phone, Navigation } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
@@ -212,7 +213,7 @@ export default function Places() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Cargando lugares...</Text>
+            <LoadingSpinner message="Cargando lugares..." size="medium" />
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
