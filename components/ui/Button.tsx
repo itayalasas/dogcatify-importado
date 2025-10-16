@@ -1,45 +1,34 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, ActivityIndicator } from 'react-native';
 
 interface ButtonProps {
-  title?: string;
+  title: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'outline' | 'danger';
+  variant?: 'primary' | 'secondary' | 'outline';
+  size?: 'small' | 'medium' | 'large';
   disabled?: boolean;
   loading?: boolean;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
-  children?: React.ReactNode;
 }
 
 export const Button: React.FC<ButtonProps> = ({
   title,
   onPress,
   variant = 'primary',
+  size = 'medium',
   disabled = false,
   loading = false,
-  style,
-  textStyle,
-  children,
 }) => {
   const buttonStyle = [
     styles.button,
-    variant === 'primary' && styles.primaryButton,
-    variant === 'secondary' && styles.secondaryButton,
-    variant === 'outline' && styles.outlineButton,
-    variant === 'danger' && styles.dangerButton,
-    disabled && styles.disabledButton,
-    style,
+    styles[variant],
+    styles[size],
+    disabled && styles.disabled,
   ];
 
-  const textStyles = [
-    styles.buttonText,
-    variant === 'primary' && styles.primaryText,
-    variant === 'secondary' && styles.secondaryText,
-    variant === 'outline' && styles.outlineText,
-    variant === 'danger' && styles.dangerText,
-    disabled && styles.disabledText,
-    textStyle,
+  const textStyle = [
+    styles.text,
+    styles[`${variant}Text`],
+    styles[`${size}Text`],
   ];
 
   return (
@@ -47,14 +36,12 @@ export const Button: React.FC<ButtonProps> = ({
       style={buttonStyle}
       onPress={onPress}
       disabled={disabled || loading}
-      activeOpacity={0.7}
+      activeOpacity={0.8}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'outline' ? '#007AFF' : '#FFFFFF'} />
+        <ActivityIndicator color={variant === 'primary' ? '#FFFFFF' : '#3B82F6'} />
       ) : (
-        <>
-          {children || <Text style={textStyles}>{title}</Text>}
-        </>
+        <Text style={textStyle}>{title}</Text>
       )}
     </TouchableOpacity>
   );
@@ -62,32 +49,43 @@ export const Button: React.FC<ButtonProps> = ({
 
 const styles = StyleSheet.create({
   button: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    alignItems: 'center',
+    borderRadius: 12,
     justifyContent: 'center',
-    minHeight: 48,
+    alignItems: 'center', 
+    flexDirection: 'row',
+    width: '100%',
   },
-  primaryButton: {
-    backgroundColor: '#007AFF',
+  primary: {
+    backgroundColor: '#2D6A6F', 
   },
-  secondaryButton: {
-    backgroundColor: '#5856D6',
+  secondary: {
+    backgroundColor: '#10B981',
   },
-  outlineButton: {
+  outline: {
     backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#007AFF',
+    borderWidth: 2,
+    borderColor: '#2D6A6F', 
   },
-  dangerButton: {
-    backgroundColor: '#FF3B30',
+  small: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minHeight: 32,
   },
-  disabledButton: {
-    backgroundColor: '#E5E5E5',
+  medium: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    minHeight: 40,
   },
-  buttonText: {
-    fontSize: 16,
+  large: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    minHeight: 44,
+  },
+  disabled: {
+    opacity: 0.6,
+  },
+  text: {
+    fontFamily: 'Inter-Medium',
     fontWeight: '600',
   },
   primaryText: {
@@ -97,12 +95,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   outlineText: {
-    color: '#007AFF',
+    color: '#2D6A6F',
   },
-  dangerText: {
-    color: '#FFFFFF',
+  smallText: {
+    fontSize: 13,
   },
-  disabledText: {
-    color: '#999999',
+  mediumText: {
+    fontSize: 15,
+  },
+  largeText: {
+    fontSize: 16,
   },
 });

@@ -45,31 +45,6 @@ const VideoPlayer = memo(({
     videoRef(ref);
   };
 
-  const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
-    if (!status.isLoaded) return;
-
-    // Restart video before it finishes to avoid crash
-    if (status.durationMillis && status.positionMillis) {
-      const timeRemaining = status.durationMillis - status.positionMillis;
-      if (timeRemaining < 100 && isInViewport) {
-        internalRef.current?.setPositionAsync(0).catch(() => {});
-      }
-    }
-
-    // Fallback if video does finish
-    if (status.didJustFinish && isInViewport) {
-      setTimeout(() => {
-        if (internalRef.current) {
-          internalRef.current.setPositionAsync(0).then(() => {
-            if (isPlaying) {
-              internalRef.current?.playAsync().catch(() => {});
-            }
-          }).catch(() => {});
-        }
-      }, 50);
-    }
-  }, [isInViewport, isPlaying]);
-
   return (
     <View style={styles.videoContainer}>
       <Video
@@ -77,12 +52,11 @@ const VideoPlayer = memo(({
         source={source}
         style={style}
         resizeMode={ResizeMode.COVER}
-        isLooping={false}
+        isLooping
         shouldPlay={isInViewport && isPlaying}
         isMuted={false}
         useNativeControls={false}
-        progressUpdateIntervalMillis={1000}
-        onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+        progressUpdateIntervalMillis={500}
         onReadyForDisplay={() => {}}
         onError={() => {}}
       />
