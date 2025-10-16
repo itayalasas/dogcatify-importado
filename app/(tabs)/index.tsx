@@ -765,15 +765,22 @@ export default function Home() {
   const onViewableItemsChanged = React.useRef(({ viewableItems }: any) => {
     const newVisibleIds = new Set<string>();
     viewableItems.forEach((item: any) => {
-      if (item.item.type === 'post') {
+      if (item.item.type === 'post' && item.isViewable) {
         newVisibleIds.add(item.item.data.id);
       }
     });
+
+    console.log('👁️ Viewable items changed:', {
+      visibleCount: newVisibleIds.size,
+      visibleIds: Array.from(newVisibleIds)
+    });
+
     setVisiblePostIds(newVisibleIds);
   }).current;
 
   const viewabilityConfig = React.useRef({
-    itemVisiblePercentThreshold: 50,
+    itemVisiblePercentThreshold: 30,
+    minimumViewTime: 100,
   }).current;
 
   const renderFooter = () => {
