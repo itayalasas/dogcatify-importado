@@ -14,29 +14,29 @@ const VideoPlayer = memo(({
   source,
   style,
   onTogglePlay,
+  onChangeSpeed,
   isPlaying,
+  playbackRate,
   index
 }: {
   videoRef: (ref: Video | null) => void;
   source: { uri: string };
   style: any;
   onTogglePlay: () => void;
+  onChangeSpeed: () => void;
   isPlaying: boolean;
+  playbackRate: number;
   index: number;
 }) => {
   return (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      onPress={onTogglePlay}
-      style={styles.videoContainer}
-    >
+    <View style={styles.videoContainer}>
       <Video
         ref={videoRef}
         source={source}
         style={style}
         resizeMode={ResizeMode.COVER}
         isLooping
-        shouldPlay={false}
+        shouldPlay={true}
         isMuted={false}
         useNativeControls={false}
         onReadyForDisplay={() => {
@@ -46,14 +46,28 @@ const VideoPlayer = memo(({
           console.error(`❌ Video error at index ${index}:`, error);
         }}
       />
-      <View style={styles.videoOverlay}>
-        {!isPlaying && (
-          <View style={styles.playButton}>
-            <Play size={48} color="#FFFFFF" fill="#FFFFFF" />
-          </View>
-        )}
+      <View style={styles.videoControlsOverlay}>
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={onTogglePlay}
+          activeOpacity={0.8}
+        >
+          {isPlaying ? (
+            <Pause size={32} color="#FFFFFF" fill="#FFFFFF" />
+          ) : (
+            <Play size={32} color="#FFFFFF" fill="#FFFFFF" />
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.speedButton}
+          onPress={onChangeSpeed}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.speedButtonText}>{playbackRate}x</Text>
+        </TouchableOpacity>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 });
 
@@ -85,6 +99,7 @@ const PostCard: React.FC<PostCardProps> = ({
   const [showLikeAnimation, setShowLikeAnimation] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [playingVideos, setPlayingVideos] = useState<{[key: number]: boolean}>({});
+  const [videoSpeeds, setVideoSpeeds] = useState<{[key: number]: number}>({});
   const videoRefs = useRef<{[key: number]: Video | null}>({});
 
   useEffect(() => {
@@ -600,6 +615,24 @@ const PostCard: React.FC<PostCardProps> = ({
     }
   }, []);
 
+  const changeVideoSpeed = useCallback(async (index: number) => {
+    const videoRef = videoRefs.current[index];
+    if (videoRef) {
+      try {
+        const currentSpeed = videoSpeeds[index] || 1;
+        const speeds = [1, 1.5, 2, 0.5];
+        const currentIndex = speeds.indexOf(currentSpeed);
+        const nextSpeed = speeds[(currentIndex + 1) % speeds.length];
+
+        await videoRef.setRateAsync(nextSpeed, true);
+        setVideoSpeeds(prev => ({ ...prev, [index]: nextSpeed }));
+        console.log(`🎛️ Video speed changed to ${nextSpeed}x`);
+      } catch (error) {
+        console.error('❌ Error changing video speed:', error);
+      }
+    }
+  }, [videoSpeeds]);
+
   const handleImagePress = () => {
     if (doubleTapTimer) {
       // This is a double tap
@@ -683,7 +716,9 @@ const PostCard: React.FC<PostCardProps> = ({
                 source={{ uri: getCleanUrl(post.imageURL) }}
                 style={styles.singleImage}
                 onTogglePlay={() => toggleVideoPlayback(0)}
-                isPlaying={!!playingVideos[0]}
+                onChangeSpeed={() => changeVideoSpeed(0)}
+                isPlaying={playingVideos[0] !== false}
+                playbackRate={videoSpeeds[0] || 1}
                 index={0}
               />
             ) : (
@@ -740,7 +775,9 @@ const PostCard: React.FC<PostCardProps> = ({
                         source={{ uri: cleanUrl }}
                         style={styles.albumMainImage}
                         onTogglePlay={() => toggleVideoPlayback(index)}
-                        isPlaying={!!playingVideos[index]}
+                        onChangeSpeed={() => changeVideoSpeed(index)}
+                        isPlaying={playingVideos[index] !== false}
+                        playbackRate={videoSpeeds[index] || 1}
                         index={index}
                       />
                     ) : (
@@ -1044,6 +1081,35 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.1)',
+  },
+  videoControlsOverlay: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    flexDirection: 'column',
+    gap: 12,
+  },
+  controlButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  speedButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 48,
+  },
+  speedButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   playButton: {
     width: 80,
