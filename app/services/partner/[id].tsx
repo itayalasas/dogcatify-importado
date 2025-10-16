@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, TextInput, Dimensions, Modal, Alert, Share, Platform, Linking } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MapPin, Clock, Phone, Star, Search, User, Heart, MessageCircle } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Clock, Phone, Star, Search, User, Heart, MessageCircle, Stethoscope, Scissors, Home, Dog, ShoppingBag, Syringe, Activity, Pill, Droplet, Bath } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -417,6 +417,64 @@ export default function PartnerServices() {
     }
   };
 
+  const getServiceIcon = (serviceName: string, category?: string) => {
+    const name = serviceName.toLowerCase();
+    const cat = category?.toLowerCase() || '';
+
+    // Hotel / Hospedaje / Boarding
+    if (name.includes('hotel') || name.includes('hospedaje') || name.includes('boarding') || cat.includes('boarding')) {
+      return <Home size={24} color="#10B981" />;
+    }
+
+    // Consulta / Veterinaria
+    if (name.includes('consulta') || name.includes('veterinaria') || name.includes('revision') || name.includes('examen')) {
+      return <Stethoscope size={24} color="#10B981" />;
+    }
+
+    // Vacunación / Vacunas
+    if (name.includes('vacun') || name.includes('vaccine')) {
+      return <Syringe size={24} color="#10B981" />;
+    }
+
+    // Cirugía
+    if (name.includes('cirug') || name.includes('surgery') || name.includes('operación')) {
+      return <Activity size={24} color="#10B981" />;
+    }
+
+    // Baño / Grooming / Peluquería
+    if (name.includes('baño') || name.includes('bath') || name.includes('grooming') || name.includes('peluque')) {
+      return <Bath size={24} color="#10B981" />;
+    }
+
+    // Corte / Tijeras
+    if (name.includes('corte') || name.includes('trim') || name.includes('pelo')) {
+      return <Scissors size={24} color="#10B981" />;
+    }
+
+    // Paseo / Walking
+    if (name.includes('paseo') || name.includes('walk') || name.includes('caminar')) {
+      return <Dog size={24} color="#10B981" />;
+    }
+
+    // Medicamentos / Tratamiento
+    if (name.includes('medicamento') || name.includes('tratamiento') || name.includes('medicina')) {
+      return <Pill size={24} color="#10B981" />;
+    }
+
+    // Desparasitación
+    if (name.includes('desparasit') || name.includes('deworm')) {
+      return <Droplet size={24} color="#10B981" />;
+    }
+
+    // Tienda / Shop
+    if (name.includes('tienda') || name.includes('shop') || name.includes('producto')) {
+      return <ShoppingBag size={24} color="#10B981" />;
+    }
+
+    // Default: icono de mascota
+    return <Heart size={24} color="#10B981" />;
+  };
+
   const renderStarRating = (rating: number, size: number = 16) => {
     return (
       <View style={styles.starRating}>
@@ -449,16 +507,39 @@ export default function PartnerServices() {
     })).reverse(); // Show 5 stars first
   };
 
+  const handlePhoneCall = async (phoneNumber: string) => {
+    try {
+      if (!phoneNumber || phoneNumber === 'Teléfono no disponible') {
+        Alert.alert('Sin teléfono', 'Este negocio no tiene un número de teléfono registrado');
+        return;
+      }
+
+      // Clean phone number
+      const cleanedPhone = phoneNumber.replace(/[\s-]/g, '');
+      const phoneUrl = `tel:${cleanedPhone}`;
+
+      const canOpen = await Linking.canOpenURL(phoneUrl);
+      if (canOpen) {
+        await Linking.openURL(phoneUrl);
+      } else {
+        Alert.alert('Error', 'No se puede realizar la llamada desde este dispositivo');
+      }
+    } catch (error) {
+      console.error('Error making phone call:', error);
+      Alert.alert('Error', 'No se pudo realizar la llamada');
+    }
+  };
+
   const handleContactShelter = async (contactInfo: string) => {
     try {
       // Extract phone number from contact info
       const phoneMatch = contactInfo.match(/(\+?\d{1,4}[\s-]?\d{1,4}[\s-]?\d{1,4}[\s-]?\d{1,4})/);
       const emailMatch = contactInfo.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-      
+
       if (phoneMatch) {
         const phoneNumber = phoneMatch[1].replace(/[\s-]/g, '');
         const phoneUrl = `tel:${phoneNumber}`;
-        
+
         if (await Linking.canOpenURL(phoneUrl)) {
           await Linking.openURL(phoneUrl);
         } else {
@@ -467,7 +548,7 @@ export default function PartnerServices() {
       } else if (emailMatch) {
         const email = emailMatch[1];
         const emailUrl = `mailto:${email}`;
-        
+
         if (await Linking.canOpenURL(emailUrl)) {
           await Linking.openURL(emailUrl);
         } else {
@@ -774,23 +855,27 @@ export default function PartnerServices() {
             
             <View style={styles.partnerInfo}>
               <Text style={styles.partnerName}>{partner?.business_name || partner?.businessName || 'Negocio'}</Text>
-              
+
               <View style={styles.partnerDetails}>
-                <View style={styles.partnerDetail}>
-                  <MapPin size={14} color="#6B7280" />
-                  <Text style={styles.partnerDetailText} numberOfLines={1}>
+                <View style={styles.partnerDetailRow}>
+                  <MapPin size={14} color="#6B7280" style={styles.detailIcon} />
+                  <Text style={styles.partnerAddressText}>
                     {partner?.address || 'Ubicación no disponible'}
                   </Text>
                 </View>
-                
-                <View style={styles.partnerDetail}>
-                  <Phone size={14} color="#6B7280" />
-                  <Text style={styles.partnerDetailText}>
+
+                <TouchableOpacity
+                  style={styles.partnerDetailRow}
+                  onPress={() => handlePhoneCall(partner?.phone || '')}
+                  activeOpacity={0.7}
+                >
+                  <Phone size={14} color="#10B981" style={styles.detailIcon} />
+                  <Text style={styles.partnerPhoneText}>
                     {partner?.phone || 'Teléfono no disponible'}
                   </Text>
-                </View>
+                </TouchableOpacity>
               </View>
-              
+
               {averageRating > 0 && (
                 <TouchableOpacity style={styles.ratingContainer} onPress={handleShowReviews}>
                   {renderStarRating(averageRating)}
@@ -860,7 +945,7 @@ export default function PartnerServices() {
                   <View style={styles.modernServiceContent}>
                     <View style={styles.modernServiceLeft}>
                       <View style={styles.serviceIconContainer}>
-                        <Text style={styles.serviceIcon}>🐾</Text>
+                        {getServiceIcon(service.name, service.category)}
                       </View>
                     </View>
 
@@ -1317,17 +1402,41 @@ const styles = StyleSheet.create({
   },
   partnerDetails: {
     marginBottom: 8,
+    gap: 6,
   },
   partnerDetail: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 4,
   },
+  partnerDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 6,
+  },
+  detailIcon: {
+    marginTop: 2,
+    marginRight: 6,
+    flexShrink: 0,
+  },
   partnerDetailText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     marginLeft: 4,
+  },
+  partnerAddressText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    flex: 1,
+    lineHeight: 18,
+  },
+  partnerPhoneText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#10B981',
+    textDecorationLine: 'underline',
   },
   ratingContainer: {
     flexDirection: 'row',
