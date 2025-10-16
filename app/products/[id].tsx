@@ -362,36 +362,54 @@ export default function ProductDetail() {
 
         {/* Product Info */}
         <View style={styles.productInfo}>
-          <Text style={styles.category}>{product.category}</Text>
           <Text style={styles.productName}>{product.name}</Text>
-          
+
           {product.rating && (
             <View style={styles.ratingContainer}>
-              <Star size={16} color="#F59E0B" fill="#F59E0B" />
+              <Star size={14} color="#F59E0B" fill="#F59E0B" />
               <Text style={styles.ratingText}>{product.rating}</Text>
-              <Text style={styles.reviewsText}>
-                ({product.reviews || 0} reseñas)
-              </Text>
+              <Text style={styles.reviewsText}>({product.reviews || 0})</Text>
+              <View style={styles.separator} />
+              <Text style={styles.soldText}>Vendidos: {product.sold || 0}</Text>
             </View>
           )}
 
           {/* Price with Discount Badge */}
           {appliedDiscount > 0 ? (
-            <View style={styles.priceContainer}>
-              <View style={styles.discountBadge}>
-                <Text style={styles.discountBadgeText}>-{appliedDiscount}%</Text>
+            <View style={styles.priceSection}>
+              <View style={styles.priceRow}>
+                <Text style={styles.originalPriceSmall}>{formatPrice(product.price)}</Text>
+                <View style={styles.discountBadgeSmall}>
+                  <Text style={styles.discountBadgeSmallText}>{appliedDiscount}% OFF</Text>
+                </View>
               </View>
-              <Text style={styles.originalPrice}>{formatPrice(product.price)}</Text>
-              <Text style={styles.discountedPrice}>
+              <Text style={styles.currentPrice}>
                 {formatPrice(product.price * (1 - appliedDiscount / 100))}
-              </Text>
-              <Text style={styles.savingsText}>
-                ¡Ahorras {formatPrice(product.price * (appliedDiscount / 100))}!
               </Text>
             </View>
           ) : (
-            <Text style={styles.price}>{formatPrice(product.price)}</Text>
+            <View style={styles.priceSection}>
+              <Text style={styles.currentPrice}>{formatPrice(product.price)}</Text>
+            </View>
           )}
+
+          {/* Stock and Shipping Info */}
+          <View style={styles.quickInfo}>
+            <View style={styles.quickInfoItem}>
+              <Text style={styles.quickInfoLabel}>Stock disponible</Text>
+              <Text style={[
+                styles.quickInfoValue,
+                product.stock <= 5 && styles.quickInfoValueWarning
+              ]}>
+                {product.stock === 0 ? 'Sin stock' : product.stock <= 5 ? `Últimas ${product.stock} unidades` : `${product.stock} unidades`}
+              </Text>
+            </View>
+            <View style={styles.quickInfoDivider} />
+            <View style={styles.quickInfoItem}>
+              <Text style={styles.quickInfoLabel}>Envío gratis</Text>
+              <Text style={styles.quickInfoValue}>Comprando +$5.000</Text>
+            </View>
+          </View>
           
           {/* Store Info */}
           <TouchableOpacity
@@ -417,97 +435,81 @@ export default function ProductDetail() {
           </TouchableOpacity>
         </View>
 
-        {/* Product Details */}
-        <Card style={styles.detailsCard}>
-          <Text style={styles.sectionTitle}>Detalles del Producto</Text>
+        {/* Shipping and Delivery */}
+        <View style={styles.shippingSection}>
+          <View style={styles.shippingCard}>
+            <Truck size={24} color="#00A650" />
+            <View style={styles.shippingInfo}>
+              <Text style={styles.shippingTitle}>Envío gratis comprando +$5.000</Text>
+              <Text style={styles.shippingSubtitle}>Llega en 24-48 horas • Envío rápido</Text>
+            </View>
+          </View>
+        </View>
 
-          <Text style={styles.description}>
+        {/* Quantity and Add to Cart */}
+        <View style={styles.purchaseSection}>
+          <View style={styles.quantityRow}>
+            <Text style={styles.quantityLabel}>Cantidad:</Text>
+            <View style={styles.quantityControls}>
+              <TouchableOpacity
+                style={styles.quantityBtn}
+                onPress={() => handleQuantityChange(-1)}
+                disabled={quantity <= 1}
+              >
+                <Minus size={18} color={quantity <= 1 ? '#D1D5DB' : '#3B82F6'} />
+              </TouchableOpacity>
+
+              <Text style={styles.quantityValue}>{quantity}</Text>
+
+              <TouchableOpacity
+                style={styles.quantityBtn}
+                onPress={() => handleQuantityChange(1)}
+                disabled={quantity >= (product.stock || 10)}
+              >
+                <Plus size={18} color={quantity >= (product.stock || 10) ? '#D1D5DB' : '#3B82F6'} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.stockIndicator}>({product.stock} disponibles)</Text>
+          </View>
+
+          {product.stock > 0 ? (
+            <TouchableOpacity style={styles.buyButton} onPress={handleAddToCart}>
+              <Text style={styles.buyButtonText}>Agregar al carrito</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.outOfStockButton}>
+              <Text style={styles.outOfStockButtonText}>Sin stock disponible</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Product Details */}
+        <View style={styles.infoSection}>
+          <Text style={styles.infoTitle}>Información del producto</Text>
+
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Categoría</Text>
+            <Text style={styles.infoValue}>{product.category || 'General'}</Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Marca</Text>
+            <Text style={styles.infoValue}>{product.brand || 'Sin especificar'}</Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Condición</Text>
+            <Text style={styles.infoValue}>Nuevo</Text>
+          </View>
+        </View>
+
+        {/* Description */}
+        <View style={styles.descriptionSection}>
+          <Text style={styles.descriptionTitle}>Descripción</Text>
+          <Text style={styles.descriptionText}>
             {product.description || 'No hay descripción disponible para este producto.'}
           </Text>
-
-          <View style={styles.detailsGrid}>
-            {/* Stock Detail */}
-            <View style={[
-              styles.detailBox,
-              product.stock === 0 && styles.detailBoxDanger,
-              product.stock > 0 && product.stock <= 5 && styles.detailBoxWarning,
-              product.stock > 5 && styles.detailBoxSuccess
-            ]}>
-              <View style={[
-                styles.detailIconContainer,
-                product.stock === 0 && styles.detailIconDanger,
-                product.stock > 0 && product.stock <= 5 && styles.detailIconWarning,
-                product.stock > 5 && styles.detailIconSuccess
-              ]}>
-                <Package
-                  size={20}
-                  color={product.stock === 0 ? '#EF4444' : product.stock <= 5 ? '#F59E0B' : '#10B981'}
-                />
-              </View>
-              <Text style={styles.detailBoxLabel}>Stock</Text>
-              <Text style={[
-                styles.detailBoxValue,
-                product.stock === 0 && styles.detailValueDanger,
-                product.stock > 0 && product.stock <= 5 && styles.detailValueWarning,
-                product.stock > 5 && styles.detailValueSuccess
-              ]}>
-                {product.stock === 0
-                  ? 'Agotado'
-                  : product.stock <= 5
-                  ? `${product.stock} unidades`
-                  : `${product.stock} disponibles`
-                }
-              </Text>
-              {product.stock > 0 && product.stock <= 5 && (
-                <Text style={styles.detailBoxSubtext}>¡Últimas unidades!</Text>
-              )}
-            </View>
-
-            {/* Shipping Detail */}
-            <View style={[styles.detailBox, styles.detailBoxInfo]}>
-              <View style={[styles.detailIconContainer, styles.detailIconInfo]}>
-                <Truck size={20} color="#3B82F6" />
-              </View>
-              <Text style={styles.detailBoxLabel}>Envío</Text>
-              <Text style={[styles.detailBoxValue, styles.detailValueInfo]}>Disponible</Text>
-              <Text style={styles.detailBoxSubtext}>Gratis en compras +$5000</Text>
-            </View>
-
-            {/* Delivery Detail */}
-            <View style={[styles.detailBox, styles.detailBoxInfo]}>
-              <View style={[styles.detailIconContainer, styles.detailIconInfo]}>
-                <Clock size={20} color="#3B82F6" />
-              </View>
-              <Text style={styles.detailBoxLabel}>Entrega</Text>
-              <Text style={[styles.detailBoxValue, styles.detailValueInfo]}>24-48 horas</Text>
-              <Text style={styles.detailBoxSubtext}>Envío rápido</Text>
-            </View>
-          </View>
-        </Card>
-
-        {/* Quantity Selector */}
-        <Card style={styles.quantityCard}>
-          <Text style={styles.quantityTitle}>Cantidad</Text>
-          <View style={styles.quantitySelector}>
-            <TouchableOpacity 
-              style={styles.quantityButton}
-              onPress={() => handleQuantityChange(-1)}
-              disabled={quantity <= 1}
-            >
-              <Minus size={20} color={quantity <= 1 ? '#D1D5DB' : '#111827'} />
-            </TouchableOpacity>
-            
-            <Text style={styles.quantityText}>{quantity}</Text>
-            
-            <TouchableOpacity 
-              style={styles.quantityButton}
-              onPress={() => handleQuantityChange(1)}
-              disabled={quantity >= (product.stock || 10)}
-            >
-              <Plus size={20} color={quantity >= (product.stock || 10) ? '#D1D5DB' : '#111827'} />
-            </TouchableOpacity>
-          </View>
-        </Card>
+        </View>
 
         {/* Related Products */}
         {relatedProducts.length > 0 && (
@@ -544,28 +546,7 @@ export default function ProductDetail() {
           </View>
         )}
 
-        {/* Add to Cart Button */}
-        <View style={styles.addToCartContainer}>
-          {product.stock === 0 ? (
-            <View style={styles.outOfStockContainer}>
-              <Text style={styles.outOfStockMessage}>
-                Lo sentimos, este producto está agotado
-              </Text>
-              <Button
-                title="Ver Productos Similares"
-                onPress={() => router.push('/(tabs)/shop')}
-                variant="outline"
-                size="large"
-              />
-            </View>
-          ) : (
-            <Button
-              title="Agregar al Carrito"
-              onPress={handleAddToCart}
-              size="large"
-            />
-          )}
-        </View>
+        <View style={{ height: 20 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -706,76 +687,101 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  category: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-    marginBottom: 4,
+    borderBottomColor: '#E5E7EB',
   },
   productName: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
+    fontSize: 20,
+    fontFamily: 'Inter-Regular',
     color: '#111827',
-    marginBottom: 8,
+    marginBottom: 12,
+    lineHeight: 26,
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 16,
   },
   ratingText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
     color: '#111827',
     marginLeft: 4,
   },
   reviewsText: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
-    marginLeft: 4,
+    marginLeft: 2,
   },
-  priceContainer: {
+  separator: {
+    width: 1,
+    height: 12,
+    backgroundColor: '#D1D5DB',
+    marginHorizontal: 8,
+  },
+  soldText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  priceSection: {
     marginBottom: 16,
   },
-  price: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
-    marginBottom: 16,
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
   },
-  discountBadge: {
-    backgroundColor: '#10B981',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 16,
-    alignSelf: 'flex-start',
-    marginBottom: 8,
-  },
-  discountBadgeText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
-  },
-  originalPrice: {
-    fontSize: 18,
+  originalPriceSmall: {
+    fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#9CA3AF',
     textDecorationLine: 'line-through',
-    marginBottom: 4,
+    marginRight: 8,
   },
-  discountedPrice: {
-    fontSize: 28,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
-    marginBottom: 4,
+  discountBadgeSmall: {
+    backgroundColor: '#00A650',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
-  savingsText: {
-    fontSize: 14,
+  discountBadgeSmallText: {
+    fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
+    color: '#FFFFFF',
+  },
+  currentPrice: {
+    fontSize: 32,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+  },
+  quickInfo: {
+    flexDirection: 'row',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  quickInfoItem: {
+    flex: 1,
+  },
+  quickInfoLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  quickInfoValue: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#00A650',
+  },
+  quickInfoValueWarning: {
+    color: '#F59E0B',
+  },
+  quickInfoDivider: {
+    width: 1,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: 16,
   },
   storeContainer: {
     flexDirection: 'row',
@@ -824,151 +830,141 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
   },
-  detailsCard: {
-    margin: 16,
-    marginTop: 8,
-    borderRadius: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+  shippingSection: {
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    marginBottom: 8,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
-  },
-  description: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  detailsGrid: {
+  shippingCard: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 16,
+    alignItems: 'center',
     gap: 12,
   },
-  detailBox: {
+  shippingInfo: {
     flex: 1,
-    minWidth: '30%',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
+  },
+  shippingTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  shippingSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  purchaseSection: {
+    backgroundColor: '#FFFFFF',
     padding: 16,
+    marginBottom: 8,
+  },
+  quantityRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 2,
+    marginBottom: 16,
+  },
+  quantityLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#111827',
+    marginRight: 12,
+  },
+  quantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
     borderColor: '#E5E7EB',
+    borderRadius: 6,
   },
-  detailBoxSuccess: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#A7F3D0',
-  },
-  detailBoxWarning: {
-    backgroundColor: '#FEF3C7',
-    borderColor: '#FDE68A',
-  },
-  detailBoxDanger: {
-    backgroundColor: '#FEE2E2',
-    borderColor: '#FECACA',
-  },
-  detailBoxInfo: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#BFDBFE',
-  },
-  detailIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  quantityBtn: {
+    padding: 10,
+    width: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
-    backgroundColor: '#FFFFFF',
   },
-  detailIconSuccess: {
-    backgroundColor: '#D1FAE5',
-  },
-  detailIconWarning: {
-    backgroundColor: '#FEF3C7',
-  },
-  detailIconDanger: {
-    backgroundColor: '#FEE2E2',
-  },
-  detailIconInfo: {
-    backgroundColor: '#DBEAFE',
-  },
-  detailBoxLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  detailBoxValue: {
-    fontSize: 15,
-    fontFamily: 'Inter-Bold',
+  quantityValue: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
     color: '#111827',
+    paddingHorizontal: 16,
+    minWidth: 40,
     textAlign: 'center',
-    marginBottom: 4,
   },
-  detailValueSuccess: {
-    color: '#059669',
-  },
-  detailValueWarning: {
-    color: '#D97706',
-  },
-  detailValueDanger: {
-    color: '#DC2626',
-  },
-  detailValueInfo: {
-    color: '#2563EB',
-  },
-  detailBoxSubtext: {
-    fontSize: 11,
+  stockIndicator: {
+    fontSize: 13,
     fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginLeft: 12,
+  },
+  buyButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buyButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  outOfStockButton: {
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  outOfStockButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
     color: '#9CA3AF',
-    textAlign: 'center',
   },
-  quantityCard: {
-    marginHorizontal: 16,
+  infoSection: {
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    marginBottom: 8,
+  },
+  infoTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
     marginBottom: 16,
-    borderRadius: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
   },
-  quantityTitle: {
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  infoLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  infoValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#111827',
+  },
+  descriptionSection: {
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    marginBottom: 8,
+  },
+  descriptionTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
     marginBottom: 12,
   },
-  quantitySelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quantityButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quantityText: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginHorizontal: 16,
-    minWidth: 30,
-    textAlign: 'center',
+  descriptionText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#4B5563',
+    lineHeight: 22,
   },
   relatedSection: {
     marginTop: 8,
@@ -1004,27 +1000,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Bold',
     color: '#10B981',
-  },
-  addToCartContainer: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  outOfStock: {
-    color: '#EF4444',
-    fontFamily: 'Inter-Bold',
-  },
-  lowStock: {
-    color: '#F59E0B',
-    fontFamily: 'Inter-SemiBold',
-  },
-  outOfStockContainer: {
-    gap: 12,
-  },
-  outOfStockMessage: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#EF4444',
-    textAlign: 'center',
-    marginBottom: 8,
   },
 });
