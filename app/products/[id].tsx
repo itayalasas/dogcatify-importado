@@ -68,14 +68,14 @@ export default function ProductDetail() {
         .select('*')
         .eq('id', id)
         .single();
-      
+
       if (productData && !error) {
         setProduct({
           id: productData.id,
           ...productData,
           createdAt: new Date(productData.created_at),
         });
-        
+
         // Fetch partner info
         if (productData.partner_id) {
           const { data: partnerData, error: partnerError } = await supabaseClient
@@ -83,12 +83,32 @@ export default function ProductDetail() {
             .select('*')
             .eq('id', productData.partner_id)
             .single();
-            
+
           if (partnerData && !partnerError) {
             setPartnerInfo({
               id: partnerData.id,
               ...partnerData
             });
+          }
+
+          // Check for active promotions if no discount was passed
+          if (!discount) {
+            const { data: promotions } = await supabaseClient
+              .from('promotions')
+              .select('*')
+              .eq('partner_id', productData.partner_id)
+              .eq('is_active', true)
+              .gte('end_date', new Date().toISOString());
+
+            if (promotions && promotions.length > 0) {
+              const applicablePromotion = promotions.find(p =>
+                p.applicable_products?.includes(id) ||
+                p.applicable_to === 'all'
+              );
+              if (applicablePromotion) {
+                setAppliedDiscount(applicablePromotion.discount_percentage || 0);
+              }
+            }
           }
         }
         
@@ -400,39 +420,67 @@ export default function ProductDetail() {
         {/* Product Details */}
         <Card style={styles.detailsCard}>
           <Text style={styles.sectionTitle}>Detalles del Producto</Text>
-          
+
           <Text style={styles.description}>
             {product.description || 'No hay descripción disponible para este producto.'}
           </Text>
-          
+
           <View style={styles.detailsGrid}>
-            <View style={styles.detailItem}>
-              <Package size={16} color={product.stock > 0 ? '#6B7280' : '#EF4444'} />
-              <Text style={styles.detailLabel}>Stock:</Text>
+            {/* Stock Detail */}
+            <View style={[
+              styles.detailBox,
+              product.stock === 0 && styles.detailBoxDanger,
+              product.stock > 0 && product.stock <= 5 && styles.detailBoxWarning,
+              product.stock > 5 && styles.detailBoxSuccess
+            ]}>
+              <View style={[
+                styles.detailIconContainer,
+                product.stock === 0 && styles.detailIconDanger,
+                product.stock > 0 && product.stock <= 5 && styles.detailIconWarning,
+                product.stock > 5 && styles.detailIconSuccess
+              ]}>
+                <Package
+                  size={20}
+                  color={product.stock === 0 ? '#EF4444' : product.stock <= 5 ? '#F59E0B' : '#10B981'}
+                />
+              </View>
+              <Text style={styles.detailBoxLabel}>Stock</Text>
               <Text style={[
-                styles.detailValue,
-                product.stock === 0 && styles.outOfStock,
-                product.stock > 0 && product.stock <= 5 && styles.lowStock
+                styles.detailBoxValue,
+                product.stock === 0 && styles.detailValueDanger,
+                product.stock > 0 && product.stock <= 5 && styles.detailValueWarning,
+                product.stock > 5 && styles.detailValueSuccess
               ]}>
                 {product.stock === 0
                   ? 'Agotado'
                   : product.stock <= 5
-                  ? `${product.stock} (¡Últimas unidades!)`
-                  : product.stock
+                  ? `${product.stock} unidades`
+                  : `${product.stock} disponibles`
                 }
               </Text>
+              {product.stock > 0 && product.stock <= 5 && (
+                <Text style={styles.detailBoxSubtext}>¡Últimas unidades!</Text>
+              )}
             </View>
-            
-            <View style={styles.detailItem}>
-              <Truck size={16} color="#6B7280" />
-              <Text style={styles.detailLabel}>Envío:</Text>
-              <Text style={styles.detailValue}>Disponible</Text>
+
+            {/* Shipping Detail */}
+            <View style={[styles.detailBox, styles.detailBoxInfo]}>
+              <View style={[styles.detailIconContainer, styles.detailIconInfo]}>
+                <Truck size={20} color="#3B82F6" />
+              </View>
+              <Text style={styles.detailBoxLabel}>Envío</Text>
+              <Text style={[styles.detailBoxValue, styles.detailValueInfo]}>Disponible</Text>
+              <Text style={styles.detailBoxSubtext}>Gratis en compras +$5000</Text>
             </View>
-            
-            <View style={styles.detailItem}>
-              <Clock size={16} color="#6B7280" />
-              <Text style={styles.detailLabel}>Entrega:</Text>
-              <Text style={styles.detailValue}>24-48 horas</Text>
+
+            {/* Delivery Detail */}
+            <View style={[styles.detailBox, styles.detailBoxInfo]}>
+              <View style={[styles.detailIconContainer, styles.detailIconInfo]}>
+                <Clock size={20} color="#3B82F6" />
+              </View>
+              <Text style={styles.detailBoxLabel}>Entrega</Text>
+              <Text style={[styles.detailBoxValue, styles.detailValueInfo]}>24-48 horas</Text>
+              <Text style={styles.detailBoxSubtext}>Envío rápido</Text>
             </View>
           </View>
         </Card>
@@ -800,25 +848,90 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   detailsGrid: {
-    marginTop: 8,
-  },
-  detailItem: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
+    flexWrap: 'wrap',
+    marginTop: 16,
+    gap: 12,
   },
-  detailLabel: {
-    fontSize: 14,
+  detailBox: {
+    flex: 1,
+    minWidth: '30%',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+  },
+  detailBoxSuccess: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  detailBoxWarning: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FDE68A',
+  },
+  detailBoxDanger: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FECACA',
+  },
+  detailBoxInfo: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
+  detailIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  detailIconSuccess: {
+    backgroundColor: '#D1FAE5',
+  },
+  detailIconWarning: {
+    backgroundColor: '#FEF3C7',
+  },
+  detailIconDanger: {
+    backgroundColor: '#FEE2E2',
+  },
+  detailIconInfo: {
+    backgroundColor: '#DBEAFE',
+  },
+  detailBoxLabel: {
+    fontSize: 12,
     fontFamily: 'Inter-Medium',
     color: '#6B7280',
-    marginLeft: 8,
-    width: 80,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  detailValue: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
+  detailBoxValue: {
+    fontSize: 15,
+    fontFamily: 'Inter-Bold',
     color: '#111827',
-    flex: 1,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  detailValueSuccess: {
+    color: '#059669',
+  },
+  detailValueWarning: {
+    color: '#D97706',
+  },
+  detailValueDanger: {
+    color: '#DC2626',
+  },
+  detailValueInfo: {
+    color: '#2563EB',
+  },
+  detailBoxSubtext: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    textAlign: 'center',
   },
   quantityCard: {
     marginHorizontal: 16,
