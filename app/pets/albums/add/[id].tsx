@@ -314,35 +314,6 @@ export default function AddPhoto() {
     }
   };
 
-  const createPostFromAlbum = async (imageUrls: string[], petData: any) => {
-    try {
-      const { error } = await supabaseClient
-         .from('posts')
-         .insert({
-           user_id: currentUser!.id,
-           pet_id: id,
-           content: photoDescription || `Nuevas fotos de ${petData.name} 📸`,
-           image_url: imageUrls[0], // Use first image as main post image
-           album_images: imageUrls, // Store all images for carousel
-           likes: [],
-           author: {
-             name: currentUser!.displayName || 'Usuario',
-             avatar: currentUser!.photoURL || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100',
-           },
-           pet: {
-             name: petData.name,
-             species: petData.species === 'dog' ? 'Perro' : 'Gato'
-           },
-           type: 'album'
-         });
-
-      if (error) throw error;
-    } catch (error) {
-      console.error('Error creating post:', error);
-      throw error;
-    }
-  };
-
   const handleSavePhotos = async () => {
     if (selectedImages.length === 0 && selectedVideos.length === 0) {
       Alert.alert('Error', 'Por favor selecciona al menos una foto o video');
