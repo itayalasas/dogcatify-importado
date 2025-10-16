@@ -206,7 +206,8 @@ export default function Services() {
   };
 
   const handleRatingPress = (item: any) => {
-    if (item.reviewsCount > 0) {
+    const reviewCount = item.reviews || item.reviewsCount || 0;
+    if (reviewCount > 0) {
       router.push(`/services/partner/${item.partnerId}?tab=reviews`);
     } else {
       Alert.alert('Sin reseñas', 'Este negocio aún no tiene reseñas.');
@@ -237,13 +238,13 @@ export default function Services() {
       return item.images[0];
     }
 
-    // Fallback: imágenes de Pexels según el tipo de negocio
+    // Fallback: imágenes de Pexels relacionadas con mascotas según tipo de negocio
     const fallbackImages = {
-      veterinary: 'https://images.pexels.com/photos/6235086/pexels-photo-6235086.jpeg?auto=compress&cs=tinysrgb&w=600',
-      grooming: 'https://images.pexels.com/photos/6816858/pexels-photo-6816858.jpeg?auto=compress&cs=tinysrgb&w=600',
-      boarding: 'https://images.pexels.com/photos/7210704/pexels-photo-7210704.jpeg?auto=compress&cs=tinysrgb&w=600',
-      walking: 'https://images.pexels.com/photos/2253275/pexels-photo-2253275.jpeg?auto=compress&cs=tinysrgb&w=600',
-      shelter: 'https://images.pexels.com/photos/4498185/pexels-photo-4498185.jpeg?auto=compress&cs=tinysrgb&w=600',
+      veterinary: 'https://images.pexels.com/photos/6235231/pexels-photo-6235231.jpeg?auto=compress&cs=tinysrgb&w=800',
+      grooming: 'https://images.pexels.com/photos/7788009/pexels-photo-7788009.jpeg?auto=compress&cs=tinysrgb&w=800',
+      boarding: 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=800',
+      walking: 'https://images.pexels.com/photos/406014/pexels-photo-406014.jpeg?auto=compress&cs=tinysrgb&w=800',
+      shelter: 'https://images.pexels.com/photos/2253275/pexels-photo-2253275.jpeg?auto=compress&cs=tinysrgb&w=800',
     };
 
     return fallbackImages[item.partnerType as keyof typeof fallbackImages] || fallbackImages.veterinary;
@@ -255,10 +256,10 @@ export default function Services() {
     // Filter by category
     if (selectedCategory !== 'all') {
       const categoryToBusinessType: Record<string, string> = {
-        'consulta': 'veterinary',
-        'baño': 'grooming',
+        'veterinaria': 'veterinary',
+        'peluquería': 'grooming',
         'paseo': 'walking',
-        'hospedaje': 'boarding'
+        'pensión': 'boarding'
       };
 
       const businessType = categoryToBusinessType[selectedCategory];
@@ -269,8 +270,10 @@ export default function Services() {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
       filtered = filtered.filter(partner =>
+        partner.partnerName?.toLowerCase().includes(query) ||
         partner.businessName?.toLowerCase().includes(query) ||
-        partner.partnerType?.toLowerCase().includes(query)
+        partner.partnerType?.toLowerCase().includes(query) ||
+        partner.partnerAddress?.toLowerCase().includes(query)
       );
     }
 
@@ -289,11 +292,11 @@ export default function Services() {
     );
   };
   const categories = [
-    { id: 'all', name: t('all') },
-    { id: 'consulta', name: t('consultation') },
-    { id: 'baño', name: t('grooming') },
-    { id: 'paseo', name: t('walking') },
-    { id: 'hospedaje', name: t('boarding') }
+    { id: 'all', name: 'Todo' },
+    { id: 'veterinaria', name: 'Veterinaria' },
+    { id: 'peluquería', name: 'Peluquería' },
+    { id: 'pensión', name: 'Pensión' },
+    { id: 'paseo', name: 'Paseo' }
   ];
 
   return (
