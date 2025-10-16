@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as Linking from 'expo-linking';
 import { AuthProvider } from '../contexts/AuthContext';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { BiometricProvider } from '../contexts/BiometricContext';
@@ -8,7 +9,7 @@ import { CartProvider } from '../contexts/CartContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import { supabaseClient } from '@/lib/supabase';
 
 export default function RootLayout() {
@@ -45,6 +46,63 @@ export default function RootLayout() {
     } catch (error) {
       console.error('Error setting up auth listener:', error);
     }
+  }, []);
+
+  // Handle deep links and universal links
+  useEffect(() => {
+    const handleDeepLink = (event: { url: string }) => {
+      const url = event.url;
+      console.log('Deep link received:', url);
+
+      try {
+        // Parse the URL
+        const { hostname, path, queryParams } = Linking.parse(url);
+
+        console.log('Parsed URL:', { hostname, path, queryParams });
+
+        // Handle album links: dogcatify://album/[id] or https://dogcatify.app/album/[id]
+        if (path?.startsWith('album/')) {
+          const albumId = path.replace('album/', '');
+          console.log('Navigating to album:', albumId);
+
+          // Use setTimeout to ensure navigation happens after app is ready
+          setTimeout(() => {
+            // Navigate to album view
+            const router = require('expo-router').router;
+            router.push(`/pets/albums/${albumId}`);
+          }, 500);
+        }
+        // Handle post links: dogcatify://post/[id] or https://dogcatify.app/post/[id]
+        else if (path?.startsWith('post/')) {
+          const postId = path.replace('post/', '');
+          console.log('Navigating to post:', postId);
+
+          setTimeout(() => {
+            // Navigate to feed (posts are shown in the main feed)
+            const router = require('expo-router').router;
+            router.push('/(tabs)');
+            // You could add logic here to scroll to specific post
+          }, 500);
+        }
+      } catch (error) {
+        console.error('Error handling deep link:', error);
+      }
+    };
+
+    // Get initial URL (if app was opened from a link)
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        console.log('Initial URL:', url);
+        handleDeepLink({ url });
+      }
+    });
+
+    // Listen for deep links while app is running
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   // Determine initial route based on platform

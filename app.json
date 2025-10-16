@@ -30,7 +30,8 @@
   "supportsTablet": true,
   "bundleIdentifier": "com.dogcatify.app",
   "associatedDomains": [
-    "applinks:dogcatify.com"
+    "applinks:dogcatify.app",
+    "applinks:www.dogcatify.app"
   ],
   "infoPlist": {
     "NSCameraUsageDescription": "Esta aplicación necesita acceso a la cámara para tomar fotos de mascotas.",
@@ -67,6 +68,16 @@
         {
           "scheme": "dogcatify",
           "host": "*"
+        },
+        {
+          "scheme": "https",
+          "host": "dogcatify.app",
+          "pathPrefix": "/album"
+        },
+        {
+          "scheme": "https",
+          "host": "dogcatify.app",
+          "pathPrefix": "/post"
         }
       ],
       "category": [
