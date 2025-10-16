@@ -28,44 +28,12 @@ export default function Register() {
   const { register } = useAuth();
   const { t } = useLanguage();
 
-  const handlePrivacyPress = async () => {
-    try {
-      const privacyUrl = process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL || 'https://dogcatify.com/privacy';
-      
-      if (Platform.OS === 'web') {
-        window.open(privacyUrl, '_blank');
-      } else {
-        const canOpen = await Linking.canOpenURL(privacyUrl);
-        if (canOpen) {
-          await Linking.openURL(privacyUrl);
-        } else {
-          Alert.alert('Error', 'No se pudo abrir el enlace');
-        }
-      }
-    } catch (error) {
-      console.error('Error opening privacy policy:', error);
-      Alert.alert('Error', 'No se pudo abrir las políticas de privacidad');
-    }
+  const handlePrivacyPress = () => {
+    router.push('/legal/privacy-policy');
   };
 
-  const handleTermsPress = async () => {
-    try {
-      const termsUrl = process.env.EXPO_PUBLIC_TERMS_OF_SERVICE_URL || 'https://dogcatify.com/terms';
-      
-      if (Platform.OS === 'web') {
-        window.open(termsUrl, '_blank');
-      } else {
-        const canOpen = await Linking.canOpenURL(termsUrl);
-        if (canOpen) {
-          await Linking.openURL(termsUrl);
-        } else {
-          Alert.alert('Error', 'No se pudo abrir el enlace');
-        }
-      }
-    } catch (error) {
-      console.error('Error opening terms of service:', error);
-      Alert.alert('Error', 'No se pudo abrir los términos de servicio');
-    }
+  const handleTermsPress = () => {
+    router.push('/legal/terms-of-service');
   };
 
   const handleRegister = async () => {
