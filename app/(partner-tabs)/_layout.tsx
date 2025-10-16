@@ -7,6 +7,7 @@ import { TouchableOpacity, View, Text, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { supabaseClient } from '../../lib/supabase';
+import { LoadingScreen } from '../../components/ui/LoadingScreen';
 
 export default function PartnerTabLayout() {
   const { t } = useLanguage();
@@ -98,12 +99,7 @@ export default function PartnerTabLayout() {
   };
 
   if (loading || !authInitialized) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 30 }}>
-        <ActivityIndicator size="large" color="#2D6A6F" />
-        <Text style={{ marginTop: 10, fontFamily: 'Inter-Regular' }}>Cargando perfil de negocio...</Text>
-      </View>
-    );
+    return <LoadingScreen message="Cargando perfil de negocio..." />;
   }
   
   // Don't render if not authenticated
