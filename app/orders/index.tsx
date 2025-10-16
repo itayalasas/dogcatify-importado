@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { ArrowLeft, Package, Clock, Truck, CircleCheck as CheckCircle, Circle as XCircle, MapPin, Phone, Star } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 
@@ -240,7 +241,7 @@ export default function MyOrders() {
           <View style={styles.placeholder} />
         </View>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando pedidos...</Text>
+          <LoadingSpinner message="Cargando pedidos..." />
         </View>
       </SafeAreaView>
     );

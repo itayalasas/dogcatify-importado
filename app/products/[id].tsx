@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, ShoppingCart, Star, Plus, Minus, Heart, Share2, Truck, Package, Clock } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { useCart } from '@/contexts/CartContext';
@@ -239,7 +240,7 @@ export default function ProductDetail() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando detalles del producto...</Text>
+          <LoadingSpinner message="Cargando detalles del producto..." />
         </View>
       </SafeAreaView>
     );

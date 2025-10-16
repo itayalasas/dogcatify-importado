@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Ale
 import { Filter, Search, ShoppingCart, Package } from 'lucide-react-native';
 import { FlatGrid } from 'react-native-super-grid';
 import { ProductCard } from '../../components/ProductCard';
+import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
@@ -148,7 +149,7 @@ export default function Shop() {
 
         {loading ? (
           <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Cargando productos...</Text>
+            <LoadingSpinner message="Cargando productos..." size="medium" />
           </View> 
         ) : filteredProducts.length === 0 ? (
           <View style={styles.emptyContainer}>

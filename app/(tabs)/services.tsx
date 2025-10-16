@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, LogBox, TextInput, Image, Dimensions } from 'react-native';
 import { Search, MapPin, Star, Phone, Stethoscope, Scissors, Home, Dog } from 'lucide-react-native';
 import { FlatList } from 'react-native';
-import { ServiceCard } from '../../components/ServiceCard'; 
+import { ServiceCard } from '../../components/ServiceCard';
+import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
@@ -345,7 +346,7 @@ export default function Services() {
         <View style={styles.servicesContainer}>
           {loading && (
             <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>Cargando servicios...</Text>
+              <LoadingSpinner message="Cargando servicios..." size="medium" />
             </View>
           )}
 
