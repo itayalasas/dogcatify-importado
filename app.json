@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "DogCatiFy",
-    "slug": "dogcatify",
+    "slug": "dogcatifyv1",
     "version": "9.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.jpg",
