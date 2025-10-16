@@ -74,17 +74,19 @@ const VideoPlayer = memo(({
 interface PostCardProps {
   post: any;
   isMock?: boolean;
+  isInViewport?: boolean;
   onLike: (postId: string, doubleTap?: boolean) => void;
   onComment: (postId: string, post?: any) => void;
   onShare: (postId: string) => void;
 }
 
-const PostCard: React.FC<PostCardProps> = ({ 
-  post, 
-  isMock = false, 
-  onLike, 
-  onComment, 
-  onShare 
+const PostCard: React.FC<PostCardProps> = ({
+  post,
+  isMock = false,
+  isInViewport = true,
+  onLike,
+  onComment,
+  onShare
 }) => {
   const { currentUser } = useAuth();
   const [liked, setLiked] = useState(false);
@@ -107,17 +109,45 @@ const PostCard: React.FC<PostCardProps> = ({
       setLiked(post.likes.includes(currentUser.id));
     }
     setLikesCount(post.likes?.length || 0);
-    
+
     console.log('PostCard useEffect - Post likes updated:', {
       postId: post.id,
       likesArray: post.likes,
       isLiked: post.likes?.includes(currentUser?.id),
       likesCount: post.likes?.length || 0
     });
-    
+
     // Always fetch comments count for display
     fetchCommentsCount();
   }, [post.likes, currentUser]);
+
+  // Pause videos that are not in the current view when scrolling albums
+  useEffect(() => {
+    Object.entries(videoRefs.current).forEach(([indexStr, ref]) => {
+      const index = parseInt(indexStr);
+      if (ref && index !== currentImageIndex) {
+        ref.pauseAsync().catch(() => {
+          // Ignore errors
+        });
+        setPlayingVideos(prev => ({ ...prev, [index]: false }));
+      }
+    });
+  }, [currentImageIndex]);
+
+  // Pause all videos when post is not in viewport
+  useEffect(() => {
+    if (!isInViewport) {
+      console.log('📴 Post out of viewport, pausing all videos');
+      Object.values(videoRefs.current).forEach((ref) => {
+        if (ref) {
+          ref.pauseAsync().catch(() => {
+            // Ignore errors
+          });
+        }
+      });
+      setPlayingVideos({});
+    }
+  }, [isInViewport]);
 
   // Separate effect for modal comments
   useEffect(() => {

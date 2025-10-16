@@ -174,6 +174,7 @@ export default function Home() {
   const [currentPage, setCurrentPage] = useState(0);
   const [hasMorePosts, setHasMorePosts] = useState(true);
   const [allPostsLoaded, setAllPostsLoaded] = useState(false);
+  const [visiblePostIds, setVisiblePostIds] = useState<Set<string>>(new Set());
   const { t } = useLanguage();
   const { currentUser } = useAuth();
   
@@ -748,9 +749,11 @@ export default function Home() {
         />
       );
     } else {
+      const isVisible = visiblePostIds.has(item.data.id);
       return (
         <PostCard
           post={item.data}
+          isInViewport={isVisible}
           onLike={handleLike}
           onComment={handleComment}
           onShare={handleShare}
@@ -758,6 +761,20 @@ export default function Home() {
       );
     }
   };
+
+  const onViewableItemsChanged = React.useRef(({ viewableItems }: any) => {
+    const newVisibleIds = new Set<string>();
+    viewableItems.forEach((item: any) => {
+      if (item.item.type === 'post') {
+        newVisibleIds.add(item.item.data.id);
+      }
+    });
+    setVisiblePostIds(newVisibleIds);
+  }).current;
+
+  const viewabilityConfig = React.useRef({
+    itemVisiblePercentThreshold: 50,
+  }).current;
 
   const renderFooter = () => {
     if (!loadingMore) return null;
@@ -824,6 +841,8 @@ export default function Home() {
         }
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.3}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
         ListHeaderComponent={<MedicalAlertsWidget />}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmpty}
