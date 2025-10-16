@@ -139,18 +139,25 @@ const PostCard: React.FC<PostCardProps> = ({
 
   // Pause all videos when post is not in viewport
   useEffect(() => {
-    if (!isInViewport) {
-      console.log('📴 Post out of viewport, pausing all videos');
+    const videoCount = Object.keys(videoRefs.current).length;
+    console.log(`🎬 Post ${post.id} viewport changed:`, {
+      isInViewport,
+      videoCount,
+      hasVideos: videoCount > 0
+    });
+
+    if (!isInViewport && videoCount > 0) {
+      console.log(`📴 Post ${post.id} out of viewport, pausing ${videoCount} videos`);
       Object.values(videoRefs.current).forEach((ref) => {
         if (ref) {
-          ref.pauseAsync().catch(() => {
-            // Ignore errors
+          ref.pauseAsync().catch((error) => {
+            console.log('Pause error (ignore):', error);
           });
         }
       });
       setPlayingVideos({});
     }
-  }, [isInViewport]);
+  }, [isInViewport, post.id]);
 
   // Separate effect for modal comments
   useEffect(() => {
@@ -745,12 +752,16 @@ const PostCard: React.FC<PostCardProps> = ({
               <VideoPlayer
                 videoRef={(ref) => {
                   videoRefs.current[0] = ref;
+                  // Initialize as playing if in viewport
+                  if (ref && isInViewport && playingVideos[0] === undefined) {
+                    setPlayingVideos(prev => ({ ...prev, [0]: true }));
+                  }
                 }}
                 source={{ uri: getCleanUrl(post.imageURL) }}
                 style={styles.singleImage}
                 onTogglePlay={() => toggleVideoPlayback(0)}
                 onChangeSpeed={() => changeVideoSpeed(0)}
-                isPlaying={playingVideos[0] !== false}
+                isPlaying={playingVideos[0] ?? true}
                 playbackRate={videoSpeeds[0] || 1}
                 isInViewport={isInViewport}
                 index={0}
@@ -805,12 +816,16 @@ const PostCard: React.FC<PostCardProps> = ({
                         videoRef={(ref) => {
                           videoRefs.current[index] = ref;
                           console.log(`🎥 Video ref set for index ${index}:`, ref ? 'exists' : 'null');
+                          // Initialize as playing if in viewport and is current image
+                          if (ref && isInViewport && currentImageIndex === index && playingVideos[index] === undefined) {
+                            setPlayingVideos(prev => ({ ...prev, [index]: true }));
+                          }
                         }}
                         source={{ uri: cleanUrl }}
                         style={styles.albumMainImage}
                         onTogglePlay={() => toggleVideoPlayback(index)}
                         onChangeSpeed={() => changeVideoSpeed(index)}
-                        isPlaying={playingVideos[index] !== false}
+                        isPlaying={playingVideos[index] ?? true}
                         playbackRate={videoSpeeds[index] || 1}
                         isInViewport={isInViewport && currentImageIndex === index}
                         index={index}
