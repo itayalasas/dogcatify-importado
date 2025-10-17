@@ -39,15 +39,17 @@ Se han implementado las siguientes mejoras en la aplicación:
 #### b) Carga Automática desde el Perfil del Usuario
 El carrito carga automáticamente los siguientes campos del perfil del usuario (`profiles`):
 
-| Campo en Perfil | Campo en Carrito | Obligatorio |
-|-----------------|------------------|-------------|
-| `calle` | Calle | ✅ Sí |
-| `numero` | Número | ✅ Sí |
-| `barrio` | Barrio | ❌ No |
-| `address_locality` | Localidad/Ciudad | ✅ Sí |
-| `address_department` | Departamento | ✅ Sí |
-| `codigo_postal` | Código Postal | ❌ No |
-| `address_phone` o `phone` | Teléfono | ⚠️ Recomendado |
+| Campo en Perfil | Campo en Carrito | Obligatorio | Notas |
+|-----------------|------------------|-------------|-------|
+| `calle` | Calle | ✅ Sí | |
+| `numero` | Número | ✅ Sí | |
+| `barrio` | Barrio | ❌ No | Muestra en vista compacta |
+| `address_locality` | Localidad/Ciudad | ✅ Sí | Ej: "Buceo", "Centro" |
+| `department_id` → `departments.name` | Departamento | ✅ Sí | Se obtiene por JOIN |
+| `codigo_postal` | Código Postal | ❌ No | |
+| `address_phone` o `phone` | Teléfono | ⚠️ Recomendado | |
+
+**Importante**: El nombre del departamento se obtiene mediante un JOIN con la tabla `departments` usando el campo `department_id`.
 
 #### c) Tres Estados de la Interfaz
 
@@ -114,28 +116,51 @@ Los campos opcionales (barrio, código postal, teléfono) solo se incluyen si ti
 
 ---
 
-## 3. Campos de la Tabla Profiles
+## 3. Campos de la Tabla Profiles y Departments
 
-Los campos de dirección que ya existen en la tabla `profiles` son:
+### Campos de Dirección en `profiles`
 
 ```sql
 -- Campos relacionados con dirección
-calle                   text
-numero                  text
-barrio                  text
-codigo_postal          text
-address_street         text  -- Alternativa a 'calle'
-address_number         text  -- Alternativa a 'numero'
-address_locality       text
-address_department     text
-address_phone          text
-latitud                text  -- Para geolocalización
-longitud              text  -- Para geolocalización
-country_id            uuid  -- Referencia al país
-department_id         uuid  -- Referencia al departamento
+calle                   text          -- Nombre de la calle
+numero                  text          -- Número de puerta
+barrio                  text          -- Barrio/zona (ej: "Buceo", "Centro")
+codigo_postal          text          -- Código postal
+address_locality       text          -- Localidad/Ciudad (ej: "Montevideo")
+address_street         text          -- Alternativa a 'calle' (legacy)
+address_number         text          -- Alternativa a 'numero' (legacy)
+address_department     text          -- Departamento en texto (legacy)
+address_phone          text          -- Teléfono de contacto para entregas
+phone                  text          -- Teléfono general
+latitud                text          -- Para geolocalización
+longitud              text          -- Para geolocalización
+country_id            uuid          -- Referencia al país
+department_id         uuid          -- ⭐ Referencia a la tabla departments
 ```
 
-**Nota:** El sistema usa principalmente `calle`, `numero`, `barrio`, `address_locality`, `address_department`, `codigo_postal` y `address_phone`.
+### Relación con Tabla `departments`
+
+El campo `department_id` es una **clave foránea** que referencia a la tabla `departments`:
+
+```sql
+-- Tabla departments
+CREATE TABLE departments (
+  id uuid PRIMARY KEY,
+  name text NOT NULL,  -- Ej: "Montevideo", "Canelones", "Maldonado"
+  ...
+);
+```
+
+**Cómo funciona:**
+- El carrito hace un **JOIN** entre `profiles` y `departments`
+- Obtiene el nombre del departamento desde `departments.name` usando `department_id`
+- Ejemplo: `department_id` → UUID → JOIN → `departments.name` = "Montevideo"
+
+**Nota:** El sistema usa principalmente:
+- `calle`, `numero`, `barrio` → Para dirección física
+- `address_locality` → Para la localidad (ej: "Buceo")
+- `department_id` → Para obtener el departamento (ej: "Montevideo")
+- `codigo_postal`, `address_phone` → Información adicional
 
 ---
 
