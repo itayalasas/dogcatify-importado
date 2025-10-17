@@ -294,12 +294,13 @@ Deno.serve(async (req: Request) => {
 
     console.log(`🔍 Buscando webhooks activos para evento ${event_type}...`);
 
-    // ⚠️ CRÍTICO: Incluir secret_key en el SELECT
+    // Obtener secret global de variable de entorno
+    const webhookSecret = Deno.env.get("WEBHOOK_SECRET") || "default_webhook_secret_key_2024";
+
     const { data: subscriptions, error: subsError } = await supabase
       .from("webhook_subscriptions")
-      .select("id, webhook_url, secret_key, events, is_active")
-      .eq("is_active", true)
-      .contains("events", [event_type]);
+      .select("id, webhook_url, events, is_active")
+      .eq("is_active", true);
 
     if (subsError) {
       console.error("❌ Error al buscar subscripciones:", subsError);
@@ -315,9 +316,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log(`✅ Webhooks activos encontrados: ${subscriptions?.length || 0}`);
+    // Filtrar por evento que contenga el event_type
+    const filteredSubscriptions = subscriptions?.filter(sub =>
+      sub.events && Array.isArray(sub.events) && sub.events.includes(event_type)
+    ) || [];
 
-    if (!subscriptions || subscriptions.length === 0) {
+    console.log(`✅ Webhooks activos encontrados: ${filteredSubscriptions.length}`);
+
+    if (filteredSubscriptions.length === 0) {
       console.log(`⚠️ No active webhooks found for event ${event_type}`);
       return new Response(
         JSON.stringify({
@@ -332,8 +338,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Agregar secret_key a cada subscription
+    const subscriptionsWithSecret = filteredSubscriptions.map(sub => ({
+      ...sub,
+      secret_key: webhookSecret,
+    }));
+
     console.log("🚀 Iniciando envío de webhooks...");
-    const notifications = subscriptions.map(subscription =>
+    const notifications = subscriptionsWithSecret.map(subscription =>
       sendWebhookNotification(subscription, order_id, event_type, order, supabase)
     );
 
@@ -345,7 +357,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         message: "Webhooks notificados",
-        webhooks_notified: subscriptions.length,
+        webhooks_notified: filteredSubscriptions.length,
       }),
       {
         status: 200,
