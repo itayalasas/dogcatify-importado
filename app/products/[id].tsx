@@ -159,7 +159,8 @@ export default function ProductDetail() {
       quantity: quantity,
       image: product.images && product.images.length > 0 ? product.images[0] : null,
       partnerId: product.partner_id,
-      partnerName: partnerInfo?.businessName || 'Tienda'
+      partnerName: partnerInfo?.businessName || 'Tienda',
+      iva_rate: product.iva_rate
     });
   };
 
