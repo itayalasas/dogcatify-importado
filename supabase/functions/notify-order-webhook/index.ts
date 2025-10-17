@@ -189,10 +189,18 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const { data: adminProfile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("email", "admin@dogcatify.com")
+      .single();
+
+    const adminId = adminProfile?.id || "00000000-0000-0000-0000-000000000000";
+
     const { data: subscriptions, error: subsError } = await supabase
       .from("webhook_subscriptions")
       .select("*")
-      .or(`partner_id.eq.${order.partner_id},partner_id.eq.00000000-0000-0000-0000-000000000000`)
+      .or(`partner_id.eq.${order.partner_id},partner_id.eq.${adminId}`)
       .eq("is_active", true)
       .contains("events", [event_type]);
 
