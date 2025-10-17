@@ -10,6 +10,7 @@ export interface CartItem {
   image?: string | null;
   partnerId: string;
   partnerName: string;
+  iva_rate?: number;
 }
 
 interface CartContextType {
