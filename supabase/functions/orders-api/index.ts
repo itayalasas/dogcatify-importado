@@ -13,6 +13,10 @@ interface OrderData {
   customer_id: string;
   items: any[];
   status: string;
+  subtotal?: number;
+  iva_rate?: number;
+  iva_amount?: number;
+  iva_included_in_price?: boolean;
   total_amount: number;
   shipping_address?: string;
   payment_preference_id?: string;
