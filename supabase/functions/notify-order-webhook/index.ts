@@ -172,13 +172,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select(`
-        *,
-        customer:profiles!customer_id(id, full_name, email, phone),
-        partner:profiles!partner_id(id, full_name, email, business_name),
-        service:services(id, name, description),
-        pet:pets(id, name, species, breed)
-      `)
+      .select("*")
       .eq("id", order_id)
       .single();
 
