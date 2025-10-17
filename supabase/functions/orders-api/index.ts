@@ -75,9 +75,9 @@ Deno.serve(async (req: Request) => {
     } else {
       const { data: partner, error: partnerError } = await supabase
         .from("profiles")
-        .select("id, full_name, email, role")
+        .select("id, display_name, email, is_partner")
         .eq("id", apiKey)
-        .eq("role", "partner")
+        .eq("is_partner", true)
         .single();
 
       if (partnerError || !partner) {
@@ -94,7 +94,7 @@ Deno.serve(async (req: Request) => {
       }
 
       partnerId = partner.id;
-      console.log(`👤 Partner access granted: ${partner.full_name}`);
+      console.log(`👤 Partner access granted: ${partner.display_name}`);
     }
 
     if (req.method === "GET" && orderId && orderId !== "orders-api") {
@@ -104,12 +104,14 @@ Deno.serve(async (req: Request) => {
           *,
           customer:profiles!orders_customer_id_fkey(
             id,
-            full_name,
+            display_name,
             email,
             phone,
-            address,
-            city,
-            country
+            calle,
+            numero,
+            barrio,
+            codigo_postal,
+            location
           )
         `)
         .eq("id", orderId);
@@ -164,12 +166,14 @@ Deno.serve(async (req: Request) => {
           *,
           customer:profiles!orders_customer_id_fkey(
             id,
-            full_name,
+            display_name,
             email,
             phone,
-            address,
-            city,
-            country
+            calle,
+            numero,
+            barrio,
+            codigo_postal,
+            location
           )
         `, { count: "exact" })
         .order("created_at", { ascending: false })
