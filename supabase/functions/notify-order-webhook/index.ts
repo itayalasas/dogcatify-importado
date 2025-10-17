@@ -9,10 +9,9 @@ const corsHeaders = {
 
 interface WebhookSubscription {
   id: string;
-  partner_id: string;
   webhook_url: string;
-  events: string[];
   secret_key: string;
+  events: string[];
   is_active: boolean;
 }
 
@@ -44,78 +43,127 @@ async function sendWebhookNotification(
   supabase: any,
   maxRetries: number = 3
 ): Promise<void> {
-  const payload = {
-    event: eventType,
-    order_id: orderId,
-    data: orderData,
-    timestamp: new Date().toISOString(),
-  };
+  console.log(`📨 sendWebhookNotification iniciada para orden ${orderId}`);
 
-  const payloadString = JSON.stringify(payload);
-  const signature = await generateSignature(payloadString, subscription.secret_key);
+  try {
+    console.log("🔨 Creando objeto payload...");
+    const payload = {
+      event: eventType,
+      order_id: orderId,
+      data: orderData,
+      timestamp: new Date().toISOString(),
+    };
+    console.log("✅ Objeto payload creado");
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    console.log("🔨 Convirtiendo payload a JSON string...");
+    let payloadString: string;
     try {
-      console.log(`Attempt ${attempt} to send webhook to ${subscription.webhook_url}`);
+      payloadString = JSON.stringify(payload);
+      console.log("✅ Payload convertido a string, longitud:", payloadString.length);
+      console.log("📦 Payload preview:", payloadString.substring(0, 300));
+    } catch (jsonError: any) {
+      console.error("❌ ERROR al hacer JSON.stringify:", jsonError.message);
+      throw jsonError;
+    }
 
-      const response = await fetch(subscription.webhook_url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-DogCatiFy-Signature": signature,
-          "X-DogCatiFy-Event": eventType,
-          "User-Agent": "DogCatiFy-Webhook/1.0",
-        },
-        body: payloadString,
-      });
+    console.log("🔨 Generando firma HMAC...");
+    console.log("🔑 Secret key length:", subscription.secret_key?.length || 0);
 
-      const responseBody = await response.text();
-      const success = response.ok;
+    if (!subscription.secret_key || subscription.secret_key.length === 0) {
+      console.error("❌ ERROR: secret_key está vacío!");
+      throw new Error("Secret key is empty");
+    }
 
-      await supabase.from("webhook_logs").insert({
-        webhook_subscription_id: subscription.id,
-        order_id: orderId,
-        event_type: eventType,
-        payload,
-        response_status: response.status,
-        response_body: responseBody.substring(0, 1000),
-        attempt_number: attempt,
-        success,
-      });
+    const signature = await generateSignature(payloadString, subscription.secret_key);
+    console.log("✅ Firma generada");
 
-      if (success) {
-        console.log(`Webhook sent successfully to ${subscription.webhook_url}`);
-        return;
-      } else {
-        console.error(`Webhook failed with status ${response.status}: ${responseBody}`);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🚀 Intento ${attempt}/${maxRetries} - Enviando a ${subscription.webhook_url}`);
+
+        const response = await fetch(subscription.webhook_url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-DogCatiFy-Signature": signature,
+            "X-DogCatiFy-Event": eventType,
+            "User-Agent": "DogCatiFy-Webhook/1.0",
+          },
+          body: payloadString,
+        });
+
+        console.log(`📥 Respuesta recibida: Status ${response.status}`);
+        const responseBody = await response.text();
+        const success = response.ok;
+
+        console.log("💾 Guardando log en webhook_logs...");
+        const logData = {
+          webhook_subscription_id: subscription.id,
+          order_id: orderId,
+          event_type: eventType,
+          payload: payload,
+          response_status: response.status,
+          response_body: responseBody.substring(0, 1000),
+          attempt_number: attempt,
+          success,
+        };
+        console.log("📋 Log data preparado (payload es objeto JSON)");
+
+        const { error: insertError } = await supabase.from("webhook_logs").insert(logData);
+
+        if (insertError) {
+          console.error("❌ ERROR al insertar en webhook_logs:", insertError);
+          throw insertError;
+        }
+
+        console.log("✅ Log guardado exitosamente");
+
+        if (success) {
+          console.log(`✅ Webhook enviado exitosamente a ${subscription.webhook_url}`);
+          return;
+        } else {
+          console.error(`⚠️ Webhook falló con status ${response.status}: ${responseBody.substring(0, 100)}`);
+
+          if (attempt < maxRetries) {
+            const delay = Math.pow(2, attempt) * 1000;
+            console.log(`⏳ Reintentando en ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
+      } catch (attemptError: any) {
+        console.error(`❌ Error en intento ${attempt}:`, attemptError.message);
+
+        try {
+          console.log("💾 Guardando log de error...");
+          await supabase.from("webhook_logs").insert({
+            webhook_subscription_id: subscription.id,
+            order_id: orderId,
+            event_type: eventType,
+            payload: payload,
+            response_status: 0,
+            response_body: attemptError.message,
+            attempt_number: attempt,
+            success: false,
+          });
+          console.log("✅ Log de error guardado");
+        } catch (logError: any) {
+          console.error("❌ ERROR al guardar log de error:", logError);
+        }
 
         if (attempt < maxRetries) {
           const delay = Math.pow(2, attempt) * 1000;
+          console.log(`⏳ Reintentando en ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
-    } catch (error: any) {
-      console.error(`Error sending webhook (attempt ${attempt}):`, error);
-
-      await supabase.from("webhook_logs").insert({
-        webhook_subscription_id: subscription.id,
-        order_id: orderId,
-        event_type: eventType,
-        payload,
-        response_status: 0,
-        response_body: error.message,
-        attempt_number: attempt,
-        success: false,
-      });
-
-      if (attempt < maxRetries) {
-        const delay = Math.pow(2, attempt) * 1000;
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
     }
-  }
 
-  console.error(`Failed to send webhook after ${maxRetries} attempts`);
+    console.error(`❌ Falló después de ${maxRetries} intentos`);
+  } catch (outerError: any) {
+    console.error("❌ ERROR CRÍTICO en sendWebhookNotification:", outerError);
+    console.error("Stack:", outerError.stack);
+    throw outerError;
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -166,14 +214,38 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    console.log(`🔍 Buscando orden: ${order_id}, evento: ${event_type}`);
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Query completa con todos los campos JSONB y JOIN a customer
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .select(`
-        *,
+        id,
+        partner_id,
+        customer_id,
+        status,
+        order_type,
+        total_amount,
+        items,
+        shipping_address,
+        payment_method,
+        payment_id,
+        payment_status,
+        payment_preference_id,
+        commission_amount,
+        partner_amount,
+        booking_id,
+        service_id,
+        appointment_date,
+        appointment_time,
+        pet_id,
+        booking_notes,
+        created_at,
+        updated_at,
         customer:profiles!orders_customer_id_fkey(
           id,
           display_name,
@@ -189,7 +261,23 @@ Deno.serve(async (req: Request) => {
       .eq("id", order_id)
       .single();
 
-    if (orderError || !order) {
+    if (orderError) {
+      console.error("❌ Error al obtener orden:", orderError);
+      return new Response(
+        JSON.stringify({
+          error: "Error al obtener orden",
+          message: orderError.message,
+          details: orderError,
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    if (!order) {
+      console.error("❌ Orden no encontrada:", order_id);
       return new Response(
         JSON.stringify({
           error: "Orden no encontrada",
@@ -202,27 +290,35 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { data: adminProfile } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("email", "admin@dogcatify.com")
-      .single();
+    console.log(`✅ Orden encontrada: ${order.id}, Partner: ${order.partner_id}`);
 
-    const adminId = adminProfile?.id || "00000000-0000-0000-0000-000000000000";
+    console.log(`🔍 Buscando webhooks activos para evento ${event_type}...`);
 
+    // ⚠️ CRÍTICO: Incluir secret_key en el SELECT
     const { data: subscriptions, error: subsError } = await supabase
       .from("webhook_subscriptions")
-      .select("*")
-      .or(`partner_id.eq.${order.partner_id},partner_id.eq.${adminId}`)
+      .select("id, webhook_url, secret_key, events, is_active")
       .eq("is_active", true)
       .contains("events", [event_type]);
 
     if (subsError) {
-      throw subsError;
+      console.error("❌ Error al buscar subscripciones:", subsError);
+      return new Response(
+        JSON.stringify({
+          error: "Error al buscar webhooks",
+          message: subsError.message,
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
+    console.log(`✅ Webhooks activos encontrados: ${subscriptions?.length || 0}`);
+
     if (!subscriptions || subscriptions.length === 0) {
-      console.log(`No active webhooks found for partner ${order.partner_id} and event ${event_type}`);
+      console.log(`⚠️ No active webhooks found for event ${event_type}`);
       return new Response(
         JSON.stringify({
           success: true,
@@ -236,11 +332,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    console.log("🚀 Iniciando envío de webhooks...");
     const notifications = subscriptions.map(subscription =>
       sendWebhookNotification(subscription, order_id, event_type, order, supabase)
     );
 
+    console.log("⏳ Esperando respuesta de webhooks...");
     await Promise.allSettled(notifications);
+    console.log("✅ Webhooks procesados");
 
     return new Response(
       JSON.stringify({
