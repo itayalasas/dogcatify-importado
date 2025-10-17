@@ -16,11 +16,24 @@ export default function Cart() {
   const [loading, setLoading] = useState(false);
   const [loadingAddress, setLoadingAddress] = useState(true);
   const [useNewAddress, setUseNewAddress] = useState(false);
-  const [addressStreet, setAddressStreet] = useState('');
-  const [addressNumber, setAddressNumber] = useState('');
-  const [addressLocality, setAddressLocality] = useState('');
-  const [addressDepartment, setAddressDepartment] = useState('');
-  const [addressPhone, setAddressPhone] = useState('');
+  const [savedAddress, setSavedAddress] = useState({
+    street: '',
+    number: '',
+    locality: '',
+    department: '',
+    barrio: '',
+    codigo_postal: '',
+    phone: ''
+  });
+  const [newAddress, setNewAddress] = useState({
+    street: '',
+    number: '',
+    locality: '',
+    department: '',
+    barrio: '',
+    codigo_postal: '',
+    phone: ''
+  });
 
   useEffect(() => {
     if (currentUser) {
@@ -35,7 +48,7 @@ export default function Cart() {
     try {
       const { data: profile, error } = await supabaseClient
         .from('profiles')
-        .select('address_street, address_number, address_locality, address_department, address_phone, phone')
+        .select('calle, numero, address_locality, address_department, barrio, codigo_postal, address_phone, phone')
         .eq('id', currentUser.id)
         .maybeSingle();
 
@@ -45,11 +58,16 @@ export default function Cart() {
       }
 
       if (profile) {
-        setAddressStreet(profile.address_street || '');
-        setAddressNumber(profile.address_number || '');
-        setAddressLocality(profile.address_locality || '');
-        setAddressDepartment(profile.address_department || '');
-        setAddressPhone(profile.address_phone || profile.phone || '');
+        const loadedAddress = {
+          street: profile.calle || '',
+          number: profile.numero || '',
+          locality: profile.address_locality || '',
+          department: profile.address_department || '',
+          barrio: profile.barrio || '',
+          codigo_postal: profile.codigo_postal || '',
+          phone: profile.address_phone || profile.phone || ''
+        };
+        setSavedAddress(loadedAddress);
       }
     } catch (error) {
       console.error('Error loading user address:', error);
@@ -77,8 +95,10 @@ export default function Cart() {
       return;
     }
 
-    if (!addressStreet.trim() || !addressNumber.trim() || !addressLocality.trim() || !addressDepartment.trim()) {
-      Alert.alert('Error', 'Por favor completa todos los campos de dirección');
+    const addressToUse = useNewAddress ? newAddress : savedAddress;
+
+    if (!addressToUse.street.trim() || !addressToUse.number.trim() || !addressToUse.locality.trim() || !addressToUse.department.trim()) {
+      Alert.alert('Error', 'Por favor completa los campos obligatorios de dirección (calle, número, localidad, departamento)');
       return;
     }
 
@@ -88,8 +108,16 @@ export default function Cart() {
       console.log('Cart items:', cart);
       console.log('Customer info:', currentUser);
 
-      // Format complete address
-      const fullAddress = `${addressStreet} ${addressNumber}, ${addressLocality}, ${addressDepartment}`;
+      const addressToUse = useNewAddress ? newAddress : savedAddress;
+
+      // Format complete address for shipping
+      let fullAddress = `${addressToUse.street} ${addressToUse.number}`;
+      if (addressToUse.barrio) fullAddress += `, ${addressToUse.barrio}`;
+      fullAddress += `, ${addressToUse.locality}, ${addressToUse.department}`;
+      if (addressToUse.codigo_postal) fullAddress += ` - CP: ${addressToUse.codigo_postal}`;
+      if (addressToUse.phone) fullAddress += ` - Tel: ${addressToUse.phone}`;
+
+      console.log('Shipping address:', fullAddress);
 
       // Calculate shipping cost
       const totalShippingCost = 500;
@@ -268,52 +296,111 @@ export default function Cart() {
                   <View style={styles.addressRow}>
                     <View style={styles.addressFieldLarge}>
                       <Input
-                        placeholder="Calle"
-                        value={addressStreet}
-                        onChangeText={setAddressStreet}
+                        placeholder="Calle *"
+                        value={useNewAddress ? newAddress.street : savedAddress.street}
+                        onChangeText={(text) => {
+                          if (useNewAddress) {
+                            setNewAddress({ ...newAddress, street: text });
+                          }
+                        }}
                         editable={useNewAddress}
                       />
                     </View>
                     <View style={styles.addressFieldSmall}>
                       <Input
-                        placeholder="Número"
-                        value={addressNumber}
-                        onChangeText={setAddressNumber}
+                        placeholder="Número *"
+                        value={useNewAddress ? newAddress.number : savedAddress.number}
+                        onChangeText={(text) => {
+                          if (useNewAddress) {
+                            setNewAddress({ ...newAddress, number: text });
+                          }
+                        }}
                         editable={useNewAddress}
                       />
                     </View>
                   </View>
 
                   <Input
-                    placeholder="Localidad/Ciudad"
-                    value={addressLocality}
-                    onChangeText={setAddressLocality}
+                    placeholder="Barrio (opcional)"
+                    value={useNewAddress ? newAddress.barrio : savedAddress.barrio}
+                    onChangeText={(text) => {
+                      if (useNewAddress) {
+                        setNewAddress({ ...newAddress, barrio: text });
+                      }
+                    }}
                     editable={useNewAddress}
                     style={styles.addressInput}
                   />
 
                   <Input
-                    placeholder="Departamento"
-                    value={addressDepartment}
-                    onChangeText={setAddressDepartment}
+                    placeholder="Localidad/Ciudad *"
+                    value={useNewAddress ? newAddress.locality : savedAddress.locality}
+                    onChangeText={(text) => {
+                      if (useNewAddress) {
+                        setNewAddress({ ...newAddress, locality: text });
+                      }
+                    }}
                     editable={useNewAddress}
+                    style={styles.addressInput}
+                  />
+
+                  <Input
+                    placeholder="Departamento *"
+                    value={useNewAddress ? newAddress.department : savedAddress.department}
+                    onChangeText={(text) => {
+                      if (useNewAddress) {
+                        setNewAddress({ ...newAddress, department: text });
+                      }
+                    }}
+                    editable={useNewAddress}
+                    style={styles.addressInput}
+                  />
+
+                  <Input
+                    placeholder="Código Postal (opcional)"
+                    value={useNewAddress ? newAddress.codigo_postal : savedAddress.codigo_postal}
+                    onChangeText={(text) => {
+                      if (useNewAddress) {
+                        setNewAddress({ ...newAddress, codigo_postal: text });
+                      }
+                    }}
+                    editable={useNewAddress}
+                    keyboardType="numeric"
                     style={styles.addressInput}
                   />
 
                   <Input
                     placeholder="Teléfono de contacto"
-                    value={addressPhone}
-                    onChangeText={setAddressPhone}
+                    value={useNewAddress ? newAddress.phone : savedAddress.phone}
+                    onChangeText={(text) => {
+                      if (useNewAddress) {
+                        setNewAddress({ ...newAddress, phone: text });
+                      }
+                    }}
                     editable={useNewAddress}
                     keyboardType="phone-pad"
                     style={styles.addressInput}
                   />
 
-                  {!useNewAddress && (addressStreet || addressNumber || addressLocality || addressDepartment) && (
+                  {!useNewAddress && (savedAddress.street || savedAddress.number || savedAddress.locality || savedAddress.department) && (
                     <View style={styles.addressPreview}>
                       <MapPin size={16} color="#6B7280" />
-                      <Text style={styles.addressPreviewText}>
-                        {addressStreet} {addressNumber}, {addressLocality}, {addressDepartment}
+                      <View style={styles.addressPreviewTextContainer}>
+                        <Text style={styles.addressPreviewText}>
+                          {savedAddress.street} {savedAddress.number}
+                          {savedAddress.barrio ? `, ${savedAddress.barrio}` : ''}
+                          {'\n'}
+                          {savedAddress.locality}, {savedAddress.department}
+                          {savedAddress.codigo_postal ? ` - CP: ${savedAddress.codigo_postal}` : ''}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {!useNewAddress && !savedAddress.street && !savedAddress.number && (
+                    <View style={styles.noAddressContainer}>
+                      <Text style={styles.noAddressText}>
+                        No tienes una dirección guardada. Marca "Usar dirección diferente" para ingresar una.
                       </Text>
                     </View>
                   )}
@@ -565,18 +652,33 @@ const styles = StyleSheet.create({
   },
   addressPreview: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: '#F9FAFB',
     padding: 12,
     borderRadius: 8,
     marginTop: 8,
     gap: 8,
   },
-  addressPreviewText: {
+  addressPreviewTextContainer: {
     flex: 1,
+  },
+  addressPreviewText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#374151',
+    lineHeight: 20,
+  },
+  noAddressContainer: {
+    backgroundColor: '#FEF3C7',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  noAddressText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#92400E',
+    textAlign: 'center',
   },
   summaryCard: {
     marginHorizontal: 16,
