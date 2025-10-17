@@ -593,12 +593,20 @@ export default function ServiceDetail() {
                       </Text>
                     )}
                   </View>
-                  <Text style={[
-                    styles.categoryPrice,
-                    selectedCategory === category.id && styles.selectedCategoryText
-                  ]}>
-                    {formatPrice(category.price)}
-                  </Text>
+                  <View>
+                    <Text style={[
+                      styles.categoryPrice,
+                      selectedCategory === category.id && styles.selectedCategoryText
+                    ]}>
+                      {formatPrice(category.price)}
+                    </Text>
+                    <Text style={[
+                      styles.categoryIvaIncluded,
+                      selectedCategory === category.id && styles.selectedCategoryText
+                    ]}>
+                      IVA incluido
+                    </Text>
+                  </View>
                 </TouchableOpacity>
                 );
               })}
@@ -618,9 +626,13 @@ export default function ServiceDetail() {
                   <Text style={styles.savingsText}>
                     ¡Ahorras {formatPrice(service.price * (appliedDiscount / 100))}!
                   </Text>
+                  <Text style={styles.ivaIncluded}>IVA incluido</Text>
                 </View>
               ) : (
-                <Text style={styles.priceText}>{formatPrice(service.price)}</Text>
+                <View>
+                  <Text style={styles.priceText}>{formatPrice(service.price)}</Text>
+                  <Text style={styles.ivaIncluded}>IVA incluido</Text>
+                </View>
               )}
             </>
           )}
@@ -1073,6 +1085,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#10B981',
   },
+  ivaIncluded: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 4,
+  },
   serviceDetails: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1439,6 +1457,12 @@ const styles = StyleSheet.create({
   },
   selectedCategoryText: {
     color: '#3B82F6',
+  },
+  categoryIvaIncluded: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    marginTop: 2,
   },
   imageViewerContainer: {
     flex: 1,
