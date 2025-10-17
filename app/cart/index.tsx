@@ -188,16 +188,21 @@ export default function Cart() {
 
   const getCompactAddress = () => {
     const addr = useNewAddress ? newAddress : savedAddress;
-    if (!addr.street && !addr.number) return 'Sin dirección';
+    if (!addr.street && !addr.number) return null;
 
     let compact = `${addr.street} ${addr.number}`;
     if (addr.barrio) compact += `, ${addr.barrio}`;
     return compact;
   };
 
+  const hasPartialAddress = () => {
+    const addr = useNewAddress ? newAddress : savedAddress;
+    return !!(addr.street || addr.number || addr.barrio);
+  };
+
   const hasCompleteAddress = () => {
     const addr = useNewAddress ? newAddress : savedAddress;
-    return addr.street && addr.number && addr.locality && addr.department;
+    return !!(addr.street && addr.number && addr.locality && addr.department);
   };
 
   return (
@@ -323,15 +328,19 @@ export default function Cart() {
                   <MapPin size={20} color="#3B82F6" />
                   <View style={styles.addressHeaderText}>
                     <Text style={styles.addressHeaderTitle}>Dirección de Envío</Text>
-                    {!loadingAddress && hasCompleteAddress() && !isAddressExpanded && (
-                      <Text style={styles.addressHeaderSubtitle} numberOfLines={1}>
-                        {getCompactAddress()}
-                      </Text>
-                    )}
-                    {!loadingAddress && !hasCompleteAddress() && !isAddressExpanded && (
-                      <Text style={styles.addressHeaderWarning}>
-                        ⚠️ Completar dirección
-                      </Text>
+                    {!loadingAddress && !isAddressExpanded && (
+                      <>
+                        {hasPartialAddress() && getCompactAddress() && (
+                          <Text style={styles.addressHeaderSubtitle} numberOfLines={1}>
+                            {getCompactAddress()}
+                          </Text>
+                        )}
+                        {!hasCompleteAddress() && (
+                          <Text style={styles.addressHeaderWarning}>
+                            ⚠️ {hasPartialAddress() ? 'Completar localidad y departamento' : 'Completar dirección'}
+                          </Text>
+                        )}
+                      </>
                     )}
                   </View>
                 </View>
