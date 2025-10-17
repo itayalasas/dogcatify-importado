@@ -67,30 +67,44 @@ Deno.serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Verificar que el API Key corresponde a un partner válido
-    const { data: partner, error: partnerError } = await supabase
-      .from("profiles")
-      .select("id, full_name, email, role")
-      .eq("id", apiKey)
-      .eq("role", "partner")
-      .single();
+    // Token administrativo para CRM (acceso completo a todas las órdenes)
+    const adminToken = Deno.env.get("ADMIN_API_TOKEN") || "dogcatify_admin_2025_secure";
+    let isAdmin = false;
+    let partnerId: string | null = null;
 
-    if (partnerError || !partner) {
-      return new Response(
-        JSON.stringify({
-          error: "API Key inválida",
-          message: "El API Key proporcionado no es válido o no pertenece a un partner",
-        }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+    if (apiKey === adminToken) {
+      // Token administrativo - acceso total
+      isAdmin = true;
+      console.log("🔐 Admin access granted - Full access to all orders");
+    } else {
+      // Token de partner - verificar que es un partner válido
+      const { data: partner, error: partnerError } = await supabase
+        .from("profiles")
+        .select("id, full_name, email, role")
+        .eq("id", apiKey)
+        .eq("role", "partner")
+        .single();
+
+      if (partnerError || !partner) {
+        return new Response(
+          JSON.stringify({
+            error: "API Key inválida",
+            message: "El API Key proporcionado no es válido. Debe ser un Partner ID válido o el token administrativo.",
+          }),
+          {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      partnerId = partner.id;
+      console.log(`👤 Partner access granted: ${partner.full_name}`);
     }
 
     // GET /orders/:id - Obtener datos de una orden específica
     if (req.method === "GET" && orderId && orderId !== "orders-api") {
-      const { data: order, error: orderError } = await supabase
+      let orderQuery = supabase
         .from("orders")
         .select(`
           *,
@@ -99,9 +113,14 @@ Deno.serve(async (req: Request) => {
           service:services(id, name, description),
           pet:pets(id, name, species, breed)
         `)
-        .eq("id", orderId)
-        .eq("partner_id", partner.id)
-        .single();
+        .eq("id", orderId);
+
+      // Si no es admin, filtrar por partner_id
+      if (!isAdmin && partnerId) {
+        orderQuery = orderQuery.eq("partner_id", partnerId);
+      }
+
+      const { data: order, error: orderError } = await orderQuery.single();
 
       if (orderError || !order) {
         return new Response(
@@ -131,13 +150,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // GET /orders - Listar todas las órdenes del partner
+    // GET /orders - Listar órdenes (todas si es admin, solo las propias si es partner)
     if (req.method === "GET") {
       const page = parseInt(url.searchParams.get("page") || "1");
       const limit = parseInt(url.searchParams.get("limit") || "10");
       const status = url.searchParams.get("status");
       const from = url.searchParams.get("from");
       const to = url.searchParams.get("to");
+      const filterPartnerId = url.searchParams.get("partner_id"); // Permite filtrar por partner si eres admin
 
       const offset = (page - 1) * limit;
 
@@ -146,12 +166,22 @@ Deno.serve(async (req: Request) => {
         .select(`
           *,
           customer:profiles!customer_id(id, full_name, email, phone),
+          partner:profiles!partner_id(id, full_name, email, business_name),
           service:services(id, name, description),
           pet:pets(id, name, species, breed)
         `, { count: "exact" })
-        .eq("partner_id", partner.id)
         .order("created_at", { ascending: false })
         .range(offset, offset + limit - 1);
+
+      // Si no es admin, filtrar por partner_id
+      if (!isAdmin && partnerId) {
+        query = query.eq("partner_id", partnerId);
+      }
+
+      // Si es admin y especifica partner_id, filtrar por ese partner
+      if (isAdmin && filterPartnerId) {
+        query = query.eq("partner_id", filterPartnerId);
+      }
 
       if (status) {
         query = query.eq("status", status);
