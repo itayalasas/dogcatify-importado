@@ -208,6 +208,8 @@ export const getPartnerMercadoPagoConfig = async (partnerId: string) => {
       ...data.mercadopago_config,
       commission_percentage: data.commission_percentage || 5.0,
       business_name: data.business_name,
+      iva_rate: data.iva_rate || 0,
+      iva_included_in_price: data.iva_included_in_price || false,
       // Para configuraciones manuales, usar el partner_id como user_id si no existe
       user_id: data.mercadopago_config.user_id || data.mercadopago_config.account_id || partnerId
     };
@@ -465,14 +467,26 @@ export const createMultiPartnerOrder = async (
 
     // Add IVA info to each item
     const itemsWithIVA = cartItems.map(item => {
-      const itemTotal = item.price * item.quantity;
-      const itemSubtotal = ivaCalculation.ivaRate > 0 ? itemTotal / (1 + ivaCalculation.ivaRate / 100) : itemTotal;
-      const itemIVA = itemTotal - itemSubtotal;
+      // Use item's IVA rate if available, otherwise use partner's IVA rate
+      const itemIvaRate = (item.iva_rate !== undefined && item.iva_rate !== null) ? item.iva_rate : ivaCalculation.ivaRate;
+      const itemPrice = item.price * item.quantity;
+      let itemSubtotal: number;
+      let itemIVA: number;
+
+      if (ivaCalculation.ivaIncluded) {
+        // IVA incluido: extraer del precio
+        itemSubtotal = itemIvaRate > 0 ? itemPrice / (1 + itemIvaRate / 100) : itemPrice;
+        itemIVA = itemPrice - itemSubtotal;
+      } else {
+        // IVA no incluido: sumar al precio
+        itemSubtotal = itemPrice;
+        itemIVA = itemIvaRate > 0 ? itemSubtotal * (itemIvaRate / 100) : 0;
+      }
 
       return {
         ...item,
         subtotal: Math.round(itemSubtotal * 100) / 100,
-        iva_rate: ivaCalculation.ivaRate,
+        iva_rate: itemIvaRate,
         iva_amount: Math.round(itemIVA * 100) / 100
       };
     });
