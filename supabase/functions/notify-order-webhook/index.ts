@@ -192,7 +192,7 @@ Deno.serve(async (req: Request) => {
     const { data: subscriptions, error: subsError } = await supabase
       .from("webhook_subscriptions")
       .select("*")
-      .eq("partner_id", order.partner_id)
+      .or(`partner_id.eq.${order.partner_id},partner_id.eq.00000000-0000-0000-0000-000000000000`)
       .eq("is_active", true)
       .contains("events", [event_type]);
 
