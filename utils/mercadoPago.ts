@@ -463,11 +463,25 @@ export const createMultiPartnerOrder = async (
     // Generate a simple unique ID for temporary use
     const tempOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
+    // Add IVA info to each item
+    const itemsWithIVA = cartItems.map(item => {
+      const itemTotal = item.price * item.quantity;
+      const itemSubtotal = ivaCalculation.ivaRate > 0 ? itemTotal / (1 + ivaCalculation.ivaRate / 100) : itemTotal;
+      const itemIVA = itemTotal - itemSubtotal;
+
+      return {
+        ...item,
+        subtotal: Math.round(itemSubtotal * 100) / 100,
+        iva_rate: ivaCalculation.ivaRate,
+        iva_amount: Math.round(itemIVA * 100) / 100
+      };
+    });
+
     // Prepare order data
     const orderData = {
       partner_id: primaryPartnerId,
       customer_id: customerInfo.id,
-      items: cartItems,
+      items: itemsWithIVA,
       subtotal: ivaCalculation.subtotal,
       iva_rate: ivaCalculation.ivaRate,
       iva_amount: ivaCalculation.ivaAmount,
@@ -685,10 +699,36 @@ export const createServiceBookingOrder = async (bookingData: {
   try {
     console.log('Creating service booking order...');
     console.log('Booking data:', bookingData);
-    
+
     // Get partner's Mercado Pago configuration
     const partnerConfig = await getPartnerMercadoPagoConfig(bookingData.partnerId);
     console.log('Partner MP config loaded for:', partnerConfig.business_name);
+
+    // Get service details to obtain IVA rate
+    const { data: serviceData, error: serviceError } = await supabaseClient
+      .from('partner_services')
+      .select('iva_rate')
+      .eq('id', bookingData.serviceId)
+      .single();
+
+    // Get IVA rate: service > partner > 0 (default)
+    let ivaRate = 0;
+    if (serviceData?.iva_rate != null) {
+      ivaRate = serviceData.iva_rate;
+    } else if (partnerConfig.iva_rate != null) {
+      ivaRate = partnerConfig.iva_rate;
+    }
+
+    // Calculate IVA (included in price)
+    const subtotal = ivaRate > 0 ? bookingData.totalAmount / (1 + ivaRate / 100) : bookingData.totalAmount;
+    const ivaAmount = bookingData.totalAmount - subtotal;
+
+    console.log('IVA calculation:', {
+      total: bookingData.totalAmount,
+      iva_rate: ivaRate,
+      subtotal: subtotal.toFixed(2),
+      iva_amount: ivaAmount.toFixed(2)
+    });
     
     // Calculate commission
     const commissionAmount = bookingData.totalAmount * ((partnerConfig.commission_percentage || 5.0) / 100);
@@ -750,8 +790,14 @@ export const createServiceBookingOrder = async (bookingData: {
         name: bookingData.serviceName,
         price: bookingData.totalAmount,
         quantity: 1,
-        type: 'service'
+        type: 'service',
+        iva_rate: ivaRate,
+        subtotal: subtotal,
+        iva_amount: ivaAmount
       }],
+      subtotal: subtotal,
+      iva_rate: ivaRate,
+      iva_amount: ivaAmount,
       total_amount: bookingData.totalAmount,
       commission_amount: commissionAmount,
       partner_amount: partnerAmount,
