@@ -18,6 +18,7 @@ export default function AddService() {
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [price, setPrice] = useState('');
+  const [ivaRate, setIvaRate] = useState('22');
   const [duration, setDuration] = useState('60');
   const [stock, setStock] = useState('10');
   const [brand, setBrand] = useState('');
@@ -291,6 +292,7 @@ export default function AddService() {
           description: description.trim() || '',
           category: category.trim(),
           price: parseFloat(price),
+          iva_rate: ivaRate ? parseFloat(ivaRate) : 0,
           stock: parseInt(stock) || 10,
           brand: brand.trim() || null,
           weight: weight.trim() || null,
@@ -326,6 +328,7 @@ export default function AddService() {
           price_overnight: priceOvernight ? parseFloat(priceOvernight) : null,
           price_weekend: priceWeekend ? parseFloat(priceWeekend) : null,
           price_weekly: priceWeekly ? parseFloat(priceWeekly) : null,
+          iva_rate: ivaRate ? parseFloat(ivaRate) : 0,
           price: 0, // Legacy field
           duration: 0, // No aplica para pensión
           images: imageUrls,
@@ -347,6 +350,7 @@ export default function AddService() {
           description: description.trim() || '',
           category: category.trim(),
           price: parseFloat(price),
+          iva_rate: ivaRate ? parseFloat(ivaRate) : 0,
           duration: parseInt(duration) || 60,
           images: imageUrls,
           is_active: true,
@@ -639,6 +643,15 @@ export default function AddService() {
                 onChangeText={setPrice}
                 keyboardType="numeric"
                 leftIcon={<DollarSign size={20} color="#6B7280" />}
+              />
+
+              <Input
+                label="IVA % (opcional)"
+                placeholder="22"
+                value={ivaRate}
+                onChangeText={setIvaRate}
+                keyboardType="numeric"
+                leftIcon={<Tag size={20} color="#6B7280" />}
               />
             </>
           )}
