@@ -23,11 +23,20 @@ Se han implementado las siguientes mejoras en la aplicación:
 
 ---
 
-## 2. Carrito de Compras - Sistema de Dirección (`app/cart/index.tsx`)
+## 2. Carrito de Compras - Sistema de Dirección Colapsable (`app/cart/index.tsx`)
 
 ### Cambios Principales:
 
-#### a) Carga Automática desde el Perfil del Usuario
+#### a) Ubicación y Diseño Optimizado
+- **Ubicación**: La sección de dirección está ahora **debajo del resumen del pedido** en lugar de arriba
+- **Diseño colapsable**: Por defecto, la dirección se muestra de forma compacta y se puede expandir al hacer clic
+- **Vista previa compacta**: Muestra "Benigno Paiva 1165, Buceo" sin ocupar mucho espacio
+- **Indicador visual**:
+  - ✅ Si la dirección está completa, muestra la dirección en formato corto
+  - ⚠️ Si falta información, muestra "Completar dirección" en amarillo
+- **Iconos**: Chevron hacia abajo cuando está colapsado, hacia arriba cuando está expandido
+
+#### b) Carga Automática desde el Perfil del Usuario
 El carrito carga automáticamente los siguientes campos del perfil del usuario (`profiles`):
 
 | Campo en Perfil | Campo en Carrito | Obligatorio |
@@ -40,12 +49,28 @@ El carrito carga automáticamente los siguientes campos del perfil del usuario (
 | `codigo_postal` | Código Postal | ❌ No |
 | `address_phone` o `phone` | Teléfono | ⚠️ Recomendado |
 
-#### b) Dos Modos de Operación
+#### c) Tres Estados de la Interfaz
+
+**Estado 1: Colapsado con Dirección Completa**
+- Muestra solo: "Dirección de Envío" + "Calle Número, Barrio" (ej: "Benigno Paiva 1165, Buceo")
+- Icono de flecha hacia abajo para indicar que se puede expandir
+- Usuario puede proceder al checkout sin expandir
+
+**Estado 2: Colapsado Sin Dirección o Incompleta**
+- Muestra: "Dirección de Envío" + "⚠️ Completar dirección" en amarillo
+- Indica visualmente que falta información
+- Usuario debe expandir para completar los datos
+
+**Estado 3: Expandido**
+- Muestra todos los campos de dirección
+- Checkbox "Usar dirección diferente" visible
+- Campos editables o no según el checkbox
+
+#### d) Dos Modos de Operación
 
 **Modo 1: Usar Dirección Guardada (Por defecto)**
 - Los campos se muestran con la información del perfil
 - Los campos están deshabilitados (solo lectura)
-- Se muestra una vista previa de la dirección completa formateada
 - Al hacer checkout, se usa esta dirección
 - **NO se modifica el perfil del usuario**
 
@@ -56,7 +81,7 @@ El carrito carga automáticamente los siguientes campos del perfil del usuario (
 - Esta dirección **NO se guarda en el perfil**
 - Solo se envía en el campo `shipping_address` de la orden
 
-#### c) Formato de Dirección en la Orden
+#### e) Formato de Dirección en la Orden
 La dirección se concatena en el siguiente formato:
 
 ```
@@ -70,13 +95,13 @@ Av. 18 de Julio 1234, Centro, Montevideo, Montevideo - CP: 11200 - Tel: 09912345
 
 Los campos opcionales (barrio, código postal, teléfono) solo se incluyen si tienen valor.
 
-#### d) Validación
+#### f) Validación
 - **Campos obligatorios**: calle, número, localidad, departamento
 - **Campos opcionales**: barrio, código postal, teléfono
 - Se muestra error si faltan campos obligatorios
 - La validación ocurre antes del checkout
 
-#### e) Manejo de Casos Especiales
+#### g) Manejo de Casos Especiales
 
 **Usuario sin dirección guardada:**
 - Se muestra un mensaje: "No tienes una dirección guardada. Marca 'Usar dirección diferente' para ingresar una."
@@ -116,33 +141,36 @@ department_id         uuid  -- Referencia al departamento
 
 ## 4. Flujo de Usuario
 
-### Escenario 1: Usuario con Dirección Completa Guardada
+### Escenario 1: Usuario con Dirección Completa Guardada (Flujo Rápido)
 1. Usuario agrega productos al carrito
 2. Va al carrito de compras
-3. Ve su dirección precargada automáticamente en campos deshabilitados
-4. Ve una vista previa de la dirección completa
-5. Procede directamente al pago sin modificar nada
-6. La dirección del perfil se envía en la orden
+3. Ve el resumen del pedido con el total
+4. Ve la sección "Dirección de Envío" colapsada mostrando "Benigno Paiva 1165, Buceo"
+5. **NO necesita expandir** la dirección si está conforme
+6. Procede directamente al pago
+7. La dirección del perfil se envía en la orden
 
-### Escenario 2: Usuario Quiere Usar Dirección Diferente (Ej: Regalo, Oficina)
+### Escenario 2: Usuario Quiere Verificar o Cambiar Dirección
 1. Usuario agrega productos al carrito
 2. Va al carrito de compras
-3. Ve su dirección guardada
-4. Marca el checkbox "Usar dirección diferente"
-5. Los campos se habilitan
-6. Modifica o ingresa una dirección completamente nueva
+3. Ve la dirección compacta "Benigno Paiva 1165, Buceo"
+4. **Hace clic para expandir** y ver todos los detalles
+5. Opción A: Verifica que está correcta y colapsa nuevamente
+6. Opción B: Marca "Usar dirección diferente" y modifica los datos
 7. Procede al pago
 8. **La nueva dirección se envía en la orden PERO NO se guarda en el perfil**
-9. La próxima vez que compre, verá nuevamente su dirección original
 
 ### Escenario 3: Usuario sin Dirección Guardada
 1. Usuario nuevo sin dirección
 2. Va al carrito
-3. Ve mensaje indicando que no tiene dirección guardada
-4. Marca el checkbox "Usar dirección diferente"
-5. Completa todos los campos obligatorios
-6. Procede al pago
-7. La dirección se envía en la orden pero no se guarda en el perfil
+3. Ve "⚠️ Completar dirección" en amarillo (colapsado)
+4. **Hace clic para expandir** la sección
+5. Ve mensaje: "No tienes dirección guardada..."
+6. Marca el checkbox "Usar dirección diferente"
+7. Completa todos los campos obligatorios
+8. Puede colapsar la sección para ver el resumen
+9. Procede al pago
+10. La dirección se envía en la orden pero NO se guarda en el perfil
 
 ---
 
@@ -158,18 +186,23 @@ department_id         uuid  -- Referencia al departamento
 - No se modifica el perfil sin consentimiento explícito del usuario
 
 ### UX/UI
-- Estados de carga claros ("Cargando dirección...")
-- Validación en tiempo real con mensajes descriptivos
-- Indicadores visuales de campos obligatorios (*)
-- Vista previa formateada de la dirección
-- Checkbox claro para cambiar de modo
-- Diseño responsive y accesible
+- **Diseño colapsable**: Reduce el espacio visual del formulario
+- **Vista previa compacta**: "Benigno Paiva 1165, Buceo" fácil de leer
+- **Indicadores visuales claros**: ✅ o ⚠️ según el estado
+- **Estados de carga**: "Cargando dirección..." mientras se obtienen datos
+- **Validación en tiempo real**: Mensajes descriptivos de errores
+- **Campos obligatorios marcados**: Asterisco (*) en campos requeridos
+- **Iconos intuitivos**: Chevron que indica expandir/colapsar
+- **Diseño responsive**: Se adapta a diferentes tamaños de pantalla
 
 ### Ventajas de Este Enfoque
 1. **No sobrescribe datos**: La dirección del perfil permanece intacta
 2. **Flexibilidad**: Permite envíos a direcciones diferentes sin cambiar configuración
 3. **Privacidad**: El usuario controla cuándo se modifica su perfil
 4. **Simplicidad**: Un solo checkbox para cambiar el comportamiento
+5. **Formulario más corto**: Al estar colapsado, el carrito es más fácil de escanear visualmente
+6. **Flujo rápido**: Usuarios con dirección guardada completan el checkout más rápido
+7. **Claridad visual**: Se ve de inmediato si hay problemas con la dirección
 
 ---
 
@@ -190,11 +223,14 @@ department_id         uuid  -- Referencia al departamento
 - `app/services/[id].tsx` - Agregado "IVA incluido" en servicios y categorías de hospedaje
 
 ### Archivos con Sistema de Dirección:
-- `app/cart/index.tsx` - Sistema completo de carga y manejo de direcciones
+- `app/cart/index.tsx` - Sistema completo de dirección colapsable
+  - **Ubicación**: Debajo del resumen del pedido
+  - **Diseño colapsable**: Reduce espacio visual del formulario
+  - **Vista previa compacta**: "Calle Número, Barrio" formato corto
+  - **Indicadores visuales**: ✅ dirección completa / ⚠️ falta información
   - Carga automática desde perfil usando campos existentes
   - Modo de dirección temporal que NO modifica el perfil
   - Validación y formato de dirección
-  - UI mejorada con campos organizados
 
 ---
 
@@ -207,35 +243,46 @@ department_id         uuid  -- Referencia al departamento
 4. Verificar que se muestra "IVA incluido"
 5. Para servicios de hospedaje, verificar en cada categoría
 
-### Test 2: Dirección - Usuario con Dirección Guardada
+### Test 2: Dirección Colapsable - Usuario con Dirección Guardada
 1. Asegurarse de tener una dirección en el perfil (con valores en `calle`, `numero`, `address_locality`, `address_department`)
 2. Agregar productos al carrito
 3. Ir al carrito
-4. Verificar que los campos muestran la dirección guardada
-5. Verificar que los campos están deshabilitados
-6. Verificar que se muestra la vista previa formateada
-7. Proceder al checkout y verificar que la dirección llegue a la orden
+4. **Verificar que la sección está debajo del resumen del pedido**
+5. **Verificar que está colapsada por defecto** mostrando "Benigno Paiva 1165, Buceo" (o similar)
+6. **Verificar que NO muestra el símbolo de advertencia** (⚠️)
+7. Hacer clic para expandir
+8. Verificar que los campos muestran la dirección guardada
+9. Verificar que los campos están deshabilitados
+10. Proceder al checkout sin expandir la dirección
+11. Verificar que la dirección llegue a la orden
 
-### Test 3: Dirección - Modo Dirección Diferente
+### Test 3: Dirección Colapsable - Expandir y Modificar
 1. Ir al carrito con productos
-2. Marcar el checkbox "Usar dirección diferente"
-3. Verificar que los campos se habilitan
-4. Modificar algún campo (ej: cambiar número de calle)
-5. Proceder al checkout
-6. Verificar que la nueva dirección se envía en la orden
-7. Recargar el carrito
-8. Verificar que la dirección original del perfil sigue intacta
+2. Expandir la sección de dirección (hacer clic)
+3. Marcar el checkbox "Usar dirección diferente"
+4. Verificar que los campos se habilitan
+5. Modificar algún campo (ej: cambiar número de calle)
+6. **Colapsar la sección** haciendo clic en el header
+7. **Verificar que muestra la dirección modificada** en formato compacto
+8. Proceder al checkout
+9. Verificar que la nueva dirección se envía en la orden
+10. Recargar el carrito
+11. Verificar que la dirección original del perfil sigue intacta
 
-### Test 4: Dirección - Usuario sin Dirección
+### Test 4: Dirección Colapsable - Usuario sin Dirección
 1. Crear un usuario nuevo o limpiar los campos de dirección del perfil
 2. Agregar productos al carrito
 3. Ir al carrito
-4. Verificar mensaje: "No tienes una dirección guardada..."
-5. Marcar el checkbox
-6. Completar todos los campos
-7. Intentar checkout sin completar campos obligatorios (debe mostrar error)
-8. Completar campos obligatorios y proceder al pago
-9. Verificar que la dirección NO se guardó en el perfil
+4. **Verificar que muestra "⚠️ Completar dirección"** en amarillo (colapsado)
+5. Expandir la sección
+6. Verificar mensaje: "No tienes una dirección guardada..."
+7. Marcar el checkbox
+8. Completar todos los campos
+9. Intentar checkout sin completar campos obligatorios (debe mostrar error)
+10. Completar campos obligatorios
+11. **Verificar que se puede colapsar/expandir** la sección
+12. Proceder al pago
+13. Verificar que la dirección NO se guardó en el perfil
 
 ---
 
@@ -244,9 +291,12 @@ department_id         uuid  -- Referencia al departamento
 El sistema ahora proporciona:
 - ✅ Información clara de IVA en todos los precios
 - ✅ Carga automática de dirección desde el perfil del usuario
+- ✅ **Formulario de carrito más compacto** con dirección colapsable
+- ✅ **Vista previa de dirección** en formato corto (ej: "Benigno Paiva 1165, Buceo")
+- ✅ **Indicadores visuales claros** (✅ completa / ⚠️ incompleta)
+- ✅ **Flujo de checkout más rápido** para usuarios con dirección guardada
 - ✅ Flexibilidad para usar direcciones temporales sin modificar el perfil
 - ✅ Validación completa y mensajes claros
-- ✅ UX mejorada con vista previa y campos organizados
 - ✅ Separación clara entre dirección del perfil y dirección de envío temporal
 
-Este enfoque respeta la privacidad del usuario y proporciona la flexibilidad necesaria para diferentes escenarios de compra (envío a domicilio, regalo, oficina, etc.) sin complicar la experiencia.
+Este enfoque respeta la privacidad del usuario, reduce el scrolling necesario en el carrito, y proporciona la flexibilidad necesaria para diferentes escenarios de compra (envío a domicilio, regalo, oficina, etc.) sin complicar la experiencia.

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Linking } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowLeft, ShoppingCart, Trash2, Plus, Minus, MapPin } from 'lucide-react-native';
+import { ArrowLeft, ShoppingCart, Trash2, Plus, Minus, MapPin, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -16,6 +16,7 @@ export default function Cart() {
   const [loading, setLoading] = useState(false);
   const [loadingAddress, setLoadingAddress] = useState(true);
   const [useNewAddress, setUseNewAddress] = useState(false);
+  const [isAddressExpanded, setIsAddressExpanded] = useState(false);
   const [savedAddress, setSavedAddress] = useState({
     street: '',
     number: '',
@@ -185,6 +186,20 @@ export default function Cart() {
     }).format(amount);
   };
 
+  const getCompactAddress = () => {
+    const addr = useNewAddress ? newAddress : savedAddress;
+    if (!addr.street && !addr.number) return 'Sin dirección';
+
+    let compact = `${addr.street} ${addr.number}`;
+    if (addr.barrio) compact += `, ${addr.barrio}`;
+    return compact;
+  };
+
+  const hasCompleteAddress = () => {
+    const addr = useNewAddress ? newAddress : savedAddress;
+    return addr.street && addr.number && addr.locality && addr.department;
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -275,139 +290,6 @@ export default function Cart() {
               ))}
             </View>
 
-            <Card style={styles.shippingCard}>
-              <View style={styles.shippingHeader}>
-                <Text style={styles.shippingTitle}>Dirección de Envío</Text>
-                <TouchableOpacity
-                  style={styles.checkboxContainer}
-                  onPress={() => setUseNewAddress(!useNewAddress)}
-                >
-                  <View style={[styles.checkbox, useNewAddress && styles.checkboxChecked]}>
-                    {useNewAddress && <Text style={styles.checkboxMark}>✓</Text>}
-                  </View>
-                  <Text style={styles.checkboxLabel}>Usar dirección diferente</Text>
-                </TouchableOpacity>
-              </View>
-
-              {loadingAddress ? (
-                <Text style={styles.loadingText}>Cargando dirección...</Text>
-              ) : (
-                <View style={styles.addressForm}>
-                  <View style={styles.addressRow}>
-                    <View style={styles.addressFieldLarge}>
-                      <Input
-                        placeholder="Calle *"
-                        value={useNewAddress ? newAddress.street : savedAddress.street}
-                        onChangeText={(text) => {
-                          if (useNewAddress) {
-                            setNewAddress({ ...newAddress, street: text });
-                          }
-                        }}
-                        editable={useNewAddress}
-                      />
-                    </View>
-                    <View style={styles.addressFieldSmall}>
-                      <Input
-                        placeholder="Número *"
-                        value={useNewAddress ? newAddress.number : savedAddress.number}
-                        onChangeText={(text) => {
-                          if (useNewAddress) {
-                            setNewAddress({ ...newAddress, number: text });
-                          }
-                        }}
-                        editable={useNewAddress}
-                      />
-                    </View>
-                  </View>
-
-                  <Input
-                    placeholder="Barrio (opcional)"
-                    value={useNewAddress ? newAddress.barrio : savedAddress.barrio}
-                    onChangeText={(text) => {
-                      if (useNewAddress) {
-                        setNewAddress({ ...newAddress, barrio: text });
-                      }
-                    }}
-                    editable={useNewAddress}
-                    style={styles.addressInput}
-                  />
-
-                  <Input
-                    placeholder="Localidad/Ciudad *"
-                    value={useNewAddress ? newAddress.locality : savedAddress.locality}
-                    onChangeText={(text) => {
-                      if (useNewAddress) {
-                        setNewAddress({ ...newAddress, locality: text });
-                      }
-                    }}
-                    editable={useNewAddress}
-                    style={styles.addressInput}
-                  />
-
-                  <Input
-                    placeholder="Departamento *"
-                    value={useNewAddress ? newAddress.department : savedAddress.department}
-                    onChangeText={(text) => {
-                      if (useNewAddress) {
-                        setNewAddress({ ...newAddress, department: text });
-                      }
-                    }}
-                    editable={useNewAddress}
-                    style={styles.addressInput}
-                  />
-
-                  <Input
-                    placeholder="Código Postal (opcional)"
-                    value={useNewAddress ? newAddress.codigo_postal : savedAddress.codigo_postal}
-                    onChangeText={(text) => {
-                      if (useNewAddress) {
-                        setNewAddress({ ...newAddress, codigo_postal: text });
-                      }
-                    }}
-                    editable={useNewAddress}
-                    keyboardType="numeric"
-                    style={styles.addressInput}
-                  />
-
-                  <Input
-                    placeholder="Teléfono de contacto"
-                    value={useNewAddress ? newAddress.phone : savedAddress.phone}
-                    onChangeText={(text) => {
-                      if (useNewAddress) {
-                        setNewAddress({ ...newAddress, phone: text });
-                      }
-                    }}
-                    editable={useNewAddress}
-                    keyboardType="phone-pad"
-                    style={styles.addressInput}
-                  />
-
-                  {!useNewAddress && (savedAddress.street || savedAddress.number || savedAddress.locality || savedAddress.department) && (
-                    <View style={styles.addressPreview}>
-                      <MapPin size={16} color="#6B7280" />
-                      <View style={styles.addressPreviewTextContainer}>
-                        <Text style={styles.addressPreviewText}>
-                          {savedAddress.street} {savedAddress.number}
-                          {savedAddress.barrio ? `, ${savedAddress.barrio}` : ''}
-                          {'\n'}
-                          {savedAddress.locality}, {savedAddress.department}
-                          {savedAddress.codigo_postal ? ` - CP: ${savedAddress.codigo_postal}` : ''}
-                        </Text>
-                      </View>
-                    </View>
-                  )}
-
-                  {!useNewAddress && !savedAddress.street && !savedAddress.number && (
-                    <View style={styles.noAddressContainer}>
-                      <Text style={styles.noAddressText}>
-                        No tienes una dirección guardada. Marca "Usar dirección diferente" para ingresar una.
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              )}
-            </Card>
-
             <Card style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Resumen del Pedido</Text>
               
@@ -429,6 +311,153 @@ export default function Cart() {
                 <Text style={styles.totalLabel}>Total</Text>
                 <Text style={styles.totalValue}>{formatCurrency(getCartTotal() + 500)}</Text>
               </View>
+
+              <View style={styles.divider} />
+
+              {/* Dirección de Envío Colapsable */}
+              <TouchableOpacity
+                style={styles.addressHeader}
+                onPress={() => setIsAddressExpanded(!isAddressExpanded)}
+              >
+                <View style={styles.addressHeaderLeft}>
+                  <MapPin size={20} color="#3B82F6" />
+                  <View style={styles.addressHeaderText}>
+                    <Text style={styles.addressHeaderTitle}>Dirección de Envío</Text>
+                    {!loadingAddress && hasCompleteAddress() && !isAddressExpanded && (
+                      <Text style={styles.addressHeaderSubtitle} numberOfLines={1}>
+                        {getCompactAddress()}
+                      </Text>
+                    )}
+                    {!loadingAddress && !hasCompleteAddress() && !isAddressExpanded && (
+                      <Text style={styles.addressHeaderWarning}>
+                        ⚠️ Completar dirección
+                      </Text>
+                    )}
+                  </View>
+                </View>
+                {isAddressExpanded ? (
+                  <ChevronUp size={20} color="#6B7280" />
+                ) : (
+                  <ChevronDown size={20} color="#6B7280" />
+                )}
+              </TouchableOpacity>
+
+              {isAddressExpanded && (
+                <View style={styles.addressExpandedContent}>
+                  <TouchableOpacity
+                    style={styles.checkboxContainer}
+                    onPress={() => setUseNewAddress(!useNewAddress)}
+                  >
+                    <View style={[styles.checkbox, useNewAddress && styles.checkboxChecked]}>
+                      {useNewAddress && <Text style={styles.checkboxMark}>✓</Text>}
+                    </View>
+                    <Text style={styles.checkboxLabel}>Usar dirección diferente</Text>
+                  </TouchableOpacity>
+
+                  {loadingAddress ? (
+                    <Text style={styles.loadingText}>Cargando dirección...</Text>
+                  ) : (
+                    <View style={styles.addressForm}>
+                      <View style={styles.addressRow}>
+                        <View style={styles.addressFieldLarge}>
+                          <Input
+                            placeholder="Calle *"
+                            value={useNewAddress ? newAddress.street : savedAddress.street}
+                            onChangeText={(text) => {
+                              if (useNewAddress) {
+                                setNewAddress({ ...newAddress, street: text });
+                              }
+                            }}
+                            editable={useNewAddress}
+                          />
+                        </View>
+                        <View style={styles.addressFieldSmall}>
+                          <Input
+                            placeholder="Número *"
+                            value={useNewAddress ? newAddress.number : savedAddress.number}
+                            onChangeText={(text) => {
+                              if (useNewAddress) {
+                                setNewAddress({ ...newAddress, number: text });
+                              }
+                            }}
+                            editable={useNewAddress}
+                          />
+                        </View>
+                      </View>
+
+                      <Input
+                        placeholder="Barrio (opcional)"
+                        value={useNewAddress ? newAddress.barrio : savedAddress.barrio}
+                        onChangeText={(text) => {
+                          if (useNewAddress) {
+                            setNewAddress({ ...newAddress, barrio: text });
+                          }
+                        }}
+                        editable={useNewAddress}
+                        style={styles.addressInput}
+                      />
+
+                      <Input
+                        placeholder="Localidad/Ciudad *"
+                        value={useNewAddress ? newAddress.locality : savedAddress.locality}
+                        onChangeText={(text) => {
+                          if (useNewAddress) {
+                            setNewAddress({ ...newAddress, locality: text });
+                          }
+                        }}
+                        editable={useNewAddress}
+                        style={styles.addressInput}
+                      />
+
+                      <Input
+                        placeholder="Departamento *"
+                        value={useNewAddress ? newAddress.department : savedAddress.department}
+                        onChangeText={(text) => {
+                          if (useNewAddress) {
+                            setNewAddress({ ...newAddress, department: text });
+                          }
+                        }}
+                        editable={useNewAddress}
+                        style={styles.addressInput}
+                      />
+
+                      <Input
+                        placeholder="Código Postal (opcional)"
+                        value={useNewAddress ? newAddress.codigo_postal : savedAddress.codigo_postal}
+                        onChangeText={(text) => {
+                          if (useNewAddress) {
+                            setNewAddress({ ...newAddress, codigo_postal: text });
+                          }
+                        }}
+                        editable={useNewAddress}
+                        keyboardType="numeric"
+                        style={styles.addressInput}
+                      />
+
+                      <Input
+                        placeholder="Teléfono de contacto"
+                        value={useNewAddress ? newAddress.phone : savedAddress.phone}
+                        onChangeText={(text) => {
+                          if (useNewAddress) {
+                            setNewAddress({ ...newAddress, phone: text });
+                          }
+                        }}
+                        editable={useNewAddress}
+                        keyboardType="phone-pad"
+                        style={styles.addressInput}
+                      />
+
+                      {!useNewAddress && !savedAddress.street && !savedAddress.number && (
+                        <View style={styles.noAddressContainer}>
+                          <Text style={styles.noAddressText}>
+                            No tienes una dirección guardada. Marca "Usar dirección diferente" para ingresar una.
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
+              )}
             </Card>
 
             <View style={styles.actionsContainer}>
@@ -585,18 +614,41 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     color: '#111827',
   },
-  shippingCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
+  addressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
   },
-  shippingHeader: {
-    marginBottom: 16,
+  addressHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
   },
-  shippingTitle: {
+  addressHeaderText: {
+    flex: 1,
+  },
+  addressHeaderTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
-    marginBottom: 8,
+    marginBottom: 2,
+  },
+  addressHeaderSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  addressHeaderWarning: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#F59E0B',
+  },
+  addressExpandedContent: {
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
   },
   checkboxContainer: {
     flexDirection: 'row',
@@ -649,24 +701,6 @@ const styles = StyleSheet.create({
   },
   addressInput: {
     marginBottom: 0,
-  },
-  addressPreview: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#F9FAFB',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
-    gap: 8,
-  },
-  addressPreviewTextContainer: {
-    flex: 1,
-  },
-  addressPreviewText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    lineHeight: 20,
   },
   noAddressContainer: {
     backgroundColor: '#FEF3C7',
