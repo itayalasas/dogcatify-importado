@@ -459,12 +459,18 @@ export default function Profile() {
     }
 
     try {
+      console.log('=== TEST PUSH NOTIFICATION ===');
       console.log('🧪 Testing push notification...');
-      
+      console.log('📱 Token:', expoPushToken.substring(0, 30) + '...');
+      console.log('📱 Token length:', expoPushToken.length);
+      console.log('📱 Token format valid:', expoPushToken.startsWith('ExponentPushToken['));
+
       // Send test notification using the utility function
       const { NotificationService } = await import('../../utils/notifications');
-      
-      await NotificationService.sendPushNotification(
+
+      console.log('📤 Calling sendPushNotification...');
+
+      const result = await NotificationService.sendPushNotification(
         expoPushToken,
         '🐾 Prueba DogCatiFy',
         '¡Las notificaciones están funcionando perfectamente!',
@@ -473,14 +479,20 @@ export default function Profile() {
           timestamp: new Date().toISOString()
         }
       );
-      
+
+      console.log('✅ Push notification result:', result);
+      console.log('=== END TEST ===');
+
       Alert.alert(
         'Notificación Enviada 📤',
         'Se envió una notificación de prueba a tu dispositivo. Deberías recibirla en unos segundos.\n\nSi no la recibes, verifica:\n• Permisos de notificación en configuración\n• Que la app no esté en "No molestar"\n• Tu conexión a internet',
         [{ text: 'Perfecto' }]
       );
-    } catch (error) {
-      console.error('Error testing notification:', error);
+    } catch (error: any) {
+      console.error('❌ Error testing notification:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      console.log('=== END TEST (with error) ===');
+
       Alert.alert(
         'Error en la Prueba',
         `No se pudo enviar la notificación de prueba.\n\nError: ${error.message || 'Desconocido'}\n\nVerifica tu conexión e intenta nuevamente.`,
@@ -734,9 +746,41 @@ export default function Profile() {
                 <Text style={styles.statusItem}>✅ Permisos concedidos</Text>
                 <Text style={styles.statusItem}>📱 Token configurado</Text>
                 <Text style={styles.statusItem}>🔔 Recibiendo notificaciones</Text>
-                <TouchableOpacity style={styles.testButton} onPress={testPushNotification}>
-                  <Text style={styles.testButtonText}>Probar notificación</Text>
-                </TouchableOpacity>
+                <View style={styles.buttonRow}>
+                  <TouchableOpacity style={styles.testButton} onPress={testPushNotification}>
+                    <Text style={styles.testButtonText}>Probar notificación</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.testButton, styles.regenerateButton]}
+                    onPress={async () => {
+                      Alert.alert(
+                        'Regenerar Token',
+                        '¿Seguro que quieres regenerar tu token de notificaciones? Esto puede ayudar si las notificaciones no están llegando.',
+                        [
+                          { text: 'Cancelar', style: 'cancel' },
+                          {
+                            text: 'Regenerar',
+                            onPress: async () => {
+                              try {
+                                await disableNotifications();
+                                setTimeout(async () => {
+                                  await enableNotifications();
+                                }, 1000);
+                              } catch (error: any) {
+                                Alert.alert('Error', error.message || 'No se pudo regenerar el token');
+                              }
+                            }
+                          }
+                        ]
+                      );
+                    }}
+                  >
+                    <Text style={styles.testButtonText}>Regenerar Token</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.tokenInfo}>
+                  Token: {expoPushToken?.substring(0, 25)}...
+                </Text>
               </View>
             ) : !notificationsSupported ? (
               <View style={styles.notificationBenefits}>
@@ -1204,18 +1248,35 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     lineHeight: 18,
   },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+    flexWrap: 'wrap',
+  },
   testButton: {
     backgroundColor: '#2D6A6F',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 6,
-    marginTop: 8,
-    alignSelf: 'flex-start',
+    flex: 1,
+    minWidth: 120,
+  },
+  regenerateButton: {
+    backgroundColor: '#059669',
   },
   testButtonText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
+    textAlign: 'center',
+  },
+  tokenInfo: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#166534',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   benefitsTitle: {
     fontSize: 14,
