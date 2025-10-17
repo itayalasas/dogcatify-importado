@@ -47,14 +47,45 @@ export default function Cart() {
 
     setLoadingAddress(true);
     try {
+      // Primero intentamos cargar con JOIN a departments
       const { data: profile, error } = await supabaseClient
         .from('profiles')
-        .select('calle, numero, address_locality, address_department, barrio, codigo_postal, address_phone, phone')
+        .select(`
+          calle,
+          numero,
+          address_locality,
+          barrio,
+          codigo_postal,
+          address_phone,
+          phone,
+          department_id,
+          departments (name)
+        `)
         .eq('id', currentUser.id)
         .maybeSingle();
 
       if (error) {
-        console.error('Error loading address:', error);
+        console.error('Error loading address with departments:', error);
+        // Si falla el JOIN, intentamos sin departments (fallback)
+        const { data: profileSimple } = await supabaseClient
+          .from('profiles')
+          .select('calle, numero, address_locality, address_department, barrio, codigo_postal, address_phone, phone')
+          .eq('id', currentUser.id)
+          .maybeSingle();
+
+        if (profileSimple) {
+          const loadedAddress = {
+            street: profileSimple.calle || '',
+            number: profileSimple.numero || '',
+            locality: profileSimple.address_locality || '',
+            department: profileSimple.address_department || '',
+            barrio: profileSimple.barrio || '',
+            codigo_postal: profileSimple.codigo_postal || '',
+            phone: profileSimple.address_phone || profileSimple.phone || ''
+          };
+          setSavedAddress(loadedAddress);
+        }
+        setLoadingAddress(false);
         return;
       }
 
@@ -63,7 +94,7 @@ export default function Cart() {
           street: profile.calle || '',
           number: profile.numero || '',
           locality: profile.address_locality || '',
-          department: profile.address_department || '',
+          department: profile.departments?.name || '',
           barrio: profile.barrio || '',
           codigo_postal: profile.codigo_postal || '',
           phone: profile.address_phone || profile.phone || ''
