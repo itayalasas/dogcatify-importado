@@ -172,7 +172,18 @@ Deno.serve(async (req: Request) => {
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("*")
+      .select(`
+        *,
+        customer:profiles!orders_customer_id_fkey(
+          id,
+          full_name,
+          email,
+          phone,
+          address,
+          city,
+          country
+        )
+      `)
       .eq("id", order_id)
       .single();
 

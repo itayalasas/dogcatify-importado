@@ -100,7 +100,18 @@ Deno.serve(async (req: Request) => {
     if (req.method === "GET" && orderId && orderId !== "orders-api") {
       let orderQuery = supabase
         .from("orders")
-        .select("*")
+        .select(`
+          *,
+          customer:profiles!orders_customer_id_fkey(
+            id,
+            full_name,
+            email,
+            phone,
+            address,
+            city,
+            country
+          )
+        `)
         .eq("id", orderId);
 
       if (!isAdmin && partnerId) {
@@ -149,7 +160,18 @@ Deno.serve(async (req: Request) => {
 
       let query = supabase
         .from("orders")
-        .select("*", { count: "exact" })
+        .select(`
+          *,
+          customer:profiles!orders_customer_id_fkey(
+            id,
+            full_name,
+            email,
+            phone,
+            address,
+            city,
+            country
+          )
+        `, { count: "exact" })
         .order("created_at", { ascending: false })
         .range(offset, offset + limit - 1);
 
@@ -168,7 +190,7 @@ Deno.serve(async (req: Request) => {
       if (from) {
         query = query.gte("created_at", from);
       }
-
+      
       if (to) {
         query = query.lte("created_at", to);
       }
