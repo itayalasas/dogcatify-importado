@@ -22,7 +22,6 @@ export default function Cart() {
     number: '',
     locality: '',
     department: '',
-    barrio: '',
     codigo_postal: '',
     phone: ''
   });
@@ -31,7 +30,6 @@ export default function Cart() {
     number: '',
     locality: '',
     department: '',
-    barrio: '',
     codigo_postal: '',
     phone: ''
   });
@@ -77,9 +75,8 @@ export default function Cart() {
           const loadedAddress = {
             street: profileSimple.calle || '',
             number: profileSimple.numero || '',
-            locality: profileSimple.address_locality || '',
+            locality: profileSimple.barrio || profileSimple.address_locality || '',
             department: profileSimple.address_department || '',
-            barrio: profileSimple.barrio || '',
             codigo_postal: profileSimple.codigo_postal || '',
             phone: profileSimple.address_phone || profileSimple.phone || ''
           };
@@ -93,9 +90,8 @@ export default function Cart() {
         const loadedAddress = {
           street: profile.calle || '',
           number: profile.numero || '',
-          locality: profile.address_locality || '',
+          locality: profile.barrio || profile.address_locality || '',
           department: profile.departments?.name || '',
-          barrio: profile.barrio || '',
           codigo_postal: profile.codigo_postal || '',
           phone: profile.address_phone || profile.phone || ''
         };
@@ -144,8 +140,8 @@ export default function Cart() {
 
       // Format complete address for shipping
       let fullAddress = `${addressToUse.street} ${addressToUse.number}`;
-      if (addressToUse.barrio) fullAddress += `, ${addressToUse.barrio}`;
-      fullAddress += `, ${addressToUse.locality}, ${addressToUse.department}`;
+      if (addressToUse.locality) fullAddress += `, ${addressToUse.locality}`;
+      fullAddress += `, ${addressToUse.department}`;
       if (addressToUse.codigo_postal) fullAddress += ` - CP: ${addressToUse.codigo_postal}`;
       if (addressToUse.phone) fullAddress += ` - Tel: ${addressToUse.phone}`;
 
@@ -222,13 +218,13 @@ export default function Cart() {
     if (!addr.street && !addr.number) return null;
 
     let compact = `${addr.street} ${addr.number}`;
-    if (addr.barrio) compact += `, ${addr.barrio}`;
+    if (addr.locality) compact += `, ${addr.locality}`;
     return compact;
   };
 
   const hasPartialAddress = () => {
     const addr = useNewAddress ? newAddress : savedAddress;
-    return !!(addr.street || addr.number || addr.barrio);
+    return !!(addr.street || addr.number || addr.locality);
   };
 
   const hasCompleteAddress = () => {
@@ -368,7 +364,7 @@ export default function Cart() {
                         )}
                         {!hasCompleteAddress() && (
                           <Text style={styles.addressHeaderWarning}>
-                            ⚠️ {hasPartialAddress() ? 'Completar localidad y departamento' : 'Completar dirección'}
+                            ⚠️ {hasPartialAddress() ? 'Completar departamento' : 'Completar dirección'}
                           </Text>
                         )}
                       </>
@@ -426,19 +422,7 @@ export default function Cart() {
                       </View>
 
                       <Input
-                        placeholder="Barrio (opcional)"
-                        value={useNewAddress ? newAddress.barrio : savedAddress.barrio}
-                        onChangeText={(text) => {
-                          if (useNewAddress) {
-                            setNewAddress({ ...newAddress, barrio: text });
-                          }
-                        }}
-                        editable={useNewAddress}
-                        style={styles.addressInput}
-                      />
-
-                      <Input
-                        placeholder="Localidad/Ciudad *"
+                        placeholder="Barrio/Localidad *"
                         value={useNewAddress ? newAddress.locality : savedAddress.locality}
                         onChangeText={(text) => {
                           if (useNewAddress) {
