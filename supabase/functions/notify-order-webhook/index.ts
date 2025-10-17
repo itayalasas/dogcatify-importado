@@ -176,12 +176,14 @@ Deno.serve(async (req: Request) => {
         *,
         customer:profiles!orders_customer_id_fkey(
           id,
-          full_name,
+          display_name,
           email,
           phone,
-          address,
-          city,
-          country
+          calle,
+          numero,
+          barrio,
+          codigo_postal,
+          location
         )
       `)
       .eq("id", order_id)
