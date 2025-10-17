@@ -68,7 +68,8 @@ export default function Shop() {
       quantity: 1,
       image: product.images && product.images.length > 0 ? product.images[0] : null,
       partnerId: product.partner_id,
-      partnerName: product.partner_name || 'Tienda'
+      partnerName: product.partner_name || 'Tienda',
+      iva_rate: product.iva_rate
     });
   };
 
