@@ -43,18 +43,20 @@ El carrito carga automáticamente los siguientes campos del perfil del usuario (
 |-----------------|------------------|-------------|-------|
 | `calle` | Calle | ✅ Sí | |
 | `numero` | Número | ✅ Sí | |
-| `barrio` | Barrio | ❌ No | Muestra en vista compacta |
-| `address_locality` | Localidad/Ciudad | ✅ Sí | Ej: "Buceo", "Centro" |
-| `department_id` → `departments.name` | Departamento | ✅ Sí | Se obtiene por JOIN |
+| `barrio` o `address_locality` | Barrio/Localidad | ✅ Sí | Ej: "Buceo", "Centro", "Pocitos" |
+| `department_id` → `departments.name` | Departamento | ✅ Sí | Se obtiene por JOIN. Ej: "Montevideo" |
 | `codigo_postal` | Código Postal | ❌ No | |
 | `address_phone` o `phone` | Teléfono | ⚠️ Recomendado | |
 
-**Importante**: El nombre del departamento se obtiene mediante un JOIN con la tabla `departments` usando el campo `department_id`.
+**Importante**:
+- El sistema usa **un solo campo** para barrio/localidad (se eliminó la duplicación)
+- Prioriza `barrio`, si está vacío usa `address_locality`
+- El departamento se obtiene mediante JOIN con `departments` usando `department_id`
 
 #### c) Tres Estados de la Interfaz
 
 **Estado 1: Colapsado con Dirección Completa**
-- Muestra solo: "Dirección de Envío" + "Calle Número, Barrio" (ej: "Benigno Paiva 1165, Buceo")
+- Muestra solo: "Dirección de Envío" + "Calle Número, Barrio/Localidad" (ej: "Benigno Paiva 1165, Buceo")
 - Icono de flecha hacia abajo para indicar que se puede expandir
 - Usuario puede proceder al checkout sin expandir
 
@@ -87,21 +89,25 @@ El carrito carga automáticamente los siguientes campos del perfil del usuario (
 La dirección se concatena en el siguiente formato:
 
 ```
-{calle} {numero}, {barrio}, {localidad}, {departamento} - CP: {codigo_postal} - Tel: {telefono}
+{calle} {numero}, {barrio/localidad}, {departamento} - CP: {codigo_postal} - Tel: {telefono}
 ```
 
 **Ejemplo:**
 ```
-Av. 18 de Julio 1234, Centro, Montevideo, Montevideo - CP: 11200 - Tel: 099123456
+Av. 18 de Julio 1234, Centro, Montevideo - CP: 11200 - Tel: 099123456
 ```
 
-Los campos opcionales (barrio, código postal, teléfono) solo se incluyen si tienen valor.
+**Formato**: `Calle Número, Barrio/Localidad, Departamento - CP: Código - Tel: Teléfono`
+
+Los campos opcionales (código postal, teléfono) solo se incluyen si tienen valor.
 
 #### f) Validación
-- **Campos obligatorios**: calle, número, localidad, departamento
-- **Campos opcionales**: barrio, código postal, teléfono
+- **Campos obligatorios**: calle, número, barrio/localidad, departamento
+- **Campos opcionales**: código postal, teléfono
 - Se muestra error si faltan campos obligatorios
 - La validación ocurre antes del checkout
+
+**Nota**: Ya no existe un campo separado de "barrio" opcional. El campo "Barrio/Localidad" es obligatorio y sirve para ambos propósitos.
 
 #### g) Manejo de Casos Especiales
 
@@ -157,10 +163,12 @@ CREATE TABLE departments (
 - Ejemplo: `department_id` → UUID → JOIN → `departments.name` = "Montevideo"
 
 **Nota:** El sistema usa principalmente:
-- `calle`, `numero`, `barrio` → Para dirección física
-- `address_locality` → Para la localidad (ej: "Buceo")
+- `calle`, `numero` → Para dirección física
+- `barrio` o `address_locality` → Para barrio/localidad (ej: "Buceo", "Centro")
 - `department_id` → Para obtener el departamento (ej: "Montevideo")
 - `codigo_postal`, `address_phone` → Información adicional
+
+**Consolidación de campos**: Se eliminó la duplicación de `barrio` y `address_locality`. Ahora hay un solo campo "Barrio/Localidad" que prioriza `barrio` y usa `address_locality` como fallback.
 
 ---
 
