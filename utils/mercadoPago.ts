@@ -368,6 +368,52 @@ export const createPaymentPreference = async (
 /**
  * Create orders and payment preferences for multiple partners (marketplace)
  */
+/**
+ * Calculate IVA for cart items
+ */
+interface IVACalculation {
+  subtotal: number;
+  ivaAmount: number;
+  totalAmount: number;
+  ivaRate: number;
+  ivaIncluded: boolean;
+}
+
+const calculateIVA = (cartItems: any[], partner: any): IVACalculation => {
+  // Get IVA configuration from partner (default 0% if not set)
+  const ivaRate = partner.iva_rate || 0;
+  const ivaIncluded = partner.iva_included_in_price || false;
+
+  // Calculate items subtotal (sum of all items)
+  const itemsTotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+  let subtotal: number;
+  let ivaAmount: number;
+  let totalAmount: number;
+
+  if (ivaIncluded) {
+    // If IVA is included, we need to extract it from the price
+    // Formula: subtotal = totalAmount / (1 + (ivaRate / 100))
+    totalAmount = itemsTotal;
+    subtotal = totalAmount / (1 + (ivaRate / 100));
+    ivaAmount = totalAmount - subtotal;
+  } else {
+    // If IVA is not included, we add it to the price
+    // Formula: ivaAmount = subtotal * (ivaRate / 100)
+    subtotal = itemsTotal;
+    ivaAmount = subtotal * (ivaRate / 100);
+    totalAmount = subtotal + ivaAmount;
+  }
+
+  return {
+    subtotal: Math.round(subtotal * 100) / 100,
+    ivaAmount: Math.round(ivaAmount * 100) / 100,
+    totalAmount: Math.round(totalAmount * 100) / 100,
+    ivaRate,
+    ivaIncluded
+  };
+};
+
 export const createMultiPartnerOrder = async (
   cartItems: any[],
   customerInfo: any,
@@ -382,23 +428,28 @@ export const createMultiPartnerOrder = async (
       partnerId: item.partnerId,
       partnerName: item.partnerName
     })));
-    
-    // Calculate totals for the unified order
-    const itemsSubtotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const totalAmount = itemsSubtotal + totalShippingCost;
+
+    // Use the first partner as the primary partner for the unified order
+    const primaryPartnerId = cartItems[0].partnerId;
+
+    // Get primary partner's configuration including commission percentage and IVA
+    const primaryPartnerConfig = await getPartnerMercadoPagoConfig(primaryPartnerId);
+
+    // Calculate IVA for the order
+    const ivaCalculation = calculateIVA(cartItems, primaryPartnerConfig);
+
+    // Calculate totals for the unified order (including shipping)
+    const totalAmount = ivaCalculation.totalAmount + totalShippingCost;
 
     console.log('Unified order totals:', {
-      itemsSubtotal,
+      subtotal: ivaCalculation.subtotal,
+      ivaRate: ivaCalculation.ivaRate,
+      ivaAmount: ivaCalculation.ivaAmount,
+      itemsTotal: ivaCalculation.totalAmount,
       shippingCost: totalShippingCost,
       totalAmount
     });
 
-    // Use the first partner as the primary partner for the unified order
-    const primaryPartnerId = cartItems[0].partnerId;
-    
-    // Get primary partner's configuration including commission percentage
-    const primaryPartnerConfig = await getPartnerMercadoPagoConfig(primaryPartnerId);
-    
     // Calculate commission using partner's configured percentage
     const commissionAmount = totalAmount * ((primaryPartnerConfig.commission_percentage || 5.0) / 100);
     const partnerAmount = totalAmount - commissionAmount;
@@ -417,6 +468,10 @@ export const createMultiPartnerOrder = async (
       partner_id: primaryPartnerId,
       customer_id: customerInfo.id,
       items: cartItems,
+      subtotal: ivaCalculation.subtotal,
+      iva_rate: ivaCalculation.ivaRate,
+      iva_amount: ivaCalculation.ivaAmount,
+      iva_included_in_price: ivaCalculation.ivaIncluded,
       total_amount: totalAmount,
       commission_amount: commissionAmount,
       partner_amount: partnerAmount,
@@ -447,7 +502,10 @@ export const createMultiPartnerOrder = async (
         }, {}),
         total_partners: [...new Set(cartItems.map(item => item.partnerId))].length,
         commission_split: commissionAmount,
-        shipping_cost: totalShippingCost
+        shipping_cost: totalShippingCost,
+        iva_rate: ivaCalculation.ivaRate,
+        iva_amount: ivaCalculation.ivaAmount,
+        iva_included: ivaCalculation.ivaIncluded
       }
     };
 

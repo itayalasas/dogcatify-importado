@@ -57,6 +57,10 @@ export default function EditBusiness() {
   const [geocodingResults, setGeocodingResults] = useState<any[]>([]);
   const [showGeocodingResults, setShowGeocodingResults] = useState(false);
 
+  // IVA state
+  const [ivaRate, setIvaRate] = useState('0');
+  const [ivaIncludedInPrice, setIvaIncludedInPrice] = useState(false);
+
   useEffect(() => {
     if (businessId) {
       loadBusinessData();
@@ -87,7 +91,9 @@ export default function EditBusiness() {
         setCodigoPostal(data.codigo_postal || '');
         setLatitud(data.latitud || '');
         setLongitud(data.longitud || '');
-        
+        setIvaRate(data.iva_rate?.toString() || '0');
+        setIvaIncludedInPrice(data.iva_included_in_price || false);
+
         // Load country and department if they exist
         if (data.country_id) {
           const { data: countryData } = await supabaseClient
@@ -344,6 +350,8 @@ export default function EditBusiness() {
         latitud: latitud.trim() || null,
         longitud: longitud.trim() || null,
         address: `${calle.trim()} ${numero.trim()}${barrio ? ', ' + barrio : ''}, ${selectedDepartment?.name || ''}, ${selectedCountry?.name || ''}`,
+        iva_rate: parseFloat(ivaRate) || 0,
+        iva_included_in_price: ivaIncludedInPrice,
         updated_at: new Date().toISOString(),
       };
 
@@ -530,6 +538,54 @@ export default function EditBusiness() {
             editable={!!selectedDepartment}
             style={!selectedDepartment ? styles.disabledInput : undefined}
           />
+
+          {/* IVA Configuration */}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>💰 Configuración de IVA</Text>
+            <Text style={styles.sectionSubtitle}>
+              Configura el IVA que se aplicará a tus servicios y productos
+            </Text>
+          </View>
+
+          <View style={styles.row}>
+            <View style={styles.halfWidth}>
+              <Input
+                label="Porcentaje de IVA (%)"
+                placeholder="21"
+                value={ivaRate}
+                onChangeText={setIvaRate}
+                keyboardType="decimal-pad"
+              />
+            </View>
+            <View style={styles.halfWidth}>
+              <Text style={styles.inputLabel}>IVA Incluido en Precio</Text>
+              <TouchableOpacity
+                style={styles.switchContainer}
+                onPress={() => setIvaIncludedInPrice(!ivaIncludedInPrice)}
+              >
+                <View style={[
+                  styles.switch,
+                  ivaIncludedInPrice && styles.switchActive
+                ]}>
+                  <View style={[
+                    styles.switchThumb,
+                    ivaIncludedInPrice && styles.switchThumbActive
+                  ]} />
+                </View>
+                <Text style={styles.switchLabel}>
+                  {ivaIncludedInPrice ? 'Sí' : 'No'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.ivaExplanation}>
+            <Text style={styles.ivaExplanationText}>
+              {ivaIncludedInPrice
+                ? '✓ El IVA está incluido en el precio que muestras a tus clientes'
+                : '✓ El IVA se sumará al precio final en el checkout'}
+            </Text>
+          </View>
 
           {/* Geocoding Button */}
           {calle.trim() && numero.trim() && selectedDepartment && selectedCountry && (
@@ -840,6 +896,76 @@ const styles = StyleSheet.create({
   },
   halfWidth: {
     flex: 1,
+  },
+  sectionHeader: {
+    marginTop: 24,
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 20,
+  },
+  switchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  switch: {
+    width: 51,
+    height: 31,
+    borderRadius: 16,
+    backgroundColor: '#D1D5DB',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  switchActive: {
+    backgroundColor: '#10B981',
+  },
+  switchThumb: {
+    width: 27,
+    height: 27,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  switchThumbActive: {
+    transform: [{ translateX: 20 }],
+  },
+  switchLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#111827',
+    marginLeft: 12,
+  },
+  ivaExplanation: {
+    backgroundColor: '#F0F9FF',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  ivaExplanationText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#0369A1',
+    lineHeight: 18,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 4,
   },
   geocodingSection: {
     marginBottom: 20,
