@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { ArrowLeft, ShoppingCart, Trash2, Plus, Minus, MapPin } from 'lucide-react-native';
@@ -8,12 +8,55 @@ import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import { createMultiPartnerOrder } from '../../utils/mercadoPago';
+import { supabaseClient } from '../../lib/supabase';
 
 export default function Cart() {
   const { currentUser } = useAuth();
   const { cart, updateQuantity, removeFromCart, clearCart, getCartTotal } = useCart();
   const [loading, setLoading] = useState(false);
-  const [shippingAddress, setShippingAddress] = useState('');
+  const [loadingAddress, setLoadingAddress] = useState(true);
+  const [useNewAddress, setUseNewAddress] = useState(false);
+  const [addressStreet, setAddressStreet] = useState('');
+  const [addressNumber, setAddressNumber] = useState('');
+  const [addressLocality, setAddressLocality] = useState('');
+  const [addressDepartment, setAddressDepartment] = useState('');
+  const [addressPhone, setAddressPhone] = useState('');
+
+  useEffect(() => {
+    if (currentUser) {
+      loadUserAddress();
+    }
+  }, [currentUser]);
+
+  const loadUserAddress = async () => {
+    if (!currentUser) return;
+
+    setLoadingAddress(true);
+    try {
+      const { data: profile, error } = await supabaseClient
+        .from('profiles')
+        .select('address_street, address_number, address_locality, address_department, address_phone, phone')
+        .eq('id', currentUser.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error loading address:', error);
+        return;
+      }
+
+      if (profile) {
+        setAddressStreet(profile.address_street || '');
+        setAddressNumber(profile.address_number || '');
+        setAddressLocality(profile.address_locality || '');
+        setAddressDepartment(profile.address_department || '');
+        setAddressPhone(profile.address_phone || profile.phone || '');
+      }
+    } catch (error) {
+      console.error('Error loading user address:', error);
+    } finally {
+      setLoadingAddress(false);
+    }
+  };
 
   const handleUpdateQuantity = (itemId: string, newQuantity: number) => {
     if (newQuantity <= 0) {
@@ -34,8 +77,8 @@ export default function Cart() {
       return;
     }
 
-    if (!shippingAddress.trim()) {
-      Alert.alert('Error', 'Por favor ingresa tu dirección de envío');
+    if (!addressStreet.trim() || !addressNumber.trim() || !addressLocality.trim() || !addressDepartment.trim()) {
+      Alert.alert('Error', 'Por favor completa todos los campos de dirección');
       return;
     }
 
@@ -44,15 +87,18 @@ export default function Cart() {
       console.log('Starting checkout process...');
       console.log('Cart items:', cart);
       console.log('Customer info:', currentUser);
-      
+
+      // Format complete address
+      const fullAddress = `${addressStreet} ${addressNumber}, ${addressLocality}, ${addressDepartment}`;
+
       // Calculate shipping cost
       const totalShippingCost = 500;
-      
+
       // Create orders and payment preferences using Mercado Pago
       const { orders, paymentPreferences } = await createMultiPartnerOrder(
         cart,
         currentUser,
-        shippingAddress.trim(),
+        fullAddress,
         totalShippingCost
       );
       
@@ -202,15 +248,77 @@ export default function Cart() {
             </View>
 
             <Card style={styles.shippingCard}>
-              <Text style={styles.shippingTitle}>Dirección de Envío</Text>
-              <Input
-                placeholder="Ingresa tu dirección completa"
-                value={shippingAddress}
-                onChangeText={setShippingAddress}
-                leftIcon={<MapPin size={20} color="#6B7280" />}
-                multiline
-                numberOfLines={2}
-              />
+              <View style={styles.shippingHeader}>
+                <Text style={styles.shippingTitle}>Dirección de Envío</Text>
+                <TouchableOpacity
+                  style={styles.checkboxContainer}
+                  onPress={() => setUseNewAddress(!useNewAddress)}
+                >
+                  <View style={[styles.checkbox, useNewAddress && styles.checkboxChecked]}>
+                    {useNewAddress && <Text style={styles.checkboxMark}>✓</Text>}
+                  </View>
+                  <Text style={styles.checkboxLabel}>Usar dirección diferente</Text>
+                </TouchableOpacity>
+              </View>
+
+              {loadingAddress ? (
+                <Text style={styles.loadingText}>Cargando dirección...</Text>
+              ) : (
+                <View style={styles.addressForm}>
+                  <View style={styles.addressRow}>
+                    <View style={styles.addressFieldLarge}>
+                      <Input
+                        placeholder="Calle"
+                        value={addressStreet}
+                        onChangeText={setAddressStreet}
+                        editable={useNewAddress}
+                      />
+                    </View>
+                    <View style={styles.addressFieldSmall}>
+                      <Input
+                        placeholder="Número"
+                        value={addressNumber}
+                        onChangeText={setAddressNumber}
+                        editable={useNewAddress}
+                      />
+                    </View>
+                  </View>
+
+                  <Input
+                    placeholder="Localidad/Ciudad"
+                    value={addressLocality}
+                    onChangeText={setAddressLocality}
+                    editable={useNewAddress}
+                    style={styles.addressInput}
+                  />
+
+                  <Input
+                    placeholder="Departamento"
+                    value={addressDepartment}
+                    onChangeText={setAddressDepartment}
+                    editable={useNewAddress}
+                    style={styles.addressInput}
+                  />
+
+                  <Input
+                    placeholder="Teléfono de contacto"
+                    value={addressPhone}
+                    onChangeText={setAddressPhone}
+                    editable={useNewAddress}
+                    keyboardType="phone-pad"
+                    style={styles.addressInput}
+                  />
+
+                  {!useNewAddress && (addressStreet || addressNumber || addressLocality || addressDepartment) && (
+                    <View style={styles.addressPreview}>
+                      <MapPin size={16} color="#6B7280" />
+                      <Text style={styles.addressPreviewText}>
+                        {addressStreet} {addressNumber}, {addressLocality}, {addressDepartment}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
             </Card>
 
             <Card style={styles.summaryCard}>
@@ -394,11 +502,81 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 16,
   },
+  shippingHeader: {
+    marginBottom: 16,
+  },
   shippingTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
-    marginBottom: 12,
+    marginBottom: 8,
+  },
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
+    borderRadius: 4,
+    marginRight: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  checkboxMark: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Inter-Bold',
+  },
+  checkboxLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  loadingText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  addressForm: {
+    gap: 12,
+  },
+  addressRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  addressFieldLarge: {
+    flex: 3,
+  },
+  addressFieldSmall: {
+    flex: 1,
+  },
+  addressInput: {
+    marginBottom: 0,
+  },
+  addressPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+    gap: 8,
+  },
+  addressPreviewText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
   },
   summaryCard: {
     marginHorizontal: 16,

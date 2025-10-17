@@ -386,10 +386,12 @@ export default function ProductDetail() {
               <Text style={styles.currentPrice}>
                 {formatPrice(product.price * (1 - appliedDiscount / 100))}
               </Text>
+              <Text style={styles.ivaIncluded}>IVA incluido</Text>
             </View>
           ) : (
             <View style={styles.priceSection}>
               <Text style={styles.currentPrice}>{formatPrice(product.price)}</Text>
+              <Text style={styles.ivaIncluded}>IVA incluido</Text>
             </View>
           )}
 
@@ -754,6 +756,12 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontFamily: 'Inter-Regular',
     color: '#111827',
+  },
+  ivaIncluded: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 4,
   },
   quickInfo: {
     flexDirection: 'row',
