@@ -11,6 +11,8 @@ export interface CartItem {
   partnerId: string;
   partnerName: string;
   iva_rate?: number;
+  discount_percentage?: number;
+  original_price?: number;
 }
 
 interface CartContextType {

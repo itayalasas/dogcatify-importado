@@ -31,11 +31,12 @@ const documentTypes = [
 ];
 
 export default function ServiceBooking() {
-  const { serviceId, partnerId, petId, boardingCategory } = useLocalSearchParams<{
+  const { serviceId, partnerId, petId, boardingCategory, discount } = useLocalSearchParams<{
     serviceId: string;
     partnerId: string;
     petId: string;
     boardingCategory?: string;
+    discount?: string;
   }>();
   
   const { currentUser } = useAuth();
@@ -69,12 +70,21 @@ export default function ServiceBooking() {
   const [detectedCardType, setDetectedCardType] = useState<CardType | null>(null);
   const [showDocumentTypes, setShowDocumentTypes] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
 
   useEffect(() => {
     if (serviceId && partnerId && petId) {
       fetchBookingData();
     }
-  }, [serviceId, partnerId, petId]);
+
+    // Apply discount from promotion if provided
+    if (discount) {
+      const discountValue = parseFloat(discount);
+      if (!isNaN(discountValue) && discountValue > 0 && discountValue <= 100) {
+        setAppliedDiscount(discountValue);
+      }
+    }
+  }, [serviceId, partnerId, petId, discount]);
 
   // Detect card type based on number
   useEffect(() => {
@@ -399,6 +409,11 @@ export default function ServiceBooking() {
         totalAmount: service.price
       });
 
+      const originalPrice = getServicePrice();
+      const finalPrice = appliedDiscount > 0
+        ? originalPrice * (1 - appliedDiscount / 100)
+        : originalPrice;
+
       const bookingData = {
         serviceId: service.id,
         partnerId: partner.id,
@@ -410,13 +425,15 @@ export default function ServiceBooking() {
         serviceName: service.name,
         partnerName: partner.business_name,
         petName: pet.name,
-        totalAmount: getServicePrice(),
+        totalAmount: finalPrice,
         customerInfo: {
           id: currentUser!.id,
           email: currentUser!.email,
           displayName: currentUser!.displayName || 'Usuario',
           phone: currentUser!.phone || null
-        }
+        },
+        discountPercentage: appliedDiscount > 0 ? appliedDiscount : undefined,
+        originalPrice: appliedDiscount > 0 ? originalPrice : undefined
       };
 
       console.log('Llamando a createServiceBookingOrder...');

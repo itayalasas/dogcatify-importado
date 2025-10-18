@@ -144,7 +144,7 @@ export default function ProductDetail() {
       Alert.alert('Iniciar sesión', 'Debes iniciar sesión para agregar productos al carrito');
       return;
     }
-    
+
     if (!product) return;
 
     // Calculate final price with discount
@@ -160,7 +160,9 @@ export default function ProductDetail() {
       image: product.images && product.images.length > 0 ? product.images[0] : null,
       partnerId: product.partner_id,
       partnerName: partnerInfo?.businessName || 'Tienda',
-      iva_rate: product.iva_rate
+      iva_rate: product.iva_rate,
+      discount_percentage: appliedDiscount > 0 ? appliedDiscount : undefined,
+      original_price: appliedDiscount > 0 ? product.price : undefined
     });
   };
 
