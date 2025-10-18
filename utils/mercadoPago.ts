@@ -487,7 +487,9 @@ export const createMultiPartnerOrder = async (
         ...item,
         subtotal: Math.round(itemSubtotal * 100) / 100,
         iva_rate: itemIvaRate,
-        iva_amount: Math.round(itemIVA * 100) / 100
+        iva_amount: Math.round(itemIVA * 100) / 100,
+        discount_percentage: item.discount_percentage || undefined,
+        original_price: item.original_price || undefined
       };
     });
 
@@ -709,6 +711,8 @@ export const createServiceBookingOrder = async (bookingData: {
   petName: string;
   totalAmount: number;
   customerInfo: any;
+  discountPercentage?: number;
+  originalPrice?: number;
 }): Promise<{ success: boolean; paymentUrl?: string; orderId?: string; error?: string }> => {
   try {
     console.log('Creating service booking order...');
@@ -807,7 +811,9 @@ export const createServiceBookingOrder = async (bookingData: {
         type: 'service',
         iva_rate: ivaRate,
         subtotal: subtotal,
-        iva_amount: ivaAmount
+        iva_amount: ivaAmount,
+        discount_percentage: bookingData.discountPercentage || undefined,
+        original_price: bookingData.originalPrice || undefined
       }],
       subtotal: subtotal,
       iva_rate: ivaRate,
