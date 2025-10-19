@@ -21,6 +21,8 @@ export default function AddService() {
   const [ivaRate, setIvaRate] = useState('22');
   const [duration, setDuration] = useState('60');
   const [stock, setStock] = useState('10');
+  const [currency, setCurrency] = useState('UYU');
+  const [currencyCodeDgi, setCurrencyCodeDgi] = useState('858');
   const [brand, setBrand] = useState('');
   const [weight, setWeight] = useState('');
   const [size, setSize] = useState('');
@@ -162,6 +164,20 @@ export default function AddService() {
 
   const config = getServiceConfig(businessType || '');
 
+  const CURRENCY_OPTIONS = [
+    { code: 'UYU', dgiCode: '858', name: 'Peso Uruguayo', symbol: '$' },
+    { code: 'USD', dgiCode: '840', name: 'Dólar Estadounidense', symbol: 'US$' },
+    { code: 'EUR', dgiCode: '978', name: 'Euro', symbol: '€' }
+  ];
+
+  const handleCurrencyChange = (currencyCode: string) => {
+    const selectedCurrency = CURRENCY_OPTIONS.find(c => c.code === currencyCode);
+    if (selectedCurrency) {
+      setCurrency(selectedCurrency.code);
+      setCurrencyCodeDgi(selectedCurrency.dgiCode);
+    }
+  };
+
   const handleSelectImages = async () => {
     try {
       const permissionResult = await requestMediaLibraryPermissionsAsync();
@@ -302,6 +318,8 @@ export default function AddService() {
           pet_type: petType.trim() || null,
           partner_name: partnerProfile?.businessName || 'Tienda',
           images: imageUrls,
+          currency: currency,
+          currency_code_dgi: currencyCodeDgi,
           is_active: true,
           created_at: new Date().toISOString()
         };
@@ -332,6 +350,8 @@ export default function AddService() {
           price: 0, // Legacy field
           duration: 0, // No aplica para pensión
           images: imageUrls,
+          currency: currency,
+          currency_code_dgi: currencyCodeDgi,
           is_active: true,
           created_at: new Date().toISOString()
         };
@@ -353,6 +373,8 @@ export default function AddService() {
           iva_rate: ivaRate ? parseFloat(ivaRate) : 0,
           duration: parseInt(duration) || 60,
           images: imageUrls,
+          currency: currency,
+          currency_code_dgi: currencyCodeDgi,
           is_active: true,
           created_at: new Date().toISOString()
         };
@@ -653,6 +675,37 @@ export default function AddService() {
                 keyboardType="numeric"
                 leftIcon={<Tag size={20} color="#6B7280" />}
               />
+
+              {/* Selector de Moneda */}
+              <View style={styles.categorySection}>
+                <Text style={styles.categoryLabel}>Moneda 💰</Text>
+                <Text style={styles.categoryHint}>Selecciona la moneda en la que se vende este {businessType === 'shop' ? 'producto' : 'servicio'}</Text>
+                <View style={styles.categories}>
+                  {CURRENCY_OPTIONS.map((curr) => (
+                    <TouchableOpacity
+                      key={curr.code}
+                      style={[
+                        styles.currencyButton,
+                        currency === curr.code && styles.selectedCurrency
+                      ]}
+                      onPress={() => handleCurrencyChange(curr.code)}
+                    >
+                      <Text style={[
+                        styles.currencyText,
+                        currency === curr.code && styles.selectedCurrencyText
+                      ]}>
+                        {curr.symbol} {curr.code}
+                      </Text>
+                      <Text style={[
+                        styles.currencyName,
+                        currency === curr.code && styles.selectedCurrencyName
+                      ]}>
+                        {curr.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
             </>
           )}
 
@@ -1042,6 +1095,45 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 8,
+  },
+  categoryHint: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  currencyButton: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+    minWidth: '30%',
+  },
+  selectedCurrency: {
+    backgroundColor: '#EBF8FF',
+    borderColor: '#10B981',
+  },
+  currencyText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  selectedCurrencyText: {
+    color: '#10B981',
+  },
+  currencyName: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  selectedCurrencyName: {
+    color: '#059669',
   },
   imageCount: {
     fontSize: 12,

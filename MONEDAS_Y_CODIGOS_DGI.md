@@ -46,6 +46,44 @@ Si no se especifica una moneda al crear un producto o servicio:
 
 Esto garantiza compatibilidad con todos los productos y servicios existentes.
 
+## Interfaz de Usuario (UI)
+
+### Selector de Moneda en Formularios
+
+Cuando un partner crea o edita un producto o servicio, encontrará un selector visual de moneda en el formulario.
+
+**Ubicación en la UI:**
+- **Productos**: En el formulario "Agregar Producto" y "Editar Producto"
+- **Servicios**: En el formulario "Agregar Servicio" y "Editar Servicio"
+- Aparece después del campo "Precio" y antes de los campos específicos
+
+**Cómo funciona:**
+1. El partner ve tres opciones de moneda presentadas como botones:
+   - **$ UYU** - Peso Uruguayo (seleccionado por defecto)
+   - **US$ USD** - Dólar Estadounidense
+   - **€ EUR** - Euro
+
+2. Al tocar una moneda:
+   - El botón se resalta en verde
+   - Se actualiza automáticamente el código DGI correspondiente
+   - El producto/servicio se guardará en esa moneda
+
+3. La moneda seleccionada se muestra en:
+   - El listado de productos/servicios del partner
+   - El detalle del producto/servicio para los clientes
+   - Las órdenes y facturas generadas
+
+**Ejemplo visual del selector:**
+```
+Moneda 💰
+Selecciona la moneda en la que se vende este producto
+
+[✓ $ UYU          ]  [ US$ USD        ]  [ € EUR          ]
+  Peso Uruguayo       Dólar Estadounidense    Euro
+```
+
+La moneda por defecto es **UYU (Peso Uruguayo)** si no se selecciona ninguna.
+
 ## Uso en el Sistema
 
 ### 1. Crear/Editar Productos con Moneda
