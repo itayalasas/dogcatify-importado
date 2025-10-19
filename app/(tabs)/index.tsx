@@ -175,6 +175,7 @@ export default function Home() {
   const [allPostsLoaded, setAllPostsLoaded] = useState(false);
   const [visiblePostIds, setVisiblePostIds] = useState<Set<string>>(new Set());
   const [isTabFocused, setIsTabFocused] = useState(true);
+  const [shuffledPromotions, setShuffledPromotions] = useState<any[]>([]);
   const { t } = useLanguage();
   const { currentUser } = useAuth();
   
@@ -367,18 +368,24 @@ export default function Home() {
     }
   };
 
+  // Shuffle promociones solo una vez cuando se cargan
+  useEffect(() => {
+    if (promotions.length > 0 && shuffledPromotions.length === 0) {
+      setShuffledPromotions([...promotions].sort(() => Math.random() - 0.5));
+    }
+  }, [promotions]);
+
   // Intercalar promociones en el feed cada 3 posts
   useEffect(() => {
     // Only process when both data sources are loaded
     if (!postsLoaded || !promotionsLoaded) return;
-    
-    
+    if (shuffledPromotions.length === 0 && promotions.length > 0) return; // Esperar al shuffle
+
     const interleaveFeedItems = () => {
       const items = [];
-      
-      if (promotions.length > 0) {
-        // Crear una copia aleatoria de promociones para variar el orden
-        const shuffledPromotions = [...promotions].sort(() => Math.random() - 0.5);
+
+      if (shuffledPromotions.length > 0) {
+        // Usar las promociones ya shuffleadas (no re-shuffle)
         let promoIndex = 0;
 
         // Determinar intervalo dinámico basado en cantidad de posts
@@ -395,15 +402,10 @@ export default function Home() {
           items.push({ type: 'post', data: posts[i] });
           
           // Insertar promoción según el intervalo dinámico
-          if ((i + 1) % interval === 0 && promoIndex < shuffledPromotions.length) {
-            items.push({ type: 'promotion', data: shuffledPromotions[promoIndex] });
+          if ((i + 1) % interval === 0 && shuffledPromotions.length > 0) {
+            // Usar índice circular para reutilizar promociones sin re-shuffle
+            items.push({ type: 'promotion', data: shuffledPromotions[promoIndex % shuffledPromotions.length] });
             promoIndex++;
-            
-            // Si se acabaron las promociones, reiniciar con orden aleatorio
-            if (promoIndex >= shuffledPromotions.length) {
-              shuffledPromotions.sort(() => Math.random() - 0.5);
-              promoIndex = 0;
-            }
           }
         }
         
@@ -425,7 +427,7 @@ export default function Home() {
     InteractionManager.runAfterInteractions(() => {
       interleaveFeedItems();
     });
-  }, [posts, promotions, postsLoaded, promotionsLoaded]);
+  }, [posts, shuffledPromotions, postsLoaded, promotionsLoaded]);
 
   const getTimeAgo = (date: Date): string => {
     const now = new Date();
@@ -705,7 +707,9 @@ export default function Home() {
       setCurrentPage(0);
       setHasMorePosts(true);
       setAllPostsLoaded(false);
-      
+      // Resetear shuffle de promociones para que se vuelva a ordenar
+      setShuffledPromotions([]);
+
       // Fetch fresh data
       await Promise.all([
         fetchInitialPosts(),
