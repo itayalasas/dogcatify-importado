@@ -154,38 +154,50 @@ export default function ServiceBooking() {
   };
 
   const fetchBookedTimes = async (date: Date) => {
-    if (!partnerId) return;
-    
+    if (!partnerId || !serviceId) return;
+
     try {
-      console.log('Fetching booked times for date:', date.toDateString());
-      
-      // Get bookings for the selected date and partner
-      const { data: bookings, error } = await supabaseClient
-        .from('bookings')
-        .select('time, status')
-        .eq('partner_id', partnerId)
-        .eq('date', date.toISOString().split('T')[0])
-        .in('status', ['pending', 'confirmed', 'pending_payment']);
-      
-      if (error) {
-        console.error('Error fetching booked times:', error);
+      console.log('Fetching booked times for date:', date.toDateString(), 'service:', serviceId);
+
+      const dateString = date.toISOString().split('T')[0];
+
+      // IMPORTANTE: Consultar ORDERS (no bookings) porque ahí están las reservas confirmadas
+      // Filtrar por:
+      // 1. service_id = el servicio actual
+      // 2. appointment_date = la fecha seleccionada
+      // 3. status != 'cancelled' (solo reservas activas)
+      const { data: orders, error: ordersError } = await supabaseClient
+        .from('orders')
+        .select('appointment_time, status, order_type')
+        .eq('service_id', serviceId)
+        .gte('appointment_date', `${dateString}T00:00:00`)
+        .lte('appointment_date', `${dateString}T23:59:59`)
+        .neq('status', 'cancelled')
+        .eq('order_type', 'service_booking');
+
+      if (ordersError) {
+        console.error('Error fetching booked times from orders:', ordersError);
         return;
       }
-      
-      const bookedTimeSlots = bookings?.map(booking => booking.time) || [];
-      console.log('Booked times for date:', bookedTimeSlots);
+
+      // Extraer las horas ya reservadas
+      const bookedTimeSlots = orders
+        ?.filter(order => order.appointment_time) // Solo las que tienen hora
+        .map(order => order.appointment_time) || [];
+
+      console.log('Booked times for date from ORDERS:', bookedTimeSlots);
       setBookedTimes(bookedTimeSlots);
     } catch (error) {
       console.error('Error fetching booked times:', error);
     }
   };
 
-  // Fetch booked times when date changes
+  // Fetch booked times when date or service changes
   useEffect(() => {
-    if (selectedDate && partnerId) {
+    if (selectedDate && partnerId && serviceId) {
       fetchBookedTimes(selectedDate);
     }
-  }, [selectedDate, partnerId]);
+  }, [selectedDate, partnerId, serviceId]);
 
   // Validar fecha seleccionada cuando cambia la categoría
   useEffect(() => {
@@ -408,6 +420,50 @@ export default function ServiceBooking() {
         serviceName: service.name,
         totalAmount: service.price
       });
+
+      // VALIDACIÓN CRÍTICA: Verificar que no exista una reserva para esta fecha/hora/servicio
+      if (selectedTime && selectedTime !== 'N/A') {
+        const dateString = selectedDate.toISOString().split('T')[0];
+
+        console.log('🔍 Validando disponibilidad de horario...');
+        const { data: existingOrders, error: checkError } = await supabaseClient
+          .from('orders')
+          .select('id, appointment_time, status')
+          .eq('service_id', service.id)
+          .gte('appointment_date', `${dateString}T00:00:00`)
+          .lte('appointment_date', `${dateString}T23:59:59`)
+          .eq('appointment_time', selectedTime)
+          .neq('status', 'cancelled')
+          .eq('order_type', 'service_booking');
+
+        if (checkError) {
+          console.error('❌ Error verificando disponibilidad:', checkError);
+          throw new Error('No se pudo verificar la disponibilidad del horario');
+        }
+
+        if (existingOrders && existingOrders.length > 0) {
+          console.warn('⚠️ Ya existe una reserva para esta fecha/hora/servicio:', existingOrders);
+          setPaymentLoading(false);
+          setPaymentStep('methods');
+          Alert.alert(
+            'Horario No Disponible',
+            `Lo sentimos, la hora ${selectedTime} para el día ${selectedDate.toLocaleDateString()} ya no está disponible. Por favor selecciona otro horario.`,
+            [
+              {
+                text: 'Entendido',
+                onPress: () => {
+                  // Recargar los horarios ocupados
+                  fetchBookedTimes(selectedDate);
+                  setSelectedTime(null);
+                }
+              }
+            ]
+          );
+          return;
+        }
+
+        console.log('✅ Horario disponible, continuando con la reserva...');
+      }
 
       const originalPrice = getServicePrice();
       const finalPrice = appliedDiscount > 0
