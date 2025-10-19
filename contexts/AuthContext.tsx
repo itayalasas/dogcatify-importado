@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Alert } from 'react-native';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { Alert, AppState, AppStateStatus } from 'react-native';
 import { router } from 'expo-router';
 import { supabaseClient, getUserProfile, updateUserProfile, signIn as supabaseSignIn, signUp as supabaseSignUp, signOut as supabaseSignOut } from '../lib/supabase';
 import { User } from '../types';
@@ -34,7 +34,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isEmailConfirmed, setIsEmailConfirmed] = useState(false);
   const [authInitialized, setAuthInitialized] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [tokenCheckInterval, setTokenCheckInterval] = useState<NodeJS.Timeout | null>(null);
+  const tokenCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const appState = useRef(AppState.currentState);
+  const isHandlingExpirationRef = useRef(false);
 
   const updateCurrentUser = (updatedUser: User) => {
     setCurrentUser(updatedUser);
@@ -331,9 +333,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     return () => {
       mounted = false;
-      // Clear token check interval
-      if (tokenCheckInterval) {
-        clearInterval(tokenCheckInterval);
+      if (tokenCheckIntervalRef.current) {
+        clearInterval(tokenCheckIntervalRef.current);
       }
       if (subscription && typeof subscription.unsubscribe === 'function') {
         subscription.unsubscribe();
@@ -341,91 +342,111 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // Set up periodic token validation when user is authenticated
+  // Set up periodic token validation and app state monitoring
   useEffect(() => {
     if (currentUser && session) {
-      console.log('Setting up token validation interval for user:', currentUser.email);
-      
-      // Clear any existing interval
-      if (tokenCheckInterval) {
-        clearInterval(tokenCheckInterval);
+      console.log('Setting up token validation for user:', currentUser.email);
+
+      if (tokenCheckIntervalRef.current) {
+        clearInterval(tokenCheckIntervalRef.current);
       }
-      
-      // Check token validity every 5 minutes
-      const interval = setInterval(async () => {
-        const isValid = await checkTokenValidity();
-        if (!isValid) {
-          console.log('Token expired, redirecting to login...');
-          await handleTokenExpiration();
+
+      tokenCheckIntervalRef.current = setInterval(async () => {
+        if (!isHandlingExpirationRef.current) {
+          const isValid = await checkTokenValidity();
+          if (!isValid) {
+            console.log('Token expired, redirecting to login...');
+            await handleTokenExpiration();
+          }
         }
-      }, 5 * 60 * 1000); // 5 minutes
-      
-      setTokenCheckInterval(interval);
+      }, 2 * 60 * 1000);
+
+      const subscription = AppState.addEventListener('change', async (nextAppState: AppStateStatus) => {
+        if (
+          appState.current.match(/inactive|background/) &&
+          nextAppState === 'active' &&
+          currentUser &&
+          !isHandlingExpirationRef.current
+        ) {
+          console.log('App returned to foreground, checking token validity...');
+          const isValid = await checkTokenValidity();
+          if (!isValid) {
+            console.log('Token expired on app resume, redirecting to login...');
+            await handleTokenExpiration();
+          }
+        }
+        appState.current = nextAppState;
+      });
+
+      return () => {
+        if (tokenCheckIntervalRef.current) {
+          clearInterval(tokenCheckIntervalRef.current);
+          tokenCheckIntervalRef.current = null;
+        }
+        subscription?.remove();
+      };
     } else {
-      // Clear interval when user logs out
-      if (tokenCheckInterval) {
-        clearInterval(tokenCheckInterval);
-        setTokenCheckInterval(null);
+      if (tokenCheckIntervalRef.current) {
+        clearInterval(tokenCheckIntervalRef.current);
+        tokenCheckIntervalRef.current = null;
       }
     }
-    
-    return () => {
-      if (tokenCheckInterval) {
-        clearInterval(tokenCheckInterval);
-      }
-    };
   }, [currentUser, session]);
 
   const checkTokenValidity = async (): Promise<boolean> => {
     try {
-      // Get current session
       const { data: { session }, error } = await supabaseClient.auth.getSession();
-      
+
       if (error) {
         console.error('Error checking session:', error);
         return false;
       }
-      
+
       if (!session) {
         console.log('No active session found');
         return false;
       }
-      
-      // Check if token is expired
+
       const now = Math.floor(Date.now() / 1000);
       const tokenExp = session.expires_at || 0;
-      
-      console.log('Token validation:', {
-        now,
-        expires_at: tokenExp,
-        isExpired: now >= tokenExp,
-        timeUntilExpiry: tokenExp - now
-      });
-      
+      const timeUntilExpiry = tokenExp - now;
+
       if (now >= tokenExp) {
         console.log('Token has expired');
         return false;
       }
-      
-      // Try to make a simple API call to verify token works
-      const { data, error: testError } = await supabaseClient
+
+      if (timeUntilExpiry < 300) {
+        console.log('Token expires soon, attempting refresh...');
+        const { data: refreshData, error: refreshError } = await supabaseClient.auth.refreshSession();
+
+        if (refreshError || !refreshData.session) {
+          console.error('Failed to refresh session:', refreshError);
+          return false;
+        }
+
+        console.log('Session refreshed successfully');
+        return true;
+      }
+
+      const { error: testError } = await supabaseClient
         .from('profiles')
         .select('id')
         .eq('id', session.user.id)
         .limit(1);
-      
+
       if (testError) {
         console.error('Token validation API call failed:', testError);
-        
-        // Check for specific JWT errors
-        if (testError.message?.includes('JWT') || 
+
+        if (testError.message?.includes('JWT') ||
             testError.message?.includes('expired') ||
-            testError.message?.includes('invalid')) {
+            testError.message?.includes('invalid') ||
+            testError.code === 'PGRST301') {
           console.log('JWT error detected, token is invalid');
           return false;
         }
       }
-      
+
       return true;
     } catch (error) {
       console.error('Error in checkTokenValidity:', error);
@@ -434,40 +455,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const handleTokenExpiration = async () => {
+    if (isHandlingExpirationRef.current) {
+      console.log('Already handling token expiration, skipping...');
+      return;
+    }
+
+    isHandlingExpirationRef.current = true;
+
     try {
       console.log('Handling token expiration...');
-      
-      // Clear local state
+
+      if (tokenCheckIntervalRef.current) {
+        clearInterval(tokenCheckIntervalRef.current);
+        tokenCheckIntervalRef.current = null;
+      }
+
       setCurrentUser(null);
       setSession(null);
       setIsEmailConfirmed(false);
-      
-      // Clear token check interval
-      if (tokenCheckInterval) {
-        clearInterval(tokenCheckInterval);
-        setTokenCheckInterval(null);
-      }
-      
-      // Sign out from Supabase
+
       await supabaseClient.auth.signOut();
-      
-      // Show alert and redirect to login
+
       Alert.alert(
         'Sesión expirada',
         'Tu sesión ha expirado por seguridad. Por favor inicia sesión nuevamente.',
         [
           {
-            text: 'Iniciar sesión',
+            text: 'OK',
             onPress: () => {
-              try {
-                router.replace('/auth/login');
-              } catch (routerError) {
-                console.error('Error navigating to login:', routerError);
-                // Fallback navigation
-                setTimeout(() => {
+              setTimeout(() => {
+                try {
                   router.replace('/auth/login');
-                }, 100);
-              }
+                } catch (error) {
+                  console.error('Error navigating to login:', error);
+                }
+                isHandlingExpirationRef.current = false;
+              }, 100);
             }
           }
         ],
@@ -475,12 +498,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
     } catch (error) {
       console.error('Error handling token expiration:', error);
-      // Force navigation to login even if there's an error
-      try {
-        router.replace('/auth/login');
-      } catch (routerError) {
-        console.error('Error in fallback navigation:', routerError);
-      }
+      setTimeout(() => {
+        try {
+          router.replace('/auth/login');
+        } catch (routerError) {
+          console.error('Error in fallback navigation:', routerError);
+        }
+        isHandlingExpirationRef.current = false;
+      }, 100);
     }
   };
   const login = async (email: string, password: string): Promise<User | null> => {
