@@ -14,7 +14,20 @@
       "backgroundColor": "#ffffff"
     },
     "assetBundlePatterns": ["**/*"],
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/logo-transp.png",
+          "color": "#2D6A6F",
+          "sounds": [],
+          "android": {
+            "useNextNotificationsApi": true
+          }
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true
     },
@@ -45,6 +58,7 @@
     "android": {
   "package": "com.dogcatify.app",
   "versionCode": 9,
+  "googleServicesFile": "./google-services.json",
   "adaptiveIcon": {
     "foregroundImage": "./assets/images/logo.jpg",
     "backgroundColor": "#FFFFFF"
