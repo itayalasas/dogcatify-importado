@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Linking } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { ArrowLeft, ShoppingCart, Trash2, Plus, Minus, MapPin, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
@@ -47,6 +48,15 @@ export default function Cart() {
       loadProductStocks();
     }
   }, [cart]);
+
+  // Recargar stocks cada vez que la pantalla se enfoca (al volver desde Mercado Pago)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (cart && cart.length > 0) {
+        loadProductStocks();
+      }
+    }, [cart])
+  );
 
   const loadProductStocks = async () => {
     if (!cart || cart.length === 0) return;
