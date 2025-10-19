@@ -399,28 +399,34 @@ export default function Home() {
         }
 
         for (let i = 0; i < posts.length; i++) {
-          items.push({ type: 'post', data: posts[i], feedIndex: items.length });
+          // Usar el ID del post como parte de la key para que sea estable
+          items.push({ type: 'post', data: posts[i], feedIndex: `post-${posts[i].id}` });
 
           // Insertar promoción según el intervalo dinámico
           if ((i + 1) % interval === 0 && shuffledPromotions.length > 0) {
-            // Usar índice circular para reutilizar promociones sin re-shuffle
+            const promoData = shuffledPromotions[promoIndex % shuffledPromotions.length];
+            // Key estable: promoción ID + posición en el feed
             items.push({
               type: 'promotion',
-              data: shuffledPromotions[promoIndex % shuffledPromotions.length],
-              feedIndex: items.length // Índice único en el feed para keys únicas
+              data: promoData,
+              feedIndex: `promo-${promoData.id}-at-${i + 1}`
             });
             promoIndex++;
           }
         }
-        
+
         // Si no se insertó ninguna promoción y hay posts, agregar una al final
         if (posts.length > 0 && !items.some(item => item.type === 'promotion')) {
-          items.push({ type: 'promotion', data: shuffledPromotions[0], feedIndex: items.length });
+          items.push({
+            type: 'promotion',
+            data: shuffledPromotions[0],
+            feedIndex: `promo-${shuffledPromotions[0].id}-at-end`
+          });
         }
       } else {
         // Si no hay promociones, solo agregar posts
-        posts.forEach((post, index) => {
-          items.push({ type: 'post', data: post, feedIndex: index });
+        posts.forEach((post) => {
+          items.push({ type: 'post', data: post, feedIndex: `post-${post.id}` });
         });
       }
 
