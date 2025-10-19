@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { CircleX as XCircle, RefreshCw } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { supabaseClient } from '@/lib/supabase';
 
 export default function PaymentFailure() {
   const { order_id, type } = useLocalSearchParams<{
@@ -15,17 +16,132 @@ export default function PaymentFailure() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate loading order details
-    setTimeout(() => {
+    if (order_id) {
+      cancelFailedOrder();
+    } else {
+      setLoading(false);
+    }
+  }, [order_id, type]);
+
+  const cancelFailedOrder = async () => {
+    try {
+      console.log('Cancelling failed order:', order_id);
+
+      // Fetch order details
+      const { data: order, error: fetchError } = await supabaseClient
+        .from('orders')
+        .select('*, partners(business_name)')
+        .eq('id', order_id)
+        .maybeSingle();
+
+      if (fetchError) {
+        console.error('Error fetching order:', fetchError);
+        setOrderDetails({
+          id: order_id || '#failed',
+          total: '$0',
+          status: 'Fallido',
+          isBooking: type === 'booking'
+        });
+        setLoading(false);
+        return;
+      }
+
+      if (!order) {
+        console.log('Order not found:', order_id);
+        setOrderDetails({
+          id: order_id || '#failed',
+          total: '$0',
+          status: 'Fallido',
+          isBooking: type === 'booking'
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Update order status to cancelled
+      const { error: updateError } = await supabaseClient
+        .from('orders')
+        .update({
+          status: 'cancelled',
+          payment_status: 'failed',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', order_id);
+
+      if (updateError) {
+        console.error('Error updating order status:', updateError);
+      } else {
+        console.log('Order cancelled successfully');
+      }
+
+      // If this is a booking, update booking status as well
+      if (order.booking_id) {
+        const { error: bookingError } = await supabaseClient
+          .from('bookings')
+          .update({
+            status: 'cancelled',
+            payment_status: 'failed',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', order.booking_id);
+
+        if (bookingError) {
+          console.error('Error updating booking status:', bookingError);
+        } else {
+          console.log('Booking cancelled successfully');
+        }
+      }
+
+      // If order has items, restore stock for products
+      if (order.items && Array.isArray(order.items) && order.items.length > 0) {
+        console.log('Restoring stock for cancelled order items');
+        for (const item of order.items) {
+          if (item.type !== 'service' && item.id) {
+            // Only restore stock for products, not services
+            const { error: stockError } = await supabaseClient
+              .from('partner_products')
+              .update({
+                stock: supabaseClient.raw(`stock + ${item.quantity || 1}`),
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', item.id);
+
+            if (stockError) {
+              console.error(`Error restoring stock for product ${item.id}:`, stockError);
+            }
+          }
+        }
+      }
+
+      // Format currency
+      const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('es-UY', {
+          style: 'currency',
+          currency: 'UYU',
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0,
+        }).format(amount);
+      };
+
       setOrderDetails({
-        id: order_id || '#failed123',
-        total: '$430.00',
+        id: order_id,
+        total: formatCurrency(order.total_amount || 0),
+        status: 'Fallido',
+        isBooking: type === 'booking' || !!order.booking_id,
+        partnerName: order.partners?.business_name
+      });
+    } catch (error) {
+      console.error('Error in cancelFailedOrder:', error);
+      setOrderDetails({
+        id: order_id || '#failed',
+        total: '$0',
         status: 'Fallido',
         isBooking: type === 'booking'
       });
+    } finally {
       setLoading(false);
-    }, 1000);
-  }, [order_id, type]);
+    }
+  };
 
   const handleRetryPayment = () => {
     if (orderDetails?.isBooking) {
