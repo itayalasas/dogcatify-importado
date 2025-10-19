@@ -489,7 +489,9 @@ export const createMultiPartnerOrder = async (
         iva_rate: itemIvaRate,
         iva_amount: Math.round(itemIVA * 100) / 100,
         discount_percentage: item.discount_percentage ?? 0,
-        original_price: item.original_price ?? item.price
+        original_price: item.original_price ?? item.price,
+        currency: item.currency || 'UYU',
+        currency_code_dgi: item.currency_code_dgi || '858'
       };
     });
 
@@ -722,10 +724,10 @@ export const createServiceBookingOrder = async (bookingData: {
     const partnerConfig = await getPartnerMercadoPagoConfig(bookingData.partnerId);
     console.log('Partner MP config loaded for:', partnerConfig.business_name);
 
-    // Get service details to obtain IVA rate
+    // Get service details to obtain IVA rate and currency
     const { data: serviceData, error: serviceError } = await supabaseClient
       .from('partner_services')
-      .select('iva_rate')
+      .select('iva_rate, currency, currency_code_dgi')
       .eq('id', bookingData.serviceId)
       .single();
 
@@ -813,7 +815,9 @@ export const createServiceBookingOrder = async (bookingData: {
         subtotal: subtotal,
         iva_amount: ivaAmount,
         discount_percentage: bookingData.discountPercentage ?? 0,
-        original_price: bookingData.originalPrice ?? bookingData.totalAmount
+        original_price: bookingData.originalPrice ?? bookingData.totalAmount,
+        currency: serviceData?.currency || 'UYU',
+        currency_code_dgi: serviceData?.currency_code_dgi || '858'
       }],
       subtotal: subtotal,
       iva_rate: ivaRate,
