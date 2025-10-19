@@ -17,6 +17,7 @@ export default function Cart() {
   const [loadingAddress, setLoadingAddress] = useState(true);
   const [useNewAddress, setUseNewAddress] = useState(false);
   const [isAddressExpanded, setIsAddressExpanded] = useState(false);
+  const [productStocks, setProductStocks] = useState<Record<string, number>>({});
   const [savedAddress, setSavedAddress] = useState({
     street: '',
     number: '',
@@ -39,6 +40,35 @@ export default function Cart() {
       loadUserAddress();
     }
   }, [currentUser]);
+
+  // Cargar stocks de los productos en el carrito
+  useEffect(() => {
+    if (cart && cart.length > 0) {
+      loadProductStocks();
+    }
+  }, [cart]);
+
+  const loadProductStocks = async () => {
+    if (!cart || cart.length === 0) return;
+
+    try {
+      const productIds = cart.map(item => item.id);
+      const { data, error } = await supabaseClient
+        .from('partner_products')
+        .select('id, stock')
+        .in('id', productIds);
+
+      if (data && !error) {
+        const stocks: Record<string, number> = {};
+        data.forEach(product => {
+          stocks[product.id] = product.stock;
+        });
+        setProductStocks(stocks);
+      }
+    } catch (error) {
+      console.error('Error loading product stocks:', error);
+    }
+  };
 
   const loadUserAddress = async () => {
     if (!currentUser) return;
@@ -107,9 +137,20 @@ export default function Cart() {
   const handleUpdateQuantity = (itemId: string, newQuantity: number) => {
     if (newQuantity <= 0) {
       removeFromCart(itemId);
-    } else {
-      updateQuantity(itemId, newQuantity);
+      return;
     }
+
+    // Validar contra el stock disponible
+    const availableStock = productStocks[itemId];
+    if (availableStock !== undefined && newQuantity > availableStock) {
+      Alert.alert(
+        'Stock insuficiente',
+        `Solo hay ${availableStock} unidades disponibles de este producto.`
+      );
+      return;
+    }
+
+    updateQuantity(itemId, newQuantity, availableStock);
   };
 
   const handleCheckout = async () => {
@@ -277,44 +318,54 @@ export default function Cart() {
         ) : (
           <>
             <View style={styles.itemsContainer}>
-              {cart.map((item) => (
-                <Card key={item.id} style={styles.itemCard}>
-                  <View style={styles.itemHeader}>
-                    <Image 
-                      source={{ uri: item.image || 'https://images.pexels.com/photos/1459244/pexels-photo-1459244.jpeg?auto=compress&cs=tinysrgb&w=400' }} 
-                      style={styles.itemImage} 
-                    />
-                    <View style={styles.itemInfo}>
-                      <Text style={styles.itemName}>{item.name}</Text>
-                      <Text style={styles.itemPartner}>{item.partnerName}</Text>
-                      {item.discount_percentage > 0 ? (
-                        <View style={styles.priceContainer}>
-                          <Text style={styles.originalPrice}>
-                            {formatCurrency(item.original_price || item.price)}
+              {cart.map((item) => {
+                const availableStock = productStocks[item.id];
+                const canIncreaseQuantity = availableStock === undefined || item.quantity < availableStock;
+
+                return (
+                  <Card key={item.id} style={styles.itemCard}>
+                    <View style={styles.itemHeader}>
+                      <Image
+                        source={{ uri: item.image || 'https://images.pexels.com/photos/1459244/pexels-photo-1459244.jpeg?auto=compress&cs=tinysrgb&w=400' }}
+                        style={styles.itemImage}
+                      />
+                      <View style={styles.itemInfo}>
+                        <Text style={styles.itemName}>{item.name}</Text>
+                        <Text style={styles.itemPartner}>{item.partnerName}</Text>
+                        {availableStock !== undefined && (
+                          <Text style={styles.stockInfo}>
+                            Stock: {availableStock} disponibles
                           </Text>
-                          <View style={styles.discountBadge}>
-                            <Text style={styles.discountText}>{item.discount_percentage}% OFF</Text>
+                        )}
+                        {item.discount_percentage > 0 ? (
+                          <View style={styles.priceContainer}>
+                            <Text style={styles.originalPrice}>
+                              {formatCurrency(item.original_price || item.price)}
+                            </Text>
+                            <View style={styles.discountBadge}>
+                              <Text style={styles.discountText}>{item.discount_percentage}% OFF</Text>
+                            </View>
                           </View>
-                        </View>
-                      ) : null}
-                      <Text style={styles.itemPrice}>{formatCurrency(item.price)}</Text>
+                        ) : null}
+                        <Text style={styles.itemPrice}>{formatCurrency(item.price)}</Text>
+                      </View>
+                      <View style={styles.quantityControls}>
+                        <TouchableOpacity
+                          style={styles.quantityButton}
+                          onPress={() => handleUpdateQuantity(item.id, item.quantity - 1)}
+                        >
+                          <Minus size={16} color="#6B7280" />
+                        </TouchableOpacity>
+                        <Text style={styles.quantityText}>{item.quantity}</Text>
+                        <TouchableOpacity
+                          style={[styles.quantityButton, !canIncreaseQuantity && styles.quantityButtonDisabled]}
+                          onPress={() => handleUpdateQuantity(item.id, item.quantity + 1)}
+                          disabled={!canIncreaseQuantity}
+                        >
+                          <Plus size={16} color={canIncreaseQuantity ? "#6B7280" : "#D1D5DB"} />
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                    <View style={styles.quantityControls}>
-                      <TouchableOpacity
-                        style={styles.quantityButton}
-                        onPress={() => handleUpdateQuantity(item.id, item.quantity - 1)}
-                      >
-                        <Minus size={16} color="#6B7280" />
-                      </TouchableOpacity>
-                      <Text style={styles.quantityText}>{item.quantity}</Text>
-                      <TouchableOpacity
-                        style={styles.quantityButton}
-                        onPress={() => handleUpdateQuantity(item.id, item.quantity + 1)}
-                      >
-                        <Plus size={16} color="#6B7280" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
                   
                   <View style={styles.itemFooter}>
                     <TouchableOpacity
@@ -329,7 +380,8 @@ export default function Cart() {
                     </Text>
                   </View>
                 </Card>
-              ))}
+                );
+              })}
             </View>
 
             <Card style={styles.summaryCard}>
@@ -604,6 +656,12 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginBottom: 4,
   },
+  stockInfo: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#059669',
+    marginBottom: 4,
+  },
   priceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -641,6 +699,9 @@ const styles = StyleSheet.create({
   },
   quantityButton: {
     padding: 8,
+  },
+  quantityButtonDisabled: {
+    opacity: 0.4,
   },
   quantityText: {
     fontSize: 16,
