@@ -415,11 +415,12 @@ export default function Home() {
           // Insertar promoción según el intervalo dinámico
           if ((i + 1) % interval === 0 && shuffledPromotions.length > 0) {
             const promoData = shuffledPromotions[promoIndex % shuffledPromotions.length];
-            // Key estable: solo usar promoción ID para evitar re-renders innecesarios
+            // Key estable que incluye el índice de repetición para evitar duplicados
             items.push({
               type: 'promotion',
               data: promoData,
-              feedIndex: `promo-${promoData.id}`
+              feedIndex: `promo-${promoData.id}-${promoIndex}`,
+              promoRepeatIndex: promoIndex
             });
             promoIndex++;
           }
@@ -430,7 +431,8 @@ export default function Home() {
           items.push({
             type: 'promotion',
             data: shuffledPromotions[0],
-            feedIndex: `promo-${shuffledPromotions[0].id}-at-end`
+            feedIndex: `promo-${shuffledPromotions[0].id}-end`,
+            promoRepeatIndex: 0
           });
         }
       } else {
@@ -845,7 +847,7 @@ export default function Home() {
       <FlatList
         data={feedItems}
         renderItem={renderFeedItem}
-        keyExtractor={(item) => `${item.type}-${item.data.id}-${item.feedIndex}`}
+        keyExtractor={(item) => item.feedIndex}
         style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -865,8 +867,8 @@ export default function Home() {
         ListEmptyComponent={renderEmpty}
         initialNumToRender={INITIAL_LOAD}
         maxToRenderPerBatch={POSTS_PER_PAGE}
-        windowSize={5}
-        removeClippedSubviews={Platform.OS === 'android'}
+        windowSize={10}
+        removeClippedSubviews={false}
         maintainVisibleContentPosition={
           Platform.OS === 'ios' ? {
             minIndexForVisible: 0,
