@@ -47,10 +47,33 @@ async function sendWebhookNotification(
 
   try {
     console.log("🔨 Creando objeto payload...");
+
+    // Calcular IVA sobre el envío si aplica
+    const shippingCost = orderData.shipping_cost || 0;
+    const shippingIvaAmount = orderData.iva_rate && !orderData.iva_included_in_price
+      ? (shippingCost * orderData.iva_rate / 100)
+      : 0;
+
+    // Estructurar información de envío
+    const shippingInfo = orderData.order_type === 'product_purchase' ? {
+      shipping_cost: shippingCost,
+      shipping_iva_amount: shippingIvaAmount,
+      shipping_total: shippingCost + shippingIvaAmount,
+      shipping_address: orderData.shipping_address || null,
+    } : {
+      shipping_cost: null,
+      shipping_iva_amount: null,
+      shipping_total: null,
+      shipping_address: null,
+    };
+
     const payload = {
       event: eventType,
       order_id: orderId,
-      data: orderData,
+      data: {
+        ...orderData,
+        shipping_info: shippingInfo,
+      },
       timestamp: new Date().toISOString(),
     };
     console.log("✅ Objeto payload creado");
@@ -230,6 +253,7 @@ Deno.serve(async (req: Request) => {
         status,
         order_type,
         subtotal,
+        shipping_cost,
         iva_rate,
         iva_amount,
         iva_included_in_price,
