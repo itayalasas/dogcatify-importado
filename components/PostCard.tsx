@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions, Modal, TextInput, FlatList, ActivityIndicator, ScrollView, Image, Share, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions, Modal, TextInput, FlatList, ActivityIndicator, ScrollView, Image, Share, Platform, KeyboardAvoidingView } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Heart, MessageCircle, Share2, MoveHorizontal as MoreHorizontal, ArrowLeft, Send, Play, Pause } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
@@ -899,33 +899,39 @@ const PostCard: React.FC<PostCardProps> = ({
         onRequestClose={() => setShowCommentsModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => setShowCommentsModal(false)}>
-                <ArrowLeft size={24} color="#111827" />
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>Comentarios</Text>
-              <View style={styles.modalHeaderSpacer} />
-            </View>
-            
-            {loadingComments ? (
-              <View style={styles.loadingCommentsContainer}>
-                <ActivityIndicator size="small" color="#3B82F6" />
-                <Text style={styles.loadingCommentsText}>Cargando comentarios...</Text>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardAvoidingView}
+            keyboardVerticalOffset={0}
+          >
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <TouchableOpacity onPress={() => setShowCommentsModal(false)}>
+                  <ArrowLeft size={24} color="#111827" />
+                </TouchableOpacity>
+                <Text style={styles.modalTitle}>Comentarios</Text>
+                <View style={styles.modalHeaderSpacer} />
               </View>
-            ) : (
-              <FlatList
-                data={comments}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => renderCommentThread({ item })}
-                ListEmptyComponent={
-                  <Text style={styles.noCommentsText}>No hay comentarios aún. ¡Sé el primero en comentar!</Text>
-                }
-                style={styles.commentsList}
-              />
-            )}
-            
-            <View style={styles.addCommentContainer}>
+
+              {loadingComments ? (
+                <View style={styles.loadingCommentsContainer}>
+                  <ActivityIndicator size="small" color="#3B82F6" />
+                  <Text style={styles.loadingCommentsText}>Cargando comentarios...</Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={comments}
+                  keyExtractor={(item) => item.id}
+                  renderItem={({ item }) => renderCommentThread({ item })}
+                  ListEmptyComponent={
+                    <Text style={styles.noCommentsText}>No hay comentarios aún. ¡Sé el primero en comentar!</Text>
+                  }
+                  style={styles.commentsList}
+                  contentContainerStyle={styles.commentsListContent}
+                />
+              )}
+
+              <View style={styles.addCommentContainer}>
               {replyTo && (
                 <View style={styles.replyingToContainer}>
                   <Text style={styles.replyingToText}>
@@ -957,7 +963,7 @@ const PostCard: React.FC<PostCardProps> = ({
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </View>
@@ -1182,6 +1188,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
   modalContent: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -1204,6 +1213,9 @@ const styles = StyleSheet.create({
   },
   commentsList: {
     flex: 1,
+  },
+  commentsListContent: {
+    paddingBottom: 20,
   },
   commentItem: {
     flexDirection: 'row',
@@ -1267,6 +1279,8 @@ const styles = StyleSheet.create({
   addCommentContainer: {
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    paddingBottom: Platform.OS === 'ios' ? 0 : 8,
   },
   replyingToContainer: {
     flexDirection: 'row',
