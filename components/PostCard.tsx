@@ -32,14 +32,20 @@ const VideoPlayer = memo(({
 }) => {
   const internalRef = useRef<Video | null>(null);
   const isMounted = useRef(true);
+  const hasUnloaded = useRef(false);
 
-  // Cleanup only when component unmounts
+  // Cleanup when component unmounts
   useEffect(() => {
     isMounted.current = true;
+    hasUnloaded.current = false;
+
     return () => {
       isMounted.current = false;
-      if (internalRef.current) {
-        internalRef.current.unloadAsync().catch(() => {});
+      if (internalRef.current && !hasUnloaded.current) {
+        hasUnloaded.current = true;
+        internalRef.current.pauseAsync()
+          .then(() => internalRef.current?.unloadAsync())
+          .catch(() => {});
       }
     };
   }, []);
@@ -62,7 +68,9 @@ const VideoPlayer = memo(({
         useNativeControls={false}
         progressUpdateIntervalMillis={500}
         onReadyForDisplay={() => {}}
-        onError={() => {}}
+        onError={(error) => {
+          console.log('Video error:', error);
+        }}
       />
       <View style={styles.videoControlsOverlay}>
         <TouchableOpacity
@@ -87,6 +95,13 @@ const VideoPlayer = memo(({
       </View>
     </View>
   );
+}, (prevProps, nextProps) => {
+  // Solo re-renderizar si cambian props críticas
+  return prevProps.index === nextProps.index &&
+         prevProps.isPlaying === nextProps.isPlaying &&
+         prevProps.isInViewport === nextProps.isInViewport &&
+         prevProps.playbackRate === nextProps.playbackRate &&
+         prevProps.source.uri === nextProps.source.uri;
 });
 
 interface PostCardProps {
@@ -141,18 +156,24 @@ const PostCard: React.FC<PostCardProps> = ({
     fetchCommentsCount();
   }, [post.likes, currentUser]);
 
-  // Pause videos when changing slides (no unload)
+  // Unload videos when changing slides to free memory
   useEffect(() => {
     Object.keys(videoRefs.current).forEach((indexStr) => {
       const index = parseInt(indexStr);
       if (index !== currentImageIndex) {
         const ref = videoRefs.current[index];
         if (ref) {
-          ref.pauseAsync().catch(() => {});
+          // First pause, then unload to free memory
+          ref.pauseAsync()
+            .then(() => ref.unloadAsync())
+            .catch(() => {});
+          // Remove ref from collection since it's unloaded
+          delete videoRefs.current[index];
         }
       }
     });
     setPlayingVideos({});
+    setVideoSpeeds({});
   }, [currentImageIndex]);
 
   // Pause videos when post is not in viewport
@@ -812,28 +833,30 @@ const PostCard: React.FC<PostCardProps> = ({
                     key={index}
                     style={styles.albumImageWrapper}
                   >
-                    {isVideo && isCurrent ? (
-                      <VideoPlayer
-                        key={`video-${post.id}-${index}`}
-                        videoRef={(ref) => {
-                          videoRefs.current[index] = ref;
-                          if (ref && isInViewport && currentImageIndex === index && playingVideos[index] === undefined) {
-                            setPlayingVideos(prev => ({ ...prev, [index]: true }));
-                          }
-                        }}
-                        source={{ uri: cleanUrl }}
-                        style={styles.albumMainImage}
-                        onTogglePlay={() => toggleVideoPlayback(index)}
-                        onChangeSpeed={() => changeVideoSpeed(index)}
-                        isPlaying={playingVideos[index] ?? true}
-                        playbackRate={videoSpeeds[index] || 1}
-                        isInViewport={isInViewport && currentImageIndex === index}
-                        index={index}
-                      />
-                    ) : isVideo ? (
-                      <View style={[styles.albumMainImage, styles.videoPlaceholder]}>
-                        <Play size={48} color="#FFFFFF" />
-                      </View>
+                    {isVideo ? (
+                      isCurrent ? (
+                        <VideoPlayer
+                          key={`video-${post.id}-${index}-${currentImageIndex}`}
+                          videoRef={(ref) => {
+                            videoRefs.current[index] = ref;
+                            if (ref && isInViewport && playingVideos[index] === undefined) {
+                              setPlayingVideos(prev => ({ ...prev, [index]: true }));
+                            }
+                          }}
+                          source={{ uri: cleanUrl }}
+                          style={styles.albumMainImage}
+                          onTogglePlay={() => toggleVideoPlayback(index)}
+                          onChangeSpeed={() => changeVideoSpeed(index)}
+                          isPlaying={playingVideos[index] ?? true}
+                          playbackRate={videoSpeeds[index] || 1}
+                          isInViewport={isInViewport}
+                          index={index}
+                        />
+                      ) : (
+                        <View style={[styles.albumMainImage, styles.videoPlaceholder]}>
+                          <Play size={48} color="#FFFFFF" />
+                        </View>
+                      )
                     ) : (
                       <TouchableOpacity
                         activeOpacity={0.9}
