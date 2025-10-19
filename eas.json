@@ -8,25 +8,21 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "prebuildCommand": "bash eas-build-pre-install.sh"
+      }
     },
     "production": {
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
-      },
-      "prebuildCommand": "bash eas-build-pre-install.sh"
+      }
     },
     "default": {
       "android": {
         "buildType": "apk"
-      },
-      "prebuildCommand": "bash eas-build-pre-install.sh"
+      }
     }
   },
   "submit": {
     "production": {}
   }
 }
-
