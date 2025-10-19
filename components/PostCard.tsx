@@ -117,6 +117,7 @@ const PostCard: React.FC<PostCardProps> = ({
   const [playingVideos, setPlayingVideos] = useState<{[key: number]: boolean}>({});
   const [videoSpeeds, setVideoSpeeds] = useState<{[key: number]: number}>({});
   const [videosInitialized, setVideosInitialized] = useState<{[key: number]: boolean}>({});
+  const commentInputRef = useRef<TextInput>(null);
   const videoRefs = useRef<{[key: number]: Video | null}>({});
 
   useEffect(() => {
@@ -330,7 +331,12 @@ const PostCard: React.FC<PostCardProps> = ({
 
       setNewComment('');
       setReplyTo(null);
-      
+
+      // Keep focus on input after sending
+      setTimeout(() => {
+        commentInputRef.current?.focus();
+      }, 100);
+
       // Refresh both comments and count
       fetchComments();
       fetchCommentsCount();
@@ -948,11 +954,16 @@ const PostCard: React.FC<PostCardProps> = ({
                   style={styles.currentUserAvatar}
                 />
                 <TextInput
+                  ref={commentInputRef}
                   style={styles.commentInput}
                   placeholder="Añade un comentario..."
                   value={newComment}
                   onChangeText={setNewComment}
                   multiline
+                  blurOnSubmit={false}
+                  returnKeyType="send"
+                  onSubmitEditing={handleAddComment}
+                  enablesReturnKeyAutomatically={true}
                 />
                 <TouchableOpacity 
                   style={[styles.sendButton, !newComment.trim() && styles.disabledSendButton]}
