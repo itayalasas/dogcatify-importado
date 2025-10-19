@@ -147,6 +147,12 @@ export default function ProductDetail() {
 
     if (!product) return;
 
+    // Validar que hay stock disponible
+    if (!product.stock || product.stock < quantity) {
+      Alert.alert('Sin stock', 'No hay suficiente stock disponible para este producto');
+      return;
+    }
+
     // Calculate final price with discount
     const finalPrice = appliedDiscount > 0
       ? product.price * (1 - appliedDiscount / 100)
