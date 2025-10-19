@@ -20,6 +20,8 @@ export default function EditService() {
   const [price, setPrice] = useState('');
   const [duration, setDuration] = useState('60');
   const [stock, setStock] = useState('10');
+  const [currency, setCurrency] = useState('UYU');
+  const [currencyCodeDgi, setCurrencyCodeDgi] = useState('858');
   const [brand, setBrand] = useState('');
   const [weight, setWeight] = useState('');
   const [size, setSize] = useState('');
@@ -71,6 +73,8 @@ export default function EditService() {
         setPrice(data.price?.toString() || '');
         setDuration(data.duration?.toString() || '60');
         setExistingImages(data.images || []);
+        setCurrency(data.currency || 'UYU');
+        setCurrencyCodeDgi(data.currency_code_dgi || '858');
 
         if (isProduct) {
           setStock(data.stock?.toString() || '10');
@@ -103,6 +107,20 @@ export default function EditService() {
       Alert.alert('Error', 'No se pudo cargar la información del servicio');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const CURRENCY_OPTIONS = [
+    { code: 'UYU', dgiCode: '858', name: 'Peso Uruguayo', symbol: '$' },
+    { code: 'USD', dgiCode: '840', name: 'Dólar Estadounidense', symbol: 'US$' },
+    { code: 'EUR', dgiCode: '978', name: 'Euro', symbol: '€' }
+  ];
+
+  const handleCurrencyChange = (currencyCode: string) => {
+    const selectedCurrency = CURRENCY_OPTIONS.find(c => c.code === currencyCode);
+    if (selectedCurrency) {
+      setCurrency(selectedCurrency.code);
+      setCurrencyCodeDgi(selectedCurrency.dgiCode);
     }
   };
 
@@ -244,6 +262,8 @@ export default function EditService() {
           age_range: ageRange.trim() || null,
           pet_type: petType.trim() || null,
           images: allImages,
+          currency: currency,
+          currency_code_dgi: currencyCodeDgi,
           updated_at: new Date().toISOString()
         };
 
@@ -270,6 +290,8 @@ export default function EditService() {
           price_weekend: priceWeekend ? parseFloat(priceWeekend) : null,
           price_weekly: priceWeekly ? parseFloat(priceWeekly) : null,
           images: allImages,
+          currency: currency,
+          currency_code_dgi: currencyCodeDgi,
           updated_at: new Date().toISOString()
         };
 
@@ -289,6 +311,8 @@ export default function EditService() {
           price: parseFloat(price),
           duration: parseInt(duration) || 60,
           images: allImages,
+          currency: currency,
+          currency_code_dgi: currencyCodeDgi,
           updated_at: new Date().toISOString()
         };
 
@@ -568,6 +592,37 @@ export default function EditService() {
                 keyboardType="numeric"
                 leftIcon={<DollarSign size={20} color="#6B7280" />}
               />
+
+              {/* Selector de Moneda */}
+              <View style={styles.categorySection}>
+                <Text style={styles.categoryLabel}>Moneda 💰</Text>
+                <Text style={styles.categoryHint}>Selecciona la moneda en la que se vende este {businessType === 'shop' ? 'producto' : 'servicio'}</Text>
+                <View style={styles.categories}>
+                  {CURRENCY_OPTIONS.map((curr) => (
+                    <TouchableOpacity
+                      key={curr.code}
+                      style={[
+                        styles.currencyButton,
+                        currency === curr.code && styles.selectedCurrency
+                      ]}
+                      onPress={() => handleCurrencyChange(curr.code)}
+                    >
+                      <Text style={[
+                        styles.currencyText,
+                        currency === curr.code && styles.selectedCurrencyText
+                      ]}>
+                        {curr.symbol} {curr.code}
+                      </Text>
+                      <Text style={[
+                        styles.currencyName,
+                        currency === curr.code && styles.selectedCurrencyName
+                      ]}>
+                        {curr.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
             </>
           )}
 
@@ -918,5 +973,58 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     marginTop: 8,
+  },
+  categorySection: {
+    marginBottom: 16,
+  },
+  categoryLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  categories: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  categoryHint: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  currencyButton: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+    minWidth: '30%',
+  },
+  selectedCurrency: {
+    backgroundColor: '#EBF8FF',
+    borderColor: '#10B981',
+  },
+  currencyText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  selectedCurrencyText: {
+    color: '#10B981',
+  },
+  currencyName: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  selectedCurrencyName: {
+    color: '#059669',
   }
 });
