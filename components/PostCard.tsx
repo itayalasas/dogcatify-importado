@@ -959,7 +959,6 @@ const PostCard: React.FC<PostCardProps> = ({
                   placeholder="Añade un comentario..."
                   value={newComment}
                   onChangeText={setNewComment}
-                  multiline
                   blurOnSubmit={false}
                   returnKeyType="send"
                   onSubmitEditing={handleAddComment}
