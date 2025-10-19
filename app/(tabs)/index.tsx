@@ -154,10 +154,8 @@ const PromotionWrapper = React.memo(({ promotion, onPress, onLike }: { promotion
     />
   );
 }, (prevProps, nextProps) => {
-  // Retornar true si NO debe re-renderizar (props son iguales)
-  return prevProps.promotion.id === nextProps.promotion.id &&
-         prevProps.promotion.views === nextProps.promotion.views &&
-         (prevProps.promotion.likes?.length || 0) === (nextProps.promotion.likes?.length || 0);
+  // Solo comparar el ID - ignorar cambios en views y likes para evitar re-renders
+  return prevProps.promotion.id === nextProps.promotion.id;
 });
 
 export default function Home() {
@@ -368,20 +366,10 @@ export default function Home() {
     }
   };
 
-  // Shuffle promociones solo cuando cambian
+  // Shuffle promociones solo una vez al cargar
   useEffect(() => {
-    if (promotions.length > 0) {
-      // Solo hacer shuffle si las promociones cambiaron realmente
-      const promotionIds = promotions.map(p => p.id).sort().join(',');
-      const currentShuffledIds = shuffledPromotions.map(p => p.id).sort().join(',');
-
-      // Solo actualizar si los IDs son diferentes (evita re-shuffles innecesarios)
-      if (promotionIds !== currentShuffledIds) {
-        setShuffledPromotions([...promotions].sort(() => Math.random() - 0.5));
-      }
-    } else if (promotions.length === 0 && shuffledPromotions.length > 0) {
-      // Si no hay promociones, limpiar el estado
-      setShuffledPromotions([]);
+    if (promotions.length > 0 && shuffledPromotions.length === 0) {
+      setShuffledPromotions([...promotions].sort(() => Math.random() - 0.5));
     }
   }, [promotions]);
 
@@ -393,53 +381,17 @@ export default function Home() {
 
     const interleaveFeedItems = () => {
       const items = [];
+      let promoIndex = 0;
 
-      if (shuffledPromotions.length > 0) {
-        // Usar las promociones ya shuffleadas (no re-shuffle)
-        let promoIndex = 0;
+      for (let i = 0; i < posts.length; i++) {
+        items.push({ type: 'post', data: posts[i] });
 
-        // Determinar intervalo dinámico basado en cantidad de posts
-        let interval;
-        if (posts.length <= 5) {
-          interval = 2; // Con pocos posts, mostrar cada 2 posts
-        } else if (posts.length <= 10) {
-          interval = 3; // Con posts moderados, cada 3 posts
-        } else {
-          interval = 5; // Con muchos posts, cada 5 posts
+        // Insertar promoción cada 3 posts
+        if ((i + 1) % 3 === 0 && shuffledPromotions.length > 0) {
+          const promo = shuffledPromotions[promoIndex % shuffledPromotions.length];
+          items.push({ type: 'promotion', data: promo });
+          promoIndex++;
         }
-
-        for (let i = 0; i < posts.length; i++) {
-          // Usar el ID del post como parte de la key para que sea estable
-          items.push({ type: 'post', data: posts[i], feedIndex: `post-${posts[i].id}` });
-
-          // Insertar promoción según el intervalo dinámico
-          if ((i + 1) % interval === 0 && shuffledPromotions.length > 0) {
-            const promoData = shuffledPromotions[promoIndex % shuffledPromotions.length];
-            // Key estable que incluye el índice de repetición para evitar duplicados
-            items.push({
-              type: 'promotion',
-              data: promoData,
-              feedIndex: `promo-${promoData.id}-${promoIndex}`,
-              promoRepeatIndex: promoIndex
-            });
-            promoIndex++;
-          }
-        }
-
-        // Si no se insertó ninguna promoción y hay posts, agregar una al final
-        if (posts.length > 0 && !items.some(item => item.type === 'promotion')) {
-          items.push({
-            type: 'promotion',
-            data: shuffledPromotions[0],
-            feedIndex: `promo-${shuffledPromotions[0].id}-end`,
-            promoRepeatIndex: 0
-          });
-        }
-      } else {
-        // Si no hay promociones, solo agregar posts
-        posts.forEach((post) => {
-          items.push({ type: 'post', data: post, feedIndex: `post-${post.id}` });
-        });
       }
 
       setFeedItems(items);
@@ -729,11 +681,8 @@ export default function Home() {
       setCurrentPage(0);
       setHasMorePosts(true);
       setAllPostsLoaded(false);
-      // Limpiar estados
+      // Resetear promociones shuffleadas para re-ordenar
       setShuffledPromotions([]);
-      setPromotions([]);
-      setPosts([]);
-      setFeedItems([]);
 
       // Fetch fresh data
       await Promise.all([
@@ -847,7 +796,7 @@ export default function Home() {
       <FlatList
         data={feedItems}
         renderItem={renderFeedItem}
-        keyExtractor={(item) => item.feedIndex}
+        keyExtractor={(item, index) => `${item.type}-${item.data.id}-${index}`}
         style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -867,8 +816,8 @@ export default function Home() {
         ListEmptyComponent={renderEmpty}
         initialNumToRender={INITIAL_LOAD}
         maxToRenderPerBatch={POSTS_PER_PAGE}
-        windowSize={10}
-        removeClippedSubviews={false}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS === 'android'}
         maintainVisibleContentPosition={
           Platform.OS === 'ios' ? {
             minIndexForVisible: 0,
