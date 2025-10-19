@@ -963,6 +963,7 @@ const PostCard: React.FC<PostCardProps> = ({
                 </TouchableOpacity>
               </View>
             </View>
+            </View>
           </KeyboardAvoidingView>
         </View>
       </Modal>
