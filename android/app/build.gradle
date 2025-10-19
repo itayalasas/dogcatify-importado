@@ -1,6 +1,15 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+
+// Copiar google-services.json desde la raíz si existe
+def rootGoogleServices = new File(projectDir.getParentFile().getParentFile(), 'google-services.json')
+def appGoogleServices = new File(projectDir, 'google-services.json')
+if (rootGoogleServices.exists() && !appGoogleServices.exists()) {
+    println "📋 Copiando google-services.json desde la raíz..."
+    java.nio.file.Files.copy(rootGoogleServices.toPath(), appGoogleServices.toPath())
+}
+
 apply plugin: "com.google.gms.google-services"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
