@@ -368,10 +368,19 @@ export default function Home() {
     }
   };
 
-  // Shuffle promociones solo una vez cuando se cargan
+  // Shuffle promociones cada vez que cambian las promociones
   useEffect(() => {
-    if (promotions.length > 0 && shuffledPromotions.length === 0) {
-      setShuffledPromotions([...promotions].sort(() => Math.random() - 0.5));
+    if (promotions.length > 0) {
+      // Solo hacer shuffle si las promociones cambiaron realmente
+      const promotionIds = promotions.map(p => p.id).join(',');
+      const currentShuffledIds = shuffledPromotions.map(p => p.id).join(',');
+
+      if (promotionIds !== currentShuffledIds) {
+        setShuffledPromotions([...promotions].sort(() => Math.random() - 0.5));
+      }
+    } else if (promotions.length === 0 && shuffledPromotions.length > 0) {
+      // Si no hay promociones, limpiar el estado
+      setShuffledPromotions([]);
     }
   }, [promotions]);
 
@@ -717,8 +726,11 @@ export default function Home() {
       setCurrentPage(0);
       setHasMorePosts(true);
       setAllPostsLoaded(false);
-      // Resetear shuffle de promociones para que se vuelva a ordenar
+      // Limpiar estados
       setShuffledPromotions([]);
+      setPromotions([]);
+      setPosts([]);
+      setFeedItems([]);
 
       // Fetch fresh data
       await Promise.all([
