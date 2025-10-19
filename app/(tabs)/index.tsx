@@ -368,13 +368,14 @@ export default function Home() {
     }
   };
 
-  // Shuffle promociones cada vez que cambian las promociones
+  // Shuffle promociones solo cuando cambian
   useEffect(() => {
     if (promotions.length > 0) {
       // Solo hacer shuffle si las promociones cambiaron realmente
-      const promotionIds = promotions.map(p => p.id).join(',');
-      const currentShuffledIds = shuffledPromotions.map(p => p.id).join(',');
+      const promotionIds = promotions.map(p => p.id).sort().join(',');
+      const currentShuffledIds = shuffledPromotions.map(p => p.id).sort().join(',');
 
+      // Solo actualizar si los IDs son diferentes (evita re-shuffles innecesarios)
       if (promotionIds !== currentShuffledIds) {
         setShuffledPromotions([...promotions].sort(() => Math.random() - 0.5));
       }
@@ -414,11 +415,11 @@ export default function Home() {
           // Insertar promoción según el intervalo dinámico
           if ((i + 1) % interval === 0 && shuffledPromotions.length > 0) {
             const promoData = shuffledPromotions[promoIndex % shuffledPromotions.length];
-            // Key estable: promoción ID + posición en el feed
+            // Key estable: solo usar promoción ID para evitar re-renders innecesarios
             items.push({
               type: 'promotion',
               data: promoData,
-              feedIndex: `promo-${promoData.id}-at-${i + 1}`
+              feedIndex: `promo-${promoData.id}`
             });
             promoIndex++;
           }
