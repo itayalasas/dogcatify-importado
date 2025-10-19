@@ -287,6 +287,16 @@ export default function Cart() {
                     <View style={styles.itemInfo}>
                       <Text style={styles.itemName}>{item.name}</Text>
                       <Text style={styles.itemPartner}>{item.partnerName}</Text>
+                      {item.discount_percentage > 0 ? (
+                        <View style={styles.priceContainer}>
+                          <Text style={styles.originalPrice}>
+                            {formatCurrency(item.original_price || item.price)}
+                          </Text>
+                          <View style={styles.discountBadge}>
+                            <Text style={styles.discountText}>{item.discount_percentage}% OFF</Text>
+                          </View>
+                        </View>
+                      ) : null}
                       <Text style={styles.itemPrice}>{formatCurrency(item.price)}</Text>
                     </View>
                     <View style={styles.quantityControls}>
@@ -593,6 +603,29 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     marginBottom: 4,
+  },
+  priceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+    gap: 8,
+  },
+  originalPrice: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
+  },
+  discountBadge: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  discountText: {
+    fontSize: 10,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
   },
   itemPrice: {
     fontSize: 14,
