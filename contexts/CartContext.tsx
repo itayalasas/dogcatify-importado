@@ -19,9 +19,9 @@ export interface CartItem {
 
 interface CartContextType {
   cart: CartItem[];
-  addToCart: (item: CartItem) => void;
+  addToCart: (item: CartItem, maxStock?: number) => void;
   removeFromCart: (itemId: string) => void;
-  updateQuantity: (itemId: string, quantity: number) => void;
+  updateQuantity: (itemId: string, quantity: number, maxStock?: number) => void;
   clearCart: () => void;
   getCartTotal: () => number;
   getCartCount: () => number;
@@ -111,15 +111,23 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const addToCart = (item: CartItem) => {
+  const addToCart = (item: CartItem, maxStock?: number) => {
     setCart(prevCart => {
       // Check if item already exists in cart
       const existingItemIndex = prevCart.findIndex(cartItem => cartItem.id === item.id);
-      
+
       if (existingItemIndex >= 0) {
         // Update quantity if item exists
         const updatedCart = [...prevCart];
-        updatedCart[existingItemIndex].quantity += item.quantity;
+        const newQuantity = updatedCart[existingItemIndex].quantity + item.quantity;
+
+        // Si hay un límite de stock, validarlo
+        if (maxStock !== undefined && newQuantity > maxStock) {
+          console.warn(`Cannot add more items. Max stock: ${maxStock}, current: ${updatedCart[existingItemIndex].quantity}`);
+          return prevCart; // No agregar si excede el stock
+        }
+
+        updatedCart[existingItemIndex].quantity = newQuantity;
         return updatedCart;
       } else {
         // Add new item if it doesn't exist
@@ -132,9 +140,15 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCart(prevCart => prevCart.filter(item => item.id !== itemId));
   };
 
-  const updateQuantity = (itemId: string, quantity: number) => {
-    setCart(prevCart => 
-      prevCart.map(item => 
+  const updateQuantity = (itemId: string, quantity: number, maxStock?: number) => {
+    // Validar que la cantidad no exceda el stock
+    if (maxStock !== undefined && quantity > maxStock) {
+      console.warn(`Cannot update quantity. Max stock: ${maxStock}, requested: ${quantity}`);
+      return;
+    }
+
+    setCart(prevCart =>
+      prevCart.map(item =>
         item.id === itemId ? { ...item, quantity } : item
       )
     );

@@ -9,10 +9,14 @@ interface ProductCardProps {
   product: Product;
   onPress: () => void;
   onAddToCart: () => void;
+  currentCartQuantity?: number;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, onAddToCart }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, onAddToCart, currentCartQuantity = 0 }) => {
   const { t } = useLanguage();
+
+  const availableStock = product.stock - currentCartQuantity;
+  const canAddMore = availableStock > 0;
 
   const [isFavorite, setIsFavorite] = React.useState(false);
 
@@ -67,19 +71,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, onAd
           )}
           
           {product.stock !== undefined && (
-            <Text style={[styles.stockText, product.stock === 0 && styles.stockTextEmpty]}>
-              Stock: {product.stock} {product.stock === 0 ? '(Agotado)' : ''}
+            <Text style={[styles.stockText, !canAddMore && styles.stockTextEmpty]}>
+              Stock: {product.stock}
+              {currentCartQuantity > 0 && ` (${currentCartQuantity} en carrito)`}
+              {!canAddMore && ' (Agotado)'}
             </Text>
           )}
 
-          {product.stock > 0 ? (
+          {canAddMore ? (
             <TouchableOpacity onPress={onAddToCart} style={styles.addToCartButton}>
               <ShoppingCart size={16} color="#FFFFFF" />
               <Text style={styles.addToCartText}>Agregar</Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.outOfStockButton}>
-              <Text style={styles.outOfStockText}>Sin stock</Text>
+              <Text style={styles.outOfStockText}>
+                {product.stock === 0 ? 'Sin stock' : 'Máximo en carrito'}
+              </Text>
             </View>
           )}
         </View>

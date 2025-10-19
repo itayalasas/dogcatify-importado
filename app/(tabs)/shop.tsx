@@ -61,6 +61,26 @@ export default function Shop() {
     const product = products.find(p => p.id === productId);
     if (!product) return;
 
+    // Verificar stock disponible
+    if (!product.stock || product.stock <= 0) {
+      Alert.alert('Sin stock', 'Este producto no tiene stock disponible');
+      return;
+    }
+
+    // Verificar cuántas unidades ya hay en el carrito
+    const existingItem = cart.find(item => item.id === productId);
+    const currentQuantityInCart = existingItem ? existingItem.quantity : 0;
+    const newTotalQuantity = currentQuantityInCart + 1;
+
+    // Validar que no exceda el stock disponible
+    if (newTotalQuantity > product.stock) {
+      Alert.alert(
+        'Stock insuficiente',
+        `Solo hay ${product.stock} unidades disponibles. Ya tienes ${currentQuantityInCart} en el carrito.`
+      );
+      return;
+    }
+
     addToCart({
       id: product.id,
       name: product.name,
@@ -69,8 +89,12 @@ export default function Shop() {
       image: product.images && product.images.length > 0 ? product.images[0] : null,
       partnerId: product.partner_id,
       partnerName: product.partner_name || 'Tienda',
-      iva_rate: product.iva_rate
-    });
+      iva_rate: product.iva_rate,
+      discount_percentage: 0,
+      original_price: product.price,
+      currency: product.currency,
+      currency_code_dgi: product.currency_code_dgi
+    }, product.stock);
   };
 
   // Filter products by category and search query
@@ -165,13 +189,19 @@ export default function Shop() {
             itemDimension={160}
             data={filteredProducts}
             spacing={8}
-            renderItem={({ item }) => (
-              <ProductCard
-                product={item}
-                onPress={() => handleProductPress(item.id)}
-                onAddToCart={() => handleAddToCart(item.id)}
-              />
-            )}
+            renderItem={({ item }) => {
+              const cartItem = cart.find(c => c.id === item.id);
+              const currentCartQuantity = cartItem ? cartItem.quantity : 0;
+
+              return (
+                <ProductCard
+                  product={item}
+                  onPress={() => handleProductPress(item.id)}
+                  onAddToCart={() => handleAddToCart(item.id)}
+                  currentCartQuantity={currentCartQuantity}
+                />
+              );
+            }}
             staticDimension={undefined}
             maxItemsPerRow={2}
           />
