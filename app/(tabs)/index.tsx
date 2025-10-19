@@ -155,13 +155,9 @@ const PromotionWrapper = React.memo(({ promotion, onPress, onLike }: { promotion
   );
 }, (prevProps, nextProps) => {
   // Retornar true si NO debe re-renderizar (props son iguales)
-  // Retornar false si DEBE re-renderizar (props cambiaron)
-  const shouldNotRerender =
-    prevProps.promotion.id === nextProps.promotion.id &&
-    JSON.stringify(prevProps.promotion.likes) === JSON.stringify(nextProps.promotion.likes) &&
-    prevProps.promotion.views === nextProps.promotion.views;
-
-  return shouldNotRerender;
+  return prevProps.promotion.id === nextProps.promotion.id &&
+         prevProps.promotion.views === nextProps.promotion.views &&
+         (prevProps.promotion.likes?.length || 0) === (nextProps.promotion.likes?.length || 0);
 });
 
 export default function Home() {
@@ -799,13 +795,16 @@ export default function Home() {
     );
   };
 
+  // Memoizar el header para evitar re-renders que causen saltos
+  const listHeader = React.useMemo(() => <MedicalAlertsWidget />, []);
+
   // Manejar redirección cuando no hay usuario - FUERA del render condicional
   useEffect(() => {
     if (!currentUser) {
       const timer = setTimeout(() => {
         router.replace('/auth/login');
       }, 100);
-      
+
       return () => clearTimeout(timer);
     }
   }, [currentUser]);
@@ -842,13 +841,13 @@ export default function Home() {
         onEndReachedThreshold={0.3}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
-        ListHeaderComponent={<MedicalAlertsWidget />}
+        ListHeaderComponent={listHeader}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmpty}
         initialNumToRender={INITIAL_LOAD}
         maxToRenderPerBatch={POSTS_PER_PAGE}
-        windowSize={21}
-        removeClippedSubviews={false}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS === 'android'}
         maintainVisibleContentPosition={
           Platform.OS === 'ios' ? {
             minIndexForVisible: 0,
