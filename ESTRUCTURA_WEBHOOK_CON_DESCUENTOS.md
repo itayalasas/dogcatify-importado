@@ -1,6 +1,6 @@
 # Estructura del Webhook con Descuentos
 
-Este documento describe la estructura del JSON que se envía al CRM cuando una orden incluye descuentos de promociones.
+Este documento describe la estructura del JSON que se envía al CRM. Los campos de descuento **siempre están presentes** en todos los items, incluso cuando no hay descuento aplicado.
 
 ## Orden con Productos (con descuento)
 
@@ -142,7 +142,7 @@ Este documento describe la estructura del JSON que se envía al CRM cuando una o
 
 ## Campos de descuento en items
 
-Cada item en el array `items` puede incluir los siguientes campos relacionados con descuentos:
+Cada item en el array `items` incluye **siempre** los siguientes campos:
 
 ### Campos obligatorios (siempre presentes)
 - `id`: ID del producto o servicio
@@ -152,36 +152,70 @@ Cada item en el array `items` puede incluir los siguientes campos relacionados c
 - `subtotal`: Subtotal del item (price * quantity)
 - `iva_rate`: Tasa de IVA aplicada (porcentaje)
 - `iva_amount`: Monto del IVA
-
-### Campos de descuento (opcionales)
-- `discount_percentage`: Porcentaje de descuento aplicado (0-100). **Solo presente si hay descuento**
-- `original_price`: Precio original sin descuento. **Solo presente si hay descuento**
+- `discount_percentage`: Porcentaje de descuento aplicado (0-100). **Siempre presente, será 0 si no hay descuento**
+- `original_price`: Precio original sin descuento. **Siempre presente, será igual a `price` si no hay descuento**
 
 ### Cálculo del descuento
 
-Si `discount_percentage` y `original_price` están presentes:
+Los campos `discount_percentage` y `original_price` **siempre están presentes**:
 
 ```javascript
-// Cálculo del descuento
+// Cálculo del descuento cuando discount_percentage > 0
 const discountAmount = original_price * (discount_percentage / 100);
 const finalPrice = original_price - discountAmount;
 
-// Ejemplo:
+// Ejemplo con descuento:
 // original_price = 250
 // discount_percentage = 20
 // discountAmount = 250 * 0.20 = 50
 // finalPrice (price) = 250 - 50 = 200
+
+// Ejemplo sin descuento:
+// original_price = 500
+// discount_percentage = 0
+// discountAmount = 500 * 0 = 0
+// finalPrice (price) = 500
 ```
+
+## Orden sin Descuentos
+
+Cuando un producto NO tiene descuento, los campos se envían así:
+
+```json
+{
+  "id": "producto-abc-123",
+  "name": "Juguete para perros",
+  "price": 500,
+  "quantity": 1,
+  "subtotal": 500,
+  "partnerId": "partner-xyz",
+  "partnerName": "Tienda",
+  "iva_rate": 22,
+  "iva_amount": 110,
+  "discount_percentage": 0,
+  "original_price": 500
+}
+```
+
+Nota que `discount_percentage` es 0 y `original_price` es igual a `price`.
 
 ## Notas importantes
 
-1. **Los campos de descuento son opcionales**: Si no hay descuento aplicado, los campos `discount_percentage` y `original_price` estarán `undefined` o no estarán presentes en el JSON.
+1. **Los campos de descuento siempre están presentes**: `discount_percentage` y `original_price` **siempre** se envían en el JSON.
 
-2. **El precio en `price` siempre es el precio final**: Es decir, ya tiene el descuento aplicado si existe.
+2. **Sin descuento**: Cuando no hay descuento:
+   - `discount_percentage` = 0
+   - `original_price` = `price` (son iguales)
 
-3. **Para calcular el ahorro total**:
+3. **Con descuento**: Cuando hay descuento:
+   - `discount_percentage` > 0 (el porcentaje de descuento)
+   - `original_price` > `price` (el precio antes del descuento)
+
+4. **El precio en `price` siempre es el precio final**: Es decir, ya tiene el descuento aplicado si existe.
+
+5. **Para calcular el ahorro total**:
    ```javascript
-   if (item.discount_percentage && item.original_price) {
+   if (item.discount_percentage > 0) {
      const savings = (item.original_price - item.price) * item.quantity;
    }
    ```
@@ -203,7 +237,7 @@ Al recibir el webhook en tu CRM, puedes:
 
 1. Verificar si hay descuento:
    ```javascript
-   const hasDiscount = item.discount_percentage !== undefined && item.original_price !== undefined;
+   const hasDiscount = item.discount_percentage > 0;
    ```
 
 2. Mostrar información de descuento al usuario:
@@ -220,7 +254,7 @@ Al recibir el webhook en tu CRM, puedes:
 3. Calcular totales de ahorro en la orden:
    ```javascript
    const totalSavings = order.items.reduce((sum, item) => {
-     if (item.discount_percentage && item.original_price) {
+     if (item.discount_percentage > 0) {
        return sum + ((item.original_price - item.price) * item.quantity);
      }
      return sum;

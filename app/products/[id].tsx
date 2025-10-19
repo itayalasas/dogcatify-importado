@@ -161,8 +161,8 @@ export default function ProductDetail() {
       partnerId: product.partner_id,
       partnerName: partnerInfo?.businessName || 'Tienda',
       iva_rate: product.iva_rate,
-      discount_percentage: appliedDiscount > 0 ? appliedDiscount : undefined,
-      original_price: appliedDiscount > 0 ? product.price : undefined
+      discount_percentage: appliedDiscount || 0,
+      original_price: product.price
     });
   };
 
