@@ -488,8 +488,8 @@ export const createMultiPartnerOrder = async (
         subtotal: Math.round(itemSubtotal * 100) / 100,
         iva_rate: itemIvaRate,
         iva_amount: Math.round(itemIVA * 100) / 100,
-        discount_percentage: item.discount_percentage || undefined,
-        original_price: item.original_price || undefined
+        discount_percentage: item.discount_percentage ?? 0,
+        original_price: item.original_price ?? item.price
       };
     });
 
@@ -812,8 +812,8 @@ export const createServiceBookingOrder = async (bookingData: {
         iva_rate: ivaRate,
         subtotal: subtotal,
         iva_amount: ivaAmount,
-        discount_percentage: bookingData.discountPercentage || undefined,
-        original_price: bookingData.originalPrice || undefined
+        discount_percentage: bookingData.discountPercentage ?? 0,
+        original_price: bookingData.originalPrice ?? bookingData.totalAmount
       }],
       subtotal: subtotal,
       iva_rate: ivaRate,

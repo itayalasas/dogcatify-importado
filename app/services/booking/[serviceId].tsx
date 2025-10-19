@@ -432,8 +432,8 @@ export default function ServiceBooking() {
           displayName: currentUser!.displayName || 'Usuario',
           phone: currentUser!.phone || null
         },
-        discountPercentage: appliedDiscount > 0 ? appliedDiscount : undefined,
-        originalPrice: appliedDiscount > 0 ? originalPrice : undefined
+        discountPercentage: appliedDiscount || 0,
+        originalPrice: originalPrice
       };
 
       console.log('Llamando a createServiceBookingOrder...');
