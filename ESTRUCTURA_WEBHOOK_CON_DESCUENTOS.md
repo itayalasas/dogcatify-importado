@@ -37,7 +37,9 @@ Este documento describe la estructura del JSON que se envía al CRM. Los campos 
         "iva_rate": 22,
         "iva_amount": 44,
         "discount_percentage": 20,
-        "original_price": 250
+        "original_price": 250,
+        "currency": "UYU",
+        "currency_code_dgi": "858"
       },
       {
         "id": "c3f5beaa-46be-43bf-856e-89f7cca9e633",
@@ -51,7 +53,9 @@ Este documento describe la estructura del JSON que se envía al CRM. Los campos 
         "iva_rate": 22,
         "iva_amount": 1980,
         "discount_percentage": 10,
-        "original_price": 5000
+        "original_price": 5000,
+        "currency": "UYU",
+        "currency_code_dgi": "858"
       }
     ],
     "subtotal": 9200,
@@ -112,7 +116,9 @@ Este documento describe la estructura del JSON que se envía al CRM. Los campos 
         "iva_rate": 22,
         "iva_amount": 264,
         "discount_percentage": 15,
-        "original_price": 1500
+        "original_price": 1500,
+        "currency": "UYU",
+        "currency_code_dgi": "858"
       }
     ],
     "subtotal": 1200,
@@ -154,6 +160,8 @@ Cada item en el array `items` incluye **siempre** los siguientes campos:
 - `iva_amount`: Monto del IVA
 - `discount_percentage`: Porcentaje de descuento aplicado (0-100). **Siempre presente, será 0 si no hay descuento**
 - `original_price`: Precio original sin descuento. **Siempre presente, será igual a `price` si no hay descuento**
+- `currency`: Código ISO 4217 de la moneda (UYU, USD, EUR). **Por defecto: UYU**
+- `currency_code_dgi`: Código numérico DGI de la moneda. **Por defecto: 858 (Peso Uruguayo)**
 
 ### Cálculo del descuento
 
@@ -193,11 +201,13 @@ Cuando un producto NO tiene descuento, los campos se envían así:
   "iva_rate": 22,
   "iva_amount": 110,
   "discount_percentage": 0,
-  "original_price": 500
+  "original_price": 500,
+  "currency": "UYU",
+  "currency_code_dgi": "858"
 }
 ```
 
-Nota que `discount_percentage` es 0 y `original_price` es igual a `price`.
+Nota que `discount_percentage` es 0, `original_price` es igual a `price`, y la moneda es Peso Uruguayo (UYU) por defecto.
 
 ## Notas importantes
 
@@ -231,6 +241,42 @@ Nota que `discount_percentage` es 0 y `original_price` es igual a `price`.
    - `order.cancelled`: Cuando se cancela una orden
    - `order.completed`: Cuando se completa una orden
 
+## Monedas y Códigos DGI
+
+Todos los items incluyen información de moneda según los estándares de la DGI de Uruguay.
+
+### Códigos de Moneda Soportados
+
+| Moneda | Código ISO 4217 | Código DGI | Descripción |
+|--------|-----------------|-------------|-------------|
+| Peso Uruguayo | UYU | 858 | Moneda por defecto |
+| Dólar Estadounidense | USD | 840 | Dólar americano |
+| Euro | EUR | 978 | Moneda europea |
+
+### Campos de Moneda en Items
+
+Cada item incluye:
+- `currency`: Código alfabético de 3 letras (ISO 4217)
+- `currency_code_dgi`: Código numérico de 3 dígitos usado por la DGI
+
+**Valores por defecto:**
+- Si no se especifica moneda, se usa: `currency = "UYU"` y `currency_code_dgi = "858"`
+
+**Ejemplo de uso en facturación electrónica:**
+```xml
+<Moneda>858</Moneda> <!-- Código DGI para Peso Uruguayo -->
+```
+
+### Importante para Integración DGI
+
+1. **Usar siempre `currency_code_dgi` para facturación**: Este es el código que acepta la DGI en los comprobantes electrónicos.
+
+2. **Código numérico de 3 dígitos**: El formato es siempre 3 dígitos (ejemplo: "858", "840", "978").
+
+3. **Estándar ISO 4217**: Todos los códigos siguen el estándar internacional ISO 4217.
+
+4. **Conversión de moneda**: El sistema NO realiza conversiones automáticas. Cada producto/servicio se guarda en su moneda original.
+
 ## Integración con CRM
 
 Al recibir el webhook en tu CRM, puedes:
@@ -240,14 +286,17 @@ Al recibir el webhook en tu CRM, puedes:
    const hasDiscount = item.discount_percentage > 0;
    ```
 
-2. Mostrar información de descuento al usuario:
+2. Mostrar información de descuento y moneda al usuario:
    ```javascript
    if (hasDiscount) {
+     const currencySymbol = item.currency === 'USD' ? '$' :
+                           item.currency === 'EUR' ? '€' : '$';
      console.log(`Producto: ${item.name}`);
-     console.log(`Precio original: $${item.original_price}`);
+     console.log(`Moneda: ${item.currency} (Código DGI: ${item.currency_code_dgi})`);
+     console.log(`Precio original: ${currencySymbol}${item.original_price}`);
      console.log(`Descuento: ${item.discount_percentage}%`);
-     console.log(`Precio final: $${item.price}`);
-     console.log(`Ahorro: $${item.original_price - item.price}`);
+     console.log(`Precio final: ${currencySymbol}${item.price}`);
+     console.log(`Ahorro: ${currencySymbol}${item.original_price - item.price}`);
    }
    ```
 

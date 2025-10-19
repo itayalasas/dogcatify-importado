@@ -162,7 +162,9 @@ export default function ProductDetail() {
       partnerName: partnerInfo?.businessName || 'Tienda',
       iva_rate: product.iva_rate,
       discount_percentage: appliedDiscount || 0,
-      original_price: product.price
+      original_price: product.price,
+      currency: product.currency || 'UYU',
+      currency_code_dgi: product.currency_code_dgi || '858'
     });
   };
 

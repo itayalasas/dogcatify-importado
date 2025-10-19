@@ -13,6 +13,8 @@ export interface CartItem {
   iva_rate?: number;
   discount_percentage: number;
   original_price: number;
+  currency?: string;
+  currency_code_dgi?: string;
 }
 
 interface CartContextType {
