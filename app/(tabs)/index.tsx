@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, SafeAreaView, Alert, RefreshControl, Image, Animated, ActivityIndicator } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Platform, Linking, InteractionManager } from 'react-native';
 import Constants from 'expo-constants';
 import PostCard from '../../components/PostCard';
@@ -174,12 +174,26 @@ export default function Home() {
   const [hasMorePosts, setHasMorePosts] = useState(true);
   const [allPostsLoaded, setAllPostsLoaded] = useState(false);
   const [visiblePostIds, setVisiblePostIds] = useState<Set<string>>(new Set());
+  const [isTabFocused, setIsTabFocused] = useState(true);
   const { t } = useLanguage();
   const { currentUser } = useAuth();
   
   // Configuración de paginación
   const POSTS_PER_PAGE = 5; // Cargar 5 posts por página
   const INITIAL_LOAD = 3; // Carga inicial más pequeña
+
+  // Detectar cuando el tab gana o pierde el foco
+  useFocusEffect(
+    React.useCallback(() => {
+      // Tab ganó el foco
+      setIsTabFocused(true);
+
+      return () => {
+        // Tab perdió el foco - pausar todos los videos
+        setIsTabFocused(false);
+      };
+    }, [])
+  );
 
   useEffect(() => {
     if (currentUser) {
@@ -720,10 +734,12 @@ export default function Home() {
       );
     } else {
       const isVisible = visiblePostIds.has(item.data.id);
+      // Solo permitir reproducción si está visible Y el tab está enfocado
+      const isInViewport = isVisible && isTabFocused;
       return (
         <PostCard
           post={item.data}
-          isInViewport={isVisible}
+          isInViewport={isInViewport}
           onLike={handleLike}
           onComment={handleComment}
           onShare={handleShare}
