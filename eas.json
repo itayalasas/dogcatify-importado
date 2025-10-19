@@ -8,29 +8,17 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "env": {
-        "GOOGLE_SERVICES_JSON": "",
-        "GOOGLE_SERVICE_INFO_PLIST": ""
       }
     },
     "production": {
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
-      },
-      "env": {
-        "GOOGLE_SERVICES_JSON": "",
-        "GOOGLE_SERVICE_INFO_PLIST": ""
       }
     },
     "default": {
       "android": {
         "buildType": "apk"
-      },
-      "env": {
-        "GOOGLE_SERVICES_JSON": "",
-        "GOOGLE_SERVICE_INFO_PLIST": ""
       }
     }
   },
