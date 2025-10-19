@@ -67,15 +67,21 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, onAd
           )}
           
           {product.stock !== undefined && (
-            <Text style={styles.stockText}>
+            <Text style={[styles.stockText, product.stock === 0 && styles.stockTextEmpty]}>
               Stock: {product.stock} {product.stock === 0 ? '(Agotado)' : ''}
             </Text>
           )}
-          
-          <TouchableOpacity onPress={onAddToCart} style={styles.addToCartButton}>
-            <ShoppingCart size={16} color="#FFFFFF" />
-            <Text style={styles.addToCartText}>Agregar</Text>
-          </TouchableOpacity>
+
+          {product.stock > 0 ? (
+            <TouchableOpacity onPress={onAddToCart} style={styles.addToCartButton}>
+              <ShoppingCart size={16} color="#FFFFFF" />
+              <Text style={styles.addToCartText}>Agregar</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.outOfStockButton}>
+              <Text style={styles.outOfStockText}>Sin stock</Text>
+            </View>
+          )}
         </View>
       </TouchableOpacity>
     </Card>
@@ -151,6 +157,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     fontFamily: 'Inter-Regular',
   },
+  stockTextEmpty: {
+    color: '#EF4444',
+    fontFamily: 'Inter-SemiBold',
+  },
   addToCartButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -165,5 +175,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     marginLeft: 4,
+  },
+  outOfStockButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  outOfStockText: {
+    color: '#9CA3AF',
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
   },
 });
