@@ -31,31 +31,20 @@ const VideoPlayer = memo(({
   index: number;
 }) => {
   const internalRef = useRef<Video | null>(null);
+  const isMounted = useRef(true);
 
-  // Cleanup when component unmounts or viewport changes
+  // Cleanup only when component unmounts
   useEffect(() => {
+    isMounted.current = true;
     return () => {
+      isMounted.current = false;
       if (internalRef.current) {
-        internalRef.current.stopAsync().catch(() => {});
         internalRef.current.unloadAsync().catch(() => {});
-        internalRef.current = null;
       }
     };
   }, []);
 
-  // Pause video when not in viewport
-  useEffect(() => {
-    if (!isInViewport && internalRef.current) {
-      internalRef.current.pauseAsync().catch(() => {});
-    }
-  }, [isInViewport]);
-
   const handleRef = (ref: Video | null) => {
-    // Cleanup previous ref if exists
-    if (internalRef.current && internalRef.current !== ref) {
-      internalRef.current.stopAsync().catch(() => {});
-      internalRef.current.unloadAsync().catch(() => {});
-    }
     internalRef.current = ref;
     videoRef(ref);
   };
@@ -152,38 +141,23 @@ const PostCard: React.FC<PostCardProps> = ({
     fetchCommentsCount();
   }, [post.likes, currentUser]);
 
-  // Clean up video refs when changing slides
+  // Pause videos when changing slides (no unload)
   useEffect(() => {
-    const cleanupVideos = async () => {
-      const keysToDelete: number[] = [];
-
-      Object.keys(videoRefs.current).forEach((indexStr) => {
-        const index = parseInt(indexStr);
-        if (index !== currentImageIndex) {
-          const ref = videoRefs.current[index];
-          if (ref) {
-            // Unload async to free memory
-            ref.stopAsync().catch(() => {});
-            ref.unloadAsync().catch(() => {});
-          }
-          keysToDelete.push(index);
+    Object.keys(videoRefs.current).forEach((indexStr) => {
+      const index = parseInt(indexStr);
+      if (index !== currentImageIndex) {
+        const ref = videoRefs.current[index];
+        if (ref) {
+          ref.pauseAsync().catch(() => {});
         }
-      });
-
-      // Remove refs after cleanup
-      keysToDelete.forEach(key => {
-        delete videoRefs.current[key];
-      });
-    };
-
-    cleanupVideos();
+      }
+    });
     setPlayingVideos({});
   }, [currentImageIndex]);
 
-  // Pause and cleanup videos when post is not in viewport
+  // Pause videos when post is not in viewport
   useEffect(() => {
     if (!isInViewport) {
-      // Pause all videos
       Object.values(videoRefs.current).forEach((ref) => {
         if (ref) {
           ref.pauseAsync().catch(() => {});
@@ -196,10 +170,8 @@ const PostCard: React.FC<PostCardProps> = ({
   // Cleanup all videos when component unmounts
   useEffect(() => {
     return () => {
-      // Cleanup all video refs on unmount
       Object.values(videoRefs.current).forEach((ref) => {
         if (ref) {
-          ref.stopAsync().catch(() => {});
           ref.unloadAsync().catch(() => {});
         }
       });
