@@ -154,10 +154,14 @@ const PromotionWrapper = React.memo(({ promotion, onPress, onLike }: { promotion
     />
   );
 }, (prevProps, nextProps) => {
-  // Solo re-renderizar si cambia el ID de la promoción o sus likes
-  return prevProps.promotion.id === nextProps.promotion.id &&
-         prevProps.promotion.liked === nextProps.promotion.liked &&
-         prevProps.promotion.likes === nextProps.promotion.likes;
+  // Retornar true si NO debe re-renderizar (props son iguales)
+  // Retornar false si DEBE re-renderizar (props cambiaron)
+  const shouldNotRerender =
+    prevProps.promotion.id === nextProps.promotion.id &&
+    JSON.stringify(prevProps.promotion.likes) === JSON.stringify(nextProps.promotion.likes) &&
+    prevProps.promotion.views === nextProps.promotion.views;
+
+  return shouldNotRerender;
 });
 
 export default function Home() {
@@ -399,24 +403,28 @@ export default function Home() {
         }
 
         for (let i = 0; i < posts.length; i++) {
-          items.push({ type: 'post', data: posts[i] });
-          
+          items.push({ type: 'post', data: posts[i], feedIndex: items.length });
+
           // Insertar promoción según el intervalo dinámico
           if ((i + 1) % interval === 0 && shuffledPromotions.length > 0) {
             // Usar índice circular para reutilizar promociones sin re-shuffle
-            items.push({ type: 'promotion', data: shuffledPromotions[promoIndex % shuffledPromotions.length] });
+            items.push({
+              type: 'promotion',
+              data: shuffledPromotions[promoIndex % shuffledPromotions.length],
+              feedIndex: items.length // Índice único en el feed para keys únicas
+            });
             promoIndex++;
           }
         }
         
         // Si no se insertó ninguna promoción y hay posts, agregar una al final
         if (posts.length > 0 && !items.some(item => item.type === 'promotion')) {
-          items.push({ type: 'promotion', data: shuffledPromotions[0] });
+          items.push({ type: 'promotion', data: shuffledPromotions[0], feedIndex: items.length });
         }
       } else {
         // Si no hay promociones, solo agregar posts
-        posts.forEach(post => {
-          items.push({ type: 'post', data: post });
+        posts.forEach((post, index) => {
+          items.push({ type: 'post', data: post, feedIndex: index });
         });
       }
 
@@ -819,7 +827,7 @@ export default function Home() {
       <FlatList
         data={feedItems}
         renderItem={renderFeedItem}
-        keyExtractor={(item) => `${item.type}-${item.data.id}`}
+        keyExtractor={(item) => `${item.type}-${item.data.id}-${item.feedIndex}`}
         style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -839,8 +847,8 @@ export default function Home() {
         ListEmptyComponent={renderEmpty}
         initialNumToRender={INITIAL_LOAD}
         maxToRenderPerBatch={POSTS_PER_PAGE}
-        windowSize={10}
-        removeClippedSubviews={Platform.OS === 'android'}
+        windowSize={21}
+        removeClippedSubviews={false}
         maintainVisibleContentPosition={
           Platform.OS === 'ios' ? {
             minIndexForVisible: 0,
