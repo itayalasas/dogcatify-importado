@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, TextInput } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Filter, Search, ShoppingCart, Package } from 'lucide-react-native';
 import { FlatGrid } from 'react-native-super-grid';
 import { ProductCard } from '../../components/ProductCard';
@@ -23,6 +24,13 @@ export default function Shop() {
   React.useEffect(() => {
     fetchProducts();
   }, []);
+
+  // Recargar productos cada vez que la pantalla se enfoca (al volver desde Mercado Pago)
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchProducts();
+    }, [])
+  );
 
   const fetchProducts = async () => {
     try {
