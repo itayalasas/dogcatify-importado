@@ -685,22 +685,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         
         console.log('Creating custom email confirmation token for user:', data.user.id);
-        
+
         // Create our custom email confirmation token
-        const { createEmailConfirmationToken, generateConfirmationUrl } = await import('../utils/emailConfirmation');
+        const { createEmailConfirmationToken, generateConfirmationUrl, sendConfirmationEmailAPI } = await import('../utils/emailConfirmation');
         const token = await createEmailConfirmationToken(data.user.id, email, 'signup');
         const confirmationUrl = generateConfirmationUrl(token, 'signup');
-        
+
         console.log('Custom confirmation token created:', token);
-        
-        // Send our custom confirmation email
-        const { NotificationService } = await import('../utils/notifications');
-        await NotificationService.sendCustomConfirmationEmail(
+
+        // Send our custom confirmation email using new API
+        const emailResult = await sendConfirmationEmailAPI(
           email,
           displayName,
           confirmationUrl
         );
-        console.log('Custom confirmation email sent successfully');
+
+        if (emailResult.success) {
+          console.log('Custom confirmation email sent successfully via new API. Log ID:', emailResult.log_id);
+        } else {
+          console.error('Failed to send confirmation email:', emailResult.error);
+        }
       }
       
       // Sign out inmediatamente para evitar cualquier modal automático
