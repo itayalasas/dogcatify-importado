@@ -1,12 +1,9 @@
-// Follow Deno's recommended imports
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createTransport } from "npm:nodemailer@6.9.1";
 
-// Configuración de CORS para permitir solicitudes desde cualquier origen
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-api-key",
 };
 
 interface EmailRequest {
@@ -14,10 +11,14 @@ interface EmailRequest {
   subject: string;
   text?: string;
   html?: string;
+  attachment?: any;
+  // New API parameters
+  template_name?: string;
+  recipient_email?: string;
+  data?: any;
 }
 
 serve(async (req: Request) => {
-  // Handle CORS preflight request
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       status: 200,
@@ -26,70 +27,16 @@ serve(async (req: Request) => {
   }
 
   try {
-    let body: EmailRequest;
-    try {
-      // Get request body
-      body = await req.json();
-    } catch (e) {
-      console.error("Error parsing request body:", e);
-      return new Response(
-        JSON.stringify({ error: "Invalid JSON in request body" }),
-        {
-          status: 400,
-          headers: {
-            "Content-Type": "application/json",
-            ...corsHeaders,
-          },
-        }
-      );
-    }
-    
-    // Validate required fields
-    if (!body.to || !body.subject || (!body.text && !body.html)) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
-        {
-          status: 400,
-          headers: {
-            "Content-Type": "application/json",
-            ...corsHeaders,
-          },
-        }
-      );
-    }
+    const body: EmailRequest = await req.json();
 
-    // Configure SMTP transport
-    const host = Deno.env.get("SMTP_HOST") || "smtpout.secureserver.net";
-    const port = parseInt(Deno.env.get("SMTP_PORT") || "465");
-    const user = Deno.env.get("SMTP_USER") || "info@dogcatify.com";
-    const pass = Deno.env.get("SMTP_PASSWORD") || "your-password-here"; // Reemplazar con una contraseña temporal para pruebas
-    
-    const smtpConfig = {
-      host,
-      port,
-      secure: true, // true for 465, false for other ports
-      auth: {
-        user,
-        pass,
-      },
-    };
+    // Get the external email API configuration
+    const emailApiUrl = Deno.env.get("EMAIL_API_URL") || "https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/send-email";
+    const emailApiKey = Deno.env.get("EMAIL_API_KEY");
 
-    console.log("SMTP Config (Debug):", {
-      host,
-      port,
-      secure: smtpConfig.secure,
-      user,
-      pass: pass ? "********" : "not set" // Log masked password for debugging
-    });
-
-    // Create transporter
-    let transporter;
-    try {
-      transporter = createTransport(smtpConfig);
-    } catch (e) {
-      console.error("Error creating SMTP client:", e);
+    if (!emailApiKey) {
+      console.error("EMAIL_API_KEY not configured");
       return new Response(
-        JSON.stringify({ error: "Failed to create SMTP client", details: e.message }),
+        JSON.stringify({ error: "Email API not configured" }),
         {
           status: 500,
           headers: {
@@ -100,33 +47,43 @@ serve(async (req: Request) => {
       );
     }
 
-    // Send email
-    let info;
-    try {
-      const mailOptions: any = {
-        from: `"DogCatiFy" <${user}>`,
-        to: body.to,
-        subject: body.subject,
-        text: body.text || "",
-        html: body.html || "",
-      };
+    // If this is a new-style request with template_name, forward it directly
+    if (body.template_name && body.recipient_email) {
+      console.log(`Forwarding template email: ${body.template_name} to ${body.recipient_email}`);
 
-      // Add PDF attachment if provided
-      if (body.attachment) {
-        mailOptions.attachments = [{
-          filename: 'factura.pdf',
-          content: body.attachment,
-          contentType: 'application/pdf'
-        }];
+      const response = await fetch(emailApiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': emailApiKey,
+        },
+        body: JSON.stringify({
+          template_name: body.template_name,
+          recipient_email: body.recipient_email,
+          data: body.data || {},
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Email API error:', errorText);
+        return new Response(
+          JSON.stringify({ error: `Email API error: ${response.status}`, details: errorText }),
+          {
+            status: response.status,
+            headers: {
+              "Content-Type": "application/json",
+              ...corsHeaders,
+            },
+          }
+        );
       }
 
-      info = await transporter.sendMail(mailOptions);
-    } catch (e) {
-      console.error("Error sending email:", e);
+      const result = await response.json();
       return new Response(
-        JSON.stringify({ error: "Failed to send email", details: e.message }),
+        JSON.stringify(result),
         {
-          status: 500,
+          status: 200,
           headers: {
             "Content-Type": "application/json",
             ...corsHeaders,
@@ -135,26 +92,33 @@ serve(async (req: Request) => {
       );
     }
 
+    // For legacy requests with HTML (booking confirmations, etc),
+    // still forward to the email API but we'll need to handle them differently
+    console.log(`Legacy email request to: ${body.to}`);
+    console.warn("WARNING: This is a legacy email format. Please migrate to template-based emails.");
+
+    // For now, return an error encouraging migration to new API
     return new Response(
       JSON.stringify({
-        success: true, 
-        messageId: info.messageId,
-        timestamp: new Date().toISOString()
+        error: "Legacy email format not supported",
+        message: "Please use template-based emails with template_name parameter",
+        details: "Direct HTML emails should be migrated to use the template system"
       }),
       {
-        status: 200,
+        status: 400,
         headers: {
           "Content-Type": "application/json",
           ...corsHeaders,
         },
       }
     );
+
   } catch (error) {
-    console.error("Error sending email:", error);
+    console.error("Error processing email request:", error);
 
     return new Response(
       JSON.stringify({
-        error: "Failed to send email", 
+        error: "Failed to process email request",
         details: error.message,
         timestamp: new Date().toISOString()
       }),
