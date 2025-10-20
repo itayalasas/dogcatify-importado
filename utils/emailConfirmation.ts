@@ -1,5 +1,6 @@
 import { supabaseClient } from '../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
+import Constants from 'expo-constants';
 
 export interface EmailConfirmationToken {
   id: string;
@@ -300,8 +301,11 @@ export const sendConfirmationEmailAPI = async (
   console.log('📧 Confirmation URL:', confirmationUrl);
 
   try {
-    const emailApiUrl = process.env.EXPO_PUBLIC_EMAIL_API_URL;
-    const emailApiKey = process.env.EXPO_PUBLIC_EMAIL_API_KEY;
+    // Get environment variables - React Native requires direct access
+    const emailApiUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_EMAIL_API_URL ||
+                        (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_EMAIL_API_URL);
+    const emailApiKey = Constants.expoConfig?.extra?.EXPO_PUBLIC_EMAIL_API_KEY ||
+                        (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_EMAIL_API_KEY);
 
     console.log('📧 Email API Configuration:', {
       hasUrl: !!emailApiUrl,

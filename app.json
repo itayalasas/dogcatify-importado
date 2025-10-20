@@ -37,7 +37,9 @@
       },
       "eas": {
         "projectId": "0618d9ae-6714-46bb-adce-f4ee57fff324"
-      }
+      },
+      "EXPO_PUBLIC_EMAIL_API_URL": "https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/send-email",
+      "EXPO_PUBLIC_EMAIL_API_KEY": "sk_bcaca188c1b16345e4d10adf403eb4e9e98d3fa9ff04ba053d7416fe302b7dee"
     },
     "ios": {
   "supportsTablet": true,
