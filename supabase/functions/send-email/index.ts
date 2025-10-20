@@ -12,7 +12,6 @@ interface EmailRequest {
   text?: string;
   html?: string;
   attachment?: any;
-  // New API parameters
   template_name?: string;
   recipient_email?: string;
   data?: any;
@@ -29,14 +28,30 @@ serve(async (req: Request) => {
   try {
     const body: EmailRequest = await req.json();
 
+    console.log('Received email request:', {
+      template_name: body.template_name,
+      recipient_email: body.recipient_email,
+      has_data: !!body.data,
+    });
+
     // Get the external email API configuration
     const emailApiUrl = Deno.env.get("EMAIL_API_URL") || "https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/send-email";
     const emailApiKey = Deno.env.get("EMAIL_API_KEY");
 
+    console.log('Environment check:', {
+      emailApiUrl,
+      hasEmailApiKey: !!emailApiKey,
+      emailApiKeyLength: emailApiKey?.length || 0,
+    });
+
     if (!emailApiKey) {
-      console.error("EMAIL_API_KEY not configured");
+      console.error("EMAIL_API_KEY not configured in environment");
+      console.error("Available env vars:", Object.keys(Deno.env.toObject()));
       return new Response(
-        JSON.stringify({ error: "Email API not configured" }),
+        JSON.stringify({
+          error: "Email API not configured",
+          details: "EMAIL_API_KEY secret is not set. Please configure it in Supabase Dashboard > Edge Functions > Settings > Secrets"
+        }),
         {
           status: 500,
           headers: {
@@ -51,24 +66,35 @@ serve(async (req: Request) => {
     if (body.template_name && body.recipient_email) {
       console.log(`Forwarding template email: ${body.template_name} to ${body.recipient_email}`);
 
+      const payload = {
+        template_name: body.template_name,
+        recipient_email: body.recipient_email,
+        data: body.data || {},
+      };
+
+      console.log('Sending to external API:', emailApiUrl);
+      console.log('Payload:', JSON.stringify(payload, null, 2));
+
       const response = await fetch(emailApiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': emailApiKey,
         },
-        body: JSON.stringify({
-          template_name: body.template_name,
-          recipient_email: body.recipient_email,
-          data: body.data || {},
-        }),
+        body: JSON.stringify(payload),
       });
+
+      console.log('External API response status:', response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Email API error:', errorText);
+        console.error('Email API error response:', errorText);
         return new Response(
-          JSON.stringify({ error: `Email API error: ${response.status}`, details: errorText }),
+          JSON.stringify({
+            error: `Email API error: ${response.status}`,
+            details: errorText,
+            api_url: emailApiUrl,
+          }),
           {
             status: response.status,
             headers: {
@@ -80,6 +106,8 @@ serve(async (req: Request) => {
       }
 
       const result = await response.json();
+      console.log('Email sent successfully:', result);
+
       return new Response(
         JSON.stringify(result),
         {
@@ -92,12 +120,10 @@ serve(async (req: Request) => {
       );
     }
 
-    // For legacy requests with HTML (booking confirmations, etc),
-    // still forward to the email API but we'll need to handle them differently
+    // For legacy requests with HTML
     console.log(`Legacy email request to: ${body.to}`);
     console.warn("WARNING: This is a legacy email format. Please migrate to template-based emails.");
 
-    // For now, return an error encouraging migration to new API
     return new Response(
       JSON.stringify({
         error: "Legacy email format not supported",
@@ -115,6 +141,7 @@ serve(async (req: Request) => {
 
   } catch (error) {
     console.error("Error processing email request:", error);
+    console.error("Error stack:", error.stack);
 
     return new Response(
       JSON.stringify({
