@@ -341,7 +341,11 @@ Deno.serve(async (req: Request) => {
     console.log(`🔍 Buscando webhooks activos para evento ${event_type}...`);
 
     // Obtener secret global de variable de entorno
-    const webhookSecret = Deno.env.get("WEBHOOK_SECRET") || "default_webhook_secret_key_2024";
+    const webhookSecretEnv = Deno.env.get("WEBHOOK_SECRET");
+    const correctSecret = "Kzdr7C4eF9IS4EIgmH8LARdwWrvH4jCBMDOTM1SHofZNdDUHpiFEYH3WhRWx";
+    const webhookSecret = webhookSecretEnv || correctSecret;
+
+    console.log(`🔑 Using secret: ${webhookSecretEnv ? 'FROM ENV VAR' : 'HARDCODED CORRECT SECRET'}`);
 
     const { data: subscriptions, error: subsError } = await supabase
       .from("webhook_subscriptions")
