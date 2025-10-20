@@ -287,12 +287,119 @@ export const generateConfirmationUrl = (token: string, type: 'signup' | 'passwor
 };
 
 /**
+ * Send confirmation email using new API
+ */
+export const sendConfirmationEmailAPI = async (
+  email: string,
+  name: string,
+  confirmationUrl: string
+): Promise<{ success: boolean; error?: string; log_id?: string }> => {
+  try {
+    const apiUrl = process.env.EXPO_PUBLIC_EMAIL_API_URL;
+    const apiKey = process.env.EXPO_PUBLIC_EMAIL_API_KEY;
+
+    if (!apiUrl || !apiKey) {
+      console.error('Email API configuration missing');
+      return { success: false, error: 'Email API configuration missing' };
+    }
+
+    console.log('Sending confirmation email via new API to:', email);
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        template_name: 'confirmation',
+        recipient_email: email,
+        data: {
+          client_name: name,
+          confirmation_url: confirmationUrl,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Email API error:', errorText);
+      return { success: false, error: `API error: ${response.status}` };
+    }
+
+    const result = await response.json();
+    console.log('Confirmation email sent successfully:', result);
+
+    return {
+      success: true,
+      log_id: result.log_id,
+    };
+  } catch (error: any) {
+    console.error('Error sending confirmation email:', error);
+    return { success: false, error: error.message || 'Unknown error' };
+  }
+};
+
+/**
+ * Send welcome email using new API
+ */
+export const sendWelcomeEmailAPI = async (
+  email: string,
+  name: string
+): Promise<{ success: boolean; error?: string; log_id?: string }> => {
+  try {
+    const apiUrl = process.env.EXPO_PUBLIC_EMAIL_API_URL;
+    const apiKey = process.env.EXPO_PUBLIC_EMAIL_API_KEY;
+
+    if (!apiUrl || !apiKey) {
+      console.error('Email API configuration missing');
+      return { success: false, error: 'Email API configuration missing' };
+    }
+
+    console.log('Sending welcome email via new API to:', email);
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        template_name: 'welcome',
+        recipient_email: email,
+        data: {
+          client_name: name,
+          cta_url: 'dogcatify://perfil',
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Email API error:', errorText);
+      return { success: false, error: `API error: ${response.status}` };
+    }
+
+    const result = await response.json();
+    console.log('Welcome email sent successfully:', result);
+
+    return {
+      success: true,
+      log_id: result.log_id,
+    };
+  } catch (error: any) {
+    console.error('Error sending welcome email:', error);
+    return { success: false, error: error.message || 'Unknown error' };
+  }
+};
+
+/**
  * Resend confirmation email
  */
 export const resendConfirmationEmail = async (email: string): Promise<{ success: boolean; error?: string }> => {
   try {
     console.log('Resending confirmation email for:', email);
-    
+
     // Find user by email
     const { data: userData, error: userError } = await supabaseClient
       .from('profiles')
@@ -314,14 +421,14 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
     const serviceClient = getServiceClient();
     const { error: invalidateError } = await serviceClient
       .from('email_confirmations')
-      .update({ 
+      .update({
         is_confirmed: true,
         confirmed_at: new Date().toISOString()
       })
       .eq('user_id', userData.id)
       .eq('type', 'signup')
       .eq('is_confirmed', false);
-    
+
     if (invalidateError) {
       console.warn('Could not invalidate existing tokens:', invalidateError);
     }
@@ -332,13 +439,16 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
 
     console.log('New confirmation URL generated:', confirmationUrl);
 
-    // Send confirmation email
-    const { NotificationService } = await import('./notifications');
-    await NotificationService.sendCustomConfirmationEmail(
+    // Send confirmation email using new API
+    const result = await sendConfirmationEmailAPI(
       email,
       userData.display_name || 'Usuario',
       confirmationUrl
     );
+
+    if (!result.success) {
+      return { success: false, error: result.error || 'Error sending email' };
+    }
 
     console.log('Confirmation email resent successfully');
     return { success: true };

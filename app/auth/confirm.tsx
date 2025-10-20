@@ -42,10 +42,35 @@ export default function EmailConfirmationScreen() {
 
         if (result.success) {
           console.log('✅ Email confirmed successfully for user:', result.userId);
-          
+
           // Solo marcar como confirmado - el perfil ya se creó en el registro
           console.log('Email confirmed, profile already exists from registration');
-          
+
+          // Enviar email de bienvenida después de confirmar exitosamente
+          if (result.email) {
+            console.log('Sending welcome email to:', result.email);
+            try {
+              const { sendWelcomeEmailAPI } = await import('../../utils/emailConfirmation');
+
+              // Obtener el nombre del usuario
+              const { supabaseClient } = await import('../../lib/supabase');
+              const { data: profileData } = await supabaseClient
+                .from('profiles')
+                .select('display_name')
+                .eq('id', result.userId)
+                .single();
+
+              const userName = profileData?.display_name || 'Usuario';
+
+              // Enviar email de bienvenida
+              await sendWelcomeEmailAPI(result.email, userName);
+              console.log('✅ Welcome email sent successfully');
+            } catch (emailError) {
+              console.error('Error sending welcome email:', emailError);
+              // No falla la confirmación si el email no se envía
+            }
+          }
+
           setConfirmed(true);
           setUserEmail(result.email || null);
           setError(null);
