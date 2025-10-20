@@ -6,6 +6,8 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { supabase } from '../../lib/supabase';
+import { generateConfirmationToken } from '../../utils/emailConfirmation';
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
@@ -58,39 +60,128 @@ export default function Register() {
     }
 
     setLoading(true);
+    console.log('=== STARTING REGISTRATION PROCESS ===');
+    console.log('Email:', email.toLowerCase().trim());
+    console.log('Full name:', fullName.trim());
+
     try {
-      // Llamar a nuestra función personalizada de creación de usuario
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      const response = await fetch(`${supabaseUrl}/functions/v1/create-user`, {
+      const trimmedEmail = email.toLowerCase().trim();
+      const trimmedName = fullName.trim();
+
+      console.log('Step 1: Creating user with Supabase Auth...');
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: trimmedEmail,
+        password: password,
+        options: {
+          data: {
+            full_name: trimmedName,
+          },
+          emailRedirectTo: undefined,
+        },
+      });
+
+      if (authError) {
+        console.error('Auth signup error:', authError);
+        throw new Error(authError.message);
+      }
+
+      if (!authData.user) {
+        console.error('No user returned from signup');
+        throw new Error('Error creating user');
+      }
+
+      console.log('Step 2: User created successfully. User ID:', authData.user.id);
+
+      console.log('Step 3: Creating email confirmation record...');
+      const confirmationToken = generateConfirmationToken();
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24);
+
+      const { error: confirmationError } = await supabase
+        .from('email_confirmations')
+        .insert({
+          user_id: authData.user.id,
+          email: trimmedEmail,
+          token: confirmationToken,
+          type: 'signup',
+          expires_at: expiresAt.toISOString(),
+          is_confirmed: false,
+        });
+
+      if (confirmationError) {
+        console.error('Error creating confirmation record:', confirmationError);
+        throw new Error('Error creating confirmation record');
+      }
+
+      console.log('Step 4: Confirmation record created. Token:', confirmationToken);
+
+      const confirmationUrl = `dogcatify://auth/confirm?token=${confirmationToken}&email=${encodeURIComponent(trimmedEmail)}`;
+      console.log('Step 5: Confirmation URL:', confirmationUrl);
+
+      console.log('Step 6: Preparing to send confirmation email...');
+      const emailApiUrl = process.env.EXPO_PUBLIC_EMAIL_API_URL;
+      const emailApiKey = process.env.EXPO_PUBLIC_EMAIL_API_KEY;
+
+      console.log('Email API Configuration:', {
+        hasUrl: !!emailApiUrl,
+        urlValue: emailApiUrl,
+        hasKey: !!emailApiKey,
+        keyLength: emailApiKey?.length,
+      });
+
+      if (!emailApiUrl || !emailApiKey) {
+        console.error('❌ Email API configuration missing!');
+        throw new Error('Email configuration missing');
+      }
+
+      console.log('Step 7: Calling email API directly...');
+      const emailPayload = {
+        template_name: 'confirmation',
+        recipient_email: trimmedEmail,
+        data: {
+          client_name: trimmedName,
+          confirmation_url: confirmationUrl,
+        },
+      };
+
+      console.log('Email payload:', JSON.stringify(emailPayload, null, 2));
+
+      const emailResponse = await fetch(emailApiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+          'Authorization': `Bearer ${emailApiKey}`,
         },
-        body: JSON.stringify({
-          email: email.toLowerCase().trim(),
-          password: password,
-          displayName: fullName.trim()
-        }),
+        body: JSON.stringify(emailPayload),
       });
 
-      const result = await response.json();
+      console.log('Email API response status:', emailResponse.status);
+      const emailResponseText = await emailResponse.text();
+      console.log('Email API response body:', emailResponseText);
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Error creating account');
+      if (!emailResponse.ok) {
+        console.error('❌ Email API returned error:', emailResponse.status);
+        console.error('Error details:', emailResponseText);
+      } else {
+        console.log('✅ Email sent successfully!');
+        try {
+          const emailResult = JSON.parse(emailResponseText);
+          console.log('Email result parsed:', emailResult);
+        } catch (e) {
+          console.log('Could not parse email response as JSON');
+        }
       }
 
-      console.log('Account created successfully:', result.userId);
-      
-      // Mostrar mensaje de éxito como en la imagen
+      console.log('=== REGISTRATION COMPLETED ===');
+
       Alert.alert(
         '¡Registro exitoso! 🎉',
-        `Tu cuenta ha sido creada exitosamente.\n\n📧 Hemos enviado un correo de confirmación a:\n${email}\n\nPor favor revisa tu bandeja de entrada (y la carpeta de spam) y haz clic en el enlace de confirmación.\n\n⏰ El enlace expira en 24 horas.`,
+        `Tu cuenta ha sido creada exitosamente.\n\n📧 Hemos enviado un correo de confirmación a:\n${trimmedEmail}\n\nPor favor revisa tu bandeja de entrada (y la carpeta de spam) y haz clic en el enlace de confirmación.\n\n⏰ El enlace expira en 24 horas.`,
         [{ text: 'ENTENDIDO', onPress: () => router.replace('/auth/login') }]
       );
     } catch (error: any) {
-      // Solo mostrar errores reales de registro
-      console.error('Registration error:', error);
+      console.error('❌ Registration error:', error);
+      console.error('Error stack:', error.stack);
       Alert.alert('Error', error.message || 'Error al crear la cuenta');
     } finally {
       setLoading(false);
