@@ -29,6 +29,7 @@ export default function EditBusiness() {
   const [description, setDescription] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [rut, setRut] = useState('');
   const [logo, setLogo] = useState<string | null>(null);
   const [newLogoSelected, setNewLogoSelected] = useState<ImagePicker.ImagePickerAsset | null>(null);
   
@@ -84,6 +85,7 @@ export default function EditBusiness() {
         setDescription(data.description || '');
         setPhone(data.phone || '');
         setEmail(data.email || '');
+        setRut(data.rut || '');
         setLogo(data.logo);
         setCalle(data.calle || '');
         setNumero(data.numero || '');
@@ -319,7 +321,7 @@ export default function EditBusiness() {
   };
 
   const handleSave = async () => {
-    if (!businessName.trim() || !selectedType || !description.trim() || !phone.trim() || !email.trim()) {
+    if (!businessName.trim() || !selectedType || !description.trim() || !phone.trim() || !email.trim() || !rut.trim()) {
       Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
       return;
     }
@@ -340,6 +342,7 @@ export default function EditBusiness() {
         description: description.trim(),
         phone: phone.trim(),
         email: email.trim(),
+        rut: rut.trim(),
         logo: logoUrl,
         country_id: selectedCountry?.id || null,
         department_id: selectedDepartment?.id || null,
@@ -662,6 +665,14 @@ export default function EditBusiness() {
             keyboardType="email-address"
             autoCapitalize="none"
             leftIcon={<Mail size={20} color="#6B7280" />}
+          />
+
+          <Input
+            label="RUT *"
+            placeholder="12345678-9"
+            value={rut}
+            onChangeText={setRut}
+            leftIcon={<FileText size={20} color="#6B7280" />}
           />
 
           <Button

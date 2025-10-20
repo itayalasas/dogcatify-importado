@@ -243,7 +243,7 @@ Deno.serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Query completa con todos los campos JSONB y JOIN a customer
+    // Query completa con todos los campos JSONB y JOIN a customer y partner
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .select(`
@@ -290,6 +290,18 @@ Deno.serve(async (req: Request) => {
           numero,
           barrio,
           codigo_postal,
+          location
+        ),
+        partner:partners(
+          id,
+          business_name,
+          email,
+          phone,
+          calle,
+          numero,
+          barrio,
+          codigo_postal,
+          rut,
           location
         )
       `)
