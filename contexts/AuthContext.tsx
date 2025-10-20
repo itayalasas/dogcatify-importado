@@ -655,9 +655,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('AuthContext - Attempting registration for:', email);
       
       // Simplificar signUp para evitar comportamientos automáticos
+      // IMPORTANTE: Desactivar el email automático de Supabase Auth
       const { data, error } = await supabaseClient.auth.signUp({
         email,
-        password
+        password,
+        options: {
+          // Desactivar el email de confirmación automático de Supabase
+          emailRedirectTo: undefined,
+          // No enviar email automáticamente (usamos nuestro sistema personalizado)
+          data: {
+            skip_confirmation_email: true
+          }
+        }
       });
       
       if (error) {
