@@ -10,12 +10,12 @@ import crypto from 'crypto';
 const PORT = process.env.PORT || 3001;
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'Kzdr7C4ef9I54EIgmH8IARdMJ-vH+jCBMDQTM1SHofZNdDHp1FEYH3Mb5Gz';
 
-function verifyWebhookSignature(payload, signature, secretKey) {
+function verifyWebhookSignature(rawBody, signature, secretKey) {
   try {
-    const payloadString = JSON.stringify(payload);
+    // Usar el body RAW tal como llega, NO re-serializarlo
     const expectedSignature = crypto
       .createHmac('sha256', secretKey)
-      .update(payloadString)
+      .update(rawBody)
       .digest('hex');
 
     return crypto.timingSafeEqual(
@@ -129,16 +129,18 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        const payload = JSON.parse(body);
-
-        if (!verifyWebhookSignature(payload, signature, WEBHOOK_SECRET)) {
+        // IMPORTANTE: Verificar firma con el body RAW antes de parsearlo
+        if (!verifyWebhookSignature(body, signature, WEBHOOK_SECRET)) {
           console.error('❌ Firma inválida');
           res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Firma inválida' }));
+          res.end(JSON.stringify({ error: 'Invalid signature' }));
           return;
         }
 
         console.log('✅ Firma verificada correctamente');
+
+        // Ahora sí podemos parsear el payload
+        const payload = JSON.parse(body);
 
         // Responder inmediatamente
         res.writeHead(200, { 'Content-Type': 'application/json' });
