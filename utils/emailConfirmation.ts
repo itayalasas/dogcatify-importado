@@ -287,7 +287,7 @@ export const generateConfirmationUrl = (token: string, type: 'signup' | 'passwor
 };
 
 /**
- * Send confirmation email using new API
+ * Send confirmation email using new API through Supabase Edge Function
  */
 export const sendConfirmationEmailAPI = async (
   email: string,
@@ -295,21 +295,22 @@ export const sendConfirmationEmailAPI = async (
   confirmationUrl: string
 ): Promise<{ success: boolean; error?: string; log_id?: string }> => {
   try {
-    const apiUrl = process.env.EXPO_PUBLIC_EMAIL_API_URL;
-    const apiKey = process.env.EXPO_PUBLIC_EMAIL_API_KEY;
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-    if (!apiUrl || !apiKey) {
-      console.error('Email API configuration missing');
-      return { success: false, error: 'Email API configuration missing' };
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Supabase configuration missing');
+      return { success: false, error: 'Supabase configuration missing' };
     }
 
-    console.log('Sending confirmation email via new API to:', email);
+    const apiUrl = `${supabaseUrl}/functions/v1/send-email`;
+    console.log('Sending confirmation email via template API to:', email);
 
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'Authorization': `Bearer ${supabaseAnonKey}`,
       },
       body: JSON.stringify({
         template_name: 'confirmation',
@@ -341,28 +342,29 @@ export const sendConfirmationEmailAPI = async (
 };
 
 /**
- * Send welcome email using new API
+ * Send welcome email using new API through Supabase Edge Function
  */
 export const sendWelcomeEmailAPI = async (
   email: string,
   name: string
 ): Promise<{ success: boolean; error?: string; log_id?: string }> => {
   try {
-    const apiUrl = process.env.EXPO_PUBLIC_EMAIL_API_URL;
-    const apiKey = process.env.EXPO_PUBLIC_EMAIL_API_KEY;
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-    if (!apiUrl || !apiKey) {
-      console.error('Email API configuration missing');
-      return { success: false, error: 'Email API configuration missing' };
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Supabase configuration missing');
+      return { success: false, error: 'Supabase configuration missing' };
     }
 
-    console.log('Sending welcome email via new API to:', email);
+    const apiUrl = `${supabaseUrl}/functions/v1/send-email`;
+    console.log('Sending welcome email via template API to:', email);
 
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'Authorization': `Bearer ${supabaseAnonKey}`,
       },
       body: JSON.stringify({
         template_name: 'welcome',
