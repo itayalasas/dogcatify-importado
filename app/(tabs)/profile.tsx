@@ -60,8 +60,13 @@ export default function Profile() {
 
       if (error) throw error;
 
+      console.log('Subscription settings data:', data);
+
       if (data) {
         setSubscriptionsEnabled(data.enabled);
+        console.log('Subscriptions enabled:', data.enabled);
+      } else {
+        console.log('No subscription settings found');
       }
     } catch (error) {
       console.error('Error checking subscription settings:', error);
@@ -710,6 +715,33 @@ export default function Profile() {
           )}
         </Card>
 
+        {/* Premium Subscription Card */}
+        {subscriptionsEnabled && (
+          <Card style={[styles.menuCard, styles.premiumCard]}>
+            <TouchableOpacity
+              style={styles.premiumOption}
+              onPress={() => router.push('/profile/subscription')}
+            >
+              <View style={styles.premiumContent}>
+                <View style={styles.premiumIconContainer}>
+                  <Crown size={28} color="#F59E0B" />
+                </View>
+                <View style={styles.premiumTextContainer}>
+                  <Text style={styles.premiumTitle}>
+                    {userSubscription ? 'Mi Suscripción Premium' : '👑 Hazte Premium'}
+                  </Text>
+                  <Text style={styles.premiumSubtitle}>
+                    {userSubscription
+                      ? `Plan ${userSubscription.subscription_plans?.name || 'Premium'} Activo`
+                      : 'Desbloquea funciones exclusivas'}
+                  </Text>
+                </View>
+                <ArrowRight size={20} color="#F59E0B" />
+              </View>
+            </TouchableOpacity>
+          </Card>
+        )}
+
         {/* Menu Options */}
         <Card style={styles.menuCard}>
           <TouchableOpacity style={styles.menuOption} onPress={handleEditProfile}>
@@ -735,28 +767,6 @@ export default function Profile() {
             </View>
             <ChevronRight size={16} color="#6B7280" />
           </TouchableOpacity>
-
-          {subscriptionsEnabled && (
-            <TouchableOpacity
-              style={[styles.menuOption, userSubscription && styles.premiumMenuOption]}
-              onPress={() => router.push('/profile/subscription')}
-            >
-              <View style={styles.menuOptionLeft}>
-                <Crown size={20} color={userSubscription ? "#F59E0B" : "#6B7280"} />
-                <View>
-                  <Text style={[styles.menuOptionText, userSubscription && styles.premiumMenuText]}>
-                    {userSubscription ? 'Mi Suscripción Premium' : 'Hazte Premium'}
-                  </Text>
-                  {userSubscription && (
-                    <Text style={styles.subscriptionPlanBadge}>
-                      {userSubscription.subscription_plans?.name || 'Premium'}
-                    </Text>
-                  )}
-                </View>
-              </View>
-              <ChevronRight size={16} color={userSubscription ? "#F59E0B" : "#6B7280"} />
-            </TouchableOpacity>
-          )}
 
           {partnerProfile && (
             <TouchableOpacity 
@@ -1205,6 +1215,42 @@ const styles = StyleSheet.create({
     color: '#F59E0B',
     marginTop: 2,
     marginLeft: 12,
+  },
+  premiumCard: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 2,
+    borderColor: '#F59E0B',
+  },
+  premiumOption: {
+    padding: 4,
+  },
+  premiumContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  premiumIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FEF3C7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  premiumTextContainer: {
+    flex: 1,
+  },
+  premiumTitle: {
+    fontSize: 17,
+    fontFamily: 'Inter-Bold',
+    color: '#92400E',
+    marginBottom: 4,
+  },
+  premiumSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#D97706',
   },
   languageIndicator: {
     flexDirection: 'row',
