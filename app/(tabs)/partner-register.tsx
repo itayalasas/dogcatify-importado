@@ -113,6 +113,7 @@ export default function PartnerRegister() {
   const [codigoPostal, setCodigoPostal] = useState('');
   const [latitud, setLatitud] = useState('');
   const [longitud, setLongitud] = useState('');
+  const [rut, setRut] = useState('');
   
   // Estados para los dropdowns
   const [countries, setCountries] = useState<any[]>([]);
@@ -486,7 +487,7 @@ export default function PartnerRegister() {
   };
 
   const handleSubmit = async () => {
-    if (!selectedType || !businessName || !description || !calle || !numero || !selectedCountry || !selectedDepartment || !phone) {
+    if (!selectedType || !businessName || !description || !calle || !numero || !selectedCountry || !selectedDepartment || !phone || !rut) {
       Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
       return;
     }
@@ -613,6 +614,7 @@ export default function PartnerRegister() {
           codigo_postal: codigoPostal.trim() || null,
           latitud: latitud.trim() || null,
           longitud: longitud.trim() || null,
+          rut: rut.trim(),
           iva_rate: parseFloat(ivaRate) || 0,
           iva_included_in_price: ivaIncludedInPrice,
           is_active: true,
@@ -936,6 +938,14 @@ export default function PartnerRegister() {
             keyboardType="email-address"
             autoCapitalize="none"
             leftIcon={<Mail size={20} color="#6B7280" />}
+          />
+
+          <Input
+            label="RUT *"
+            placeholder="12345678-9"
+            value={rut}
+            onChangeText={setRut}
+            leftIcon={<FileText size={20} color="#6B7280" />}
           />
 
           <View style={styles.imageSection}>

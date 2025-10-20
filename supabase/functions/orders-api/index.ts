@@ -116,6 +116,18 @@ Deno.serve(async (req: Request) => {
             barrio,
             codigo_postal,
             location
+          ),
+          partner:partners(
+            id,
+            business_name,
+            email,
+            phone,
+            calle,
+            numero,
+            barrio,
+            codigo_postal,
+            rut,
+            location
           )
         `)
         .eq("id", orderId);
