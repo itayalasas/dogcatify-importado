@@ -336,7 +336,7 @@ export const sendConfirmationEmailAPI = async (
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${emailApiKey}`,
+        'x-api-key': emailApiKey,
       },
       body: JSON.stringify(emailPayload),
     });
@@ -383,8 +383,11 @@ export const sendWelcomeEmailAPI = async (
   name: string
 ): Promise<{ success: boolean; error?: string; log_id?: string }> => {
   try {
-    const emailApiUrl = process.env.EXPO_PUBLIC_EMAIL_API_URL;
-    const emailApiKey = process.env.EXPO_PUBLIC_EMAIL_API_KEY;
+    // Get environment variables - React Native requires direct access
+    const emailApiUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_EMAIL_API_URL ||
+                        (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_EMAIL_API_URL);
+    const emailApiKey = Constants.expoConfig?.extra?.EXPO_PUBLIC_EMAIL_API_KEY ||
+                        (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_EMAIL_API_KEY);
 
     if (!emailApiUrl || !emailApiKey) {
       console.error('Email API configuration missing');
@@ -397,7 +400,7 @@ export const sendWelcomeEmailAPI = async (
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${emailApiKey}`,
+        'x-api-key': emailApiKey,
       },
       body: JSON.stringify({
         template_name: 'welcome',
