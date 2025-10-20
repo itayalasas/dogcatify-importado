@@ -74,6 +74,30 @@ Deno.serve(async (req: Request) => {
     // Obtener el secret key
     const webhookSecret = Deno.env.get("WEBHOOK_SECRET") || "default_webhook_secret_key_2024";
 
+    console.log("🔍 DEBUG INFO:");
+    console.log(`  Body length: ${rawBody.length}`);
+    console.log(`  Body preview: ${rawBody.substring(0, 100)}...`);
+    console.log(`  Secret length: ${webhookSecret.length}`);
+    console.log(`  Secret preview: ${webhookSecret.substring(0, 10)}...`);
+    console.log(`  Signature received: ${signature}`);
+
+    // Generar firma esperada para debug
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(webhookSecret);
+    const messageData = encoder.encode(rawBody);
+    const key = await crypto.subtle.importKey(
+      "raw",
+      keyData,
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const signatureBuffer = await crypto.subtle.sign("HMAC", key, messageData);
+    const hashArray = Array.from(new Uint8Array(signatureBuffer));
+    const expectedSignature = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    console.log(`  Signature expected: ${expectedSignature}`);
+    console.log(`  Signatures match: ${signature === expectedSignature}`);
+
     // Verificar firma con el body RAW
     const isValid = await verifyWebhookSignature(rawBody, signature, webhookSecret);
 
