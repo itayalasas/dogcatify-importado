@@ -301,8 +301,7 @@ Deno.serve(async (req: Request) => {
           numero,
           barrio,
           codigo_postal,
-          rut,
-          location
+          rut
         )
       `)
       .eq("id", order_id)
