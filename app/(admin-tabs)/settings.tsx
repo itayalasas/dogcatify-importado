@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Switch, Alert, Modal } from 'react-native';
-import { Bell, Shield, DollarSign, Mail, Globe, Database, LogOut, Send, CreditCard } from 'lucide-react-native';
+import { Bell, Shield, DollarSign, Mail, Globe, Database, LogOut, Send, CreditCard, Crown } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
@@ -37,13 +37,65 @@ export default function AdminSettings() {
     email: ''
   });
   const [mpLoading, setMpLoading] = useState(false);
+  const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
+  const [loadingSubscriptions, setLoadingSubscriptions] = useState(false);
 
   useEffect(() => {
     if (currentUser?.email === 'admin@dogcatify.com') {
       loadAdminMpConfig();
       loadCommissionConfig();
+      loadSubscriptionSettings();
     }
   }, [currentUser]);
+
+  const loadSubscriptionSettings = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('subscription_settings')
+        .select('enabled')
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setSubscriptionsEnabled(data.enabled);
+      }
+    } catch (error) {
+      console.error('Error loading subscription settings:', error);
+    }
+  };
+
+  const handleToggleSubscriptions = async (value: boolean) => {
+    setLoadingSubscriptions(true);
+    try {
+      const { error } = await supabaseClient
+        .from('subscription_settings')
+        .update({
+          enabled: value,
+          updated_by: currentUser.id
+        })
+        .eq('id', (await supabaseClient.from('subscription_settings').select('id').maybeSingle()).data?.id);
+
+      if (error) throw error;
+
+      setSubscriptionsEnabled(value);
+      Alert.alert(
+        'Éxito',
+        value
+          ? 'Sistema de suscripciones habilitado. Los usuarios ahora pueden ver los planes.'
+          : 'Sistema de suscripciones deshabilitado. Ya no será visible para los usuarios.'
+      );
+    } catch (error) {
+      console.error('Error toggling subscriptions:', error);
+      Alert.alert('Error', 'No se pudo actualizar la configuración de suscripciones');
+    } finally {
+      setLoadingSubscriptions(false);
+    }
+  };
+
+  const handleManageSubscriptionPlans = () => {
+    router.push('/(admin-tabs)/subscription-plans');
+  };
 
   const loadCommissionConfig = async () => {
     try {
@@ -681,6 +733,74 @@ export default function AdminSettings() {
           />
         </Card>
 
+        {/* Subscriptions Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>👑 Sistema de Suscripciones Premium</Text>
+
+          <Card style={styles.subscriptionCard}>
+            <View style={styles.subscriptionHeader}>
+              <View style={styles.subscriptionTitleContainer}>
+                <Crown size={24} color="#F59E0B" style={styles.subscriptionIcon} />
+                <View>
+                  <Text style={styles.subscriptionTitle}>Membresías Premium</Text>
+                  <Text style={styles.subscriptionDescription}>
+                    Permite a los usuarios acceder a funciones premium mediante suscripciones
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.subscriptionToggleContainer}>
+              <View style={styles.subscriptionToggleInfo}>
+                <Text style={styles.subscriptionToggleLabel}>Habilitar Suscripciones</Text>
+                <Text style={styles.subscriptionToggleDescription}>
+                  {subscriptionsEnabled
+                    ? 'Los usuarios pueden ver y gestionar suscripciones desde su perfil'
+                    : 'El sistema de suscripciones está oculto para los usuarios'}
+                </Text>
+              </View>
+              <Switch
+                value={subscriptionsEnabled}
+                onValueChange={handleToggleSubscriptions}
+                disabled={loadingSubscriptions}
+                trackColor={{ false: '#E5E7EB', true: '#F59E0B' }}
+                thumbColor={subscriptionsEnabled ? '#FFFFFF' : '#FFFFFF'}
+              />
+            </View>
+
+            {subscriptionsEnabled && (
+              <View style={styles.subscriptionStatusContainer}>
+                <View style={styles.subscriptionStatusBadge}>
+                  <Text style={styles.subscriptionStatusText}>✅ Sistema Activo</Text>
+                </View>
+                <Text style={styles.subscriptionStatusInfo}>
+                  Los usuarios pueden ver los planes de suscripción desde su perfil y gestionar su membresía a través del CRM integrado.
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.subscriptionActionsContainer}>
+              <Button
+                title="Gestionar Planes de Suscripción"
+                onPress={handleManageSubscriptionPlans}
+                variant="outline"
+                size="medium"
+                style={styles.manageSubscriptionPlansButton}
+              />
+
+              <View style={styles.subscriptionInfoBox}>
+                <Text style={styles.subscriptionInfoTitle}>ℹ️ Información</Text>
+                <Text style={styles.subscriptionInfoText}>
+                  • Los planes se gestionan desde el CRM{'\n'}
+                  • Los usuarios verán los planes configurados aquí{'\n'}
+                  • Los pagos se procesan mediante el CRM{'\n'}
+                  • Las suscripciones se sincronizan automáticamente
+                </Text>
+              </View>
+            </View>
+          </Card>
+        </View>
+
         {/* Data Management */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📊 Gestión de Datos</Text>
@@ -1198,6 +1318,111 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     marginTop: 16,
+  },
+  subscriptionCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 16,
+  },
+  subscriptionHeader: {
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  subscriptionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  subscriptionIcon: {
+    marginRight: 12,
+  },
+  subscriptionTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  subscriptionDescription: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  subscriptionToggleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+  },
+  subscriptionToggleInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  subscriptionToggleLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  subscriptionToggleDescription: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  subscriptionStatusContainer: {
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#ECFDF5',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  subscriptionStatusBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#10B981',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  subscriptionStatusText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  subscriptionStatusInfo: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#065F46',
+    lineHeight: 18,
+  },
+  subscriptionActionsContainer: {
+    marginTop: 8,
+  },
+  manageSubscriptionPlansButton: {
+    marginBottom: 16,
+  },
+  subscriptionInfoBox: {
+    padding: 12,
+    backgroundColor: '#F0F9FF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  subscriptionInfoTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E40AF',
+    marginBottom: 8,
+  },
+  subscriptionInfoText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#1E40AF',
+    lineHeight: 20,
   },
   dataCard: {
     marginHorizontal: 16,

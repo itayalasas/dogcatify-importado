@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Ale
 import { router } from 'expo-router';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, Shield, CircleHelp as HelpCircle, Globe, Building, CreditCard, Fingerprint, ChevronRight, ArrowRight, Trash2 } from 'lucide-react-native';
+import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, Shield, CircleHelp as HelpCircle, Globe, Building, CreditCard, Fingerprint, ChevronRight, ArrowRight, Trash2, Crown } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
@@ -34,6 +34,8 @@ export default function Profile() {
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
+  const [userSubscription, setUserSubscription] = useState<any>(null);
 
   // Computed values for notifications
   const isExpoGo = Constants.appOwnership === 'expo';
@@ -44,8 +46,53 @@ export default function Profile() {
     if (currentUser) {
       fetchUserStats();
       fetchPartnerProfile();
+      checkSubscriptionSettings();
+      fetchUserSubscription();
     }
   }, [currentUser?.id, currentUser?.displayName, currentUser?.photoURL]);
+
+  const checkSubscriptionSettings = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('subscription_settings')
+        .select('enabled')
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setSubscriptionsEnabled(data.enabled);
+      }
+    } catch (error) {
+      console.error('Error checking subscription settings:', error);
+    }
+  };
+
+  const fetchUserSubscription = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('user_subscriptions')
+        .select(`
+          *,
+          subscription_plans (
+            name,
+            description,
+            features
+          )
+        `)
+        .eq('user_id', currentUser.id)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setUserSubscription(data);
+      }
+    } catch (error) {
+      console.error('Error fetching user subscription:', error);
+    }
+  };
 
   // Set up real-time subscription for profile updates
   useEffect(() => {
@@ -689,6 +736,28 @@ export default function Profile() {
             <ChevronRight size={16} color="#6B7280" />
           </TouchableOpacity>
 
+          {subscriptionsEnabled && (
+            <TouchableOpacity
+              style={[styles.menuOption, userSubscription && styles.premiumMenuOption]}
+              onPress={() => router.push('/profile/subscription')}
+            >
+              <View style={styles.menuOptionLeft}>
+                <Crown size={20} color={userSubscription ? "#F59E0B" : "#6B7280"} />
+                <View>
+                  <Text style={[styles.menuOptionText, userSubscription && styles.premiumMenuText]}>
+                    {userSubscription ? 'Mi Suscripción Premium' : 'Hazte Premium'}
+                  </Text>
+                  {userSubscription && (
+                    <Text style={styles.subscriptionPlanBadge}>
+                      {userSubscription.subscription_plans?.name || 'Premium'}
+                    </Text>
+                  )}
+                </View>
+              </View>
+              <ChevronRight size={16} color={userSubscription ? "#F59E0B" : "#6B7280"} />
+            </TouchableOpacity>
+          )}
+
           {partnerProfile && (
             <TouchableOpacity 
               style={styles.menuOption} 
@@ -1119,6 +1188,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#111827',
+    marginLeft: 12,
+  },
+  premiumMenuOption: {
+    backgroundColor: '#FFFBEB',
+    borderLeftWidth: 3,
+    borderLeftColor: '#F59E0B',
+  },
+  premiumMenuText: {
+    color: '#92400E',
+    fontFamily: 'Inter-SemiBold',
+  },
+  subscriptionPlanBadge: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#F59E0B',
+    marginTop: 2,
     marginLeft: 12,
   },
   languageIndicator: {
