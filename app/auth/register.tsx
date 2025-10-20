@@ -7,7 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { supabase } from '../../lib/supabase';
-import { generateConfirmationToken } from '../../utils/emailConfirmation';
+import { createEmailConfirmationToken, generateConfirmationUrl, sendConfirmationEmailAPI } from '../../utils/emailConfirmation';
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
@@ -92,83 +92,32 @@ export default function Register() {
 
       console.log('Step 2: User created successfully. User ID:', authData.user.id);
 
-      console.log('Step 3: Creating email confirmation record...');
-      const confirmationToken = generateConfirmationToken();
-      const expiresAt = new Date();
-      expiresAt.setHours(expiresAt.getHours() + 24);
+      console.log('Step 3: Creating email confirmation token using helper function...');
+      const confirmationToken = await createEmailConfirmationToken(
+        authData.user.id,
+        trimmedEmail,
+        'signup'
+      );
+      console.log('Step 4: Confirmation token created:', confirmationToken);
 
-      const { error: confirmationError } = await supabase
-        .from('email_confirmations')
-        .insert({
-          user_id: authData.user.id,
-          email: trimmedEmail,
-          token: confirmationToken,
-          type: 'signup',
-          expires_at: expiresAt.toISOString(),
-          is_confirmed: false,
-        });
+      console.log('Step 5: Generating confirmation URL using helper function...');
+      const confirmationUrl = generateConfirmationUrl(confirmationToken, 'signup');
+      console.log('Step 6: Confirmation URL generated:', confirmationUrl);
 
-      if (confirmationError) {
-        console.error('Error creating confirmation record:', confirmationError);
-        throw new Error('Error creating confirmation record');
-      }
+      console.log('Step 7: Sending confirmation email using API helper function...');
+      const emailResult = await sendConfirmationEmailAPI(
+        trimmedEmail,
+        trimmedName,
+        confirmationUrl
+      );
 
-      console.log('Step 4: Confirmation record created. Token:', confirmationToken);
-
-      const confirmationUrl = `dogcatify://auth/confirm?token=${confirmationToken}&email=${encodeURIComponent(trimmedEmail)}`;
-      console.log('Step 5: Confirmation URL:', confirmationUrl);
-
-      console.log('Step 6: Preparing to send confirmation email...');
-      const emailApiUrl = process.env.EXPO_PUBLIC_EMAIL_API_URL;
-      const emailApiKey = process.env.EXPO_PUBLIC_EMAIL_API_KEY;
-
-      console.log('Email API Configuration:', {
-        hasUrl: !!emailApiUrl,
-        urlValue: emailApiUrl,
-        hasKey: !!emailApiKey,
-        keyLength: emailApiKey?.length,
-      });
-
-      if (!emailApiUrl || !emailApiKey) {
-        console.error('❌ Email API configuration missing!');
-        throw new Error('Email configuration missing');
-      }
-
-      console.log('Step 7: Calling email API directly...');
-      const emailPayload = {
-        template_name: 'confirmation',
-        recipient_email: trimmedEmail,
-        data: {
-          client_name: trimmedName,
-          confirmation_url: confirmationUrl,
-        },
-      };
-
-      console.log('Email payload:', JSON.stringify(emailPayload, null, 2));
-
-      const emailResponse = await fetch(emailApiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${emailApiKey}`,
-        },
-        body: JSON.stringify(emailPayload),
-      });
-
-      console.log('Email API response status:', emailResponse.status);
-      const emailResponseText = await emailResponse.text();
-      console.log('Email API response body:', emailResponseText);
-
-      if (!emailResponse.ok) {
-        console.error('❌ Email API returned error:', emailResponse.status);
-        console.error('Error details:', emailResponseText);
+      if (!emailResult.success) {
+        console.error('❌ Email sending failed:', emailResult.error);
+        console.warn('User registered but email not sent. Manual intervention may be needed.');
       } else {
         console.log('✅ Email sent successfully!');
-        try {
-          const emailResult = JSON.parse(emailResponseText);
-          console.log('Email result parsed:', emailResult);
-        } catch (e) {
-          console.log('Could not parse email response as JSON');
+        if (emailResult.log_id) {
+          console.log('Email log ID:', emailResult.log_id);
         }
       }
 

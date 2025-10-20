@@ -294,16 +294,39 @@ export const sendConfirmationEmailAPI = async (
   name: string,
   confirmationUrl: string
 ): Promise<{ success: boolean; error?: string; log_id?: string }> => {
+  console.log('📧 === SENDING CONFIRMATION EMAIL ===');
+  console.log('📧 Recipient:', email);
+  console.log('📧 Name:', name);
+  console.log('📧 Confirmation URL:', confirmationUrl);
+
   try {
     const emailApiUrl = process.env.EXPO_PUBLIC_EMAIL_API_URL;
     const emailApiKey = process.env.EXPO_PUBLIC_EMAIL_API_KEY;
 
+    console.log('📧 Email API Configuration:', {
+      hasUrl: !!emailApiUrl,
+      url: emailApiUrl,
+      hasKey: !!emailApiKey,
+      keyLength: emailApiKey?.length,
+      keyPrefix: emailApiKey?.substring(0, 10) + '...',
+    });
+
     if (!emailApiUrl || !emailApiKey) {
-      console.error('Email API configuration missing');
+      console.error('❌ Email API configuration missing!');
       return { success: false, error: 'Email API configuration missing' };
     }
 
-    console.log('Sending confirmation email directly to external API:', email);
+    const emailPayload = {
+      template_name: 'confirmation',
+      recipient_email: email,
+      data: {
+        client_name: name,
+        confirmation_url: confirmationUrl,
+      },
+    };
+
+    console.log('📧 Email payload:', JSON.stringify(emailPayload, null, 2));
+    console.log('📧 Making fetch request to:', emailApiUrl);
 
     const response = await fetch(emailApiUrl, {
       method: 'POST',
@@ -311,31 +334,39 @@ export const sendConfirmationEmailAPI = async (
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${emailApiKey}`,
       },
-      body: JSON.stringify({
-        template_name: 'confirmation',
-        recipient_email: email,
-        data: {
-          client_name: name,
-          confirmation_url: confirmationUrl,
-        },
-      }),
+      body: JSON.stringify(emailPayload),
     });
 
+    console.log('📧 Response status:', response.status);
+    console.log('📧 Response headers:', Object.fromEntries(response.headers.entries()));
+
+    const responseText = await response.text();
+    console.log('📧 Response body (raw):', responseText);
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Email API error:', errorText);
-      return { success: false, error: `API error: ${response.status}` };
+      console.error('❌ Email API returned error status:', response.status);
+      console.error('❌ Error details:', responseText);
+      return { success: false, error: `API error: ${response.status} - ${responseText}` };
     }
 
-    const result = await response.json();
-    console.log('Confirmation email sent successfully:', result);
+    try {
+      const result = JSON.parse(responseText);
+      console.log('✅ Confirmation email sent successfully!');
+      console.log('✅ Result:', result);
 
-    return {
-      success: true,
-      log_id: result.log_id,
-    };
+      return {
+        success: true,
+        log_id: result.log_id,
+      };
+    } catch (parseError) {
+      console.error('⚠️ Could not parse response as JSON:', parseError);
+      return {
+        success: true,
+      };
+    }
   } catch (error: any) {
-    console.error('Error sending confirmation email:', error);
+    console.error('❌ Error sending confirmation email:', error);
+    console.error('❌ Error stack:', error.stack);
     return { success: false, error: error.message || 'Unknown error' };
   }
 };
