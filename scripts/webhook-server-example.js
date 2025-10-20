@@ -23,18 +23,23 @@ const PORT = process.env.PORT || 3001;
 // IMPORTANTE: Esta debe ser la misma secret_key que registraste en la base de datos
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'tu-secret-key-super-segura-aqui';
 
-// Middleware para parsear JSON
-app.use(express.json());
+// Middleware para parsear JSON Y capturar el body raw
+app.use(express.json({
+  verify: (req, res, buf) => {
+    // Guardar el body raw para verificar firma
+    req.rawBody = buf.toString('utf8');
+  }
+}));
 
 /**
  * Verifica la firma HMAC SHA256 del webhook
  */
-function verifyWebhookSignature(payload, signature, secretKey) {
+function verifyWebhookSignature(rawBody, signature, secretKey) {
   try {
-    const payloadString = JSON.stringify(payload);
+    // IMPORTANTE: Usar el body RAW, NO el objeto parseado re-serializado
     const expectedSignature = crypto
       .createHmac('sha256', secretKey)
-      .update(payloadString)
+      .update(rawBody)
       .digest('hex');
 
     // Usar timingSafeEqual para evitar timing attacks
@@ -64,9 +69,10 @@ function webhookVerification(req, res, next) {
     return res.status(401).json({ error: 'Sin firma de seguridad' });
   }
 
-  if (!verifyWebhookSignature(req.body, signature, WEBHOOK_SECRET)) {
+  // IMPORTANTE: Usar req.rawBody en lugar de req.body
+  if (!verifyWebhookSignature(req.rawBody, signature, WEBHOOK_SECRET)) {
     console.error('❌ Firma inválida');
-    return res.status(401).json({ error: 'Firma inválida' });
+    return res.status(401).json({ error: 'Invalid signature' });
   }
 
   console.log('✅ Firma verificada correctamente');
