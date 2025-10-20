@@ -71,14 +71,20 @@ Deno.serve(async (req: Request) => {
     // Leer el body RAW
     const rawBody = await req.text();
 
-    // Obtener el secret key
-    const webhookSecret = Deno.env.get("WEBHOOK_SECRET") || "default_webhook_secret_key_2024";
+    // Obtener el secret key - probar ambos secrets
+    const webhookSecretEnv = Deno.env.get("WEBHOOK_SECRET");
+    const defaultSecret = "default_webhook_secret_key_2024";
+    const correctSecret = "Kzdr7C4eF9IS4EIgmH8LARdwWrvH4jCBMDOTM1SHofZNdDUHpiFEYH3WhRWx";
+
+    const webhookSecret = webhookSecretEnv || correctSecret;
 
     console.log("🔍 DEBUG INFO:");
+    console.log(`  WEBHOOK_SECRET env var exists: ${webhookSecretEnv ? 'YES' : 'NO'}`);
+    console.log(`  Using secret: ${webhookSecret === defaultSecret ? 'DEFAULT' : webhookSecret === correctSecret ? 'CORRECT' : 'ENV VAR'}`);
     console.log(`  Body length: ${rawBody.length}`);
-    console.log(`  Body preview: ${rawBody.substring(0, 100)}...`);
+    console.log(`  Body preview: ${rawBody.substring(0, 200)}...`);
     console.log(`  Secret length: ${webhookSecret.length}`);
-    console.log(`  Secret preview: ${webhookSecret.substring(0, 10)}...`);
+    console.log(`  Secret preview: ${webhookSecret.substring(0, 15)}...`);
     console.log(`  Signature received: ${signature}`);
 
     // Generar firma esperada para debug
