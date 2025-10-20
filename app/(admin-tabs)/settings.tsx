@@ -68,15 +68,36 @@ export default function AdminSettings() {
   const handleToggleSubscriptions = async (value: boolean) => {
     setLoadingSubscriptions(true);
     try {
-      const { error } = await supabaseClient
+      // First get the settings record
+      const { data: settingsData, error: fetchError } = await supabaseClient
         .from('subscription_settings')
-        .update({
-          enabled: value,
-          updated_by: currentUser.id
-        })
-        .eq('id', (await supabaseClient.from('subscription_settings').select('id').maybeSingle()).data?.id);
+        .select('id')
+        .maybeSingle();
 
-      if (error) throw error;
+      if (fetchError) throw fetchError;
+
+      // If no settings exist, create one
+      if (!settingsData) {
+        const { error: insertError } = await supabaseClient
+          .from('subscription_settings')
+          .insert({
+            enabled: value,
+            updated_by: currentUser.id
+          });
+
+        if (insertError) throw insertError;
+      } else {
+        // Update existing settings
+        const { error: updateError } = await supabaseClient
+          .from('subscription_settings')
+          .update({
+            enabled: value,
+            updated_by: currentUser.id
+          })
+          .eq('id', settingsData.id);
+
+        if (updateError) throw updateError;
+      }
 
       setSubscriptionsEnabled(value);
       Alert.alert(
