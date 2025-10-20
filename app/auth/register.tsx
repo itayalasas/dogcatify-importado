@@ -6,7 +6,7 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { supabase } from '../../lib/supabase';
+import { supabaseClient } from '../../lib/supabase';
 import { createEmailConfirmationToken, generateConfirmationUrl, sendConfirmationEmailAPI } from '../../utils/emailConfirmation';
 
 export default function Register() {
@@ -69,7 +69,7 @@ export default function Register() {
       const trimmedName = fullName.trim();
 
       console.log('Step 1: Creating user with Supabase Auth...');
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const { data: authData, error: authError } = await supabaseClient.auth.signUp({
         email: trimmedEmail,
         password: password,
         options: {
