@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Platform, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Platform, Linking, KeyboardAvoidingView } from 'react-native';
 import { router, Stack } from 'expo-router';
 import { ArrowLeft, User, Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
@@ -138,19 +138,28 @@ export default function Register() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Image 
-          source={require('../../assets/images/logo.jpg')} 
-          style={styles.logo} 
-        />
-      </View>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+    >
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color="#111827" />
+          </TouchableOpacity>
+          <Image
+            source={require('../../assets/images/logo.jpg')}
+            style={styles.logo}
+          />
+        </View>
 
-      <View style={styles.form}>
+        <View style={styles.form}>
         <Text style={styles.title}>¡Únete a DogCatiFy! 🐾</Text>
         <Text style={styles.subtitle}>{t('createAccountSubtitle')}</Text>
 
@@ -221,7 +230,7 @@ export default function Register() {
           size="large"
         />
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.loginButton}
           onPress={() => router.replace('/auth/login')}
         >
@@ -229,8 +238,9 @@ export default function Register() {
             {t('alreadyHaveAccount')} <Text style={styles.loginLink}>{t('signIn')}</Text>
           </Text>
         </TouchableOpacity>
-      </View>
-    </ScrollView>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -238,11 +248,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    paddingTop: 30,
+  },
+  scrollView: {
+    flex: 1,
   },
   content: {
     flexGrow: 1,
     padding: 20,
+    paddingTop: 50,
     paddingBottom: 40,
   },
   header: {

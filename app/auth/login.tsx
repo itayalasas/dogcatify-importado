@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Modal, Platform, Animated, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Modal, Platform, Animated, Alert, KeyboardAvoidingView } from 'react-native';
 import { Link, router } from 'expo-router';
 import { Mail, Lock, Eye, EyeOff, Fingerprint, CircleAlert as AlertCircle, X, CircleCheck as CheckCircle } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
@@ -298,18 +298,27 @@ export default function Login() {
 
   return (
     <>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Image 
-            source={require('../../assets/images/logo.jpg')} 
-            style={styles.logo} 
-          />
-          <Text style={styles.title}>¡Bienvenido de vuelta a DogCatiFy! 🐾</Text>
-          <Text style={styles.subtitle}>Inicia sesión para conectar con tu comunidad de mascotas</Text>
-        </View>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.header}>
+            <Image
+              source={require('../../assets/images/logo.jpg')}
+              style={styles.logo}
+            />
+            <Text style={styles.title}>¡Bienvenido de vuelta a DogCatiFy! 🐾</Text>
+            <Text style={styles.subtitle}>Inicia sesión para conectar con tu comunidad de mascotas</Text>
+          </View>
 
 
-        <View style={styles.form}>
+          <View style={styles.form}>
           <Input
             label="Correo electrónico"
             placeholder="tu@email.com"
@@ -372,15 +381,16 @@ export default function Login() {
           </View>
         </View>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            ¿No tienes una cuenta?{' '}
-            <Link href="/auth/register" style={styles.link}>
-              Registrate
-            </Link>
-          </Text>
-        </View>
-      </ScrollView>
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              ¿No tienes una cuenta?{' '}
+              <Link href="/auth/register" style={styles.link}>
+                Registrate
+              </Link>
+            </Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Email Confirmation Modal */}
       <Modal
@@ -435,12 +445,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    paddingTop: 30,
+  },
+  scrollView: {
+    flex: 1,
   },
   content: {
     flexGrow: 1,
     padding: 20,
-    paddingTop: 20,
+    paddingTop: 50,
+    paddingBottom: 40,
   },
   header: {
     alignItems: 'center',
