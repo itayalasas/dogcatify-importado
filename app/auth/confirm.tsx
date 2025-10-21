@@ -5,6 +5,7 @@ import { CircleCheck as CheckCircle, CircleX as XCircle, Mail } from 'lucide-rea
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { confirmEmailCustom } from '../../utils/emailConfirmation';
+import { supabaseClient } from '../../lib/supabase';
 
 export default function EmailConfirmationScreen() {
   const params = useLocalSearchParams();
@@ -258,6 +259,13 @@ export default function EmailConfirmationScreen() {
               Cuenta confirmada: {userEmail}
             </Text>
           )}
+          <View style={styles.errorActions}>
+            <Button
+              title="Ir a Iniciar Sesión"
+              onPress={handleGoToLogin}
+              size="large"
+            />
+          </View>
         </Card>
       </View>
     );
