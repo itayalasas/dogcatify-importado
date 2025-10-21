@@ -572,3 +572,76 @@ export const sendPartnerWelcomeEmailAPI = async (
     return { success: false, error: error.message || 'Unknown error' };
   }
 };
+
+/**
+ * Send password reset email using new API
+ */
+export const sendPasswordResetEmailAPI = async (
+  email: string,
+  clientName: string,
+  resetUrl: string
+): Promise<{ success: boolean; error?: string; log_id?: string }> => {
+  console.log('📧 === SENDING PASSWORD RESET EMAIL ===');
+  console.log('📧 Recipient Email:', email);
+  console.log('📧 Client Name:', clientName);
+  console.log('📧 Reset URL:', resetUrl);
+
+  try {
+    if (!EMAIL_API_URL || !EMAIL_API_KEY) {
+      console.error('❌ Email API configuration missing!');
+      return { success: false, error: 'Email API configuration missing' };
+    }
+
+    const emailPayload = {
+      template_name: 'reset-password',
+      recipient_email: email,
+      data: {
+        client_name: clientName,
+        reset_url: resetUrl,
+      },
+    };
+
+    console.log('📧 Email payload:', JSON.stringify(emailPayload, null, 2));
+    console.log('📧 Making fetch request to:', EMAIL_API_URL);
+
+    const response = await fetch(EMAIL_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': EMAIL_API_KEY,
+      },
+      body: JSON.stringify(emailPayload),
+    });
+
+    console.log('📧 Response status:', response.status);
+
+    const responseText = await response.text();
+    console.log('📧 Response body (raw):', responseText);
+
+    if (!response.ok) {
+      console.error('❌ Email API returned error status:', response.status);
+      console.error('❌ Error details:', responseText);
+      return { success: false, error: `API error: ${response.status} - ${responseText}` };
+    }
+
+    try {
+      const result = JSON.parse(responseText);
+      console.log('✅ Password reset email sent successfully!');
+      console.log('✅ Result:', result);
+
+      return {
+        success: true,
+        log_id: result.log_id,
+      };
+    } catch (parseError) {
+      console.error('⚠️ Could not parse response as JSON:', parseError);
+      return {
+        success: true,
+      };
+    }
+  } catch (error: any) {
+    console.error('❌ Error sending password reset email:', error);
+    console.error('❌ Error stack:', error.stack);
+    return { success: false, error: error.message || 'Unknown error' };
+  }
+};

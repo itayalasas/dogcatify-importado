@@ -39,22 +39,30 @@ export default function ForgotPassword() {
       }
 
       console.log('User found, creating custom password reset token...');
-      
+
       // Crear token personalizado para reset de contraseña
       const token = await createEmailConfirmationToken(userData.id, email.toLowerCase().trim(), 'password_reset');
       const resetUrl = generateConfirmationUrl(token, 'password_reset');
 
-      console.log('Sending custom password reset email...');
-      
-      // Enviar email personalizado
-      const { NotificationService } = await import('../../utils/notifications');
-      await NotificationService.sendPasswordResetEmail(
+      console.log('Sending password reset email using new API...');
+      console.log('Reset URL:', resetUrl);
+
+      // Enviar email usando la nueva API
+      const { sendPasswordResetEmailAPI } = await import('../../utils/emailConfirmation');
+      const emailResult = await sendPasswordResetEmailAPI(
         email.toLowerCase().trim(),
         userData.display_name || 'Usuario',
         resetUrl
       );
 
-      console.log('Custom password reset email sent successfully');
+      if (!emailResult.success) {
+        throw new Error(emailResult.error || 'Error sending password reset email');
+      }
+
+      console.log('✅ Password reset email sent successfully!');
+      if (emailResult.log_id) {
+        console.log('Email log ID:', emailResult.log_id);
+      }
 
       setResetSent(true);
       Alert.alert(
