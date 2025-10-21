@@ -15,30 +15,39 @@ export default function EmailConfirmationScreen() {
   const [error, setError] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [resendingEmail, setResendingEmail] = useState(false);
+  const [hasAttempted, setHasAttempted] = useState(false);
 
   useEffect(() => {
+    // Prevenir múltiples intentos de confirmación
+    if (hasAttempted) {
+      console.log('Confirmation already attempted, skipping...');
+      return;
+    }
+
     const confirmEmail = async () => {
       const { token_hash, type } = params;
-      
+
       console.log('Email confirmation page loaded with params:', { token_hash, type });
-      
+
       if (!token_hash) {
         setError('Token de confirmación no encontrado');
         setLoading(false);
         return;
       }
 
+      setHasAttempted(true);
+
       try {
         console.log('Attempting to confirm email with token:', token_hash);
-        
+
         // Add a small delay to ensure database is ready
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
         const result = await confirmEmailCustom(
-          token_hash as string, 
+          token_hash as string,
           (type as 'signup' | 'password_reset') || 'signup'
         );
-        
+
         console.log('Email confirmation result:', result);
 
         if (result.success) {
@@ -75,14 +84,41 @@ export default function EmailConfirmationScreen() {
           setConfirmed(true);
           setUserEmail(result.email || null);
           setError(null);
+          setLoading(false);
 
-          // Redirigir automáticamente después de 2 segundos
+          // Redirigir automáticamente después de 1.5 segundos
           setTimeout(() => {
             router.replace('/web-info');
-          }, 2000);
+          }, 1500);
         } else {
           console.error('❌ Email confirmation failed:', result.error);
-          
+
+          // Si el token ya fue usado, verificar si el email ya está confirmado
+          if (result.error === 'TOKEN_ALREADY_USED' && result.email) {
+            console.log('Token already used, checking if email is already confirmed...');
+
+            try {
+              // Verificar si el email ya está confirmado en la base de datos
+              const { data: profileData } = await supabaseClient
+                .from('profiles')
+                .select('email_confirmed')
+                .eq('email', result.email)
+                .single();
+
+              if (profileData?.email_confirmed) {
+                console.log('Email is already confirmed, redirecting to web-info...');
+                // El email ya está confirmado, redirigir directamente
+                setLoading(false);
+                setTimeout(() => {
+                  router.replace('/web-info');
+                }, 500);
+                return;
+              }
+            } catch (checkError) {
+              console.error('Error checking email confirmation status:', checkError);
+            }
+          }
+
           // Mejorar mensajes de error
           let errorMessage = 'Error al confirmar el email';
           if (result.error === 'TOKEN_ALREADY_USED') {
@@ -92,22 +128,22 @@ export default function EmailConfirmationScreen() {
           } else if (result.error === 'TOKEN_NOT_FOUND') {
             errorMessage = 'NOT_FOUND';
           }
-          
+
           setError(errorMessage);
           setUserEmail(result.email || null);
           setConfirmed(false);
+          setLoading(false);
         }
       } catch (error) {
         console.error('❌ Error in email confirmation:', error);
         setError('Error interno del servidor');
         setConfirmed(false);
-      } finally {
         setLoading(false);
       }
     };
 
     confirmEmail();
-  }, [params]);
+  }, [params, hasAttempted]);
 
   const handleResendEmail = async () => {
     if (!userEmail) {
