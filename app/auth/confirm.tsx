@@ -75,6 +75,11 @@ export default function EmailConfirmationScreen() {
           setConfirmed(true);
           setUserEmail(result.email || null);
           setError(null);
+
+          // Redirigir automáticamente después de 2 segundos
+          setTimeout(() => {
+            router.replace('/web-info');
+          }, 2000);
         } else {
           console.error('❌ Email confirmation failed:', result.error);
           
