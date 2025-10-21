@@ -236,9 +236,23 @@ export default function AdminRequests() {
       if (partnerData.email) {
         try {
           const { sendPartnerWelcomeEmailAPI } = await import('../../utils/emailConfirmation');
-          const partnerName = profileData?.display_name || 'Partner';
+
+          // Get partner name - try from profile first, then from partner email username
+          let partnerName = profileData?.display_name;
+
+          if (!partnerName || partnerName.trim() === '') {
+            // Extract name from email as fallback (e.g., "john.doe@email.com" -> "John Doe")
+            const emailUsername = partnerData.email.split('@')[0];
+            partnerName = emailUsername
+              .split(/[._-]/)
+              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+              .join(' ');
+          }
 
           console.log('Sending partner welcome email to:', partnerData.email);
+          console.log('Partner name:', partnerName);
+          console.log('Business name:', partnerData.business_name);
+
           const emailResult = await sendPartnerWelcomeEmailAPI(
             partnerData.email,
             partnerName,
