@@ -2,6 +2,10 @@ import { supabaseClient } from '../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 
+// Email API Configuration
+const EMAIL_API_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_EMAIL_API_URL || process.env.EXPO_PUBLIC_EMAIL_API_URL;
+const EMAIL_API_KEY = Constants.expoConfig?.extra?.EXPO_PUBLIC_EMAIL_API_KEY || process.env.EXPO_PUBLIC_EMAIL_API_KEY;
+
 export interface EmailConfirmationToken {
   id: string;
   user_id: string;
@@ -493,5 +497,78 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
   } catch (error) {
     console.error('Error resending confirmation email:', error);
     return { success: false, error: 'Error al reenviar email de confirmación' };
+  }
+};
+
+/**
+ * Send welcome email to partner when their business is approved by admin
+ */
+export const sendPartnerWelcomeEmailAPI = async (
+  partnerEmail: string,
+  partnerName: string,
+  businessName: string
+): Promise<{ success: boolean; error?: string; log_id?: string }> => {
+  console.log('📧 === SENDING PARTNER WELCOME EMAIL ===');
+  console.log('📧 Partner Email:', partnerEmail);
+  console.log('📧 Partner Name:', partnerName);
+  console.log('📧 Business Name:', businessName);
+
+  try {
+    if (!EMAIL_API_URL || !EMAIL_API_KEY) {
+      console.error('❌ Email API configuration missing!');
+      return { success: false, error: 'Email API configuration missing' };
+    }
+
+    const emailPayload = {
+      template_name: 'welcome-partner',
+      recipient_email: partnerEmail,
+      data: {
+        partner_name: partnerName,
+        business_name: businessName,
+      },
+    };
+
+    console.log('📧 Email payload:', JSON.stringify(emailPayload, null, 2));
+    console.log('📧 Making fetch request to:', EMAIL_API_URL);
+
+    const response = await fetch(EMAIL_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': EMAIL_API_KEY,
+      },
+      body: JSON.stringify(emailPayload),
+    });
+
+    console.log('📧 Response status:', response.status);
+
+    const responseText = await response.text();
+    console.log('📧 Response body (raw):', responseText);
+
+    if (!response.ok) {
+      console.error('❌ Email API returned error status:', response.status);
+      console.error('❌ Error details:', responseText);
+      return { success: false, error: `API error: ${response.status} - ${responseText}` };
+    }
+
+    try {
+      const result = JSON.parse(responseText);
+      console.log('✅ Partner welcome email sent successfully!');
+      console.log('✅ Result:', result);
+
+      return {
+        success: true,
+        log_id: result.log_id,
+      };
+    } catch (parseError) {
+      console.error('⚠️ Could not parse response as JSON:', parseError);
+      return {
+        success: true,
+      };
+    }
+  } catch (error: any) {
+    console.error('❌ Error sending partner welcome email:', error);
+    console.error('❌ Error stack:', error.stack);
+    return { success: false, error: error.message || 'Unknown error' };
   }
 };

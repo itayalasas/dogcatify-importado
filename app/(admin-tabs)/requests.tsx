@@ -181,11 +181,22 @@ export default function AdminRequests() {
       // Get the partner data before approval to check user_id
       const { data: partnerData, error: fetchError } = await supabaseClient
         .from('partners')
-        .select('user_id, business_name, business_type')
+        .select('user_id, business_name, business_type, email')
         .eq('id', requestId)
         .single();
-      
+
       if (fetchError) throw fetchError;
+
+      // Get the user's display name from profiles
+      const { data: profileData, error: profileError } = await supabaseClient
+        .from('profiles')
+        .select('display_name')
+        .eq('id', partnerData.user_id)
+        .single();
+
+      if (profileError) {
+        console.error('Error fetching profile data:', profileError);
+      }
       
       const { error } = await supabaseClient
         .from('partners')
@@ -199,7 +210,7 @@ export default function AdminRequests() {
 
       // After approval, check if user has other businesses with MP config
       await replicateMercadoPagoConfigOnApproval(partnerData.user_id, requestId);
-      
+
       // Enviar notificación push al usuario
       try {
         const businessTypeName = getBusinessTypeName(partnerData.business_type);
@@ -220,25 +231,30 @@ export default function AdminRequests() {
         console.error('Error sending approval notification:', notificationError);
         // No interrumpir el flujo si falla la notificación
       }
-      
-      // Get partner details to send email
-      const { data: emailPartnerData, error: emailFetchError } = await supabaseClient
-        .from('partners')
-        .select('email, business_name')
-        .eq('id', requestId)
-        .single();
 
-      if (emailFetchError) throw emailFetchError;
-
-      // Send verification email
-      if (emailPartnerData) {
+      // Send partner welcome email using new API
+      if (partnerData.email) {
         try {
-          await NotificationService.sendPartnerVerificationEmail(
-            emailPartnerData.email,
-            emailPartnerData.business_name
+          const { sendPartnerWelcomeEmailAPI } = await import('../../utils/emailConfirmation');
+          const partnerName = profileData?.display_name || 'Partner';
+
+          console.log('Sending partner welcome email to:', partnerData.email);
+          const emailResult = await sendPartnerWelcomeEmailAPI(
+            partnerData.email,
+            partnerName,
+            partnerData.business_name
           );
+
+          if (emailResult.success) {
+            console.log('✅ Partner welcome email sent successfully!');
+            if (emailResult.log_id) {
+              console.log('Email log ID:', emailResult.log_id);
+            }
+          } else {
+            console.error('❌ Partner welcome email failed:', emailResult.error);
+          }
         } catch (emailError) {
-          console.error('Error sending partner verification email:', emailError);
+          console.error('Error sending partner welcome email:', emailError);
           // Continue with approval process even if email fails
         }
       }
