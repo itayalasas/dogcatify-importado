@@ -165,7 +165,6 @@ export default function BusinessSelector() {
   };
 
   const handleConfigureBusiness = (business: Business) => {
-    // Mostrar menú de opciones de configuración
     Alert.alert(
       'Configurar Negocio',
       'Selecciona una opción:',
@@ -185,8 +184,50 @@ export default function BusinessSelector() {
           })
         },
         {
+          text: 'Eliminar Negocio',
+          onPress: () => handleDeleteBusiness(business),
+          style: 'destructive'
+        },
+        {
           text: 'Cancelar',
           style: 'cancel'
+        }
+      ]
+    );
+  };
+
+  const handleDeleteBusiness = (business: Business) => {
+    Alert.alert(
+      'Eliminar Negocio',
+      `¿Estás seguro de que deseas eliminar "${business.businessName}"? Esta acción no se puede deshacer y eliminará:\n\n• Todos los servicios del negocio\n• Todos los productos\n• Todas las reservas\n• Toda la información del negocio`,
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel'
+        },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabaseClient
+                .from('partners')
+                .delete()
+                .eq('id', business.id);
+
+              if (error) throw error;
+
+              setBusinesses(prev => prev.filter(b => b.id !== business.id));
+
+              Alert.alert(
+                'Negocio eliminado',
+                'El negocio ha sido eliminado correctamente'
+              );
+            } catch (error) {
+              console.error('Error deleting business:', error);
+              Alert.alert('Error', 'No se pudo eliminar el negocio');
+            }
+          }
         }
       ]
     );
