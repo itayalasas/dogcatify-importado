@@ -48,13 +48,11 @@ async function sendWebhookNotification(
   try {
     console.log("🔨 Creando objeto payload...");
 
-    // Calcular IVA sobre el envío si aplica
     const shippingCost = orderData.shipping_cost || 0;
     const shippingIvaAmount = orderData.iva_rate && !orderData.iva_included_in_price
       ? (shippingCost * orderData.iva_rate / 100)
       : 0;
 
-    // Estructurar información de envío
     const shippingInfo = orderData.order_type === 'product_purchase' ? {
       shipping_cost: shippingCost,
       shipping_iva_amount: shippingIvaAmount,
@@ -81,7 +79,6 @@ async function sendWebhookNotification(
     console.log("🔨 Convirtiendo payload a JSON string...");
     let payloadString: string;
     try {
-      // Serializar con orden garantizado de claves
       const orderedPayload = {
         event: payload.event,
         order_id: payload.order_id,
@@ -138,7 +135,7 @@ async function sendWebhookNotification(
           attempt_number: attempt,
           success,
         };
-        console.log("📋 Log data preparado (payload es objeto JSON)");
+        console.log("📋 Log data preparado");
 
         const { error: insertError } = await supabase.from("webhook_logs").insert(logData);
 
@@ -251,7 +248,6 @@ Deno.serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Query completa con todos los campos JSONB y JOIN a customer y partner
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .select(`
@@ -348,7 +344,6 @@ Deno.serve(async (req: Request) => {
 
     console.log(`🔍 Buscando webhooks activos para evento ${event_type}...`);
 
-    // Obtener secret global de variable de entorno
     const webhookSecretEnv = Deno.env.get("WEBHOOK_SECRET");
     const correctSecret = "Kzdr7C4eF9IS4EIgmH8LARdwWrvH4jCBMDOTM1SHofZNdDUHpiFEYH3WhRWx";
     const webhookSecret = webhookSecretEnv || correctSecret;
@@ -374,7 +369,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Filtrar por evento que contenga el event_type
     const filteredSubscriptions = subscriptions?.filter(sub =>
       sub.events && Array.isArray(sub.events) && sub.events.includes(event_type)
     ) || [];
@@ -396,7 +390,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Agregar secret_key a cada subscription
     const subscriptionsWithSecret = filteredSubscriptions.map(sub => ({
       ...sub,
       secret_key: webhookSecret,
