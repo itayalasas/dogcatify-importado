@@ -81,9 +81,17 @@ async function sendWebhookNotification(
     console.log("🔨 Convirtiendo payload a JSON string...");
     let payloadString: string;
     try {
-      payloadString = JSON.stringify(payload);
-      console.log("✅ Payload convertido a string, longitud:", payloadString.length);
-      console.log("📦 Payload preview:", payloadString.substring(0, 300));
+      // Serializar con orden garantizado de claves
+      const orderedPayload = {
+        event: payload.event,
+        order_id: payload.order_id,
+        timestamp: payload.timestamp,
+        data: payload.data
+      };
+      payloadString = JSON.stringify(orderedPayload);
+      console.log("✅ Payload convertido a string con orden garantizado");
+      console.log("📦 Longitud:", payloadString.length);
+      console.log("📦 Preview:", payloadString.substring(0, 300));
     } catch (jsonError: any) {
       console.error("❌ ERROR al hacer JSON.stringify:", jsonError.message);
       throw jsonError;
