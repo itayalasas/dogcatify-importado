@@ -53,8 +53,8 @@ export default function EmailConfirmationScreen() {
         if (result.success) {
           console.log('✅ Email confirmed successfully for user:', result.userId);
 
-          // Solo marcar como confirmado - el perfil ya se creó en el registro
-          console.log('Email confirmed, profile already exists from registration');
+          // El perfil ya fue creado durante el registro, solo confirmar el email
+          console.log('✅ Email confirmed, profile was created during registration');
 
           // Enviar email de bienvenida después de confirmar exitosamente
           if (result.email) {
