@@ -277,17 +277,24 @@ export const completeUserRegistration = async (
  * Generate confirmation URL
  */
 export const generateConfirmationUrl = (token: string, type: 'signup' | 'password_reset' = 'signup'): string => {
-  const baseUrl = process.env.EXPO_PUBLIC_APP_DOMAIN || 
-                  process.env.EXPO_PUBLIC_APP_URL || 
-                  process.env.EXPO_PUBLIC_SUPABASE_URL?.replace('/v1', '') ||
+  const baseUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_APP_DOMAIN ||
+                  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_APP_DOMAIN) ||
+                  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_APP_URL) ||
+                  Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_URL?.replace('/v1', '') ||
+                  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SUPABASE_URL?.replace('/v1', '')) ||
                   'https://app-dogcatify.netlify.app';
-  
+
+  console.log('🔗 Generating confirmation URL with base:', baseUrl);
+  console.log('🔗 Token type:', type);
+
   if (type === 'password_reset') {
-    // Password reset goes to a SEPARATE reset password page
-    return `${baseUrl}/auth/reset-password?token=${token}`;
+    const resetUrl = `${baseUrl}/auth/reset-password?token=${token}`;
+    console.log('🔗 Password reset URL:', resetUrl);
+    return resetUrl;
   } else {
-    // Email confirmation goes to the confirm page (ONLY for signup)
-    return `${baseUrl}/auth/confirm?token_hash=${token}&type=signup`;
+    const confirmUrl = `${baseUrl}/auth/confirm?token_hash=${token}&type=signup`;
+    console.log('🔗 Email confirmation URL:', confirmUrl);
+    return confirmUrl;
   }
 };
 
