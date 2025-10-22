@@ -66,12 +66,12 @@ async function sendWebhookNotification(
     };
 
     const payload = {
-      event: eventType,
-      order_id: orderId,
       data: {
         ...orderData,
         shipping_info: shippingInfo,
       },
+      event: eventType,
+      order_id: orderId,
       timestamp: new Date().toISOString(),
     };
     console.log("✅ Objeto payload creado");
@@ -79,14 +79,8 @@ async function sendWebhookNotification(
     console.log("🔨 Convirtiendo payload a JSON string...");
     let payloadString: string;
     try {
-      const orderedPayload = {
-        event: payload.event,
-        order_id: payload.order_id,
-        timestamp: payload.timestamp,
-        data: payload.data
-      };
-      payloadString = JSON.stringify(orderedPayload);
-      console.log("✅ Payload convertido a string con orden garantizado");
+      payloadString = JSON.stringify(payload);
+      console.log("✅ Payload convertido a string");
       console.log("📦 Longitud:", payloadString.length);
       console.log("📦 Preview:", payloadString.substring(0, 300));
     } catch (jsonError: any) {
