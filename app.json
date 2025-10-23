@@ -4,12 +4,12 @@
     "slug": "dogcatify",
     "version": "9.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/logo.jpg",
     "scheme": "dogcatify",
     "userInterfaceStyle": "automatic",
     "platforms": ["ios", "android", "web"],
     "splash": {
-      "image": "./assets/images/icon.png",
+      "image": "./assets/images/logo.jpg",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -52,7 +52,7 @@
       "versionCode": 9,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
+        "foregroundImage": "./assets/images/logo.jpg",
         "backgroundColor": "#FFFFFF"
       },
       "permissions": [
@@ -80,7 +80,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/images/favicon.png",
+      "favicon": "./assets/images/logo.jpg",
       "bundler": "metro",
       "output": "static",
       "build": {
