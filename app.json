@@ -37,7 +37,13 @@
       },
       "eas": {
         "projectId": "0618d9ae-6714-46bb-adce-f4ee57fff324"
-      }
+      },
+      "EXPO_PUBLIC_EMAIL_API_URL": "https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/send-email",
+      "EXPO_PUBLIC_EMAIL_API_KEY": "sk_bcaca188c1b16345e4d10adf403eb4e9e98d3fa9ff04ba053d7416fe302b7dee",
+      "EXPO_PUBLIC_APP_DOMAIN": "https://app-dogcatify.netlify.app",
+      "EXPO_PUBLIC_SUPABASE_URL": "https://zkgiwamycbjcogcgqhff.supabase.co",
+      "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InprZ2l3YW15Y2JqY29nY2dxaGZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIyMDI2MTIsImV4cCI6MjA2Nzc3ODYxMn0.D-LyMJVBu0vR_iRInOKUkNLQMs5qwj_vUVZsW_JNGWE",
+      "EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InprZ2l3YW15Y2JqY29nY2dxaGZmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MjIwMjYxMiwiZXhwIjoyMDY3Nzc4NjEyfQ.YTP4Gr1WyhZ-HzVE9whK3EbaY8hE6WtHjb_SmLLJc-Y"
     },
     "ios": {
   "supportsTablet": true,
