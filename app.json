@@ -118,7 +118,10 @@
       }
     },
     "runtimeVersion": {
-      "policy": "sdkVersion"
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0618d9ae-6714-46bb-adce-f4ee57fff324"
     },
     "notification": {
       "icon": "./assets/images/logo-transp.png",
