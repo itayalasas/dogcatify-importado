@@ -7,19 +7,13 @@
     "icon": "./assets/images/logo.jpg",
     "scheme": "dogcatify",
     "userInterfaceStyle": "automatic",
-    "platforms": [
-      "ios",
-      "android",
-      "web"
-    ],
+    "platforms": ["ios", "android", "web"],
     "splash": {
       "image": "./assets/images/logo.jpg",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "plugins": [
       "expo-router",
       [
@@ -28,29 +22,19 @@
           "icon": "./assets/images/logo-transp.png",
           "color": "#2D6A6F",
           "sounds": [],
-          "android": {
-            "useNextNotificationsApi": true
-          }
+          "android": { "useNextNotificationsApi": true }
         }
       ]
     ],
-    "experiments": {
-      "typedRoutes": true
-    },
+    "experiments": { "typedRoutes": true },
     "extra": {
-      "router": {
-        "origin": false
-      },
-      "eas": {
-        "projectId": "0618d9ae-6714-46bb-adce-f4ee57fff324"
-      }
+      "router": { "origin": false },
+      "eas": { "projectId": "0618d9ae-6714-46bb-adce-f4ee57fff324" }
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.dogcatify.app",
       "associatedDomains": [
-        "applinks:dogcatify.app",
-        "applinks:www.dogcatify.app",
         "applinks:dogcatify.app",
         "applinks:www.dogcatify.app"
       ],
@@ -80,15 +64,6 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "android.permission.INTERNET",
-        "android.permission.ACCESS_NETWORK_STATE",
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.USE_FINGERPRINT",
-        "android.permission.USE_BIOMETRIC",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE"
       ],
       "intentFilters": [
@@ -96,49 +71,11 @@
           "action": "VIEW",
           "autoVerify": true,
           "data": [
-            {
-              "scheme": "dogcatify",
-              "host": "*"
-            },
-            {
-              "scheme": "https",
-              "host": "dogcatify.app",
-              "pathPrefix": "/album"
-            },
-            {
-              "scheme": "https",
-              "host": "dogcatify.app",
-              "pathPrefix": "/post"
-            }
+            { "scheme": "dogcatify", "host": "*" },
+            { "scheme": "https", "host": "dogcatify.app", "pathPrefix": "/album" },
+            { "scheme": "https", "host": "dogcatify.app", "pathPrefix": "/post" }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
-        },
-        {
-          "action": "VIEW",
-          "autoVerify": true,
-          "data": [
-            {
-              "scheme": "dogcatify",
-              "host": "*"
-            },
-            {
-              "scheme": "https",
-              "host": "dogcatify.app",
-              "pathPrefix": "/album"
-            },
-            {
-              "scheme": "https",
-              "host": "dogcatify.app",
-              "pathPrefix": "/post"
-            }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ]
     },
@@ -147,26 +84,15 @@
       "bundler": "metro",
       "output": "static",
       "build": {
-        "babel": {
-          "include": [
-            "@expo/vector-icons"
-          ]
-        }
+        "babel": { "include": ["@expo/vector-icons"] }
       }
     },
-    "runtimeVersion": {
-      "policy": "9.0.0",
-	  "updates": {
-      "url": "https://u.expo.dev/0618d9ae-6714-46bb-adce-f4ee57fff324"
-    }
-    },
+    "runtimeVersion": "9.0.0",
     "notification": {
       "icon": "./assets/images/logo-transp.png",
       "color": "#2D6A6F"
     },
-    "permissions": [
-      "NOTIFICATIONS"
-    ],
+    "permissions": ["NOTIFICATIONS"],
     "privacy": "public",
     "owner": "pedro86cu",
     "updates": {
