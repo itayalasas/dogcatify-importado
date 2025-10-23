@@ -7,6 +7,7 @@ import { LanguageProvider } from '../contexts/LanguageContext';
 import { BiometricProvider } from '../contexts/BiometricContext';
 import { CartProvider } from '../contexts/CartContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
+import { ConfigProvider } from '../contexts/ConfigContext';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { Platform, Alert } from 'react-native';
@@ -109,12 +110,13 @@ export default function RootLayout() {
   const initialRouteName = Platform.OS === 'web' ? 'web-info' : '(tabs)';
 
   return (
-    <LanguageProvider>
-      <AuthProvider>
-        <BiometricProvider>
-          <NotificationProvider>
-            <CartProvider>
-              <ErrorBoundary>
+    <ConfigProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <BiometricProvider>
+            <NotificationProvider>
+              <CartProvider>
+                <ErrorBoundary>
                 <Stack screenOptions={{ headerShown: false }} initialRouteName={initialRouteName}>
                   <Stack.Screen name="(tabs)" />
                   <Stack.Screen name="(admin-tabs)" />
@@ -194,12 +196,13 @@ export default function RootLayout() {
                   <Stack.Screen name="pets/share-medical-history" />
                   <Stack.Screen name="+not-found" />
                 </Stack>
-              </ErrorBoundary>
-              <StatusBar style="auto" />
-            </CartProvider>
-          </NotificationProvider>
-        </BiometricProvider>
-      </AuthProvider>
-    </LanguageProvider>
+                </ErrorBoundary>
+                <StatusBar style="auto" />
+              </CartProvider>
+            </NotificationProvider>
+          </BiometricProvider>
+        </AuthProvider>
+      </LanguageProvider>
+    </ConfigProvider>
   );
 }
