@@ -1248,6 +1248,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
+    paddingTop: Platform.OS === 'ios' ? 56 : 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
@@ -1328,7 +1329,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',
-    paddingBottom: Platform.OS === 'ios' ? 0 : 8,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 8,
   },
   replyingToContainer: {
     flexDirection: 'row',
