@@ -55,7 +55,7 @@
     },
     "android": {
       "package": "com.dogcatify.app",
-      "versionCode": 11,
+      "versionCode": 12,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
