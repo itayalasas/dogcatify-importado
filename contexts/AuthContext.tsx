@@ -44,7 +44,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     let mounted = true;
-    
+    let initializationComplete = false;
+
+    // Safety timeout to ensure auth initialization completes
+    const safetyTimeout = setTimeout(() => {
+      if (!initializationComplete && mounted) {
+        console.warn('Auth initialization timed out after 10 seconds');
+        setLoading(false);
+        setAuthInitialized(true);
+      }
+    }, 10000);
+
     // Set up auth state listener
     const subscription = supabaseClient.auth.onAuthStateChange(
       async (event, session) => {
@@ -185,6 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!mounted) return;
         setLoading(false);
         setAuthInitialized(true);
+        initializationComplete = true;
       }
     );
 
@@ -269,10 +280,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('AuthContext - Checking initial session...');
         const { data } = await supabaseClient.auth.getSession();
         const session = data?.session;
-        
+
         console.log('AuthContext - Initial session check result:', session?.user?.email || 'No session');
         setSession(session);
-        
+
         if (session?.user) {
           try {
             // Check email confirmation for initial session
@@ -323,16 +334,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } catch (error) {
         console.error('AuthContext - Error in checkSession:', error);
+      } finally {
+        // ALWAYS complete initialization, even if there were errors
+        if (mounted) {
+          setAuthInitialized(true);
+          setLoading(false);
+          initializationComplete = true;
+        }
       }
-      if (!mounted) return;
-      setAuthInitialized(true);
-      setLoading(false);
     };
     
     checkSession();
     
     return () => {
       mounted = false;
+      clearTimeout(safetyTimeout);
       if (tokenCheckIntervalRef.current) {
         clearInterval(tokenCheckIntervalRef.current);
       }
