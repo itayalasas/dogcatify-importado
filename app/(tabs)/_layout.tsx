@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Chrome as Home, Heart, ShoppingBag, Briefcase, MapPin, User } from 'lucide-react-native';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { Platform } from 'react-native';
 
 export default function TabLayout() {
   const { t } = useLanguage();
@@ -14,9 +15,9 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: '#FFFFFF',
           borderTopWidth: 0,
-          paddingTop: 5,
-          paddingBottom: 5,
-          height: 60,
+          paddingTop: 8,
+          paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+          height: Platform.OS === 'ios' ? 85 : 65,
           shadowColor: '#000',
           shadowOffset: {
             width: 0,
