@@ -81,7 +81,7 @@ export default function BiometricSetup() {
         {/* Logo */}
         <View style={styles.logoContainer}>
           <Image 
-            source={require('../../assets/images/logo.jpg')} 
+            source={require('../../assets/images/icon.png')} 
             style={styles.logo} 
           />
         </View>
