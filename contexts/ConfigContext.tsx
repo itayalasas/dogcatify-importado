@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabaseClient } from '@/lib/supabase';
 
 interface AppConfig {
   email_api_url: string;
@@ -41,13 +41,20 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
+      // Check if supabaseClient is available
+      if (!supabaseClient) {
+        console.warn('Supabase client not initialized, using default config');
+        setConfig(DEFAULT_CONFIG);
+        setLoading(false);
+        return;
+      }
+
+      const { data, error: fetchError } = await supabaseClient
         .from('app_config')
         .select('key, value');
 
       if (fetchError) {
-        console.error('Error loading config:', fetchError);
-        setError(fetchError.message);
+        console.warn('Error loading config from database, using defaults:', fetchError.message);
         setConfig(DEFAULT_CONFIG);
         return;
       }
@@ -75,7 +82,12 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     loadConfig();
 
-    const channel = supabase
+    // Only set up real-time subscription if supabaseClient is available
+    if (!supabaseClient) {
+      return;
+    }
+
+    const channel = supabaseClient
       .channel('app_config_changes')
       .on(
         'postgres_changes',
@@ -91,7 +103,9 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (supabaseClient) {
+        supabaseClient.removeChannel(channel);
+      }
     };
   }, []);
 
