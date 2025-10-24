@@ -4,12 +4,12 @@
     "slug": "dogcatify",
     "version": "9.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logo.jpg",
+    "icon": "./assets/images/icon.png",
     "scheme": "dogcatify",
     "userInterfaceStyle": "automatic",
     "platforms": ["ios", "android", "web"],
     "splash": {
-      "image": "./assets/images/logo.jpg",
+      "image": "./assets/images/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -23,6 +23,12 @@
           "color": "#2D6A6F",
           "sounds": [],
           "android": { "useNextNotificationsApi": true }
+        }
+      ],
+      [
+        "expo-updates",
+        {
+          "username": "pedro86cu"
         }
       ]
     ],
@@ -52,7 +58,7 @@
       "versionCode": 10,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/logo.jpg",
+        "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#FFFFFF"
       },
       "permissions": [
@@ -80,7 +86,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/images/logo.jpg",
+      "favicon": "./assets/images/icon.png",
       "bundler": "metro",
       "output": "static",
       "build": {
