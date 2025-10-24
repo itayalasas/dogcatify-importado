@@ -67,7 +67,7 @@ export function LoadingSpinner({ message, size = 'medium' }: LoadingSpinnerProps
           ]}
         >
           <Image
-            source={require('../../assets/images/logo-transp.png')}
+            source={require('../../assets/images/icon.png')}
             style={[styles.logo, { width: logoSize, height: logoSize }]}
             resizeMode="contain"
           />
