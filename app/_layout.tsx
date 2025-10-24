@@ -12,7 +12,6 @@ import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { Platform, Alert, View } from 'react-native';
 import { supabaseClient } from '@/lib/supabase';
-import { StartupDiagnostics, logDiagnostic } from '../components/StartupDiagnostics';
 import { SafeAppWrapper } from '../components/SafeAppWrapper';
 import * as Sentry from '@sentry/react-native';
 import { isRunningInExpoGo } from 'expo';
@@ -62,12 +61,10 @@ global.onunhandledrejection = (event: any) => {
 };
 
 function RootLayout() {
-  logDiagnostic('RootLayout', 'success', 'Component rendering');
   useFrameworkReady();
 
   // Add navigation state logging
   useEffect(() => {
-    logDiagnostic('RootLayout', 'success', 'Component mounted');
     console.log('=== RootLayout Mount ===');
     console.log('Available routes being registered...');
   }, []);
@@ -158,22 +155,6 @@ function RootLayout() {
 
   // Determine initial route based on platform
   const initialRouteName = Platform.OS === 'web' ? 'web-info' : '(tabs)';
-
-  // Show diagnostics in DEV mode if stuck loading
-  const [showDiagnostics, setShowDiagnostics] = React.useState(false);
-  useEffect(() => {
-    if (__DEV__) {
-      const timer = setTimeout(() => {
-        console.warn('App taking too long to load, showing diagnostics...');
-        setShowDiagnostics(true);
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, []);
-
-  if (__DEV__ && showDiagnostics) {
-    return <StartupDiagnostics />;
-  }
 
   return (
     <SafeAppWrapper>
