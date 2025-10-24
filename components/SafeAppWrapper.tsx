@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import * as Updates from 'expo-updates';
 
 interface Props {
   children: React.ReactNode;
@@ -40,18 +39,13 @@ export class SafeAppWrapper extends React.Component<Props, State> {
     });
   }
 
-  handleReload = async () => {
-    try {
-      await Updates.reloadAsync();
-    } catch (e) {
-      console.error('Error reloading:', e);
-      // Fallback: just reset state
-      this.setState({
-        hasError: false,
-        error: null,
-        errorInfo: null,
-      });
-    }
+  handleReload = () => {
+    // Just reset state
+    this.setState({
+      hasError: false,
+      error: null,
+      errorInfo: null,
+    });
   };
 
   render() {
