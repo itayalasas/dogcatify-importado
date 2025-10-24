@@ -94,7 +94,7 @@ export default function ForgotPassword() {
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Image 
-          source={require('../../assets/images/logo.jpg')} 
+          source={require('../../assets/images/icon.png')} 
            style={styles.logo} 
            />
       </View>

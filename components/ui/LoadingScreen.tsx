@@ -54,7 +54,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ message }) => {
         ]}
       >
         <Image
-          source={require('../../assets/images/logo.jpg')}
+          source={require('../../assets/images/icon.png')}
           style={styles.logo}
           resizeMode="contain"
         />
