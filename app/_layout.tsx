@@ -10,14 +10,47 @@ import { NotificationProvider } from '../contexts/NotificationContext';
 import { ConfigProvider } from '../contexts/ConfigContext';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
-import { Platform, Alert } from 'react-native';
+import { Platform, Alert, View } from 'react-native';
 import { supabaseClient } from '@/lib/supabase';
+import { StartupDiagnostics, logDiagnostic } from '../components/StartupDiagnostics';
+import { SafeAppWrapper } from '../components/SafeAppWrapper';
+// Global error handler
+if (typeof ErrorUtils !== 'undefined') {
+  const originalHandler = ErrorUtils.getGlobalHandler();
+  ErrorUtils.setGlobalHandler((error, isFatal) => {
+    console.error('=== GLOBAL ERROR ===');
+    console.error('Fatal:', isFatal);
+    console.error('Error:', error);
+    console.error('Stack:', error.stack);
+    console.error('===================');
+
+    // Call original handler
+    if (originalHandler) {
+      originalHandler(error, isFatal);
+    }
+  });
+}
+
+// Capture unhandled promise rejections
+const originalUnhandled = global.onunhandledrejection;
+global.onunhandledrejection = (event: any) => {
+  console.error('=== UNHANDLED PROMISE REJECTION ===');
+  console.error('Reason:', event.reason);
+  console.error('Promise:', event.promise);
+  console.error('===================================');
+
+  if (originalUnhandled) {
+    originalUnhandled(event);
+  }
+};
 
 export default function RootLayout() {
+  logDiagnostic('RootLayout', 'success', 'Component rendering');
   useFrameworkReady();
 
   // Add navigation state logging
   useEffect(() => {
+    logDiagnostic('RootLayout', 'success', 'Component mounted');
     console.log('=== RootLayout Mount ===');
     console.log('Available routes being registered...');
   }, []);
@@ -109,14 +142,31 @@ export default function RootLayout() {
   // Determine initial route based on platform
   const initialRouteName = Platform.OS === 'web' ? 'web-info' : '(tabs)';
 
+  // Show diagnostics in DEV mode if stuck loading
+  const [showDiagnostics, setShowDiagnostics] = React.useState(false);
+  useEffect(() => {
+    if (__DEV__) {
+      const timer = setTimeout(() => {
+        console.warn('App taking too long to load, showing diagnostics...');
+        setShowDiagnostics(true);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  if (__DEV__ && showDiagnostics) {
+    return <StartupDiagnostics />;
+  }
+
   return (
-    <ConfigProvider>
-      <LanguageProvider>
-        <AuthProvider>
-          <BiometricProvider>
-            <NotificationProvider>
-              <CartProvider>
-                <ErrorBoundary>
+    <SafeAppWrapper>
+      <ConfigProvider>
+        <LanguageProvider>
+          <AuthProvider>
+            <BiometricProvider>
+              <NotificationProvider>
+                <CartProvider>
+                  <ErrorBoundary>
                 <Stack screenOptions={{ headerShown: false }} initialRouteName={initialRouteName}>
                   <Stack.Screen name="(tabs)" />
                   <Stack.Screen name="(admin-tabs)" />
@@ -196,13 +246,14 @@ export default function RootLayout() {
                   <Stack.Screen name="pets/share-medical-history" />
                   <Stack.Screen name="+not-found" />
                 </Stack>
-                </ErrorBoundary>
-                <StatusBar style="auto" />
-              </CartProvider>
-            </NotificationProvider>
-          </BiometricProvider>
-        </AuthProvider>
-      </LanguageProvider>
-    </ConfigProvider>
+                  </ErrorBoundary>
+                  <StatusBar style="auto" />
+                </CartProvider>
+              </NotificationProvider>
+            </BiometricProvider>
+          </AuthProvider>
+        </LanguageProvider>
+      </ConfigProvider>
+    </SafeAppWrapper>
   );
 }
