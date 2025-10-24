@@ -30,13 +30,6 @@
         {
           "username": "pedro86cu"
         }
-      ],
-      [
-        "@sentry/react-native/expo",
-        {
-          "organization": "ayala-it-sas",
-          "project": "react-native"
-        }
       ]
     ],
     "experiments": { "typedRoutes": true },

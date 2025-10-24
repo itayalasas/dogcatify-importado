@@ -13,19 +13,11 @@ import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { Platform, Alert, View } from 'react-native';
 import { supabaseClient } from '@/lib/supabase';
 import { SafeAppWrapper } from '../components/SafeAppWrapper';
-import * as Sentry from '@sentry/react-native';
-import { isRunningInExpoGo } from 'expo';
 
-Sentry.init({
-  dsn: 'https://3e97e088cc3f4f2d8e8c0eddcfe2ede4@o4510242662449152.ingest.us.sentry.io/4510242664808448',
-  enableInExpoDevelopment: false,
-  debug: __DEV__,
-  tracesSampleRate: 1.0,
-  _experiments: {
-    profilesSampleRate: 1.0,
-  },
-  enableNative: !isRunningInExpoGo(),
-});
+// Sentry initialization - disabled for development builds to avoid issues
+// import * as Sentry from '@sentry/react-native';
+// import { isRunningInExpoGo } from 'expo';
+
 // Global error handler
 if (typeof ErrorUtils !== 'undefined') {
   const originalHandler = ErrorUtils.getGlobalHandler();
@@ -35,8 +27,6 @@ if (typeof ErrorUtils !== 'undefined') {
     console.error('Error:', error);
     console.error('Stack:', error.stack);
     console.error('===================');
-
-    Sentry.captureException(error, { tags: { fatal: isFatal } });
 
     // Call original handler
     if (originalHandler) {
@@ -52,8 +42,6 @@ global.onunhandledrejection = (event: any) => {
   console.error('Reason:', event.reason);
   console.error('Promise:', event.promise);
   console.error('===================================');
-
-  Sentry.captureException(event.reason || event, { tags: { type: 'unhandled-rejection' } });
 
   if (originalUnhandled) {
     originalUnhandled(event);
@@ -79,11 +67,7 @@ function RootLayout() {
           // Only block SIGNED_UP to prevent the confirmation modal
           if (event === 'SIGNED_UP') {
             console.log('Blocking SIGNED_UP event to prevent modal');
-            setTimeout(() => {
-              supabaseClient.auth.signOut().catch(err => {
-                console.log('Error signing out:', err.message);
-              });
-            }, 100);
+            // Don't sign out immediately, just log it
           }
         }
       );
@@ -256,4 +240,5 @@ function RootLayout() {
   );
 }
 
-export default Sentry.wrap(RootLayout);
+// Sentry disabled for now to avoid build issues
+export default RootLayout;
