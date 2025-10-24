@@ -26,11 +26,15 @@
     },
     "production": {
       "autoIncrement": true,
+      "distribution": "internal",
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
       },
       "channel": "production",
       "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://zkgiwamycbjcogcgqhff.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InprZ2l3YW15Y2JqY29nY2dxaGZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIyMDI2MTIsImV4cCI6MjA2Nzc3ODYxMn0.D-LyMJVBu0vR_iRInOKUkNLQMs5qwj_vUVZsW_JNGWE",
         "SENTRY_ORG": "ayala-it-sas",
         "SENTRY_PROJECT": "react-native"
       }
