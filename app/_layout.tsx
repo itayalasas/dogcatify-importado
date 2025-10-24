@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
@@ -14,6 +14,19 @@ import { Platform, Alert, View } from 'react-native';
 import { supabaseClient } from '@/lib/supabase';
 import { StartupDiagnostics, logDiagnostic } from '../components/StartupDiagnostics';
 import { SafeAppWrapper } from '../components/SafeAppWrapper';
+import * as Sentry from '@sentry/react-native';
+import { isRunningInExpoGo } from 'expo';
+
+Sentry.init({
+  dsn: 'https://3e97e088cc3f4f2d8e8c0eddcfe2ede4@o4510242662449152.ingest.us.sentry.io/4510242664808448',
+  enableInExpoDevelopment: false,
+  debug: __DEV__,
+  tracesSampleRate: 1.0,
+  _experiments: {
+    profilesSampleRate: 1.0,
+  },
+  enableNative: !isRunningInExpoGo(),
+});
 // Global error handler
 if (typeof ErrorUtils !== 'undefined') {
   const originalHandler = ErrorUtils.getGlobalHandler();
@@ -23,6 +36,8 @@ if (typeof ErrorUtils !== 'undefined') {
     console.error('Error:', error);
     console.error('Stack:', error.stack);
     console.error('===================');
+
+    Sentry.captureException(error, { tags: { fatal: isFatal } });
 
     // Call original handler
     if (originalHandler) {
@@ -39,12 +54,14 @@ global.onunhandledrejection = (event: any) => {
   console.error('Promise:', event.promise);
   console.error('===================================');
 
+  Sentry.captureException(event.reason || event, { tags: { type: 'unhandled-rejection' } });
+
   if (originalUnhandled) {
     originalUnhandled(event);
   }
 };
 
-export default function RootLayout() {
+function RootLayout() {
   logDiagnostic('RootLayout', 'success', 'Component rendering');
   useFrameworkReady();
 
@@ -257,3 +274,5 @@ export default function RootLayout() {
     </SafeAppWrapper>
   );
 }
+
+export default Sentry.wrap(RootLayout);
