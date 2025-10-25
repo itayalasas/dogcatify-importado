@@ -36,8 +36,8 @@ export default function BreedSelector() {
       
       // Use the optimized endpoint that returns all breeds at once
       const endpoint = species === 'dog'
-        ? 'https://api.api-ninjas.com/v1/alldogs'
-        : 'https://api.api-ninjas.com/v1/allcats';
+        ? 'https://ffihaeatoundrjzgtpzk.supabase.co/functions/v1/alldogs'
+        : 'https://ffihaeatoundrjzgtpzk.supabase.co/functions/v1/allcats';
       
       console.log(`Using endpoint: ${endpoint}`);
       
