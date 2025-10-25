@@ -33,7 +33,7 @@ type PetSpecies = 'dog' | 'cat';
 type AgeUnit = 'years' | 'months' | 'days';
 type WeightUnit = 'kg' | 'lb';
 
-const API_KEY = 'Dc+xEVg6S6WoHc7MbV9FLQ==vASOw63SGaFxuAi8';
+const API_KEY = 'pk_XYb1Nbel6qVH0fQfv3CpYwHJG1NC5aca';
 const { width: screenWidth } = Dimensions.get('window');
 
 // Lista completa de colores para mascotas
@@ -209,8 +209,8 @@ export default function AddPet() {
     setLoadingBreedInfo(true);
     try {
       const endpoint = speciesType === 'dog' 
-        ? `https://api.api-ninjas.com/v1/dogs?name=${encodeURIComponent(breedName)}`
-        : `https://api.api-ninjas.com/v1/cats?name=${encodeURIComponent(breedName)}`;
+        ? `https://ffihaeatoundrjzgtpzk.supabase.co/functions/v1/dogs?name=${encodeURIComponent(breedName)}`
+        : `https://ffihaeatoundrjzgtpzk.supabase.co/functions/v1/cats?name=${encodeURIComponent(breedName)}`;
       
       console.log(`API endpoint: ${endpoint}`);
       
