@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Act
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Search } from 'lucide-react-native';
 
-const API_KEY = 'Dc+xEVg6S6WoHc7MbV9FLQ==vASOw63SGaFxuAi8';
+const API_KEY = 'pk_XYb1Nbel6qVH0fQfv3CpYwHJG1NC5aca';
 
 export default function BreedSelector() {
   const { species } = useLocalSearchParams<{ species: string }>();
