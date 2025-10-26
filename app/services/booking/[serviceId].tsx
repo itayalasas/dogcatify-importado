@@ -838,7 +838,7 @@ export default function ServiceBooking() {
 
                 <TouchableOpacity
                   style={[styles.paymentMethodCard, styles.disabledMethod]}
-                  onPress={() => handlePaymentMethodSelect('card')}
+                  disabled
                 >
                   <View style={[styles.paymentMethodIconCircle, { backgroundColor: '#F3F4F6' }]}>
                     <CreditCard size={32} color="#9CA3AF" />
