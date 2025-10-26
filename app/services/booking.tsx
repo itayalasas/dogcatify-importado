@@ -606,7 +606,7 @@ export default function ServiceBooking() {
         
         <View style={styles.bookingButtonContainer}>
           <Button
-            title="Confirmar Reserva"
+            title={bookingLoading ? 'Procesando...' : 'Pagar'}
             onPress={handleBookService}
             loading={bookingLoading}
             size="large"
@@ -669,6 +669,10 @@ export default function ServiceBooking() {
                   </Text>
                 </View>
               </TouchableOpacity>
+
+              <Text style={styles.paymentNote}>
+                Serás redirigido para completar el pago de forma segura
+              </Text>
             </View>
           </View>
         </View>
@@ -997,5 +1001,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
+  },
+  paymentNote: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 16,
+    lineHeight: 16,
   },
 });
