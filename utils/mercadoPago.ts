@@ -1010,7 +1010,16 @@ export const createServicePaymentPreference = async (
   commissionAmount: number
 ): Promise<any> => {
   try {
-    const marketplaceAccessToken = await getMarketplaceAccessToken();
+    // Detect if we're using test credentials
+    const isTestMode = partnerConfig.access_token?.startsWith('TEST-');
+    const tokenPrefix = partnerConfig.access_token?.substring(0, 20) || 'N/A';
+
+    console.log('Creating service payment preference:', {
+      orderId,
+      isTestMode,
+      tokenPrefix: tokenPrefix + '...',
+      commissionAmount
+    });
 
     // Format phone number (remove non-digits and ensure it's 8 digits)
     const rawPhone = bookingData.customerInfo.phone || '99999999';
@@ -1097,8 +1106,17 @@ export const createServicePaymentPreference = async (
     }
     
     const preference = await response.json();
-    console.log('Service payment preference created successfully');
-    
+
+    console.log('Service payment preference created successfully:', {
+      preferenceId: preference.id,
+      isTestMode,
+      hasInitPoint: !!preference.init_point,
+      hasSandboxInitPoint: !!preference.sandbox_init_point,
+      initPointDomain: preference.init_point ? new URL(preference.init_point).hostname : 'N/A',
+      sandboxInitPointDomain: preference.sandbox_init_point ? new URL(preference.sandbox_init_point).hostname : 'N/A',
+      shouldUseUrl: isTestMode ? 'sandbox_init_point' : 'init_point'
+    });
+
     return preference;
   } catch (error) {
     console.error('Error creating service payment preference:', error);
