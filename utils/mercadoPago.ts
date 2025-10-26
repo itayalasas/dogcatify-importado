@@ -122,9 +122,22 @@ export const exchangeCodeForTokens = async (
 
 /**
  * Store partner's Mercado Pago tokens in database
+ * Updates ALL businesses belonging to the partner's user
  */
 const storePartnerTokens = async (partnerId: string, tokenData: any) => {
   try {
+    // First, get the user_id from the partner
+    const { data: partnerData, error: partnerError } = await supabaseClient
+      .from('partners')
+      .select('user_id, business_name')
+      .eq('id', partnerId)
+      .single();
+
+    if (partnerError) throw partnerError;
+
+    console.log('Storing MP tokens for all businesses of user:', partnerData.user_id);
+
+    // Update ALL partners with the same user_id
     const { error } = await supabaseClient
       .from('partners')
       .update({
@@ -138,9 +151,11 @@ const storePartnerTokens = async (partnerId: string, tokenData: any) => {
           is_oauth: true
         }
       })
-      .eq('id', partnerId);
+      .eq('user_id', partnerData.user_id);
 
     if (error) throw error;
+
+    console.log('MP tokens stored successfully for ALL businesses');
   } catch (error) {
     console.error('Error storing partner tokens:', error);
     throw error;
@@ -1385,9 +1400,22 @@ export const handleOAuth2Callback = async (
 
 /**
  * Disconnect partner from Mercado Pago
+ * Disconnects ALL businesses belonging to the partner's user
  */
 export const disconnectPartnerMercadoPago = async (partnerId: string): Promise<void> => {
   try {
+    // First, get the user_id from the partner
+    const { data: partnerData, error: partnerError } = await supabaseClient
+      .from('partners')
+      .select('user_id')
+      .eq('id', partnerId)
+      .single();
+
+    if (partnerError) throw partnerError;
+
+    console.log('Disconnecting MP for all businesses of user:', partnerData.user_id);
+
+    // Disconnect ALL partners with the same user_id
     await supabaseClient
       .from('partners')
       .update({
@@ -1395,9 +1423,9 @@ export const disconnectPartnerMercadoPago = async (partnerId: string): Promise<v
         mercadopago_config: null,
         updated_at: new Date().toISOString()
       })
-      .eq('id', partnerId);
+      .eq('user_id', partnerData.user_id);
 
-    console.log(`Partner ${partnerId} disconnected from Mercado Pago`);
+    console.log(`All businesses disconnected from Mercado Pago for user ${partnerData.user_id}`);
   } catch (error) {
     console.error('Error disconnecting partner from Mercado Pago:', error);
     throw error;
