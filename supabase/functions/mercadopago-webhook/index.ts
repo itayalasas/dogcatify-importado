@@ -22,7 +22,7 @@ interface WebhookNotification {
   };
 }
 
-async function verifyWebhookSignature(req: Request, supabase: any): Promise<boolean> {
+async function verifyWebhookSignature(req: Request): Promise<boolean> {
   try {
     const xSignature = req.headers.get('x-signature');
     const xRequestId = req.headers.get('x-request-id');
@@ -32,14 +32,10 @@ async function verifyWebhookSignature(req: Request, supabase: any): Promise<bool
       return false;
     }
 
-    const { data: adminConfig } = await supabase
-      .from('admin_settings')
-      .select('value')
-      .eq('key', 'mercadopago_config')
-      .maybeSingle();
+    const webhookSecret = Deno.env.get('MERCADOPAGO_WEBHOOK_SECRET');
 
-    if (!adminConfig?.value?.webhook_secret) {
-      console.warn('Webhook secret not configured, skipping validation');
+    if (!webhookSecret) {
+      console.warn('MERCADOPAGO_WEBHOOK_SECRET not configured, skipping validation');
       return true;
     }
 
@@ -66,7 +62,7 @@ async function verifyWebhookSignature(req: Request, supabase: any): Promise<bool
     }
 
     const manifest = `id:${xRequestId};ts:${ts};`;
-    const secretKey = adminConfig.value.webhook_secret;
+    const secretKey = webhookSecret;
 
     const encoder = new TextEncoder();
     const keyData = encoder.encode(secretKey);
@@ -114,7 +110,7 @@ serve(async (req: Request) => {
 
     const notification: WebhookNotification = await req.json();
 
-    const isValid = await verifyWebhookSignature(req, supabase);
+    const isValid = await verifyWebhookSignature(req);
 
     if (!isValid) {
       console.error('Invalid webhook signature - rejecting request');

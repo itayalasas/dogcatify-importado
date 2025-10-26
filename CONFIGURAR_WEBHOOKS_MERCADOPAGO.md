@@ -196,14 +196,22 @@ Sin validación, cualquiera podría enviar notificaciones falsas a tu webhook y 
 4. Si las firmas coinciden → ✅ procesa la notificación
 5. Si NO coinciden → ❌ rechaza con error 401
 
-### Clave Secreta Configurada
+### Configurar la Clave Secreta
 
-✅ La clave secreta ya está guardada en la base de datos:
-```
-5225bbcf087d4531d1d9a4f585ff586aae3d8b295180daa3f31d81b1ce7e6fb5
-```
+⚠️ **IMPORTANTE:** Debes configurar el secret `MERCADOPAGO_WEBHOOK_SECRET` en Supabase.
 
-**IMPORTANTE:** Esta clave está en la configuración de `admin_settings` en Supabase y se usa automáticamente. NO necesitas configurarla manualmente.
+📝 **Sigue las instrucciones detalladas en:** `CONFIGURAR_SECRETS_MERCADOPAGO.md`
+
+**Resumen rápido:**
+
+1. Ve a: https://supabase.com/dashboard/project/zkgiwamycbjcogcgqhff/settings/functions
+2. Click en **"Secrets"** en el menú lateral
+3. Click en **"Add new secret"**
+4. **Nombre:** `MERCADOPAGO_WEBHOOK_SECRET`
+5. **Valor:** `5225bbcf087d4531d1d9a4f585ff586aae3d8b295180daa3f31d81b1ce7e6fb5` (para TEST)
+6. Click en **"Save"**
+
+**Para PRODUCCIÓN:** Simplemente actualiza el valor del secret con la clave secreta de producción. No necesitas cambiar código ni redesplegar.
 
 ## Resumen
 
