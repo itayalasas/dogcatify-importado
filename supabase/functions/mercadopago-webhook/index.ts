@@ -22,7 +22,7 @@ interface WebhookNotification {
   };
 }
 
-async function verifyWebhookSignature(req: Request): Promise<boolean> {
+async function verifyWebhookSignature(req: Request, notificationData: any): Promise<boolean> {
   try {
     const xSignature = req.headers.get('x-signature');
     const xRequestId = req.headers.get('x-request-id');
@@ -61,12 +61,22 @@ async function verifyWebhookSignature(req: Request): Promise<boolean> {
       return false;
     }
 
-    const manifest = `id:${xRequestId};ts:${ts};`;
+    const url = new URL(req.url);
+    const dataId = url.searchParams.get('data.id') || notificationData?.data?.id || '';
+
+    if (!dataId) {
+      console.error('Missing data.id for signature validation');
+      return false;
+    }
+
+    const signatureTemplate = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
     const secretKey = webhookSecret;
+
+    console.log('Validating signature with template:', signatureTemplate);
 
     const encoder = new TextEncoder();
     const keyData = encoder.encode(secretKey);
-    const messageData = encoder.encode(manifest);
+    const messageData = encoder.encode(signatureTemplate);
 
     const cryptoKey = await crypto.subtle.importKey(
       'raw',
@@ -86,6 +96,10 @@ async function verifyWebhookSignature(req: Request): Promise<boolean> {
       console.error('Signature verification failed');
       console.error('Expected:', hash);
       console.error('Computed:', computedHash);
+      console.error('Template used:', signatureTemplate);
+      console.error('Data ID used:', dataId);
+    } else {
+      console.log('✅ Signature verified successfully');
     }
 
     return isValid;
@@ -110,7 +124,7 @@ serve(async (req: Request) => {
 
     const notification: WebhookNotification = await req.json();
 
-    const isValid = await verifyWebhookSignature(req);
+    const isValid = await verifyWebhookSignature(req, notification);
 
     if (!isValid) {
       console.error('Invalid webhook signature - rejecting request');
@@ -366,7 +380,7 @@ async function updateProductStock(supabase: any, orderId: string) {
       const currentStock = product.stock || 0;
       const newStock = Math.max(0, currentStock - quantity);
 
-      console.log(`Product "${product.name}": ${currentStock} -> ${newStock}`);
+      console.log(`Product \"${product.name}\": ${currentStock} -> ${newStock}`);
 
       const { error: updateError } = await supabase
         .from('partner_products')
@@ -415,14 +429,14 @@ async function sendPaymentConfirmationEmail(supabase: any, orderId: string) {
       to: order.profiles.email,
       subject: 'Pago confirmado - DogCatiFy',
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background-color: #2D6A6F; padding: 20px; text-align: center;">
-            <h1 style="color: white; margin: 0;">¡Pago Confirmado!</h1>
+        <div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;\">
+          <div style=\"background-color: #2D6A6F; padding: 20px; text-align: center;\">
+            <h1 style=\"color: white; margin: 0;\">¡Pago Confirmado!</h1>
           </div>
-          <div style="padding: 20px; background-color: #f9f9f9;">
+          <div style=\"padding: 20px; background-color: #f9f9f9;\">
             <p>Hola <strong>${order.profiles.display_name}</strong>,</p>
             <p>Tu pago ha sido confirmado exitosamente.</p>
-            <div style="background-color: white; border-left: 4px solid #10B981; padding: 15px; margin: 20px 0;">
+            <div style=\"background-color: white; border-left: 4px solid #10B981; padding: 15px; margin: 20px 0;\">
               <p><strong>Número de pedido:</strong> #${orderId.slice(-6)}</p>
               <p><strong>Total pagado:</strong> $${order.total_amount.toLocaleString()}</p>
               <p><strong>Estado:</strong> Confirmado</p>
@@ -519,92 +533,92 @@ async function sendBookingConfirmationEmail(supabase: any, bookingId: string) {
         <!DOCTYPE html>
         <html>
         <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <meta charset=\"utf-8\">
+          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
         </head>
-        <body style="margin: 0; padding: 0; background-color: #f4f4f7; font-family: Arial, sans-serif;">
-          <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f4f4f7;">
+        <body style=\"margin: 0; padding: 0; background-color: #f4f4f7; font-family: Arial, sans-serif;\">
+          <table width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"background-color: #f4f4f7;\">
             <tr>
-              <td align="center" style="padding: 40px 20px;">
-                <table width="600" border="0" cellspacing="0" cellpadding="0" style="background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden;">
+              <td align=\"center\" style=\"padding: 40px 20px;\">
+                <table width=\"600\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden;\">
                   <tr>
-                    <td style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); padding: 40px 30px; text-align: center;">
-                      <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;">¡Reserva Confirmada!</h1>
-                      <p style="color: #D1FAE5; margin: 10px 0 0 0; font-size: 16px;">Tu pago ha sido procesado exitosamente</p>
+                    <td style=\"background: linear-gradient(135deg, #10B981 0%, #059669 100%); padding: 40px 30px; text-align: center;\">
+                      <h1 style=\"color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;\">¡Reserva Confirmada!</h1>
+                      <p style=\"color: #D1FAE5; margin: 10px 0 0 0; font-size: 16px;\">Tu pago ha sido procesado exitosamente</p>
                     </td>
                   </tr>
                   <tr>
-                    <td style="padding: 40px 30px;">
-                      <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                    <td style=\"padding: 40px 30px;\">
+                      <p style=\"color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;\">
                         Hola <strong>${booking.customer.display_name}</strong>,
                       </p>
-                      <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
+                      <p style=\"color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;\">
                         ¡Excelente noticia! Tu reserva ha sido confirmada y el pago procesado correctamente.
                       </p>
-                      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 30px 0; background-color: #F0FDF4; border-left: 4px solid #10B981; border-radius: 6px;">
+                      <table width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"margin: 30px 0; background-color: #F0FDF4; border-left: 4px solid #10B981; border-radius: 6px;\">
                         <tr>
-                          <td style="padding: 20px;">
-                            <p style="color: #065F46; font-size: 14px; font-weight: 600; margin: 0 0 15px 0;">📅 Detalles de tu Reserva</p>
-                            <table width="100%" border="0" cellspacing="0" cellpadding="8">
+                          <td style=\"padding: 20px;\">
+                            <p style=\"color: #065F46; font-size: 14px; font-weight: 600; margin: 0 0 15px 0;\">📅 Detalles de tu Reserva</p>
+                            <table width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"8\">
                               <tr>
-                                <td style="color: #374151; font-size: 14px; font-weight: 600; width: 140px;">Servicio:</td>
-                                <td style="color: #111827; font-size: 14px;">${booking.service_name}</td>
+                                <td style=\"color: #374151; font-size: 14px; font-weight: 600; width: 140px;\">Servicio:</td>
+                                <td style=\"color: #111827; font-size: 14px;\">${booking.service_name}</td>
                               </tr>
                               <tr>
-                                <td style="color: #374151; font-size: 14px; font-weight: 600;">Proveedor:</td>
-                                <td style="color: #111827; font-size: 14px;">${booking.partner_name}</td>
+                                <td style=\"color: #374151; font-size: 14px; font-weight: 600;\">Proveedor:</td>
+                                <td style=\"color: #111827; font-size: 14px;\">${booking.partner_name}</td>
                               </tr>
                               <tr>
-                                <td style="color: #374151; font-size: 14px; font-weight: 600;">Mascota:</td>
-                                <td style="color: #111827; font-size: 14px;">${booking.pet_name}</td>
+                                <td style=\"color: #374151; font-size: 14px; font-weight: 600;\">Mascota:</td>
+                                <td style=\"color: #111827; font-size: 14px;\">${booking.pet_name}</td>
                               </tr>
                               <tr>
-                                <td style="color: #374151; font-size: 14px; font-weight: 600;">Fecha:</td>
-                                <td style="color: #111827; font-size: 14px;">${formattedDate}</td>
+                                <td style=\"color: #374151; font-size: 14px; font-weight: 600;\">Fecha:</td>
+                                <td style=\"color: #111827; font-size: 14px;\">${formattedDate}</td>
                               </tr>
                               <tr>
-                                <td style="color: #374151; font-size: 14px; font-weight: 600;">Hora:</td>
-                                <td style="color: #111827; font-size: 14px;">${booking.time}</td>
+                                <td style=\"color: #374151; font-size: 14px; font-weight: 600;\">Hora:</td>
+                                <td style=\"color: #111827; font-size: 14px;\">${booking.time}</td>
                               </tr>
                               <tr>
-                                <td style="color: #374151; font-size: 14px; font-weight: 600;">Monto Pagado:</td>
-                                <td style="color: #10B981; font-size: 16px; font-weight: 700;">$${booking.total_amount.toLocaleString()}</td>
+                                <td style=\"color: #374151; font-size: 14px; font-weight: 600;\">Monto Pagado:</td>
+                                <td style=\"color: #10B981; font-size: 16px; font-weight: 700;\">$${booking.total_amount.toLocaleString()}</td>
                               </tr>
                             </table>
                           </td>
                         </tr>
                       </table>
                       ${booking.notes ? `
-                      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 20px 0;">
+                      <table width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"margin: 20px 0;\">
                         <tr>
-                          <td style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; border-radius: 6px;">
-                            <p style="color: #92400E; font-size: 14px; margin: 0;"><strong>Notas:</strong><br>${booking.notes}</p>
+                          <td style=\"background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; border-radius: 6px;\">
+                            <p style=\"color: #92400E; font-size: 14px; margin: 0;\"><strong>Notas:</strong><br>${booking.notes}</p>
                           </td>
                         </tr>
                       </table>
                       ` : ''}
-                      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 30px 0;">
+                      <table width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"margin: 30px 0;\">
                         <tr>
-                          <td style="background-color: #EFF6FF; border-left: 4px solid #3B82F6; padding: 20px; border-radius: 6px;">
-                            <p style="color: #1e40af; font-size: 14px; font-weight: 600; margin: 0 0 12px 0;">📋 Próximos Pasos:</p>
-                            <ul style="color: #374151; font-size: 14px; line-height: 1.6; margin: 0; padding-left: 20px;">
-                              <li style="margin-bottom: 8px;">El proveedor ha sido notificado de tu reserva</li>
-                              <li style="margin-bottom: 8px;">Recibirás recordatorios antes de tu cita</li>
+                          <td style=\"background-color: #EFF6FF; border-left: 4px solid #3B82F6; padding: 20px; border-radius: 6px;\">
+                            <p style=\"color: #1e40af; font-size: 14px; font-weight: 600; margin: 0 0 12px 0;\">📋 Próximos Pasos:</p>
+                            <ul style=\"color: #374151; font-size: 14px; line-height: 1.6; margin: 0; padding-left: 20px;\">
+                              <li style=\"margin-bottom: 8px;\">El proveedor ha sido notificado de tu reserva</li>
+                              <li style=\"margin-bottom: 8px;\">Recibirás recordatorios antes de tu cita</li>
                               <li>Si necesitas cancelar o reprogramar, contáctanos lo antes posible</li>
                             </ul>
                           </td>
                         </tr>
                       </table>
-                      <p style="color: #6B7280; font-size: 14px; line-height: 1.6; margin: 30px 0 0 0;">
+                      <p style=\"color: #6B7280; font-size: 14px; line-height: 1.6; margin: 30px 0 0 0;\">
                         ¡Gracias por confiar en DogCatiFy!<br>
-                        <strong style="color: #374151;">El equipo de DogCatiFy</strong>
+                        <strong style=\"color: #374151;\">El equipo de DogCatiFy</strong>
                       </p>
                     </td>
                   </tr>
                   <tr>
-                    <td style="background-color: #F9FAFB; padding: 30px; text-align: center; border-top: 1px solid #E5E7EB;">
-                      <p style="color: #6B7280; font-size: 12px; line-height: 1.6; margin: 0 0 8px 0;">© 2025 DogCatiFy. Todos los derechos reservados.</p>
-                      <p style="color: #9CA3AF; font-size: 11px; line-height: 1.5; margin: 0;">Este es un correo automático, por favor no respondas a este mensaje.</p>
+                    <td style=\"background-color: #F9FAFB; padding: 30px; text-align: center; border-top: 1px solid #E5E7EB;\">
+                      <p style=\"color: #6B7280; font-size: 12px; line-height: 1.6; margin: 0 0 8px 0;\">© 2025 DogCatiFy. Todos los derechos reservados.</p>
+                      <p style=\"color: #9CA3AF; font-size: 11px; line-height: 1.5; margin: 0;\">Este es un correo automático, por favor no respondas a este mensaje.</p>
                     </td>
                   </tr>
                 </table>
