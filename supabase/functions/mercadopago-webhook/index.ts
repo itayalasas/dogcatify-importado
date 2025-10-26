@@ -79,7 +79,7 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
     const { data: orderByPayment, error: orderSearchError } = await supabase
       .from('orders')
       .select('*')
-      .or(`payment_id.eq.${paymentId},preference_id.eq.${paymentId}`)
+      .or(`payment_id.eq.${paymentId},payment_preference_id.eq.${paymentId}`)
       .maybeSingle();
 
     let orderId = orderByPayment?.id;
@@ -100,7 +100,13 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
         return;
       }
 
-      const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+      const mpApiUrl = adminConfig.value.is_test_mode
+        ? `https://api.mercadopago.com/v1/payments/${paymentId}`
+        : `https://api.mercadopago.com/v1/payments/${paymentId}`;
+
+      console.log(`Calling MP API: ${mpApiUrl}`);
+
+      const mpResponse = await fetch(mpApiUrl, {
         headers: {
           'Authorization': `Bearer ${adminConfig.value.access_token}`,
         },
@@ -114,7 +120,7 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
       }
 
       paymentData = await mpResponse.json();
-      console.log('Payment data from MP:', paymentData);
+      console.log('Payment data from MP:', JSON.stringify(paymentData, null, 2));
 
       orderId = paymentData.external_reference;
       if (!orderId) {
@@ -188,7 +194,6 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
       await updateProductStock(supabase, orderId);
       await sendPaymentConfirmationEmail(supabase, orderId);
 
-      // If this is a service booking, update the booking status and send confirmation
       if (orderData.order_type === 'service_booking' && orderData.booking_id) {
         console.log(`Updating booking ${orderData.booking_id} status to confirmed`);
         await updateBookingStatus(supabase, orderData.booking_id, 'confirmed', paymentId);
@@ -410,7 +415,6 @@ async function sendBookingConfirmationEmail(supabase: any, bookingId: string) {
       return;
     }
 
-    // Format date and time for display
     const bookingDate = new Date(booking.date);
     const formattedDate = bookingDate.toLocaleDateString('es-ES', {
       weekday: 'long',
@@ -434,33 +438,24 @@ async function sendBookingConfirmationEmail(supabase: any, bookingId: string) {
             <tr>
               <td align="center" style="padding: 40px 20px;">
                 <table width="600" border="0" cellspacing="0" cellpadding="0" style="background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden;">
-
-                  <!-- Header -->
                   <tr>
                     <td style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); padding: 40px 30px; text-align: center;">
                       <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;">¡Reserva Confirmada!</h1>
                       <p style="color: #D1FAE5; margin: 10px 0 0 0; font-size: 16px;">Tu pago ha sido procesado exitosamente</p>
                     </td>
                   </tr>
-
-                  <!-- Content -->
                   <tr>
                     <td style="padding: 40px 30px;">
                       <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
                         Hola <strong>${booking.customer.display_name}</strong>,
                       </p>
-
                       <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
                         ¡Excelente noticia! Tu reserva ha sido confirmada y el pago procesado correctamente.
                       </p>
-
-                      <!-- Booking Details -->
                       <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 30px 0; background-color: #F0FDF4; border-left: 4px solid #10B981; border-radius: 6px;">
                         <tr>
                           <td style="padding: 20px;">
-                            <p style="color: #065F46; font-size: 14px; font-weight: 600; margin: 0 0 15px 0;">
-                              📅 Detalles de tu Reserva
-                            </p>
+                            <p style="color: #065F46; font-size: 14px; font-weight: 600; margin: 0 0 15px 0;">📅 Detalles de tu Reserva</p>
                             <table width="100%" border="0" cellspacing="0" cellpadding="8">
                               <tr>
                                 <td style="color: #374151; font-size: 14px; font-weight: 600; width: 140px;">Servicio:</td>
@@ -490,26 +485,19 @@ async function sendBookingConfirmationEmail(supabase: any, bookingId: string) {
                           </td>
                         </tr>
                       </table>
-
                       ${booking.notes ? `
                       <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 20px 0;">
                         <tr>
                           <td style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; border-radius: 6px;">
-                            <p style="color: #92400E; font-size: 14px; margin: 0;">
-                              <strong>Notas:</strong><br>${booking.notes}
-                            </p>
+                            <p style="color: #92400E; font-size: 14px; margin: 0;"><strong>Notas:</strong><br>${booking.notes}</p>
                           </td>
                         </tr>
                       </table>
                       ` : ''}
-
-                      <!-- Next Steps -->
                       <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 30px 0;">
                         <tr>
                           <td style="background-color: #EFF6FF; border-left: 4px solid #3B82F6; padding: 20px; border-radius: 6px;">
-                            <p style="color: #1e40af; font-size: 14px; font-weight: 600; margin: 0 0 12px 0;">
-                              📋 Próximos Pasos:
-                            </p>
+                            <p style="color: #1e40af; font-size: 14px; font-weight: 600; margin: 0 0 12px 0;">📋 Próximos Pasos:</p>
                             <ul style="color: #374151; font-size: 14px; line-height: 1.6; margin: 0; padding-left: 20px;">
                               <li style="margin-bottom: 8px;">El proveedor ha sido notificado de tu reserva</li>
                               <li style="margin-bottom: 8px;">Recibirás recordatorios antes de tu cita</li>
@@ -518,26 +506,18 @@ async function sendBookingConfirmationEmail(supabase: any, bookingId: string) {
                           </td>
                         </tr>
                       </table>
-
                       <p style="color: #6B7280; font-size: 14px; line-height: 1.6; margin: 30px 0 0 0;">
                         ¡Gracias por confiar en DogCatiFy!<br>
                         <strong style="color: #374151;">El equipo de DogCatiFy</strong>
                       </p>
                     </td>
                   </tr>
-
-                  <!-- Footer -->
                   <tr>
                     <td style="background-color: #F9FAFB; padding: 30px; text-align: center; border-top: 1px solid #E5E7EB;">
-                      <p style="color: #6B7280; font-size: 12px; line-height: 1.6; margin: 0 0 8px 0;">
-                        © 2025 DogCatiFy. Todos los derechos reservados.
-                      </p>
-                      <p style="color: #9CA3AF; font-size: 11px; line-height: 1.5; margin: 0;">
-                        Este es un correo automático, por favor no respondas a este mensaje.
-                      </p>
+                      <p style="color: #6B7280; font-size: 12px; line-height: 1.6; margin: 0 0 8px 0;">© 2025 DogCatiFy. Todos los derechos reservados.</p>
+                      <p style="color: #9CA3AF; font-size: 11px; line-height: 1.5; margin: 0;">Este es un correo automático, por favor no respondas a este mensaje.</p>
                     </td>
                   </tr>
-
                 </table>
               </td>
             </tr>
