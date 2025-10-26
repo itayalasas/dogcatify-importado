@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Alert, ScrollView, TouchableOpacity, SafeAreaView, Switch } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowLeft, CreditCard, CircleCheck as CheckCircle, CircleAlert as AlertCircle, ExternalLink } from 'lucide-react-native';
+import { ArrowLeft, CreditCard, CircleCheck as CheckCircle, CircleAlert as AlertCircle, ExternalLink, Eye, EyeOff } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { Card } from '../../components/ui/Card';
@@ -17,12 +17,20 @@ export default function MercadoPagoConfig() {
   const [manualPublicKey, setManualPublicKey] = useState('');
   const [isTestMode, setIsTestMode] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
+  const [showCredentials, setShowCredentials] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
       loadPartnerData();
     }
   }, [currentUser]);
+
+  const maskCredential = (credential: string): string => {
+    if (!credential) return '';
+    const firstPart = credential.substring(0, 12);
+    const lastPart = credential.substring(credential.length - 6);
+    return `${firstPart}...${lastPart}`;
+  };
 
   const loadPartnerData = async () => {
     try {
@@ -55,7 +63,7 @@ export default function MercadoPagoConfig() {
       const partnerData = partnersData[0];
       console.log('Partner data loaded:', partnerData);
       setPartner(partnerData);
-      
+
       // Extract Mercado Pago configuration
       if (partnerData.mercadopago_config) {
         console.log('MP config found:', partnerData.mercadopago_config);
@@ -158,7 +166,7 @@ export default function MercadoPagoConfig() {
       console.log('MP config saved successfully');
 
       setMpConfig(config);
-      setPartner(prev => ({
+      setPartner((prev: any) => ({
         ...prev,
         mercadopago_connected: true,
         mercadopago_config: config
@@ -202,7 +210,7 @@ export default function MercadoPagoConfig() {
               if (error) throw error;
 
               setMpConfig(null);
-              setPartner(prev => ({
+              setPartner((prev: any) => ({
                 ...prev,
                 mercadopago_connected: false,
                 mercadopago_config: null
@@ -306,18 +314,46 @@ export default function MercadoPagoConfig() {
               </View>
 
               <View style={styles.configRow}>
-                <Text style={styles.configLabel}>Public Key:</Text>
-                <Text style={[styles.configValue, styles.credentialText]} numberOfLines={1}>
-                  {mpConfig.public_key}
-                </Text>
-              </View>
-
-              <View style={styles.configRow}>
                 <Text style={styles.configLabel}>Conectado:</Text>
                 <Text style={styles.configValue}>
                   {new Date(mpConfig.connected_at).toLocaleDateString()}
                 </Text>
               </View>
+            </View>
+
+            <View style={styles.credentialsSection}>
+              <View style={styles.credentialsSectionHeader}>
+                <Text style={styles.credentialsSectionTitle}>Credenciales</Text>
+                <TouchableOpacity
+                  onPress={() => setShowCredentials(!showCredentials)}
+                  style={styles.toggleButton}
+                >
+                  {showCredentials ? (
+                    <EyeOff size={20} color="#6B7280" />
+                  ) : (
+                    <Eye size={20} color="#6B7280" />
+                  )}
+                  <Text style={styles.toggleButtonText}>
+                    {showCredentials ? 'Ocultar' : 'Mostrar'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.credentialItem}>
+                <Text style={styles.credentialLabel}>Public Key:</Text>
+                <Text style={styles.credentialValue} selectable={showCredentials}>
+                  {showCredentials ? mpConfig.public_key : maskCredential(mpConfig.public_key)}
+                </Text>
+              </View>
+
+              {mpConfig.access_token && (
+                <View style={styles.credentialItem}>
+                  <Text style={styles.credentialLabel}>Access Token:</Text>
+                  <Text style={styles.credentialValue} selectable={showCredentials}>
+                    {showCredentials ? mpConfig.access_token : maskCredential(mpConfig.access_token)}
+                  </Text>
+                </View>
+              )}
             </View>
 
             <View style={styles.infoBox}>
@@ -662,6 +698,60 @@ const styles = StyleSheet.create({
   credentialText: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
+  },
+  credentialsSection: {
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  credentialsSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  credentialsSectionTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  toggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  toggleButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    marginLeft: 6,
+  },
+  credentialItem: {
+    marginBottom: 12,
+  },
+  credentialLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  credentialValue: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   helpCard: {
     marginBottom: 16,
