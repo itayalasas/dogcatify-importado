@@ -13,7 +13,6 @@ export default function MercadoPagoConfig() {
   const [loading, setLoading] = useState(true);
   const [partner, setPartner] = useState<any>(null);
   const [mpConfig, setMpConfig] = useState<any>(null);
-  const [showManualConfig, setShowManualConfig] = useState(false);
   const [manualAccessToken, setManualAccessToken] = useState('');
   const [manualPublicKey, setManualPublicKey] = useState('');
   const [isTestMode, setIsTestMode] = useState(false);
@@ -120,10 +119,10 @@ export default function MercadoPagoConfig() {
     setSaveLoading(true);
     try {
       const validation = await validateCredentials(
-        manualAccessToken.trim(), 
+        manualAccessToken.trim(),
         manualPublicKey.trim()
       );
-      
+
       if (!validation.isValid) {
         Alert.alert(
           'Credenciales inválidas',
@@ -134,14 +133,13 @@ export default function MercadoPagoConfig() {
       }
 
       const config = {
-        access_token: manualAccessToken.trim(),
         public_key: manualPublicKey.trim(),
-        is_test_mode: isTestMode,
-        account_id: validation.accountId || '',
-        email: validation.email || '',
+        access_token: manualAccessToken.trim(),
         connected_at: new Date().toISOString(),
-        is_oauth: false // Manual configuration
+        is_test_mode: isTestMode
       };
+
+      console.log('Saving MP config:', config);
 
       const { error } = await supabaseClient
         .from('partners')
@@ -152,7 +150,12 @@ export default function MercadoPagoConfig() {
         })
         .eq('id', partner.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating partner:', error);
+        throw error;
+      }
+
+      console.log('MP config saved successfully');
 
       setMpConfig(config);
       setPartner(prev => ({
@@ -161,10 +164,12 @@ export default function MercadoPagoConfig() {
         mercadopago_config: config
       }));
 
+      setManualAccessToken('');
+      setManualPublicKey('');
+
       Alert.alert(
         '¡Éxito!',
-        'Tu cuenta de Mercado Pago ha sido configurada correctamente. Ya puedes recibir pagos.',
-        [{ text: 'Continuar', onPress: () => setShowManualConfig(false) }]
+        'Tu cuenta de Mercado Pago ha sido configurada correctamente. Ya puedes recibir pagos.'
       );
     } catch (error) {
       console.error('Error saving MP config:', error);
@@ -286,34 +291,27 @@ export default function MercadoPagoConfig() {
               <CheckCircle size={32} color="#00A650" />
               <Text style={styles.connectedTitle}>✅ Cuenta Conectada</Text>
             </View>
-            
+
             <View style={styles.configDetails}>
               <View style={styles.configRow}>
                 <Text style={styles.configLabel}>Estado:</Text>
                 <Text style={styles.configValue}>Conectado</Text>
               </View>
-              
+
               <View style={styles.configRow}>
                 <Text style={styles.configLabel}>Modo:</Text>
                 <Text style={styles.configValue}>
                   {mpConfig.is_test_mode ? '🧪 Prueba' : '🚀 Producción'}
                 </Text>
               </View>
-              
-              {mpConfig.account_id && (
-                <View style={styles.configRow}>
-                  <Text style={styles.configLabel}>ID de cuenta:</Text>
-                  <Text style={styles.configValue}>{mpConfig.account_id}</Text>
-                </View>
-              )}
-              
-              {mpConfig.email && (
-                <View style={styles.configRow}>
-                  <Text style={styles.configLabel}>Email:</Text>
-                  <Text style={styles.configValue}>{mpConfig.email}</Text>
-                </View>
-              )}
-              
+
+              <View style={styles.configRow}>
+                <Text style={styles.configLabel}>Public Key:</Text>
+                <Text style={[styles.configValue, styles.credentialText]} numberOfLines={1}>
+                  {mpConfig.public_key}
+                </Text>
+              </View>
+
               <View style={styles.configRow}>
                 <Text style={styles.configLabel}>Conectado:</Text>
                 <Text style={styles.configValue}>
@@ -321,7 +319,7 @@ export default function MercadoPagoConfig() {
                 </Text>
               </View>
             </View>
-            
+
             <View style={styles.infoBox}>
               <Text style={styles.infoTitle}>¿Cómo funciona?</Text>
               <Text style={styles.infoText}>
@@ -331,7 +329,7 @@ export default function MercadoPagoConfig() {
                 • Los fondos llegan automáticamente a tu cuenta MP
               </Text>
             </View>
-            
+
             <Button
               title="Desconectar Cuenta"
               onPress={handleDisconnect}
@@ -340,95 +338,88 @@ export default function MercadoPagoConfig() {
             />
           </Card>
         ) : (
-          <Card style={styles.statusCard}>
-            <View style={styles.disconnectedHeader}>
-              <AlertCircle size={32} color="#F59E0B" />
-              <Text style={styles.disconnectedTitle}>⚠️ Sin Configurar</Text>
-            </View>
-            
-            <Text style={styles.disconnectedText}>
-              Para recibir pagos, necesitas conectar tu cuenta de Mercado Pago.
-            </Text>
-            
-            <View style={styles.benefitsList}>
-              <Text style={styles.benefitItem}>• Recibe pagos directamente en tu cuenta</Text>
-              <Text style={styles.benefitItem}>• Comisión automática del 5%</Text>
-              <Text style={styles.benefitItem}>• Proceso seguro y confiable</Text>
-              <Text style={styles.benefitItem}>• Compatible con tarjetas, transferencias y más</Text>
-            </View>
-            
-            <Button
-              title="Configurar Manualmente"
-              onPress={() => setShowManualConfig(true)}
-              size="large"
-            />
-          </Card>
-        )}
+          <>
+            <Card style={styles.statusCard}>
+              <View style={styles.disconnectedHeader}>
+                <AlertCircle size={32} color="#F59E0B" />
+                <Text style={styles.disconnectedTitle}>⚠️ Sin Configurar</Text>
+              </View>
 
-        {/* Manual Configuration Modal */}
-        {showManualConfig && (
-          <Card style={styles.manualConfigCard}>
-            <Text style={styles.manualConfigTitle}>Configuración Manual</Text>
-            
-            <View style={styles.helpSection}>
-              <Text style={styles.helpTitle}>💡 ¿Cómo obtener las credenciales?</Text>
-              <Text style={styles.helpStep}>1. Ve a developers.mercadopago.com</Text>
-              <Text style={styles.helpStep}>2. Inicia sesión con tu cuenta de MP</Text>
-              <Text style={styles.helpStep}>3. Ve a "Tus integraciones" → "Credenciales"</Text>
-              <Text style={styles.helpStep}>4. Copia el Access Token y Public Key</Text>
-            </View>
+              <Text style={styles.disconnectedText}>
+                Para recibir pagos, necesitas conectar tu cuenta de Mercado Pago.
+              </Text>
 
-            <Input
-              label="Access Token *"
-              placeholder="APP_USR-xxxxxxxx o TEST-xxxxxxxx"
-              value={manualAccessToken}
-              onChangeText={setManualAccessToken}
-            />
+              <View style={styles.benefitsList}>
+                <Text style={styles.benefitItem}>• Recibe pagos directamente en tu cuenta</Text>
+                <Text style={styles.benefitItem}>• Comisión automática del 5%</Text>
+                <Text style={styles.benefitItem}>• Proceso seguro y confiable</Text>
+                <Text style={styles.benefitItem}>• Compatible con tarjetas, transferencias y más</Text>
+              </View>
+            </Card>
 
-            <Input
-              label="Public Key *"
-              placeholder="APP_USR-xxxxxxxx o TEST-xxxxxxxx"
-              value={manualPublicKey}
-              onChangeText={setManualPublicKey}
-            />
+            <Card style={styles.manualConfigCard}>
+              <Text style={styles.manualConfigTitle}>Configuración Manual</Text>
 
-            <View style={styles.testModeSection}>
-              <View style={styles.testModeHeader}>
-                <Text style={styles.testModeTitle}>Modo de prueba</Text>
-                <Switch
-                  value={isTestMode}
-                  onValueChange={setIsTestMode}
-                  trackColor={{ false: '#E5E7EB', true: '#3B82F6' }}
-                  thumbColor={isTestMode ? '#FFFFFF' : '#FFFFFF'}
+              <View style={styles.helpSection}>
+                <Text style={styles.helpTitle}>💡 ¿Cómo obtener las credenciales?</Text>
+                <Text style={styles.helpStep}>1. Ve a developers.mercadopago.com</Text>
+                <Text style={styles.helpStep}>2. Inicia sesión con tu cuenta de MP</Text>
+                <Text style={styles.helpStep}>3. Ve a "Tus integraciones" → "Credenciales"</Text>
+                <Text style={styles.helpStep}>4. Copia el Access Token y Public Key</Text>
+              </View>
+
+              <Input
+                label="Access Token *"
+                placeholder="APP_USR-xxxxxxxx o TEST-xxxxxxxx"
+                value={manualAccessToken}
+                onChangeText={setManualAccessToken}
+              />
+
+              <Input
+                label="Public Key *"
+                placeholder="APP_USR-xxxxxxxx o TEST-xxxxxxxx"
+                value={manualPublicKey}
+                onChangeText={setManualPublicKey}
+              />
+
+              <View style={styles.testModeSection}>
+                <View style={styles.testModeHeader}>
+                  <Text style={styles.testModeTitle}>Modo de prueba</Text>
+                  <Switch
+                    value={isTestMode}
+                    onValueChange={setIsTestMode}
+                    trackColor={{ false: '#E5E7EB', true: '#3B82F6' }}
+                    thumbColor={isTestMode ? '#FFFFFF' : '#FFFFFF'}
+                  />
+                </View>
+                <Text style={styles.testModeDescription}>
+                  {isTestMode
+                    ? '🧪 Modo prueba activo - Usa credenciales TEST-'
+                    : '🚀 Modo producción - Usa credenciales APP_USR- reales'
+                  }
+                </Text>
+              </View>
+
+              <View style={styles.manualConfigActions}>
+                <Button
+                  title="Cancelar"
+                  onPress={() => {
+                    setManualAccessToken('');
+                    setManualPublicKey('');
+                    setIsTestMode(false);
+                  }}
+                  variant="outline"
+                  style={styles.actionButton}
+                />
+                <Button
+                  title="Guardar"
+                  onPress={handleSaveManualConfig}
+                  loading={saveLoading}
+                  style={styles.actionButton}
                 />
               </View>
-              <Text style={styles.testModeDescription}>
-                {isTestMode 
-                  ? '🧪 Modo prueba activo - Usa credenciales TEST-' 
-                  : '🚀 Modo producción - Usa credenciales APP_USR- reales'
-                }
-              </Text>
-            </View>
-
-            <View style={styles.manualConfigActions}>
-              <Button
-                title="Cancelar"
-                onPress={() => {
-                  setShowManualConfig(false);
-                  setManualAccessToken('');
-                  setManualPublicKey('');
-                }}
-                variant="outline"
-                size="medium"
-              />
-              <Button
-                title="Guardar"
-                onPress={handleSaveManualConfig}
-                loading={saveLoading}
-                size="medium"
-              />
-            </View>
-          </Card>
+            </Card>
+          </>
         )}
 
         {/* Help Section */}
@@ -663,6 +654,14 @@ const styles = StyleSheet.create({
   manualConfigActions: {
     flexDirection: 'row',
     gap: 12,
+    marginTop: 8,
+  },
+  actionButton: {
+    flex: 1,
+  },
+  credentialText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
   },
   helpCard: {
     marginBottom: 16,
