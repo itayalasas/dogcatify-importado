@@ -58,6 +58,7 @@ export default function ServiceBooking() {
   // Payment flow
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentMessage, setPaymentMessage] = useState('Preparando tu pago seguro con Mercado Pago');
   const [paymentStep, setPaymentStep] = useState<'methods' | 'card' | 'processing'>('methods');
   
   // Card form data
@@ -506,6 +507,9 @@ export default function ServiceBooking() {
 
         // Open Mercado Pago directly without showing alert
         try {
+          // Update message while opening
+          setPaymentMessage('Abriendo Mercado Pago...');
+
           // Use intelligent Mercado Pago opening (app first, then browser)
           const openResult = await openMercadoPagoPayment(result.paymentUrl!, isTestMode);
 
@@ -515,9 +519,17 @@ export default function ServiceBooking() {
               openResult.error || 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.'
             );
           } else {
-            console.log(openResult.openedInApp
-              ? '✅ Opened in Mercado Pago app'
-              : '🌐 Opened in browser');
+            if (openResult.openedInApp) {
+              console.log('✅ Opened in Mercado Pago app');
+              setPaymentMessage('Abriendo app de Mercado Pago...');
+            } else {
+              console.log('🌐 Opened in browser');
+              setPaymentMessage('Abriendo en navegador...');
+            }
+
+            // Give time for the message to show
+            await new Promise(resolve => setTimeout(resolve, 800));
+
             // Close modal AFTER successfully opening MP
             setShowPaymentModal(false);
             // DO NOT redirect here - let the user complete payment
@@ -549,6 +561,7 @@ export default function ServiceBooking() {
       );
     } finally {
       setPaymentLoading(false);
+      setPaymentMessage('Preparando tu pago seguro con Mercado Pago');
     }
   };
 
@@ -1055,7 +1068,7 @@ export default function ServiceBooking() {
               <ActivityIndicator size="large" color="#00A650" />
               <Text style={styles.paymentLoadingTitle}>Procesando pago...</Text>
               <Text style={styles.paymentLoadingSubtitle}>
-                Preparando tu pago seguro con Mercado Pago
+                {paymentMessage}
               </Text>
             </View>
           </View>
