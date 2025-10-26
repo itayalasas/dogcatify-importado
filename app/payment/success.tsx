@@ -4,29 +4,93 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { CircleCheck as CheckCircle, Package, Calendar } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { supabaseClient } from '@/lib/supabase';
 
 export default function PaymentSuccess() {
-  const { order_id, type } = useLocalSearchParams<{
+  const { order_id, type, payment_id } = useLocalSearchParams<{
     order_id: string;
     type?: string;
+    payment_id?: string;
   }>();
 
   const [orderDetails, setOrderDetails] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Simulate loading order details
-    setTimeout(() => {
+    loadOrderDetails();
+  }, [order_id, type]);
+
+  const loadOrderDetails = async () => {
+    if (!order_id) {
+      console.error('No order_id provided');
+      setError('No se encontró el ID de la orden');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      console.log('Loading order details:', { order_id, type, payment_id });
+
+      // Load order from database
+      const { data: order, error: orderError } = await supabaseClient
+        .from('orders')
+        .select('*')
+        .eq('id', order_id)
+        .single();
+
+      if (orderError) {
+        console.error('Error loading order:', orderError);
+        throw new Error('No se pudo cargar la orden');
+      }
+
+      if (!order) {
+        throw new Error('Orden no encontrada');
+      }
+
+      console.log('Order loaded:', {
+        id: order.id,
+        status: order.status,
+        total: order.total_amount,
+        payment_id: order.payment_id
+      });
+
+      // Format order details for display
+      const formattedOrder = {
+        id: order.id,
+        displayId: `#${order.id.slice(-6)}`,
+        total: new Intl.NumberFormat('es-UY', {
+          style: 'currency',
+          currency: 'UYU',
+        }).format(order.total_amount),
+        status: order.status === 'confirmed' ? 'Confirmado' :
+                order.status === 'pending' ? 'Pendiente' :
+                order.status,
+        paymentId: order.payment_id ? `#mp${order.payment_id.slice(-6)}` : 'Pendiente',
+        isBooking: order.order_type === 'service_booking',
+        partnerName: order.partner_name,
+        serviceName: order.service_name,
+        items: order.items || []
+      };
+
+      setOrderDetails(formattedOrder);
+      setLoading(false);
+    } catch (err: any) {
+      console.error('Error loading order details:', err);
+      setError(err.message || 'Error al cargar la orden');
+
+      // Fallback: use provided parameters
       setOrderDetails({
-        id: order_id || '#abc123',
+        id: order_id,
+        displayId: `#${order_id.slice(-6)}`,
         total: '$430.00',
         status: 'Confirmado',
-        paymentId: '#mp789456',
+        paymentId: payment_id ? `#mp${payment_id}` : 'Procesando...',
         isBooking: type === 'booking'
       });
       setLoading(false);
-    }, 1000);
-  }, [order_id, type]);
+    }
+  };
 
   const handleViewOrders = () => {
     if (orderDetails?.isBooking) {
@@ -75,7 +139,7 @@ export default function PaymentSuccess() {
             <Text style={styles.detailLabel}>
               {orderDetails?.isBooking ? 'Número de reserva:' : 'Número de pedido:'}
             </Text>
-            <Text style={styles.detailValue}>{orderDetails?.id}</Text>
+            <Text style={styles.detailValue}>{orderDetails?.displayId || orderDetails?.id}</Text>
           </View>
           
           <View style={styles.detailRow}>

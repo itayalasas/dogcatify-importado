@@ -8,7 +8,7 @@ import { Input } from '../../../components/ui/Input';
 import { LoadingScreen } from '../../../components/ui/LoadingScreen';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
-import { createServiceBookingOrder } from '../../../utils/mercadoPago';
+import { createServiceBookingOrder, openMercadoPagoPayment, isTestEnvironment } from '../../../utils/mercadoPago';
 
 interface CardType {
   name: string;
@@ -503,6 +503,9 @@ export default function ServiceBooking() {
 
         setShowPaymentModal(false);
 
+        // Detect environment from payment URL
+        const isTestMode = result.paymentUrl!.includes('sandbox');
+
         Alert.alert(
           'Redirigiendo a Mercado Pago',
           'Se abrirá la página de pago de Mercado Pago. Una vez completado el pago, recibirás una confirmación por email.',
@@ -511,9 +514,21 @@ export default function ServiceBooking() {
               text: 'Continuar',
               onPress: async () => {
                 try {
-                  await Linking.openURL(result.paymentUrl!);
-                  // Redirigir al usuario a la pantalla de servicios después de abrir MP
-                  router.replace('/(tabs)/services');
+                  // Use intelligent Mercado Pago opening (app first, then browser)
+                  const openResult = await openMercadoPagoPayment(result.paymentUrl!, isTestMode);
+
+                  if (!openResult.success) {
+                    Alert.alert(
+                      'Error',
+                      openResult.error || 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.'
+                    );
+                  } else {
+                    console.log(openResult.openedInApp
+                      ? '✅ Opened in Mercado Pago app'
+                      : '🌐 Opened in browser');
+                    // Redirigir al usuario a la pantalla de servicios después de abrir MP
+                    router.replace('/(tabs)/services');
+                  }
                 } catch (linkError) {
                   console.error('Error abriendo URL de Mercado Pago:', linkError);
                   Alert.alert('Error', 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.');
