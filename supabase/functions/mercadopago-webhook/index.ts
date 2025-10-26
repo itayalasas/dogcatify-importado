@@ -62,10 +62,22 @@ async function verifyWebhookSignature(req: Request, notificationData: any): Prom
     }
 
     const url = new URL(req.url);
-    const dataId = url.searchParams.get('data.id') || notificationData?.data?.id || '';
+    // Try multiple ways to get data.id
+    const dataId = url.searchParams.get('data.id') ||
+                   url.searchParams.get('id') ||
+                   notificationData?.data?.id ||
+                   '';
 
     if (!dataId) {
       console.error('Missing data.id for signature validation');
+      console.error('URL search params:', Object.fromEntries(url.searchParams.entries()));
+      console.error('Notification data:', notificationData);
+      // In development, allow without signature if webhook secret is not configured
+      const webhookSecret = Deno.env.get('MERCADOPAGO_WEBHOOK_SECRET');
+      if (!webhookSecret) {
+        console.warn('⚠️ No webhook secret configured - allowing request in dev mode');
+        return true;
+      }
       return false;
     }
 
@@ -122,7 +134,16 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Parse body first
     const notification: WebhookNotification = await req.json();
+
+    // Log incoming notification
+    console.log('Received MP webhook notification:', {
+      type: notification.type,
+      action: notification.action,
+      data_id: notification.data?.id,
+      live_mode: notification.live_mode
+    });
 
     const isValid = await verifyWebhookSignature(req, notification);
 

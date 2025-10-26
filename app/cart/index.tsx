@@ -8,7 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
-import { createMultiPartnerOrder } from '../../utils/mercadoPago';
+import { createMultiPartnerOrder, openMercadoPagoPayment } from '../../utils/mercadoPago';
 import { supabaseClient } from '../../lib/supabase';
 
 export default function Cart() {
@@ -231,15 +231,14 @@ export default function Cart() {
 
         if (initPoint) {
           console.log('Redirecting to Mercado Pago:', initPoint);
-          
-          // Use Linking to open URL in React Native
-          try {
-            await Linking.openURL(initPoint);
-          } catch (linkingError) {
-            console.error('Error opening URL:', linkingError);
+
+          // Use intelligent Mercado Pago opening (app first, then browser)
+          const openResult = await openMercadoPagoPayment(initPoint, isTestMode);
+
+          if (!openResult.success) {
             Alert.alert(
               'Error',
-              'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.',
+              openResult.error || 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.',
               [
                 {
                   text: 'Copiar enlace',
@@ -250,6 +249,10 @@ export default function Cart() {
                 { text: 'OK' }
               ]
             );
+          } else {
+            console.log(openResult.openedInApp
+              ? '✅ Opened in Mercado Pago app'
+              : '🌐 Opened in browser');
           }
         } else {
           throw new Error('No se pudo obtener el enlace de pago');
