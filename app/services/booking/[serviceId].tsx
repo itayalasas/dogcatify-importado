@@ -508,9 +508,9 @@ export default function ServiceBooking() {
         // Open Mercado Pago directly without showing alert
         try {
           // Update message while opening
-          setPaymentMessage('Abriendo Mercado Pago...');
+          setPaymentMessage('Redirigiendo a Mercado Pago...');
 
-          // Use intelligent Mercado Pago opening (app first, then browser)
+          // Open Mercado Pago in browser
           const openResult = await openMercadoPagoPayment(result.paymentUrl!, isTestMode);
 
           if (!openResult.success) {
@@ -519,16 +519,9 @@ export default function ServiceBooking() {
               openResult.error || 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.'
             );
           } else {
-            if (openResult.openedInApp) {
-              console.log('✅ Opened in Mercado Pago app');
-              setPaymentMessage('Abriendo app de Mercado Pago...');
-            } else {
-              console.log('🌐 Opened in browser');
-              setPaymentMessage('Abriendo en navegador...');
-            }
-
-            // Give time for the message to show
-            await new Promise(resolve => setTimeout(resolve, 800));
+            console.log('✅ Opened Mercado Pago successfully');
+            // Give time for the browser to open
+            await new Promise(resolve => setTimeout(resolve, 500));
 
             // Close modal AFTER successfully opening MP
             setShowPaymentModal(false);
