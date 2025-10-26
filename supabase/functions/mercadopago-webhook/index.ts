@@ -255,62 +255,71 @@ serve(async (req: Request) => {
 async function processPaymentNotification(supabase: any, notification: WebhookNotification) {
   try {
     const paymentId = notification.data.id;
-    console.log(`Processing payment notification for payment ID: ${paymentId}`);
+    console.log(`📨 Processing payment notification for payment ID: ${paymentId}`);
 
-    const { data: orderByPayment, error: orderSearchError } = await supabase
-      .from('orders')
-      .select('*')
-      .or(`payment_id.eq.${paymentId},payment_preference_id.eq.${paymentId}`)
+    // Step 1: Get admin MP configuration to fetch payment from API
+    const { data: adminConfig, error: adminError } = await supabase
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'mercadopago_config')
       .maybeSingle();
 
-    let orderId = orderByPayment?.id;
-    let paymentData: any = null;
+    if (adminError || !adminConfig?.value?.access_token) {
+      console.error('❌ Admin MP configuration not found:', adminError);
+      console.log('Cannot fetch payment from MP API, aborting');
+      return;
+    }
+
+    // Step 2: ALWAYS fetch payment from MP API to get real status
+    const mpApiUrl = `https://api.mercadopago.com/v1/payments/${paymentId}`;
+    console.log(`🔍 Fetching payment from MP API: ${mpApiUrl}`);
+    console.log(`🔑 Using access token: ${adminConfig.value.access_token.substring(0, 20)}...`);
+    console.log(`🏷️ Test mode: ${adminConfig.value.is_test_mode}`);
+
+    const mpResponse = await fetch(mpApiUrl, {
+      headers: {
+        'Authorization': `Bearer ${adminConfig.value.access_token}`,
+        'Content-Type': 'application/json'
+      },
+    });
+
+    if (!mpResponse.ok) {
+      console.error(`❌ Failed to fetch payment from MP API: ${mpResponse.status}`);
+      const errorText = await mpResponse.text();
+      console.error('MP API Error:', errorText);
+
+      // Common errors and solutions
+      if (mpResponse.status === 404) {
+        console.error('💡 Payment not found (404). Possible causes:');
+        console.error('   - Wrong access token (using token from different account)');
+        console.error('   - Mixed environments (test token with prod payment ID or vice versa)');
+        console.error('   - Payment ID is actually a preference_id or merchant_order_id');
+      } else if (mpResponse.status === 401) {
+        console.error('💡 Unauthorized (401). Check access token is valid and not expired');
+      }
+
+      return;
+    }
+
+    // Step 3: Parse payment data and extract order info
+    const paymentData = await mpResponse.json();
+    console.log('✅ Payment data fetched from MP API');
+    console.log(`   Status: ${paymentData.status}`);
+    console.log(`   Status Detail: ${paymentData.status_detail}`);
+    console.log(`   Transaction Amount: ${paymentData.transaction_amount}`);
+    console.log(`   External Reference: ${paymentData.external_reference}`);
+    console.log(`   Payment Method: ${paymentData.payment_method_id}`);
+
+    // Step 4: Find order by external_reference or payment_id
+    const orderId = paymentData.external_reference;
 
     if (!orderId) {
-      console.log('Order not found locally, fetching from Mercado Pago API...');
-
-      const { data: adminConfig, error: adminError } = await supabase
-        .from('admin_settings')
-        .select('value')
-        .eq('key', 'mercadopago_config')
-        .maybeSingle();
-
-      if (adminError || !adminConfig?.value?.access_token) {
-        console.error('Admin MP configuration not found:', adminError);
-        console.log('Skipping MP API call, will retry later');
-        return;
-      }
-
-      const mpApiUrl = adminConfig.value.is_test_mode
-        ? `https://api.mercadopago.com/v1/payments/${paymentId}`
-        : `https://api.mercadopago.com/v1/payments/${paymentId}`;
-
-      console.log(`Calling MP API: ${mpApiUrl}`);
-
-      const mpResponse = await fetch(mpApiUrl, {
-        headers: {
-          'Authorization': `Bearer ${adminConfig.value.access_token}`,
-        },
-      });
-
-      if (!mpResponse.ok) {
-        console.error(`Failed to fetch payment from MP API: ${mpResponse.status}`);
-        const errorText = await mpResponse.text();
-        console.error('MP API Error:', errorText);
-        return;
-      }
-
-      paymentData = await mpResponse.json();
-      console.log('Payment data from MP:', JSON.stringify(paymentData, null, 2));
-
-      orderId = paymentData.external_reference;
-      if (!orderId) {
-        console.log('No external reference found in payment');
-        return;
-      }
-    } else {
-      console.log(`Order found locally: ${orderId}`);
+      console.error('❌ No external_reference found in payment. Cannot identify order.');
+      console.log('Payment data:', JSON.stringify(paymentData, null, 2));
+      return;
     }
+
+    console.log(`🔍 Looking for order: ${orderId}`);
 
     const { data: orderData, error: orderError } = await supabase
       .from('orders')
@@ -319,43 +328,52 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
       .maybeSingle();
 
     if (orderError || !orderData) {
-      console.error('Error fetching order or order not found:', orderError);
+      console.error('❌ Error fetching order or order not found:', orderError);
       return;
     }
 
-    console.log(`Found order: ${orderId}, current status: ${orderData.status}`);
+    console.log(`✅ Found order: ${orderId}`);
+    console.log(`   Current status: ${orderData.status}`);
+    console.log(`   Current payment_status: ${orderData.payment_status || 'none'}`);
+    console.log(`   Order type: ${orderData.order_type}`);
 
-    let paymentStatus = 'approved';
-    let orderStatus = 'confirmed';
+    // Step 5: Validate payment status
+    const paymentStatus = paymentData.status; // "approved", "pending", "rejected", etc.
+    const statusDetail = paymentData.status_detail; // "accredited", etc.
+    const orderStatus = mapPaymentStatusToOrderStatus(paymentStatus);
 
-    if (paymentData) {
-      paymentStatus = paymentData.status;
-      orderStatus = mapPaymentStatusToOrderStatus(paymentData.status);
-    } else if (notification.action) {
-      if (notification.action === 'payment.created' || notification.action === 'payment.updated') {
-        paymentStatus = 'approved';
-        orderStatus = 'confirmed';
-      }
-    }
+    console.log(`💰 Payment validation:`);
+    console.log(`   MP Status: ${paymentStatus}`);
+    console.log(`   MP Status Detail: ${statusDetail}`);
+    console.log(`   Order Status (mapped): ${orderStatus}`);
 
-    const totalAmount = paymentData?.transaction_amount || orderData.total_amount;
+    // Check if payment is approved and accredited
+    const isApproved = paymentStatus === 'approved' && statusDetail === 'accredited';
+    console.log(`   Is Approved & Accredited: ${isApproved}`);
+
+    // Step 6: Calculate amounts
+    const totalAmount = paymentData.transaction_amount;
     const commissionAmount = orderData.commission_amount || (totalAmount * 0.05);
     const partnerAmount = totalAmount - commissionAmount;
 
-    console.log(`Updating order ${orderId} to status: ${orderStatus}`);
+    console.log(`💵 Amounts:`);
+    console.log(`   Total: $${totalAmount}`);
+    console.log(`   Commission (5%): $${commissionAmount}`);
+    console.log(`   Partner: $${partnerAmount}`);
+
+    // Step 7: Update order in database
+    console.log(`📝 Updating order ${orderId} to status: ${orderStatus}`);
 
     const updateData: any = {
       status: orderStatus,
       payment_id: paymentId,
       payment_status: paymentStatus,
+      payment_status_detail: statusDetail,
       commission_amount: commissionAmount,
       partner_amount: partnerAmount,
+      payment_data: paymentData,
       updated_at: new Date().toISOString(),
     };
-
-    if (paymentData) {
-      updateData.payment_data = paymentData;
-    }
 
     const { error: updateError } = await supabase
       .from('orders')
@@ -363,27 +381,36 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
       .eq('id', orderId);
 
     if (updateError) {
-      console.error('Error updating order:', updateError);
+      console.error('❌ Error updating order:', updateError);
       return;
     }
 
-    console.log(`✅ Order ${orderId} updated to status: ${orderStatus}`);
-    console.log(`Commission: $${commissionAmount}, Partner: $${partnerAmount}`);
+    console.log(`✅ Order ${orderId} updated successfully`);
 
-    if (paymentStatus === 'approved' || orderStatus === 'confirmed') {
-      console.log('Payment approved, updating stock and sending notifications...');
+    // Step 8: Process approved payments
+    if (isApproved) {
+      console.log('🎉 Payment is APPROVED and ACCREDITED! Processing...');
+
+      // Update stock for products
       await updateProductStock(supabase, orderId);
+
+      // Send confirmation email to customer
       await sendPaymentConfirmationEmail(supabase, orderId);
 
+      // If it's a service booking, update booking status
       if (orderData.order_type === 'service_booking' && orderData.booking_id) {
-        console.log(`Updating booking ${orderData.booking_id} status to confirmed`);
+        console.log(`📅 Updating booking ${orderData.booking_id} status to confirmed`);
         await updateBookingStatus(supabase, orderData.booking_id, 'confirmed', paymentId);
         await sendBookingConfirmationEmail(supabase, orderData.booking_id);
       }
+
+      console.log('✅ All post-payment actions completed');
+    } else {
+      console.log(`⏸️ Payment not approved yet. Status: ${paymentStatus}, Detail: ${statusDetail}`);
     }
 
   } catch (error) {
-    console.error('Error processing payment notification:', error);
+    console.error('❌ Error processing payment notification:', error);
     throw error;
   }
 }
@@ -607,7 +634,7 @@ async function sendBookingConfirmationEmail(supabase: any, bookingId: string) {
     const emailData = {
       to: booking.customer.email,
       subject: '¡Reserva Confirmada! - DogCatiFy',
-      html: `<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"></head><body style=\"margin: 0; padding: 0; background-color: #f4f4f7; font-family: Arial, sans-serif;\"><table width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"background-color: #f4f4f7;\"><tr><td align=\"center\" style=\"padding: 40px 20px;\"><table width=\"600\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden;\"><tr><td style=\"background: linear-gradient(135deg, #10B981 0%, #059669 100%); padding: 40px 30px; text-align: center;\"><h1 style=\"color: #ffffff; margin: 0; font-size: 28px; font-weight: 600;\">¡Reserva Confirmada!</h1><p style=\"color: #D1FAE5; margin: 10px 0 0 0; font-size: 16px;\">Tu pago ha sido procesado exitosamente</p></td></tr><tr><td style=\"padding: 40px 30px;\"><p style=\"color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;\">Hola <strong>${booking.customer.display_name}</strong>,</p><p style=\"color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;\">¡Excelente noticia! Tu reserva ha sido confirmada y el pago procesado correctamente.</p><table width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"margin: 30px 0; background-color: #F0FDF4; border-left: 4px solid #10B981; border-radius: 6px;\"><tr><td style=\"padding: 20px;\"><p style=\"color: #065F46; font-size: 14px; font-weight: 600; margin: 0 0 15px 0;\">📅 Detalles de tu Reserva</p><table width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"8\"><tr><td style=\"color: #374151; font-size: 14px; font-weight: 600; width: 140px;\">Servicio:</td><td style=\"color: #111827; font-size: 14px;\">${booking.service_name}</td></tr><tr><td style=\"color: #374151; font-size: 14px; font-weight: 600;\">Proveedor:</td><td style=\"color: #111827; font-size: 14px;\">${booking.partner_name}</td></tr><tr><td style=\"color: #374151; font-size: 14px; font-weight: 600;\">Mascota:</td><td style=\"color: #111827; font-size: 14px;\">${booking.pet_name}</td></tr><tr><td style=\"color: #374151; font-size: 14px; font-weight: 600;\">Fecha:</td><td style=\"color: #111827; font-size: 14px;\">${formattedDate}</td></tr><tr><td style=\"color: #374151; font-size: 14px; font-weight: 600;\">Hora:</td><td style=\"color: #111827; font-size: 14px;\">${booking.time}</td></tr><tr><td style=\"color: #374151; font-size: 14px; font-weight: 600;\">Monto Pagado:</td><td style=\"color: #10B981; font-size: 16px; font-weight: 700;\">$${booking.total_amount.toLocaleString()}</td></tr></table></td></tr></table>${booking.notes ? `<table width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"margin: 20px 0;\"><tr><td style=\"background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; border-radius: 6px;\"><p style=\"color: #92400E; font-size: 14px; margin: 0;\"><strong>Notas:</strong><br>${booking.notes}</p></td></tr></table>` : ''}<table width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"margin: 30px 0;\"><tr><td style=\"background-color: #EFF6FF; border-left: 4px solid #3B82F6; padding: 20px; border-radius: 6px;\"><p style=\"color: #1e40af; font-size: 14px; font-weight: 600; margin: 0 0 12px 0;\">📋 Próximos Pasos:</p><ul style=\"color: #374151; font-size: 14px; line-height: 1.6; margin: 0; padding-left: 20px;\"><li style=\"margin-bottom: 8px;\">El proveedor ha sido notificado de tu reserva</li><li style=\"margin-bottom: 8px;\">Recibirás recordatorios antes de tu cita</li><li>Si necesitas cancelar o reprogramar, contáctanos lo antes posible</li></ul></td></tr></table><p style=\"color: #6B7280; font-size: 14px; line-height: 1.6; margin: 30px 0 0 0;\">¡Gracias por confiar en DogCatiFy!<br><strong style=\"color: #374151;\">El equipo de DogCatiFy</strong></p></td></tr><tr><td style=\"background-color: #F9FAFB; padding: 30px; text-align: center; border-top: 1px solid #E5E7EB;\"><p style=\"color: #6B7280; font-size: 12px; line-height: 1.6; margin: 0 0 8px 0;\">© 2025 DogCatiFy. Todos los derechos reservados.</p><p style=\"color: #9CA3AF; font-size: 11px; line-height: 1.5; margin: 0;\">Este es un correo automático, por favor no respondas a este mensaje.</p></td></tr></table></td></tr></table></body></html>`
+      html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden;"><div style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); padding: 40px 30px; text-align: center;"><h1 style="color: #ffffff; margin: 0;">¡Reserva Confirmada!</h1><p style="color: #D1FAE5; margin: 10px 0 0 0;">Tu pago ha sido procesado exitosamente</p></div><div style="padding: 40px 30px;"><p>Hola <strong>${booking.customer.display_name}</strong>,</p><p>Tu reserva ha sido confirmada.</p><div style="background-color: #F0FDF4; border-left: 4px solid #10B981; padding: 20px; margin: 20px 0;"><p style="font-weight: 600;">📅 Detalles:</p><p><strong>Servicio:</strong> ${booking.service_name}</p><p><strong>Proveedor:</strong> ${booking.partner_name}</p><p><strong>Mascota:</strong> ${booking.pet_name}</p><p><strong>Fecha:</strong> ${formattedDate}</p><p><strong>Hora:</strong> ${booking.time}</p><p><strong>Monto:</strong> $${booking.total_amount.toLocaleString()}</p></div><p>¡Gracias por confiar en DogCatiFy!</p></div></div>`
     };
 
     const emailResponse = await fetch(`${supabase.supabaseUrl}/functions/v1/send-email`, {
