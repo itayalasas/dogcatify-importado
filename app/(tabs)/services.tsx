@@ -376,109 +376,111 @@ export default function Services() {
           )}
 
           {!loading && !error && currentUser && filteredPartners.length > 0 && (
-            <View style={styles.gridContainer}>
-              {filteredPartners.map((item) => (
-                <View key={item.partnerId} style={styles.gridCard}>
-                  <TouchableOpacity
-                    onPress={() => handlePartnerPress(item.partnerId)}
-                    activeOpacity={0.9}
-                  >
-                    {/* Image Background */}
-                    <View style={styles.cardImageContainer}>
-                      <Image
-                        source={{ uri: getServiceImage(item) }}
-                        style={styles.cardImage}
-                        resizeMode="cover"
-                      />
+            <>
+              <View style={styles.gridContainer}>
+                {filteredPartners.map((item) => (
+                  <View key={item.partnerId} style={styles.gridCard}>
+                    <TouchableOpacity
+                      onPress={() => handlePartnerPress(item.partnerId)}
+                      activeOpacity={0.9}
+                    >
+                      {/* Image Background */}
+                      <View style={styles.cardImageContainer}>
+                        <Image
+                          source={{ uri: getServiceImage(item) }}
+                          style={styles.cardImage}
+                          resizeMode="cover"
+                        />
 
-                      {/* Dark overlay for better text readability */}
-                      <View style={styles.darkOverlay} />
+                        {/* Dark overlay for better text readability */}
+                        <View style={styles.darkOverlay} />
 
-                      {/* Logo Badge */}
-                      <View style={styles.logoContainer}>
-                        {item.partnerLogo ? (
-                          <View style={styles.logoBadge}>
-                            <Image
-                              source={{ uri: item.partnerLogo }}
-                              style={styles.logoBadgeImage}
-                              resizeMode="cover"
-                            />
-                          </View>
-                        ) : (
-                          <View style={styles.logoBadge}>
-                            <View style={styles.logoPlaceholder}>
-                              {getDefaultIcon(item.partnerType)}
+                        {/* Logo Badge */}
+                        <View style={styles.logoContainer}>
+                          {item.partnerLogo ? (
+                            <View style={styles.logoBadge}>
+                              <Image
+                                source={{ uri: item.partnerLogo }}
+                                style={styles.logoBadgeImage}
+                                resizeMode="cover"
+                              />
                             </View>
+                          ) : (
+                            <View style={styles.logoBadge}>
+                              <View style={styles.logoPlaceholder}>
+                                {getDefaultIcon(item.partnerType)}
+                              </View>
+                            </View>
+                          )}
+                        </View>
+
+                        {/* Business Name on Image */}
+                        <View style={styles.businessNameContainer}>
+                          <Text style={styles.businessNameText} numberOfLines={2}>
+                            {item.partnerName}
+                          </Text>
+                          <View style={styles.typeTagInline}>
+                            <Text style={styles.typeTagText}>
+                              {item.partnerType === 'veterinary' ? 'Veterinaria' :
+                               item.partnerType === 'grooming' ? 'Peluquería' :
+                               item.partnerType === 'boarding' ? 'Pensión' :
+                               item.partnerType === 'walking' ? 'Paseo' : 'Servicio'}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Price Badge */}
+                        {item.price && (
+                          <View style={styles.priceBadge}>
+                            <Text style={styles.priceBadgeText}>
+                              ${item.price.toLocaleString()}
+                            </Text>
                           </View>
                         )}
                       </View>
+                    </TouchableOpacity>
 
-                      {/* Business Name on Image */}
-                      <View style={styles.businessNameContainer}>
-                        <Text style={styles.businessNameText} numberOfLines={2}>
-                          {item.partnerName}
-                        </Text>
-                        <View style={styles.typeTagInline}>
-                          <Text style={styles.typeTagText}>
-                            {item.partnerType === 'veterinary' ? 'Veterinaria' :
-                             item.partnerType === 'grooming' ? 'Peluquería' :
-                             item.partnerType === 'boarding' ? 'Pensión' :
-                             item.partnerType === 'walking' ? 'Paseo' : 'Servicio'}
-                          </Text>
-                        </View>
-                      </View>
-
-                      {/* Price Badge */}
-                      {item.price && (
-                        <View style={styles.priceBadge}>
-                          <Text style={styles.priceBadgeText}>
-                            ${item.price.toLocaleString()}
+                    {/* Bottom Content */}
+                    <View style={styles.cardBottomContent}>
+                      {item.partnerPhone && (
+                        <View style={styles.infoRow}>
+                          <Phone size={13} color="#6B7280" strokeWidth={2} />
+                          <Text style={styles.infoText} numberOfLines={1}>
+                            {item.partnerPhone}
                           </Text>
                         </View>
                       )}
+
+                      {item.partnerAddress && (
+                        <View style={styles.infoRow}>
+                          <MapPin size={13} color="#6B7280" strokeWidth={2} />
+                          <Text style={styles.infoText} numberOfLines={1}>
+                            {item.partnerAddress}
+                          </Text>
+                        </View>
+                      )}
+
+                      {(item.rating || item.reviews >= 0) && (
+                        <TouchableOpacity
+                          style={styles.ratingRow}
+                          onPress={() => handleRatingPress(item)}
+                          activeOpacity={0.7}
+                        >
+                          <Star size={14} color="#F59E0B" fill="#F59E0B" strokeWidth={2} />
+                          <Text style={styles.ratingValue}>
+                            {item.rating?.toFixed(1) || '5.0'}
+                          </Text>
+                          <Text style={styles.ratingCount}>
+                            ({item.reviews || 0})
+                          </Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
-                  </TouchableOpacity>
-
-                  {/* Bottom Content */}
-                  <View style={styles.cardBottomContent}>
-                    {item.partnerPhone && (
-                      <View style={styles.infoRow}>
-                        <Phone size={13} color="#6B7280" strokeWidth={2} />
-                        <Text style={styles.infoText} numberOfLines={1}>
-                          {item.partnerPhone}
-                        </Text>
-                      </View>
-                    )}
-
-                    {item.partnerAddress && (
-                      <View style={styles.infoRow}>
-                        <MapPin size={13} color="#6B7280" strokeWidth={2} />
-                        <Text style={styles.infoText} numberOfLines={1}>
-                          {item.partnerAddress}
-                        </Text>
-                      </View>
-                    )}
-
-                    {(item.rating || item.reviews >= 0) && (
-                      <TouchableOpacity
-                        style={styles.ratingRow}
-                        onPress={() => handleRatingPress(item)}
-                        activeOpacity={0.7}
-                      >
-                        <Star size={14} color="#F59E0B" fill="#F59E0B" strokeWidth={2} />
-                        <Text style={styles.ratingValue}>
-                          {item.rating?.toFixed(1) || '5.0'}
-                        </Text>
-                        <Text style={styles.ratingCount}>
-                          ({item.reviews || 0})
-                        </Text>
-                      </TouchableOpacity>
-                    )}
                   </View>
-                </View>
-              ))}
+                ))}
+              </View>
               {renderFooter()}
-            </View>
+            </>
           )}
         </View>
       </ScrollView>
