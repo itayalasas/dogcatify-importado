@@ -66,7 +66,13 @@ export default function MercadoPagoConfig() {
 
       // Extract Mercado Pago configuration
       if (partnerData.mercadopago_config) {
-        console.log('MP config found:', partnerData.mercadopago_config);
+        console.log('📥 MP config loaded from DB:', {
+          access_token_prefix: partnerData.mercadopago_config.access_token?.substring(0, 12) + '...',
+          public_key_prefix: partnerData.mercadopago_config.public_key?.substring(0, 12) + '...',
+          is_test_mode: partnerData.mercadopago_config.is_test_mode,
+          is_oauth: partnerData.mercadopago_config.is_oauth,
+          connected_at: partnerData.mercadopago_config.connected_at
+        });
         setMpConfig(partnerData.mercadopago_config);
         setIsTestMode(partnerData.mercadopago_config.is_test_mode || false);
       } else {
@@ -147,7 +153,14 @@ export default function MercadoPagoConfig() {
         is_test_mode: isTestMode
       };
 
-      console.log('Saving MP config:', config);
+      console.log('💾 Saving NEW MP config:', {
+        public_key_prefix: config.public_key.substring(0, 12) + '...',
+        access_token_prefix: config.access_token.substring(0, 12) + '...',
+        is_test_mode: config.is_test_mode,
+        connected_at: config.connected_at,
+        partner_id: partner.id,
+        partner_name: partner.business_name
+      });
 
       const { error } = await supabaseClient
         .from('partners')
@@ -165,12 +178,8 @@ export default function MercadoPagoConfig() {
 
       console.log('MP config saved successfully');
 
-      setMpConfig(config);
-      setPartner((prev: any) => ({
-        ...prev,
-        mercadopago_connected: true,
-        mercadopago_config: config
-      }));
+      // Refresh partner data from database to ensure we have the latest
+      await loadPartnerData();
 
       setManualAccessToken('');
       setManualPublicKey('');
@@ -209,12 +218,8 @@ export default function MercadoPagoConfig() {
 
               if (error) throw error;
 
-              setMpConfig(null);
-              setPartner((prev: any) => ({
-                ...prev,
-                mercadopago_connected: false,
-                mercadopago_config: null
-              }));
+              // Refresh partner data from database to ensure we have the latest
+              await loadPartnerData();
 
               Alert.alert('Desconectado', 'Tu cuenta de Mercado Pago ha sido desconectada.');
             } catch (error) {

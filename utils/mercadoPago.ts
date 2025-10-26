@@ -202,9 +202,7 @@ export const getPartnerMercadoPagoConfig = async (partnerId: string) => {
       throw new Error(`Partner "${data.business_name}" no tiene access_token configurado`);
     }
 
-    console.log('MP config validation passed for partner:', data.business_name);
-
-    return {
+    const returnConfig = {
       ...data.mercadopago_config,
       commission_percentage: data.commission_percentage || 5.0,
       business_name: data.business_name,
@@ -213,6 +211,17 @@ export const getPartnerMercadoPagoConfig = async (partnerId: string) => {
       // Para configuraciones manuales, usar el partner_id como user_id si no existe
       user_id: data.mercadopago_config.user_id || data.mercadopago_config.account_id || partnerId
     };
+
+    console.log('✅ MP config returned:', {
+      business_name: returnConfig.business_name,
+      access_token_prefix: returnConfig.access_token?.substring(0, 12) + '...',
+      public_key_prefix: returnConfig.public_key?.substring(0, 12) + '...',
+      is_test_mode: returnConfig.is_test_mode,
+      is_oauth: returnConfig.is_oauth,
+      connected_at: returnConfig.connected_at
+    });
+
+    return returnConfig;
   } catch (error) {
     console.error('Error getting partner MP config:', error);
     throw error;
