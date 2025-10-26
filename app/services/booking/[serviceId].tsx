@@ -409,6 +409,9 @@ export default function ServiceBooking() {
     setPaymentLoading(true);
     setPaymentStep('processing');
 
+    // Cerrar el modal de pago para mostrar el loader en pantalla completa
+    setShowPaymentModal(false);
+
     try {
       console.log('=== Iniciando flujo de Mercado Pago ===');
       console.log('Datos de la reserva:', {
@@ -523,8 +526,7 @@ export default function ServiceBooking() {
             // Give time for the browser to open
             await new Promise(resolve => setTimeout(resolve, 500));
 
-            // Close modal AFTER successfully opening MP
-            setShowPaymentModal(false);
+            // Modal already closed when paymentLoading started
             // DO NOT redirect here - let the user complete payment
             // MP will redirect back to the app via dogcatify://payment/success
           }
@@ -543,6 +545,9 @@ export default function ServiceBooking() {
       if (error.message) {
         errorMessage = error.message;
       }
+
+      // Reabrir el modal en caso de error
+      setShowPaymentModal(true);
 
       Alert.alert(
         'Error al procesar el pago',
@@ -1067,6 +1072,25 @@ export default function ServiceBooking() {
           </View>
         )}
       </Modal>
+
+      {/* Payment Loading Overlay */}
+      {paymentLoading && (
+        <Modal
+          visible={paymentLoading}
+          transparent
+          animationType="fade"
+        >
+          <View style={styles.paymentLoadingOverlay}>
+            <View style={styles.paymentLoadingContent}>
+              <ActivityIndicator size="large" color="#00A650" />
+              <Text style={styles.paymentLoadingTitle}>Procesando pago...</Text>
+              <Text style={styles.paymentLoadingSubtitle}>
+                {paymentMessage}
+              </Text>
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
