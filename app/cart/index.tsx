@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Modal, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { ArrowLeft, ShoppingCart, Trash2, Plus, Minus, MapPin, ChevronDown, ChevronUp, CreditCard, X } from 'lucide-react-native';
@@ -20,6 +20,7 @@ export default function Cart() {
   const [isAddressExpanded, setIsAddressExpanded] = useState(false);
   const [productStocks, setProductStocks] = useState<Record<string, number>>({});
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
+  const [paymentLoading, setPaymentLoading] = useState(false);
   const [savedAddress, setSavedAddress] = useState({
     street: '',
     number: '',
@@ -197,6 +198,7 @@ export default function Cart() {
 
   const handlePayWithMercadoPago = async () => {
     setShowPaymentMethodModal(false);
+    setPaymentLoading(true);
     setLoading(true);
     try {
       console.log('Starting checkout process...');
@@ -286,6 +288,7 @@ export default function Cart() {
       Alert.alert('Error', error?.message || 'No se pudo procesar tu pedido');
     } finally {
       setLoading(false);
+      setPaymentLoading(false);
     }
   };
 
@@ -667,6 +670,25 @@ export default function Cart() {
           </View>
         </View>
       </Modal>
+
+      {/* Payment Loading Overlay */}
+      {paymentLoading && (
+        <Modal
+          visible={paymentLoading}
+          transparent
+          animationType="fade"
+        >
+          <View style={styles.paymentLoadingOverlay}>
+            <View style={styles.paymentLoadingContent}>
+              <ActivityIndicator size="large" color="#00A650" />
+              <Text style={styles.paymentLoadingTitle}>Procesando pago...</Text>
+              <Text style={styles.paymentLoadingSubtitle}>
+                Preparando tu pago seguro con Mercado Pago
+              </Text>
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -1079,5 +1101,38 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
     lineHeight: 16,
+  },
+  paymentLoadingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  paymentLoadingContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    maxWidth: 280,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  paymentLoadingTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1F2937',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  paymentLoadingSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
