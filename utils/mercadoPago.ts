@@ -421,7 +421,7 @@ export const createMultiPartnerOrder = async (
   customerInfo: any,
   shippingAddress: string,
   totalShippingCost: number
-): Promise<{ orders: any[], paymentPreferences: any[] }> => {
+): Promise<{ orders: any[], paymentPreferences: any[], isTestMode: boolean }> => {
   try {
     console.log('Creating multi-partner order with marketplace split...');
     console.log('Cart items received:', cartItems.map(item => ({
@@ -590,7 +590,16 @@ export const createMultiPartnerOrder = async (
     const orders = [unifiedOrder];
     const paymentPreferences = [preference];
 
-    return { orders, paymentPreferences };
+    // Detect if we're in test mode
+    const isTestMode = primaryPartnerConfig.access_token?.startsWith('TEST-');
+
+    console.log('Multi-partner order completed:', {
+      isTestMode,
+      ordersCount: orders.length,
+      preferencesCount: paymentPreferences.length
+    });
+
+    return { orders, paymentPreferences, isTestMode };
   } catch (error) {
     console.error('Error creating unified order:', error);
     throw error;
@@ -686,14 +695,20 @@ export const createUnifiedPaymentPreference = async (
     }
 
     const preference = await response.json();
-    
+
+    // Determine if we're using test credentials
+    const isTestMode = partnerConfig.access_token?.startsWith('TEST-');
+
     console.log('Split payment preference created successfully:', {
       id: preference.id,
       application_fee: commissionAmount,
       partner_receives: totalAmount - commissionAmount,
-      commission_percentage: partnerConfig.commission_percentage || 5.0
+      commission_percentage: partnerConfig.commission_percentage || 5.0,
+      isTestMode,
+      hasInitPoint: !!preference.init_point,
+      hasSandboxInitPoint: !!preference.sandbox_init_point
     });
-    
+
     return preference;
   } catch (error) {
     console.error('Error creating split payment preference:', error);
@@ -875,12 +890,21 @@ export const createServiceBookingOrder = async (bookingData: {
       })
       .eq('id', insertedOrder.id);
     
-    // Get payment URL
-    const paymentUrl = preference.sandbox_init_point || preference.init_point;
-    
+    // Determine if we're using test credentials
+    const isTestMode = partnerConfig.access_token?.startsWith('TEST-');
+
+    // Get payment URL based on environment
+    const paymentUrl = isTestMode ? preference.sandbox_init_point : preference.init_point;
+
     if (!paymentUrl) {
       throw new Error('No se pudo obtener la URL de pago');
     }
+
+    console.log('Payment URL selected:', {
+      isTestMode,
+      urlType: isTestMode ? 'sandbox_init_point' : 'init_point',
+      url: paymentUrl
+    });
     
     console.log('Payment URL generated successfully');
     
