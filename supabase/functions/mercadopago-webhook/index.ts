@@ -394,14 +394,10 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
       // Update stock for products
       await updateProductStock(supabase, orderId);
 
-      // Send confirmation email to customer
-      await sendPaymentConfirmationEmail(supabase, orderId);
-
       // If it's a service booking, update booking status
       if (orderData.order_type === 'service_booking' && orderData.booking_id) {
         console.log(`📅 Updating booking ${orderData.booking_id} status to confirmed`);
         await updateBookingStatus(supabase, orderData.booking_id, 'confirmed', paymentId);
-        await sendBookingConfirmationEmail(supabase, orderData.booking_id);
       }
 
       console.log('✅ All post-payment actions completed');
@@ -514,65 +510,6 @@ async function updateProductStock(supabase: any, orderId: string) {
   }
 }
 
-async function sendPaymentConfirmationEmail(supabase: any, orderId: string) {
-  try {
-    const { data: order } = await supabase
-      .from('orders')
-      .select(`
-        *,
-        profiles:customer_id(email, display_name)
-      `)
-      .eq('id', orderId)
-      .single();
-
-    if (!order || !order.profiles) {
-      console.log('Order or customer not found for email notification');
-      return;
-    }
-
-    const emailData = {
-      to: order.profiles.email,
-      subject: 'Pago confirmado - DogCatiFy',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background-color: #2D6A6F; padding: 20px; text-align: center;">
-            <h1 style="color: white; margin: 0;">¡Pago Confirmado!</h1>
-          </div>
-          <div style="padding: 20px; background-color: #f9f9f9;">
-            <p>Hola <strong>${order.profiles.display_name}</strong>,</p>
-            <p>Tu pago ha sido confirmado exitosamente.</p>
-            <div style="background-color: white; border-left: 4px solid #10B981; padding: 15px; margin: 20px 0;">
-              <p><strong>Número de pedido:</strong> #${orderId.slice(-6)}</p>
-              <p><strong>Total pagado:</strong> $${order.total_amount.toLocaleString()}</p>
-              <p><strong>Estado:</strong> Confirmado</p>
-            </div>
-            <p>Recibirás actualizaciones sobre el estado de tu pedido.</p>
-            <p>¡Gracias por tu compra en DogCatiFy!</p>
-          </div>
-        </div>
-      `
-    };
-
-    const emailResponse = await fetch(`${supabase.supabaseUrl}/functions/v1/send-email`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabase.supabaseKey}`,
-      },
-      body: JSON.stringify(emailData),
-    });
-
-    if (!emailResponse.ok) {
-      console.error('Failed to send confirmation email');
-    } else {
-      console.log('Payment confirmation email sent');
-    }
-
-  } catch (error) {
-    console.error('Error sending payment confirmation email:', error);
-  }
-}
-
 async function updateBookingStatus(supabase: any, bookingId: string, status: string, paymentId: string) {
   try {
     console.log(`Updating booking ${bookingId} to status: ${status}`);
@@ -597,64 +534,5 @@ async function updateBookingStatus(supabase: any, bookingId: string, status: str
   } catch (error) {
     console.error('Error updating booking status:', error);
     throw error;
-  }
-}
-
-async function sendBookingConfirmationEmail(supabase: any, bookingId: string) {
-  try {
-    console.log(`Sending booking confirmation email for booking ${bookingId}`);
-
-    const { data: booking, error } = await supabase
-      .from('bookings')
-      .select(`
-        *,
-        customer:profiles!customer_id(email, display_name)
-      `)
-      .eq('id', bookingId)
-      .single();
-
-    if (error || !booking) {
-      console.error('Error fetching booking for email:', error);
-      return;
-    }
-
-    if (!booking.customer || !booking.customer.email) {
-      console.error('Customer email not found for booking');
-      return;
-    }
-
-    const bookingDate = new Date(booking.date);
-    const formattedDate = bookingDate.toLocaleDateString('es-ES', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-
-    const emailData = {
-      to: booking.customer.email,
-      subject: '¡Reserva Confirmada! - DogCatiFy',
-      html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden;"><div style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); padding: 40px 30px; text-align: center;"><h1 style="color: #ffffff; margin: 0;">¡Reserva Confirmada!</h1><p style="color: #D1FAE5; margin: 10px 0 0 0;">Tu pago ha sido procesado exitosamente</p></div><div style="padding: 40px 30px;"><p>Hola <strong>${booking.customer.display_name}</strong>,</p><p>Tu reserva ha sido confirmada.</p><div style="background-color: #F0FDF4; border-left: 4px solid #10B981; padding: 20px; margin: 20px 0;"><p style="font-weight: 600;">📅 Detalles:</p><p><strong>Servicio:</strong> ${booking.service_name}</p><p><strong>Proveedor:</strong> ${booking.partner_name}</p><p><strong>Mascota:</strong> ${booking.pet_name}</p><p><strong>Fecha:</strong> ${formattedDate}</p><p><strong>Hora:</strong> ${booking.time}</p><p><strong>Monto:</strong> $${booking.total_amount.toLocaleString()}</p></div><p>¡Gracias por confiar en DogCatiFy!</p></div></div>`
-    };
-
-    const emailResponse = await fetch(`${supabase.supabaseUrl}/functions/v1/send-email`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabase.supabaseKey}`,
-      },
-      body: JSON.stringify(emailData),
-    });
-
-    if (!emailResponse.ok) {
-      console.error('Failed to send booking confirmation email');
-      const errorText = await emailResponse.text();
-      console.error('Email error:', errorText);
-    } else {
-      console.log('✅ Booking confirmation email sent successfully');
-    }
-
-  } catch (error) {
-    console.error('Error sending booking confirmation email:', error);
   }
 }
