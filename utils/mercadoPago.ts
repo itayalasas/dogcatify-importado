@@ -1550,10 +1550,45 @@ export const validateCredentialsFormat = (accessToken: string, publicKey: string
 };
 
 /**
+ * Check if Mercado Pago app is installed on the device
+ */
+export const isMercadoPagoAppInstalled = async (): Promise<boolean> => {
+  try {
+    const { Linking, Platform } = await import('react-native');
+
+    // Deep links para abrir la app de Mercado Pago
+    const mpAppSchemes = [
+      'mercadopago://',
+      'com.mercadopago.wallet://'
+    ];
+
+    // Intentar verificar si alguno de los esquemas está disponible
+    for (const scheme of mpAppSchemes) {
+      try {
+        const canOpen = await Linking.canOpenURL(scheme);
+        if (canOpen) {
+          console.log('✅ Mercado Pago app detected with scheme:', scheme);
+          return true;
+        }
+      } catch (error) {
+        // Continuar con el siguiente esquema
+        continue;
+      }
+    }
+
+    console.log('❌ Mercado Pago app not installed');
+    return false;
+  } catch (error) {
+    console.error('Error checking Mercado Pago app:', error);
+    return false;
+  }
+};
+
+/**
  * Open Mercado Pago payment URL intelligently
- * - Try to open native Mercado Pago app first
- * - Fallback to web browser if app is not installed
- * - Always opens web URL for now due to Android compatibility issues
+ * - Check if Mercado Pago app is installed
+ * - If installed, open in app
+ * - If not installed, open in web browser
  */
 export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boolean): Promise<{
   success: boolean;
@@ -1570,10 +1605,18 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
       platform: Platform.OS
     });
 
+    // Verificar si la app de Mercado Pago está instalada
+    const hasApp = await isMercadoPagoAppInstalled();
+
+    console.log('Mercado Pago app status:', {
+      installed: hasApp,
+      willOpenIn: hasApp ? 'app' : 'browser'
+    });
+
     // La app de Mercado Pago intercepta automáticamente las URLs de checkout
     // Si el usuario tiene la app instalada, se abrirá la app
     // Si no, se abrirá en el navegador
-    console.log('Opening Mercado Pago URL (app will intercept if installed)...');
+    console.log('Opening Mercado Pago URL...');
 
     const canOpen = await Linking.canOpenURL(paymentUrl);
 
@@ -1585,10 +1628,11 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
     await Linking.openURL(paymentUrl);
 
     // En Android/iOS, si la app está instalada se abrirá automáticamente
-    // No podemos detectar con certeza si se abrió en app o navegador
-    // pero la URL correcta permite que la app intercepte
     console.log('✅ Mercado Pago URL opened successfully');
-    return { success: true, openedInApp: false }; // Retornamos false porque no podemos detectarlo
+    return {
+      success: true,
+      openedInApp: hasApp
+    };
 
   } catch (error) {
     console.error('Error opening Mercado Pago payment:', error);
