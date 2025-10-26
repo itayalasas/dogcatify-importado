@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { ArrowLeft, CreditCard, CircleCheck as CheckCircle, CircleAlert as AlertCircle, ExternalLink, Eye, EyeOff } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { validateCredentialsFormat } from '../../utils/mercadoPago';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -89,12 +90,14 @@ export default function MercadoPagoConfig() {
 
   const validateCredentials = async (accessToken: string, publicKey: string) => {
     try {
-      // Basic validation of token format
-      const isValidToken = accessToken.startsWith('APP_USR-') || accessToken.startsWith('TEST-');
-      const isValidKey = publicKey.startsWith('APP_USR-') || publicKey.startsWith('TEST-');
-      
-      if (!isValidToken || !isValidKey) {
-        throw new Error('Formato de credenciales inválido');
+      // First, validate format using our utility function
+      const formatValidation = validateCredentialsFormat(accessToken, publicKey);
+
+      if (!formatValidation.isValid) {
+        return {
+          isValid: false,
+          error: formatValidation.error
+        };
       }
 
       // Try to validate with Mercado Pago API
@@ -113,14 +116,23 @@ export default function MercadoPagoConfig() {
             email: userData.email
           };
         } else {
-          return { isValid: isValidToken && isValidKey };
+          return {
+            isValid: true,
+            warning: 'No se pudo validar con la API de Mercado Pago, pero el formato es correcto'
+          };
         }
       } catch (apiError) {
         console.log('API validation failed, using format validation:', apiError);
-        return { isValid: isValidToken && isValidKey };
+        return {
+          isValid: true,
+          warning: 'No se pudo validar con la API de Mercado Pago, pero el formato es correcto'
+        };
       }
     } catch (error) {
-      return { isValid: false };
+      return {
+        isValid: false,
+        error: 'Error al validar credenciales'
+      };
     }
   };
 
@@ -140,10 +152,15 @@ export default function MercadoPagoConfig() {
       if (!validation.isValid) {
         Alert.alert(
           'Credenciales inválidas',
-          'Las credenciales ingresadas no son válidas. Verifica que sean correctas.'
+          validation.error || 'Las credenciales ingresadas no son válidas. Verifica que sean correctas.'
         );
         setSaveLoading(false);
         return;
+      }
+
+      // Show warning if API validation failed but format is correct
+      if (validation.warning) {
+        console.warn('Validation warning:', validation.warning);
       }
 
       const config = {

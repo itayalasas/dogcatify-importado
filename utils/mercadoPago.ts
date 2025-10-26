@@ -9,6 +9,51 @@ import { supabaseClient } from '@/lib/supabase';
 const MP_BASE_URL = process.env.EXPO_PUBLIC_MERCADOPAGO_BASE_URL || 'https://api.mercadopago.com';
 const MP_REDIRECT_URI = 'https://dogcatify.com/auth/mercadopago/callback';
 
+// Type Definitions
+export interface MercadoPagoConfig {
+  publicKey: string;
+  accessToken: string;
+  isTestMode?: boolean;
+  isOAuth?: boolean;
+  userId?: string;
+  refreshToken?: string;
+  connectedAt?: string;
+}
+
+export interface PaymentData {
+  amount: number;
+  description: string;
+  payerEmail: string;
+  payerName: string;
+  externalReference: string;
+  payerPhone?: string;
+}
+
+export interface PaymentResponse {
+  id: string;
+  status: string;
+  detail: string;
+  payment_method_id?: string;
+  payment_type_id?: string;
+  init_point?: string;
+  sandbox_init_point?: string;
+}
+
+export interface PartnerMercadoPagoConfig {
+  access_token: string;
+  public_key: string;
+  refresh_token?: string;
+  user_id?: string;
+  account_id?: string;
+  connected_at: string;
+  is_oauth?: boolean;
+  is_test_mode?: boolean;
+  commission_percentage?: number;
+  business_name?: string;
+  iva_rate?: number;
+  iva_included_in_price?: boolean;
+}
+
 /**
  * Get admin Mercado Pago configuration from database
  */
@@ -1428,6 +1473,172 @@ export const disconnectPartnerMercadoPago = async (partnerId: string): Promise<v
     console.log(`All businesses disconnected from Mercado Pago for user ${partnerData.user_id}`);
   } catch (error) {
     console.error('Error disconnecting partner from Mercado Pago:', error);
+    throw error;
+  }
+};
+
+/**
+ * Detect if we're in test/sandbox environment
+ */
+export const isTestEnvironment = (accessToken: string): boolean => {
+  return accessToken.startsWith('TEST-') ||
+         accessToken.includes('TEST') ||
+         accessToken.includes('test');
+};
+
+/**
+ * Get correct payment URL based on environment
+ */
+export const getPaymentUrl = (preference: any, accessToken: string): string => {
+  const isTest = isTestEnvironment(accessToken);
+  return isTest ? preference.sandbox_init_point : preference.init_point;
+};
+
+/**
+ * Validate Mercado Pago credentials format
+ */
+export const validateCredentialsFormat = (accessToken: string, publicKey: string): {
+  isValid: boolean;
+  error?: string;
+} => {
+  const isValidToken = accessToken.startsWith('APP_USR-') || accessToken.startsWith('TEST-');
+  const isValidKey = publicKey.startsWith('APP_USR-') || publicKey.startsWith('TEST-');
+
+  if (!isValidToken) {
+    return {
+      isValid: false,
+      error: 'El Access Token debe comenzar con APP_USR- o TEST-'
+    };
+  }
+
+  if (!isValidKey) {
+    return {
+      isValid: false,
+      error: 'La Public Key debe comenzar con APP_USR- o TEST-'
+    };
+  }
+
+  // Check if both are test or both are production
+  const tokenIsTest = accessToken.startsWith('TEST-');
+  const keyIsTest = publicKey.startsWith('TEST-');
+
+  if (tokenIsTest !== keyIsTest) {
+    return {
+      isValid: false,
+      error: 'Las credenciales deben ser ambas de TEST o ambas de PRODUCCIÓN'
+    };
+  }
+
+  return { isValid: true };
+};
+
+/**
+ * Create simple payment preference (simplified version for quick integration)
+ */
+export const createSimplePaymentPreference = async (
+  accessToken: string,
+  paymentData: PaymentData
+): Promise<PaymentResponse> => {
+  try {
+    const isTest = isTestEnvironment(accessToken);
+
+    console.log('Creating payment preference:', {
+      amount: paymentData.amount,
+      description: paymentData.description,
+      isTestMode: isTest
+    });
+
+    const response = await fetch(`${MP_BASE_URL}/checkout/preferences`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        items: [
+          {
+            title: paymentData.description,
+            unit_price: Number(paymentData.amount),
+            quantity: 1,
+            currency_id: 'UYU'
+          }
+        ],
+        payer: {
+          email: paymentData.payerEmail,
+          name: paymentData.payerName,
+          ...(paymentData.payerPhone && {
+            phone: {
+              area_code: '598',
+              number: paymentData.payerPhone.replace(/\D/g, '').slice(-8)
+            }
+          })
+        },
+        external_reference: paymentData.externalReference,
+        back_urls: {
+          success: `dogcatify://payment/success?external_reference=${paymentData.externalReference}`,
+          failure: `dogcatify://payment/failure?external_reference=${paymentData.externalReference}`,
+          pending: `dogcatify://payment/pending?external_reference=${paymentData.externalReference}`
+        },
+        auto_return: 'approved',
+        notification_url: `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/mercadopago-webhook`,
+        statement_descriptor: 'DOGCATIFY',
+        payment_methods: {
+          excluded_payment_methods: [],
+          excluded_payment_types: [],
+          installments: 12
+        },
+        binary_mode: false,
+        expires: false
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('MercadoPago API Error:', errorData);
+      throw new Error(`Error ${response.status}: ${errorData.message || 'Error al crear preferencia de pago'}`);
+    }
+
+    const preference = await response.json();
+
+    console.log('Payment preference created:', {
+      id: preference.id,
+      hasInitPoint: !!preference.init_point,
+      hasSandboxInitPoint: !!preference.sandbox_init_point
+    });
+
+    return {
+      id: preference.id,
+      status: 'pending',
+      detail: 'Preference created successfully',
+      init_point: preference.init_point,
+      sandbox_init_point: preference.sandbox_init_point
+    };
+  } catch (error) {
+    console.error('Error creating simple payment preference:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get partner's Mercado Pago config in simple format
+ */
+export const getPartnerMercadoPagoSimpleConfig = async (
+  partnerId: string
+): Promise<MercadoPagoConfig> => {
+  try {
+    const fullConfig = await getPartnerMercadoPagoConfig(partnerId);
+
+    return {
+      publicKey: fullConfig.public_key,
+      accessToken: fullConfig.access_token,
+      isTestMode: fullConfig.is_test_mode,
+      isOAuth: fullConfig.is_oauth,
+      userId: fullConfig.user_id,
+      refreshToken: fullConfig.refresh_token,
+      connectedAt: fullConfig.connected_at
+    };
+  } catch (error) {
+    console.error('Error getting partner MP simple config:', error);
     throw error;
   }
 };
