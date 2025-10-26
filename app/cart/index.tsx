@@ -202,25 +202,33 @@ export default function Cart() {
       const totalShippingCost = 500;
 
       // Create orders and payment preferences using Mercado Pago
-      const { orders, paymentPreferences } = await createMultiPartnerOrder(
+      const { orders, paymentPreferences, isTestMode } = await createMultiPartnerOrder(
         cart,
         currentUser,
         fullAddress,
         totalShippingCost
       );
-      
+
       console.log('Orders created:', orders.length);
       console.log('Payment preferences created:', paymentPreferences.length);
-      
+      console.log('Environment detected:', isTestMode ? 'TEST' : 'PRODUCTION');
+
       if (paymentPreferences.length > 0) {
         const preference = paymentPreferences[0];
-        
+
         // Clear cart before redirecting to payment
         clearCart();
-        
-        // Get the appropriate init point
-        const initPoint = preference.sandbox_init_point || preference.init_point;
-        
+
+        // Get the appropriate init point based on environment
+        const initPoint = isTestMode ? preference.sandbox_init_point : preference.init_point;
+
+        console.log('Payment URL selection:', {
+          isTestMode,
+          hasSandboxUrl: !!preference.sandbox_init_point,
+          hasProductionUrl: !!preference.init_point,
+          selectedUrl: initPoint
+        });
+
         if (initPoint) {
           console.log('Redirecting to Mercado Pago:', initPoint);
           
