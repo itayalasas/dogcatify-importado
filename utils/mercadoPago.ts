@@ -711,18 +711,26 @@ export const createUnifiedPaymentPreference = async (
       auto_return: 'approved',
       external_reference: orderId,
       notification_url: `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/mercadopago-webhook`,
-      statement_descriptor: 'DOGCATIFY',
-      // Application fee - comisión que va para DogCatiFy (marketplace)
-      application_fee: commissionAmount
+      statement_descriptor: 'DOGCATIFY'
     };
-    
+
+    // Detect if we're using test credentials
+    const isTestMode = partnerConfig.access_token?.startsWith('TEST-');
+
+    // Add application fee ONLY in production mode
+    // In test mode, we skip it to avoid "mixed credentials" error
+    if (!isTestMode) {
+      preferenceData.application_fee = commissionAmount;
+    }
+
     console.log('Final unified preference data:', {
       items_count: preferenceData.items.length,
       total_amount: totalAmount,
-      application_fee: commissionAmount,
+      application_fee: isTestMode ? 'SKIPPED (test mode)' : commissionAmount,
       commission_percentage: partnerConfig.commission_percentage || 5.0,
       partner_receives: totalAmount - commissionAmount,
-      external_reference: preferenceData.external_reference
+      external_reference: preferenceData.external_reference,
+      isTestMode
     });
 
     // Use partner's token to create preference (partner receives payment minus application_fee)
@@ -1081,12 +1089,18 @@ export const createServicePaymentPreference = async (
       }
     };
     
-    // Add marketplace fee if partner has OAuth configuration
-    if (partnerConfig.is_oauth && partnerConfig.user_id && !isNaN(parseInt(partnerConfig.user_id))) {
+    // Add marketplace fee ONLY if:
+    // 1. Partner has OAuth configuration
+    // 2. NOT in test mode (application_fee doesn't work in test mode with mixed credentials)
+    if (!isTestMode && partnerConfig.is_oauth && partnerConfig.user_id && !isNaN(parseInt(partnerConfig.user_id))) {
       preferenceData.application_fee = commissionAmount;
-      console.log('Using OAuth marketplace split for service booking');
+      console.log('Using OAuth marketplace split for service booking (PRODUCTION)');
     } else {
-      console.log('Using manual configuration for service booking');
+      if (isTestMode) {
+        console.log('Test mode: skipping application_fee to avoid mixed credentials');
+      } else {
+        console.log('Manual configuration: no marketplace split');
+      }
     }
     
     console.log('Creating service payment preference...');

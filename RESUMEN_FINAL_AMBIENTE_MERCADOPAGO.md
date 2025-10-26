@@ -154,6 +154,47 @@ Payment URL selected: {
 | `APP-xxx` | Ambos URLs | `init_point` | ✅ Checkout de Producción |
 | Sin prefijo | Ambos URLs | `init_point` | ✅ Checkout de Producción |
 
+## ⚠️ Problema Crítico: application_fee en Modo TEST
+
+### El Error que Aparecía
+
+Incluso usando `sandbox_init_point` correctamente, aparecía el error:
+```
+"Una de las partes con la que intentas hacer el pago es de prueba."
+```
+
+### Causa del Problema
+
+El error ocurría porque estábamos agregando `application_fee` (comisión de marketplace) en modo TEST, pero:
+- `access_token`: `TEST-xxx` (testing)
+- `user_id` / `collector_id`: `1876395148` (producción)
+
+**Esto causa mezcla de credenciales y MercadoPago lo rechaza.**
+
+### Solución Implementada
+
+**NO usar `application_fee` en modo TEST:**
+
+```javascript
+// Detect if we're using test credentials
+const isTestMode = partnerConfig.access_token?.startsWith('TEST-');
+
+// Add application fee ONLY in production mode
+// In test mode, we skip it to avoid "mixed credentials" error
+if (!isTestMode) {
+  preferenceData.application_fee = commissionAmount;
+}
+```
+
+### Por Qué Funciona Ahora
+
+| Modo | application_fee | Comportamiento |
+|------|-----------------|----------------|
+| **TEST** | ❌ NO se agrega | Partner recibe 100% del monto de prueba |
+| **PRODUCCIÓN** | ✅ SÍ se agrega | DogCatiFy recibe comisión, partner recibe el resto |
+
+En modo TEST, el partner prueba el flujo completo sin split de comisión. En producción, la comisión se aplica normalmente.
+
 ## Conclusión
 
 **La respuesta JSON de MercadoPago SIEMPRE incluirá ambos URLs.** Esto no es un problema ni un error.
@@ -162,5 +203,6 @@ Lo que importa es:
 1. ✅ Que usemos el token correcto del partner para crear la preferencia
 2. ✅ Que detectemos si es TEST o PRODUCCIÓN basado en el token
 3. ✅ Que abramos el URL correcto según el ambiente
+4. ✅ **Que NO usemos `application_fee` en modo TEST** (esto causaba el error de "mezcla de credenciales")
 
 Todos estos puntos están implementados correctamente en el código actual.
