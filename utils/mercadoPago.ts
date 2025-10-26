@@ -751,9 +751,6 @@ export const createUnifiedPaymentPreference = async (
 
     const preference = await response.json();
 
-    // Determine if we're using test credentials
-    const isTestMode = partnerConfig.access_token?.startsWith('TEST-');
-
     console.log('Split payment preference created successfully:', {
       id: preference.id,
       application_fee: commissionAmount,
