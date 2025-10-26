@@ -615,6 +615,64 @@ export default function ServiceBooking() {
         </View>
       </ScrollView>
 
+      {/* Modal de Métodos de Pago */}
+      <Modal
+        visible={showPaymentMethodModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPaymentMethodModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Método de Pago</Text>
+              <TouchableOpacity onPress={() => setShowPaymentMethodModal(false)} style={styles.closeButton}>
+                <X size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.methodsContent}>
+              <View style={styles.methodsHeader}>
+                <CreditCard size={32} color="#2D6A6F" />
+                <Text style={styles.methodsTitle}>Selecciona tu método de pago</Text>
+                <Text style={styles.methodsSubtitle}>
+                  Total: {formatPrice(service?.price || 0)}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.paymentMethodCard}
+                onPress={handlePayWithMercadoPago}
+              >
+                <View style={styles.paymentMethodIcon}>
+                  <CreditCard size={32} color="#009EE3" />
+                </View>
+                <View style={styles.paymentMethodInfo}>
+                  <Text style={styles.paymentMethodTitle}>Mercado Pago</Text>
+                  <Text style={styles.paymentMethodDescription}>
+                    Pago seguro con tarjetas, transferencias y más
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.paymentMethodCard, styles.disabledMethod]}
+                disabled
+              >
+                <View style={[styles.paymentMethodIcon, { backgroundColor: '#F3F4F6' }]}>
+                  <CreditCard size={32} color="#9CA3AF" />
+                </View>
+                <View style={styles.paymentMethodInfo}>
+                  <Text style={[styles.paymentMethodTitle, { color: '#9CA3AF' }]}>Tarjeta de Crédito/Débito</Text>
+                  <Text style={styles.paymentMethodDescription}>
+                    Visa, Mastercard, American Express
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -854,5 +912,90 @@ const styles = StyleSheet.create({
   },
   bookingButtonContainer: {
     marginBottom: 24,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 16,
+    minHeight: 400,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  methodsContent: {
+    padding: 20,
+  },
+  methodsHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  methodsTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  methodsSubtitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#10B981',
+    marginTop: 4,
+  },
+  paymentMethodCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+  },
+  disabledMethod: {
+    opacity: 0.5,
+  },
+  paymentMethodIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#E0F2FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  paymentMethodInfo: {
+    flex: 1,
+  },
+  paymentMethodTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  paymentMethodDescription: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
   },
 });
