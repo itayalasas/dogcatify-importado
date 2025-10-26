@@ -22,6 +22,83 @@ interface WebhookNotification {
   };
 }
 
+async function verifyWebhookSignature(req: Request, supabase: any): Promise<boolean> {
+  try {
+    const xSignature = req.headers.get('x-signature');
+    const xRequestId = req.headers.get('x-request-id');
+
+    if (!xSignature || !xRequestId) {
+      console.warn('Missing signature headers');
+      return false;
+    }
+
+    const { data: adminConfig } = await supabase
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'mercadopago_config')
+      .maybeSingle();
+
+    if (!adminConfig?.value?.webhook_secret) {
+      console.warn('Webhook secret not configured, skipping validation');
+      return true;
+    }
+
+    const parts = xSignature.split(',');
+    let ts = '';
+    let hash = '';
+
+    for (const part of parts) {
+      const [key, value] = part.split('=');
+      if (key && value) {
+        const trimmedKey = key.trim();
+        const trimmedValue = value.trim();
+        if (trimmedKey === 'ts') {
+          ts = trimmedValue;
+        } else if (trimmedKey === 'v1') {
+          hash = trimmedValue;
+        }
+      }
+    }
+
+    if (!ts || !hash) {
+      console.error('Invalid signature format');
+      return false;
+    }
+
+    const manifest = `id:${xRequestId};ts:${ts};`;
+    const secretKey = adminConfig.value.webhook_secret;
+
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(secretKey);
+    const messageData = encoder.encode(manifest);
+
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+
+    const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+    const hashArray = Array.from(new Uint8Array(signature));
+    const computedHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+    const isValid = computedHash === hash;
+
+    if (!isValid) {
+      console.error('Signature verification failed');
+      console.error('Expected:', hash);
+      console.error('Computed:', computedHash);
+    }
+
+    return isValid;
+  } catch (error) {
+    console.error('Error verifying signature:', error);
+    return false;
+  }
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -36,8 +113,24 @@ serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const notification: WebhookNotification = await req.json();
-    
-    console.log('Received MP webhook:', notification);
+
+    const isValid = await verifyWebhookSignature(req, supabase);
+
+    if (!isValid) {
+      console.error('Invalid webhook signature - rejecting request');
+      return new Response(
+        JSON.stringify({ error: 'Invalid signature' }),
+        {
+          status: 401,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders,
+          },
+        }
+      );
+    }
+
+    console.log('Received MP webhook (signature verified):', notification);
 
     if (notification.type === 'payment') {
       await processPaymentNotification(supabase, notification);
