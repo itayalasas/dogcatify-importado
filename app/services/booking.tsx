@@ -615,7 +615,7 @@ export default function ServiceBooking() {
         </View>
       </ScrollView>
 
-      {/* Modal de Métodos de Pago */}
+      {/* Modal de Métodos de Pago - Actualizado */}
       <Modal
         visible={showPaymentMethodModal}
         transparent
