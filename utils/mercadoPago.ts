@@ -1092,8 +1092,14 @@ export const createServicePaymentPreference = async (
       orderId,
       isTestMode,
       tokenPrefix: tokenPrefix + '...',
-      commissionAmount
+      commissionAmount,
+      willSkipApplicationFee: isTestMode
     });
+
+    // CRITICAL: In TEST mode, Mercado Pago does NOT support marketplace features
+    if (isTestMode) {
+      console.warn('⚠️ TEST MODE DETECTED - Marketplace features (application_fee, splits) will be DISABLED');
+    }
 
     // Format phone number (remove non-digits and ensure it's 8 digits)
     const rawPhone = bookingData.customerInfo.phone || '99999999';
