@@ -1551,26 +1551,43 @@ export const validateCredentialsFormat = (accessToken: string, publicKey: string
 
 /**
  * Check if Mercado Pago app is installed on the device
+ * IMPORTANTE: En iOS/Android, el sistema operativo intercepta automáticamente
+ * las URLs de Mercado Pago si la app está instalada, por lo que esta función
+ * intenta detectar la app pero no es 100% precisa. El comportamiento real
+ * depende del sistema operativo.
  */
 export const isMercadoPagoAppInstalled = async (): Promise<boolean> => {
   try {
     const { Linking, Platform } = await import('react-native');
 
+    console.log('🔍 Checking for Mercado Pago app...', { platform: Platform.OS });
+
+    // En web siempre retornamos false
+    if (Platform.OS === 'web') {
+      console.log('❌ Running on web, app detection not available');
+      return false;
+    }
+
     // Deep links para abrir la app de Mercado Pago
-    const mpAppSchemes = [
-      'mercadopago://',
-      'com.mercadopago.wallet://'
-    ];
+    // Nota: En Android, mercadopago:// es el más confiable
+    // En iOS, com.mercadopago.wallet:// funciona mejor
+    const mpAppSchemes = Platform.OS === 'ios'
+      ? ['com.mercadopago.wallet://', 'mercadopago://']
+      : ['mercadopago://', 'com.mercadopago.wallet://'];
 
     // Intentar verificar si alguno de los esquemas está disponible
     for (const scheme of mpAppSchemes) {
       try {
+        console.log('   Trying scheme:', scheme);
         const canOpen = await Linking.canOpenURL(scheme);
+        console.log('   Result:', canOpen);
+
         if (canOpen) {
           console.log('✅ Mercado Pago app detected with scheme:', scheme);
           return true;
         }
       } catch (error) {
+        console.log('   Error with scheme:', error.message);
         // Continuar con el siguiente esquema
         continue;
       }
@@ -1585,10 +1602,28 @@ export const isMercadoPagoAppInstalled = async (): Promise<boolean> => {
 };
 
 /**
+ * Extract preference ID from Mercado Pago URL
+ */
+const extractPreferenceId = (url: string): string | null => {
+  try {
+    const match = url.match(/pref_id=([^&]+)/);
+    return match ? match[1] : null;
+  } catch (error) {
+    console.error('Error extracting preference ID:', error);
+    return null;
+  }
+};
+
+/**
  * Open Mercado Pago payment URL intelligently
- * - Check if Mercado Pago app is installed
- * - If installed, open in app
- * - If not installed, open in web browser
+ *
+ * ESTRATEGIA:
+ * 1. Intenta abrir con deep link directo a la app (mercadopago://)
+ * 2. Si falla, abre la URL web normal
+ * 3. El OS decide si abre en app o navegador basado en el dominio
+ *
+ * IMPORTANTE: URLs de sandbox (sandbox.mercadopago.com.uy) no siempre
+ * abren la app, solo las URLs de producción (www.mercadopago.com.uy).
  */
 export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boolean): Promise<{
   success: boolean;
@@ -1598,53 +1633,111 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
   try {
     const { Linking, Platform } = await import('react-native');
 
-    console.log('Opening Mercado Pago payment:', {
-      isTestMode,
-      urlLength: paymentUrl.length,
-      urlDomain: new URL(paymentUrl).hostname,
-      platform: Platform.OS
-    });
+    const urlDomain = new URL(paymentUrl).hostname;
+    const isSandboxUrl = urlDomain.includes('sandbox');
 
-    // Verificar si la app de Mercado Pago está instalada
-    const hasApp = await isMercadoPagoAppInstalled();
+    console.log('═══════════════════════════════════════');
+    console.log('🚀 OPENING MERCADO PAGO PAYMENT');
+    console.log('═══════════════════════════════════════');
+    console.log('URL:', paymentUrl);
+    console.log('Domain:', urlDomain);
+    console.log('Is Test Mode:', isTestMode);
+    console.log('Is Sandbox URL:', isSandboxUrl);
+    console.log('Platform:', Platform.OS);
 
-    console.log('Mercado Pago app status:', {
-      installed: hasApp,
-      willOpenIn: hasApp ? 'app' : 'browser'
-    });
+    // Diagnóstico importante
+    if (isSandboxUrl) {
+      console.log('⚠️  WARNING: Sandbox URLs may NOT open the app');
+      console.log('⚠️  Recommendation: Use production credentials with test cards');
+      console.log('⚠️  This will ensure the app opens correctly');
+    }
 
-    // La app de Mercado Pago intercepta automáticamente las URLs de checkout
-    // Si el usuario tiene la app instalada, se abrirá la app
-    // Si no, se abrirá en el navegador
-    console.log('Opening Mercado Pago URL...');
+    // Intentar detectar si la app está instalada
+    let hasApp = false;
+    try {
+      hasApp = await isMercadoPagoAppInstalled();
+      console.log('📱 App Detection Result:', hasApp ? 'DETECTED' : 'NOT DETECTED');
+    } catch (error) {
+      console.log('📱 App Detection:', 'FAILED - Will let OS handle it');
+    }
+
+    // ESTRATEGIA 1: Intentar deep link directo a la app
+    // Esto fuerza la apertura en la app si está instalada
+    const preferenceId = extractPreferenceId(paymentUrl);
+    if (preferenceId && hasApp && Platform.OS !== 'web') {
+      console.log('');
+      console.log('🔗 STRATEGY 1: Try deep link to app');
+      console.log('Deep Link:', `mercadopago://checkout?preference_id=${preferenceId}`);
+
+      try {
+        const deepLink = `mercadopago://checkout?preference_id=${preferenceId}`;
+        const canOpenDeepLink = await Linking.canOpenURL(deepLink);
+
+        if (canOpenDeepLink) {
+          console.log('✅ Deep link available, opening app directly...');
+          await Linking.openURL(deepLink);
+          console.log('✅ SUCCESS: Opened in Mercado Pago app via deep link');
+          console.log('═══════════════════════════════════════\n');
+          return { success: true, openedInApp: true };
+        } else {
+          console.log('❌ Deep link not available, falling back to web URL');
+        }
+      } catch (deepLinkError) {
+        console.log('❌ Deep link failed:', deepLinkError.message);
+        console.log('   Falling back to web URL...');
+      }
+    }
+
+    // ESTRATEGIA 2: Abrir URL web normal
+    // El OS decide si abre en app o navegador basado en el dominio
+    console.log('');
+    console.log('🌐 STRATEGY 2: Open web URL (OS will decide)');
+    console.log('Checking if URL can be opened...');
 
     const canOpen = await Linking.canOpenURL(paymentUrl);
-
     if (!canOpen) {
-      console.error('Cannot open URL:', paymentUrl);
+      console.error('❌ Cannot open URL:', paymentUrl);
+      console.log('═══════════════════════════════════════\n');
       throw new Error('No se puede abrir la URL de pago');
     }
 
+    console.log('✅ URL can be opened, proceeding...');
     await Linking.openURL(paymentUrl);
 
-    // En Android/iOS, si la app está instalada se abrirá automáticamente
-    console.log('✅ Mercado Pago URL opened successfully');
+    // Determinar dónde se abrió basado en el dominio
+    const openedInApp = !isSandboxUrl && hasApp;
+
+    if (openedInApp) {
+      console.log('✅ SUCCESS: Likely opened in Mercado Pago app');
+      console.log('   (Production URL + app detected)');
+    } else if (isSandboxUrl) {
+      console.log('⚠️  SUCCESS: Opened in web browser');
+      console.log('   (Sandbox URLs typically open in browser)');
+    } else {
+      console.log('✅ SUCCESS: Opened, OS decided destination');
+      console.log('   (App if installed, browser otherwise)');
+    }
+
+    console.log('═══════════════════════════════════════\n');
+
     return {
       success: true,
-      openedInApp: hasApp
+      openedInApp: openedInApp
     };
 
   } catch (error) {
-    console.error('Error opening Mercado Pago payment:', error);
+    console.error('❌ ERROR opening Mercado Pago payment:', error);
+    console.log('═══════════════════════════════════════\n');
 
-    // Fallback: try to open web URL
+    // Fallback: intentar abrir en navegador web
     try {
       const { Linking } = await import('react-native');
-      console.log('Fallback: opening web URL');
+      console.log('🔄 FALLBACK: Trying to open web URL...');
       await Linking.openURL(paymentUrl);
+      console.log('✅ Fallback successful');
       return { success: true, openedInApp: false };
     } catch (fallbackError) {
-      console.error('Failed to open payment URL:', fallbackError);
+      console.error('❌ Fallback failed:', fallbackError);
       return {
         success: false,
         openedInApp: false,
