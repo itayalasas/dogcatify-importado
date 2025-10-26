@@ -291,13 +291,17 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
       // Common errors and solutions
       if (mpResponse.status === 404) {
         console.error('💡 Payment not found (404). Possible causes:');
+        console.error('   - Payment was not completed (user abandoned checkout)');
         console.error('   - Wrong access token (using token from different account)');
         console.error('   - Mixed environments (test token with prod payment ID or vice versa)');
         console.error('   - Payment ID is actually a preference_id or merchant_order_id');
+        console.log('ℹ️ This is normal if the user created a preference but never completed the payment');
+        console.log('✅ No action needed - order will remain in pending status');
       } else if (mpResponse.status === 401) {
         console.error('💡 Unauthorized (401). Check access token is valid and not expired');
       }
 
+      // Return success to prevent webhook retries
       return;
     }
 
