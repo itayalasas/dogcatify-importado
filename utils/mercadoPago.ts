@@ -1569,13 +1569,6 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
       urlDomain: new URL(paymentUrl).hostname
     });
 
-    // TEMPORARY: Always use web URL for better compatibility
-    // The deep link scheme for MP app causes navigation issues on Android
-    console.log('Opening Mercado Pago in browser (web URL)');
-    await Linking.openURL(paymentUrl);
-    return { success: true, openedInApp: false };
-
-    /* Commented out for now - app deep link causes issues
     // Extract preference ID from URL
     const preferenceId = paymentUrl.match(/\/checkout\/v1\/redirect\?pref_id=([^&]+)/)?.[1];
 
@@ -1589,13 +1582,13 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
     // mercadopago://checkout?preference-id=PREFERENCE_ID
     const appUrl = `mercadopago://checkout?preference-id=${preferenceId}`;
 
-    console.log('Attempting to open Mercado Pago app:', appUrl);
+    console.log('Checking if Mercado Pago app is installed...');
 
     // Check if app can be opened
     const canOpenApp = await Linking.canOpenURL(appUrl);
 
     if (canOpenApp) {
-      console.log('✅ Mercado Pago app is installed, opening...');
+      console.log('✅ Mercado Pago app is installed, opening in app...');
       await Linking.openURL(appUrl);
       return { success: true, openedInApp: true };
     } else {
@@ -1603,13 +1596,13 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
       await Linking.openURL(paymentUrl);
       return { success: true, openedInApp: false };
     }
-    */
   } catch (error) {
     console.error('Error opening Mercado Pago payment:', error);
 
     // Fallback: try to open web URL
     try {
       const { Linking } = await import('react-native');
+      console.log('Fallback: opening web URL');
       await Linking.openURL(paymentUrl);
       return { success: true, openedInApp: false };
     } catch (fallbackError) {

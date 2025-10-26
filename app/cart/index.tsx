@@ -21,6 +21,7 @@ export default function Cart() {
   const [productStocks, setProductStocks] = useState<Record<string, number>>({});
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentMessage, setPaymentMessage] = useState('Preparando tu pago seguro con Mercado Pago');
   const [savedAddress, setSavedAddress] = useState({
     street: '',
     number: '',
@@ -256,6 +257,9 @@ export default function Cart() {
         if (initPoint) {
           console.log('Redirecting to Mercado Pago:', initPoint);
 
+          // Update message while opening
+          setPaymentMessage('Abriendo Mercado Pago...');
+
           const openResult = await openMercadoPagoPayment(initPoint, isTestMode);
 
           if (!openResult.success) {
@@ -273,9 +277,16 @@ export default function Cart() {
               ]
             );
           } else {
-            console.log(openResult.openedInApp
-              ? '✅ Opened in Mercado Pago app'
-              : '🌐 Opened in browser');
+            if (openResult.openedInApp) {
+              console.log('✅ Opened in Mercado Pago app');
+              setPaymentMessage('Abriendo app de Mercado Pago...');
+            } else {
+              console.log('🌐 Opened in browser');
+              setPaymentMessage('Abriendo en navegador...');
+            }
+
+            // Give time for the message to show
+            await new Promise(resolve => setTimeout(resolve, 800));
           }
         } else {
           throw new Error('No se pudo obtener el enlace de pago');
@@ -289,6 +300,7 @@ export default function Cart() {
     } finally {
       setLoading(false);
       setPaymentLoading(false);
+      setPaymentMessage('Preparando tu pago seguro con Mercado Pago');
     }
   };
 
@@ -683,7 +695,7 @@ export default function Cart() {
               <ActivityIndicator size="large" color="#00A650" />
               <Text style={styles.paymentLoadingTitle}>Procesando pago...</Text>
               <Text style={styles.paymentLoadingSubtitle}>
-                Preparando tu pago seguro con Mercado Pago
+                {paymentMessage}
               </Text>
             </View>
           </View>
