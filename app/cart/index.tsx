@@ -222,7 +222,8 @@ export default function Cart() {
       if (paymentPreferences.length > 0) {
         const preference = paymentPreferences[0];
 
-        clearCart();
+        // NO limpiar el carrito aquí - lo haremos cuando el webhook confirme el pago
+        // clearCart();
 
         let initPoint: string | undefined;
 
