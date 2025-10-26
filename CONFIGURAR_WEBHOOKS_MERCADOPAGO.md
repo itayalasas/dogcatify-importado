@@ -180,10 +180,39 @@ Para probar pagos en modo TEST, usa estas tarjetas de Mercado Pago Uruguay:
 - **Vencimiento:** 11/25
 - **Nombre:** PEND
 
+## Seguridad: Validación de Firma con Clave Secreta
+
+El webhook ahora **valida la firma** de cada notificación usando la **Clave Secreta** de Mercado Pago.
+
+### ¿Por qué es importante?
+
+Sin validación, cualquiera podría enviar notificaciones falsas a tu webhook y confirmar órdenes fraudulentas. La clave secreta garantiza que **solo Mercado Pago** puede enviar notificaciones válidas.
+
+### ¿Cómo funciona?
+
+1. Mercado Pago firma cada notificación con tu clave secreta
+2. El webhook recibe headers `x-signature` y `x-request-id`
+3. El webhook calcula la firma esperada usando HMAC-SHA256
+4. Si las firmas coinciden → ✅ procesa la notificación
+5. Si NO coinciden → ❌ rechaza con error 401
+
+### Clave Secreta Configurada
+
+✅ La clave secreta ya está guardada en la base de datos:
+```
+5225bbcf087d4531d1d9a4f585ff586aae3d8b295180daa3f31d81b1ce7e6fb5
+```
+
+**IMPORTANTE:** Esta clave está en la configuración de `admin_settings` en Supabase y se usa automáticamente. NO necesitas configurarla manualmente.
+
 ## Resumen
 
 ✅ **Webhook desplegado y funcionando** en:
    `https://zkgiwamycbjcogcgqhff.supabase.co/functions/v1/mercadopago-webhook`
+
+✅ **Validación de firma implementada** - Solo acepta notificaciones firmadas por Mercado Pago
+
+✅ **Clave secreta configurada** - Protege contra notificaciones fraudulentas
 
 ⚠️ **FALTA CONFIGURAR** en el panel de Mercado Pago para que envíe notificaciones
 
