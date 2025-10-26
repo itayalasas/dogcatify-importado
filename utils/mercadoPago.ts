@@ -1648,3 +1648,148 @@ export const getPartnerMercadoPagoSimpleConfig = async (
     throw error;
   }
 };
+
+/**
+ * Regenerar link de pago para una orden existente
+ * Útil cuando el link ha expirado o el pago falló
+ */
+export const regeneratePaymentLink = async (orderId: string): Promise<{
+  success: boolean;
+  paymentUrl?: string;
+  error?: string;
+}> => {
+  try {
+    console.log('Regenerating payment link for order:', orderId);
+
+    // 1. Obtener la orden existente
+    const { data: order, error: orderError } = await supabaseClient
+      .from('orders')
+      .select('*')
+      .eq('id', orderId)
+      .single();
+
+    if (orderError || !order) {
+      console.error('Order not found:', orderError);
+      return {
+        success: false,
+        error: 'Orden no encontrada'
+      };
+    }
+
+    // 2. Verificar que la orden esté en estado pending o payment_failed
+    if (!['pending', 'payment_failed'].includes(order.status)) {
+      return {
+        success: false,
+        error: 'Esta orden ya no puede ser pagada'
+      };
+    }
+
+    // 3. Obtener configuración de Mercado Pago del partner
+    const { data: partner, error: partnerError } = await supabaseClient
+      .from('partners')
+      .select('mercadopago_config')
+      .eq('id', order.partner_id)
+      .single();
+
+    if (partnerError || !partner?.mercadopago_config) {
+      console.error('Partner MP config not found:', partnerError);
+      return {
+        success: false,
+        error: 'Configuración de pago no encontrada'
+      };
+    }
+
+    const partnerConfig = partner.mercadopago_config;
+    const isTestMode = partnerConfig.access_token?.startsWith('TEST-');
+
+    console.log('Creating new payment preference...');
+
+    // 4. Crear nueva preferencia de pago basada en el tipo de orden
+    let paymentUrl: string;
+
+    if (order.order_type === 'service_booking') {
+      // Para reservas de servicios
+      const preferenceData = {
+        items: [{
+          id: order.service_id || 'service',
+          title: order.service_name || 'Servicio',
+          quantity: 1,
+          unit_price: Number(order.total_amount),
+          currency_id: 'UYU'
+        }],
+        payer: {
+          name: order.customer_name || 'Cliente',
+          email: order.customer_email,
+          phone: {
+            area_code: '598',
+            number: order.customer_phone?.replace(/\D/g, '').slice(-8) || '99999999'
+          }
+        },
+        back_urls: {
+          success: `dogcatify://payment/success?order_id=${orderId}&type=booking`,
+          failure: `dogcatify://payment/failure?order_id=${orderId}&type=booking`,
+          pending: `dogcatify://payment/pending?order_id=${orderId}&type=booking`
+        },
+        auto_return: 'approved',
+        external_reference: orderId,
+        notification_url: `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/mercadopago-webhook`,
+        statement_descriptor: 'DOGCATIFY'
+      };
+
+      const response = await fetch(`${MP_BASE_URL}/checkout/preferences`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${partnerConfig.access_token}`
+        },
+        body: JSON.stringify(preferenceData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('MP API error:', errorData);
+        throw new Error('Error al crear preferencia de pago');
+      }
+
+      const preference = await response.json();
+      paymentUrl = isTestMode ? preference.sandbox_init_point : preference.init_point;
+
+      // Actualizar orden con nueva preferencia
+      await supabaseClient
+        .from('orders')
+        .update({
+          payment_preference_id: preference.id,
+          last_payment_url: paymentUrl,
+          payment_link_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 horas
+          payment_retry_count: (order.payment_retry_count || 0) + 1,
+          status: 'pending', // Volver a pending
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', orderId);
+
+    } else {
+      // Para compras de productos
+      return {
+        success: false,
+        error: 'Regeneración de link para productos no implementada aún'
+      };
+    }
+
+    console.log('Payment link regenerated successfully:', {
+      orderId,
+      paymentUrl: paymentUrl.substring(0, 50) + '...'
+    });
+
+    return {
+      success: true,
+      paymentUrl
+    };
+
+  } catch (error) {
+    console.error('Error regenerating payment link:', error);
+    return {
+      success: false,
+      error: error.message || 'Error al regenerar link de pago'
+    };
+  }
+};

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Linking } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowLeft, Package, Clock, Truck, CircleCheck as CheckCircle, Circle as XCircle, MapPin, Phone, Star } from 'lucide-react-native';
+import { ArrowLeft, Package, Clock, Truck, CircleCheck as CheckCircle, Circle as XCircle, MapPin, Phone, Star, AlertCircle, RefreshCw } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { regeneratePaymentLink } from '../../utils/mercadoPago';
 
 export default function MyOrders() {
   const { currentUser } = useAuth();
@@ -45,7 +46,10 @@ export default function MyOrders() {
         totalAmount: order.total_amount || 0,
         shippingAddress: order.shipping_address || '',
         createdAt: new Date(order.created_at),
-        updatedAt: order.updated_at ? new Date(order.updated_at) : null
+        updatedAt: order.updated_at ? new Date(order.updated_at) : null,
+        paymentLinkExpiresAt: order.payment_link_expires_at ? new Date(order.payment_link_expires_at) : null,
+        lastPaymentUrl: order.last_payment_url,
+        paymentRetryCount: order.payment_retry_count || 0
       })) || [];
       
       setOrders(ordersData);
@@ -60,6 +64,7 @@ export default function MyOrders() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return '#FEF3C7';
+      case 'payment_failed': return '#FECACA';
       case 'confirmed': return '#DBEAFE';
       case 'processing': return '#DBEAFE';
       case 'shipped': return '#D1FAE5';
@@ -72,6 +77,7 @@ export default function MyOrders() {
   const getStatusTextColor = (status: string) => {
     switch (status) {
       case 'pending': return '#92400E';
+      case 'payment_failed': return '#991B1B';
       case 'confirmed': return '#1E40AF';
       case 'processing': return '#1E40AF';
       case 'shipped': return '#065F46';
@@ -84,6 +90,7 @@ export default function MyOrders() {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'pending': return 'Pendiente';
+      case 'payment_failed': return 'Pago fallido';
       case 'confirmed': return 'Confirmado';
       case 'processing': return 'En proceso';
       case 'shipped': return 'Enviado';
@@ -96,6 +103,7 @@ export default function MyOrders() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pending': return <Clock size={16} color="#92400E" />;
+      case 'payment_failed': return <AlertCircle size={16} color="#991B1B" />;
       case 'confirmed': return <CheckCircle size={16} color="#1E40AF" />;
       case 'processing': return <Package size={16} color="#1E40AF" />;
       case 'shipped': return <Truck size={16} color="#065F46" />;
@@ -114,7 +122,7 @@ export default function MyOrders() {
 
   const filteredOrders = orders.filter(order => {
     if (activeTab === 'active') {
-      return ['pending', 'confirmed', 'processing', 'shipped'].includes(order.status);
+      return ['pending', 'payment_failed', 'confirmed', 'processing', 'shipped'].includes(order.status);
     } else {
       return ['delivered', 'cancelled'].includes(order.status);
     }
@@ -148,6 +156,62 @@ export default function MyOrders() {
       'Puedes contactarnos por:\n\n📧 Email: soporte@dogcatify.com\n📱 WhatsApp: +54 11 1234-5678',
       [{ text: 'Entendido' }]
     );
+  };
+
+  const handleRetryPayment = async (order: any) => {
+    try {
+      const isExpired = order.paymentLinkExpiresAt && new Date(order.paymentLinkExpiresAt) < new Date();
+
+      if (!isExpired && order.lastPaymentUrl) {
+        // Link aún válido, abrir directamente
+        const canOpen = await Linking.canOpenURL(order.lastPaymentUrl);
+        if (canOpen) {
+          await Linking.openURL(order.lastPaymentUrl);
+        } else {
+          Alert.alert('Error', 'No se pudo abrir el link de pago');
+        }
+      } else {
+        // Link expirado o no existe, regenerar
+        Alert.alert(
+          'Regenerar link de pago',
+          isExpired
+            ? 'El link de pago ha expirado. Se generará uno nuevo.'
+            : 'Se generará un nuevo link de pago.',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Continuar',
+              onPress: async () => {
+                try {
+                  Alert.alert('Generando link...', 'Por favor espera');
+
+                  const result = await regeneratePaymentLink(order.id);
+
+                  if (result.success && result.paymentUrl) {
+                    // Actualizar la orden local
+                    await fetchOrders();
+
+                    // Abrir el nuevo link
+                    const canOpen = await Linking.canOpenURL(result.paymentUrl);
+                    if (canOpen) {
+                      await Linking.openURL(result.paymentUrl);
+                    }
+                  } else {
+                    Alert.alert('Error', result.error || 'No se pudo generar el link de pago');
+                  }
+                } catch (error) {
+                  console.error('Error regenerating payment:', error);
+                  Alert.alert('Error', 'Hubo un problema al generar el link de pago');
+                }
+              }
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Error handling retry payment:', error);
+      Alert.alert('Error', 'No se pudo procesar el reintento de pago');
+    }
   };
 
   const renderOrder = (order: any) => (
@@ -206,6 +270,20 @@ export default function MyOrders() {
       </View>
 
       <View style={styles.orderActions}>
+        {order.status === 'payment_failed' && (
+          <TouchableOpacity
+            style={styles.retryPaymentButton}
+            onPress={() => handleRetryPayment(order)}
+            activeOpacity={0.7}
+          >
+            <RefreshCw size={18} color="#FFFFFF" strokeWidth={2.5} />
+            <Text style={styles.retryPaymentText}>
+              {order.paymentLinkExpiresAt && new Date(order.paymentLinkExpiresAt) < new Date()
+                ? 'Generar nuevo link'
+                : 'Reintentar pago'}
+            </Text>
+          </TouchableOpacity>
+        )}
         {order.status === 'delivered' && (
           <Button
             title="Reordenar"
@@ -553,6 +631,21 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     gap: 12,
     marginTop: 8,
+  },
+  retryPaymentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  retryPaymentText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
   },
   quickActionsCard: {
     marginTop: 8,
