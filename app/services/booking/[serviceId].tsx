@@ -1047,6 +1047,19 @@ export default function ServiceBooking() {
             ))}
           </View>
         </View>
+
+        {/* Payment Loading Overlay */}
+        {paymentLoading && (
+          <View style={styles.paymentLoadingOverlay}>
+            <View style={styles.paymentLoadingContent}>
+              <ActivityIndicator size="large" color="#00A650" />
+              <Text style={styles.paymentLoadingTitle}>Procesando pago...</Text>
+              <Text style={styles.paymentLoadingSubtitle}>
+                Preparando tu pago seguro con Mercado Pago
+              </Text>
+            </View>
+          </View>
+        )}
       </Modal>
     </SafeAreaView>
   );
@@ -1613,5 +1626,43 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
+  },
+  paymentLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  paymentLoadingContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    maxWidth: 280,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  paymentLoadingTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1F2937',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  paymentLoadingSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
