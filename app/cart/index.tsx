@@ -220,13 +220,24 @@ export default function Cart() {
         clearCart();
 
         // Get the appropriate init point based on environment
-        const initPoint = isTestMode ? preference.sandbox_init_point : preference.init_point;
+        // CRITICAL: Always use sandbox_init_point in TEST mode to avoid production charges
+        let initPoint: string | undefined;
+
+        if (isTestMode) {
+          initPoint = preference.sandbox_init_point || preference.init_point;
+          if (!preference.sandbox_init_point) {
+            console.warn('⚠️ sandbox_init_point not available, falling back to init_point');
+          }
+        } else {
+          initPoint = preference.init_point;
+        }
 
         console.log('Payment URL selection:', {
           isTestMode,
           hasSandboxUrl: !!preference.sandbox_init_point,
           hasProductionUrl: !!preference.init_point,
-          selectedUrl: initPoint
+          selectedUrl: initPoint,
+          urlDomain: initPoint ? new URL(initPoint).hostname : 'none'
         });
 
         if (initPoint) {
