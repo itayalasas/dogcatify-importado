@@ -58,7 +58,7 @@ export default function ServiceBooking() {
   // Payment flow
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
-  const [paymentMessage, setPaymentMessage] = useState('Preparando tu pago seguro con Mercado Pago');
+  const [paymentMessage, setPaymentMessage] = useState('Preparando tu pago con Mercado Pago');
   const [paymentStep, setPaymentStep] = useState<'methods' | 'card' | 'processing'>('methods');
   
   // Card form data
@@ -508,7 +508,7 @@ export default function ServiceBooking() {
         // Open Mercado Pago directly without showing alert
         try {
           // Update message while opening
-          setPaymentMessage('Redirigiendo a Mercado Pago...');
+          setPaymentMessage('Abriendo Mercado Pago...');
 
           // Open Mercado Pago in browser
           const openResult = await openMercadoPagoPayment(result.paymentUrl!, isTestMode);
@@ -554,7 +554,7 @@ export default function ServiceBooking() {
       );
     } finally {
       setPaymentLoading(false);
-      setPaymentMessage('Preparando tu pago seguro con Mercado Pago');
+      setPaymentMessage('Preparando tu pago con Mercado Pago');
     }
   };
 
