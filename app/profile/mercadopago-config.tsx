@@ -159,7 +159,8 @@ export default function MercadoPagoConfig() {
         is_test_mode: config.is_test_mode,
         connected_at: config.connected_at,
         partner_id: partner.id,
-        partner_name: partner.business_name
+        partner_name: partner.business_name,
+        user_id: partner.user_id
       });
 
       const { error } = await supabaseClient
@@ -169,14 +170,14 @@ export default function MercadoPagoConfig() {
           mercadopago_config: config,
           updated_at: new Date().toISOString()
         })
-        .eq('id', partner.id);
+        .eq('user_id', partner.user_id);
 
       if (error) {
-        console.error('Error updating partner:', error);
+        console.error('Error updating partners:', error);
         throw error;
       }
 
-      console.log('MP config saved successfully');
+      console.log('MP config saved successfully for ALL businesses of this partner');
 
       // Refresh partner data from database to ensure we have the latest
       await loadPartnerData();
@@ -186,7 +187,7 @@ export default function MercadoPagoConfig() {
 
       Alert.alert(
         '¡Éxito!',
-        'Tu cuenta de Mercado Pago ha sido configurada correctamente. Ya puedes recibir pagos.'
+        'Tu cuenta de Mercado Pago ha sido configurada correctamente para TODOS tus negocios. Ya puedes recibir pagos.'
       );
     } catch (error) {
       console.error('Error saving MP config:', error);
@@ -199,7 +200,7 @@ export default function MercadoPagoConfig() {
   const handleDisconnect = () => {
     Alert.alert(
       'Desconectar Mercado Pago',
-      '¿Estás seguro? Esto deshabilitará la recepción de pagos para tu negocio.',
+      '¿Estás seguro? Esto deshabilitará la recepción de pagos para TODOS tus negocios.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -214,14 +215,14 @@ export default function MercadoPagoConfig() {
                   mercadopago_config: null,
                   updated_at: new Date().toISOString()
                 })
-                .eq('id', partner.id);
+                .eq('user_id', partner.user_id);
 
               if (error) throw error;
 
               // Refresh partner data from database to ensure we have the latest
               await loadPartnerData();
 
-              Alert.alert('Desconectado', 'Tu cuenta de Mercado Pago ha sido desconectada.');
+              Alert.alert('Desconectado', 'Tu cuenta de Mercado Pago ha sido desconectada de todos tus negocios.');
             } catch (error) {
               Alert.alert('Error', 'No se pudo desconectar la cuenta.');
             }
