@@ -10,7 +10,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import { createMultiPartnerOrder, openMercadoPagoPayment } from '../../utils/mercadoPago';
 import { supabaseClient } from '../../lib/supabase';
-import { PaymentModal } from '../../components/PaymentModal';
 
 export default function Cart() {
   const { currentUser } = useAuth();
@@ -20,7 +19,6 @@ export default function Cart() {
   const [useNewAddress, setUseNewAddress] = useState(false);
   const [isAddressExpanded, setIsAddressExpanded] = useState(false);
   const [productStocks, setProductStocks] = useState<Record<string, number>>({});
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [savedAddress, setSavedAddress] = useState({
     street: '',
     number: '',
@@ -192,16 +190,11 @@ export default function Cart() {
       return;
     }
 
-    setShowPaymentModal(true);
-  };
-
-  const handlePaymentSuccess = async (paymentResult: any) => {
-    console.log('Payment successful:', paymentResult);
     setLoading(true);
     try {
-      if (!currentUser || !cart || cart.length === 0) {
-        throw new Error('Información incompleta para crear la orden');
-      }
+      console.log('Starting checkout process...');
+      console.log('Cart items:', cart);
+      console.log('Customer info:', currentUser);
 
       const addressToUse = useNewAddress ? newAddress : savedAddress;
 
@@ -211,64 +204,80 @@ export default function Cart() {
       if (addressToUse.codigo_postal) fullAddress += ` - CP: ${addressToUse.codigo_postal}`;
       if (addressToUse.phone) fullAddress += ` - Tel: ${addressToUse.phone}`;
 
+      console.log('Shipping address:', fullAddress);
+
       const totalShippingCost = 500;
 
-      for (const item of cart) {
-        const orderData = {
-          partner_id: item.partnerId,
-          customer_id: currentUser.id,
-          customer_name: currentUser.displayName || 'Usuario',
-          customer_email: currentUser.email,
-          customer_phone: currentUser.phone || null,
-          items: [{
-            product_id: item.id,
-            product_name: item.name,
-            quantity: item.quantity,
-            unit_price: item.price,
-            total_price: item.price * item.quantity
-          }],
-          subtotal: item.price * item.quantity,
-          shipping_cost: totalShippingCost,
-          total_amount: (item.price * item.quantity) + totalShippingCost,
-          shipping_address: fullAddress,
-          status: 'confirmed',
-          payment_status: 'paid',
-          payment_method: 'credit_card',
-          payment_transaction_id: paymentResult.transactionId,
-          payment_confirmed_at: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-        };
+      const { orders, paymentPreferences, isTestMode } = await createMultiPartnerOrder(
+        cart,
+        currentUser,
+        fullAddress,
+        totalShippingCost
+      );
 
-        const { error } = await supabaseClient
-          .from('orders')
-          .insert([orderData]);
+      console.log('Orders created:', orders.length);
+      console.log('Payment preferences created:', paymentPreferences.length);
+      console.log('Environment detected:', isTestMode ? 'TEST' : 'PRODUCTION');
 
-        if (error) {
-          console.error('Error creating order:', error);
-          throw new Error(`Error al crear la orden: ${error.message}`);
+      if (paymentPreferences.length > 0) {
+        const preference = paymentPreferences[0];
+
+        clearCart();
+
+        let initPoint: string | undefined;
+
+        if (isTestMode) {
+          initPoint = preference.sandbox_init_point || preference.init_point;
+          if (!preference.sandbox_init_point) {
+            console.warn('⚠️ sandbox_init_point not available, falling back to init_point');
+          }
+        } else {
+          initPoint = preference.init_point;
         }
+
+        console.log('Payment URL selection:', {
+          isTestMode,
+          hasSandboxUrl: !!preference.sandbox_init_point,
+          hasProductionUrl: !!preference.init_point,
+          selectedUrl: initPoint,
+          urlDomain: initPoint ? new URL(initPoint).hostname : 'none'
+        });
+
+        if (initPoint) {
+          console.log('Redirecting to Mercado Pago:', initPoint);
+
+          const openResult = await openMercadoPagoPayment(initPoint, isTestMode);
+
+          if (!openResult.success) {
+            Alert.alert(
+              'Error',
+              openResult.error || 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.',
+              [
+                {
+                  text: 'Copiar enlace',
+                  onPress: () => {
+                    console.log('Payment URL:', initPoint);
+                  }
+                },
+                { text: 'OK' }
+              ]
+            );
+          } else {
+            console.log(openResult.openedInApp
+              ? '✅ Opened in Mercado Pago app'
+              : '🌐 Opened in browser');
+          }
+        } else {
+          throw new Error('No se pudo obtener el enlace de pago');
+        }
+      } else {
+        throw new Error('No se pudo crear la preferencia de pago');
       }
-
-      clearCart();
-
-      Alert.alert(
-        'Compra Exitosa',
-        `¡Perfecto! Tu compra ha sido procesada correctamente.\n\n💰 Total: ${formatCurrency(getCartTotal() + 500)}\n\nRecibirás un correo con los detalles de tu pedido.`,
-        [{ text: 'OK', onPress: () => router.push('/(tabs)') }]
-      );
     } catch (error: any) {
-      console.error('Error creating order:', error);
-      Alert.alert(
-        'Error al crear orden',
-        `${error?.message || 'Error desconocido'}\n\nPor favor intenta nuevamente o contacta con soporte.`,
-        [
-          { text: 'Reintentar', onPress: () => setShowPaymentModal(true) },
-          { text: 'Cancelar', style: 'cancel' }
-        ]
-      );
+      console.error('Checkout error:', error);
+      Alert.alert('Error', error?.message || 'No se pudo procesar tu pedido');
     } finally {
       setLoading(false);
-      setShowPaymentModal(false);
     }
   };
 
@@ -573,36 +582,19 @@ export default function Cart() {
 
             <View style={styles.actionsContainer}>
               <Button
-                title={loading ? 'Procesando...' : 'Continuar con el Pago'}
+                title={loading ? 'Procesando...' : 'Pagar con Mercado Pago'}
                 onPress={handleCheckout}
                 loading={loading}
                 size="large"
                 disabled={!currentUser}
               />
               <Text style={styles.checkoutNote}>
-                Completa el pago de forma segura con tarjeta de crédito
+                Serás redirigido a Mercado Pago para completar el pago de forma segura
               </Text>
             </View>
           </>
         )}
       </ScrollView>
-
-      <PaymentModal
-        visible={showPaymentModal}
-        onClose={() => setShowPaymentModal(false)}
-        onPaymentSuccess={handlePaymentSuccess}
-        paymentData={{
-          serviceName: cart && cart.length > 0
-            ? `${cart.length} producto${cart.length > 1 ? 's' : ''}`
-            : 'Productos',
-          providerName: cart && cart.length > 0
-            ? cart.map(item => item.partnerName).join(', ')
-            : 'Varios proveedores',
-          price: getCartTotal(),
-          hasShipping: true,
-          shippingCost: 500
-        }}
-      />
     </SafeAreaView>
   );
 }
