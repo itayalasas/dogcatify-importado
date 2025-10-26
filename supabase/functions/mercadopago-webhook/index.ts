@@ -62,7 +62,6 @@ async function verifyWebhookSignature(req: Request, notificationData: any): Prom
     }
 
     const url = new URL(req.url);
-    // Try multiple ways to get data.id
     const dataId = url.searchParams.get('data.id') ||
                    url.searchParams.get('id') ||
                    notificationData?.data?.id ||
@@ -72,7 +71,6 @@ async function verifyWebhookSignature(req: Request, notificationData: any): Prom
       console.error('Missing data.id for signature validation');
       console.error('URL search params:', Object.fromEntries(url.searchParams.entries()));
       console.error('Notification data:', notificationData);
-      // In development, allow without signature if webhook secret is not configured
       const webhookSecret = Deno.env.get('MERCADOPAGO_WEBHOOK_SECRET');
       if (!webhookSecret) {
         console.warn('⚠️ No webhook secret configured - allowing request in dev mode');
@@ -134,16 +132,13 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get URL parameters
     const url = new URL(req.url);
     const urlParams = Object.fromEntries(url.searchParams.entries());
 
     console.log('Webhook URL params:', urlParams);
 
-    // Parse body
     const notification: WebhookNotification = await req.json();
 
-    // Log full incoming notification for debugging
     console.log('Received MP webhook notification FULL:', JSON.stringify(notification, null, 2));
     console.log('Received MP webhook notification summary:', {
       type: notification.type,
@@ -153,8 +148,6 @@ serve(async (req: Request) => {
       urlParams: urlParams
     });
 
-    // Mercado Pago might send payment ID in URL params
-    // Format: ?topic=payment&id=PAYMENT_ID or ?data.id=PAYMENT_ID
     const paymentIdFromUrl = urlParams['id'] || urlParams['data.id'];
     const topicFromUrl = urlParams['topic'] || urlParams['type'];
 
@@ -164,7 +157,6 @@ serve(async (req: Request) => {
         id: paymentIdFromUrl
       });
 
-      // Create a normalized notification object
       const normalizedNotification = {
         type: topicFromUrl,
         action: 'payment.updated',
@@ -175,7 +167,6 @@ serve(async (req: Request) => {
         ...notification
       };
 
-      // Process the payment directly if we have the ID
       if (topicFromUrl === 'payment') {
         await processPaymentNotification(supabase, normalizedNotification as WebhookNotification);
       }
@@ -192,12 +183,10 @@ serve(async (req: Request) => {
       );
     }
 
-    // If no URL params, try signature validation
     const isValid = await verifyWebhookSignature(req, notification);
 
     if (!isValid) {
       console.error('Invalid webhook signature - rejecting request');
-      // In development, still process if we have data
       if (notification.data?.id || notification.type) {
         console.warn('⚠️ Processing despite signature failure (development mode)');
       } else {
@@ -257,8 +246,6 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
     const paymentId = notification.data.id;
     console.log(`📨 Processing payment notification for payment ID: ${paymentId}`);
 
-    // Step 1: First, try to fetch payment with admin credentials to get external_reference
-    // This helps us find which partner's credentials to use
     const { data: adminConfig, error: adminError } = await supabase
       .from('admin_settings')
       .select('value')
@@ -268,7 +255,6 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
     let paymentData: any = null;
     let accessToken = '';
 
-    // Try with admin credentials first (for backward compatibility)
     if (adminConfig?.value?.access_token) {
       console.log(`🔍 Attempting to fetch payment with admin credentials...`);
       const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
@@ -287,12 +273,44 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
       }
     }
 
-    // Step 2: If we got payment data, find the order and use partner credentials
     let mpApiUrl = `https://api.mercadopago.com/v1/payments/${paymentId}`;
     let mpResponse: any;
 
-    if (paymentData?.external_reference) {
-      // We have external_reference, find the partner
+    if (!paymentData) {
+      console.log('⚠️ No payment data from admin credentials, trying partner credentials...');
+
+      const { data: partners, error: partnersError } = await supabase
+        .from('partners')
+        .select('id, business_name, mercadopago_config')
+        .not('mercadopago_config', 'is', null);
+
+      if (partners && partners.length > 0) {
+        console.log(`🔍 Found ${partners.length} partners with MP credentials, trying each...`);
+
+        for (const partner of partners) {
+          const partnerToken = partner.mercadopago_config?.access_token;
+          if (!partnerToken) continue;
+
+          console.log(`🔑 Trying credentials from partner: ${partner.business_name} (${partnerToken.substring(0, 20)}...)`);
+
+          const testResponse = await fetch(mpApiUrl, {
+            headers: {
+              'Authorization': `Bearer ${partnerToken}`,
+              'Content-Type': 'application/json'
+            },
+          });
+
+          if (testResponse.ok) {
+            paymentData = await testResponse.json();
+            accessToken = partnerToken;
+            console.log(`✅ Payment found with ${partner.business_name} credentials!`);
+            break;
+          } else {
+            console.log(`❌ Payment not found with ${partner.business_name} credentials`);
+          }
+        }
+      }
+    } else if (paymentData?.external_reference) {
       const orderId = paymentData.external_reference;
       console.log(`🔍 Found external_reference: ${orderId}`);
 
@@ -308,9 +326,14 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
       }
     }
 
-    // Step 3: Fetch payment with the appropriate credentials
     if (!paymentData) {
-      console.log(`🔍 Fetching payment from MP API: ${mpApiUrl}`);
+      console.log(`🔍 Last attempt: Fetching payment from MP API: ${mpApiUrl}`);
+
+      if (!accessToken) {
+        console.error('❌ No valid access token available');
+        return;
+      }
+
       console.log(`🔑 Using access token: ${accessToken.substring(0, 20)}...`);
 
       mpResponse = await fetch(mpApiUrl, {
@@ -325,7 +348,6 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
         const errorText = await mpResponse.text();
         console.error('MP API Error:', errorText);
 
-        // Common errors and solutions
         if (mpResponse.status === 404) {
           console.error('💡 Payment not found (404). Possible causes:');
           console.error('   - Payment was not completed (user abandoned checkout)');
@@ -338,15 +360,12 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
           console.error('💡 Unauthorized (401). Check access token is valid and not expired');
         }
 
-        // Return success to prevent webhook retries
         return;
       }
 
-      // Parse payment data
       paymentData = await mpResponse.json();
     }
 
-    // Step 4: Validate we have payment data
     if (!paymentData) {
       console.error('❌ No payment data available');
       return;
@@ -359,7 +378,6 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
     console.log(`   External Reference: ${paymentData.external_reference}`);
     console.log(`   Payment Method: ${paymentData.payment_method_id}`);
 
-    // Step 5: Find order by external_reference or payment_id
     const orderId = paymentData.external_reference;
 
     if (!orderId) {
@@ -386,9 +404,8 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
     console.log(`   Current payment_status: ${orderData.payment_status || 'none'}`);
     console.log(`   Order type: ${orderData.order_type}`);
 
-    // Step 5: Validate payment status
-    const paymentStatus = paymentData.status; // "approved", "pending", "rejected", etc.
-    const statusDetail = paymentData.status_detail; // "accredited", etc.
+    const paymentStatus = paymentData.status;
+    const statusDetail = paymentData.status_detail;
     const orderStatus = mapPaymentStatusToOrderStatus(paymentStatus);
 
     console.log(`💰 Payment validation:`);
@@ -396,11 +413,9 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
     console.log(`   MP Status Detail: ${statusDetail}`);
     console.log(`   Order Status (mapped): ${orderStatus}`);
 
-    // Check if payment is approved and accredited
     const isApproved = paymentStatus === 'approved' && statusDetail === 'accredited';
     console.log(`   Is Approved & Accredited: ${isApproved}`);
 
-    // Step 6: Calculate amounts
     const totalAmount = paymentData.transaction_amount;
     const commissionAmount = orderData.commission_amount || (totalAmount * 0.05);
     const partnerAmount = totalAmount - commissionAmount;
@@ -410,7 +425,6 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
     console.log(`   Commission (5%): $${commissionAmount}`);
     console.log(`   Partner: $${partnerAmount}`);
 
-    // Step 7: Update order in database
     console.log(`📝 Updating order ${orderId} to status: ${orderStatus}`);
 
     const updateData: any = {
@@ -436,14 +450,11 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
 
     console.log(`✅ Order ${orderId} updated successfully`);
 
-    // Step 8: Process approved payments
     if (isApproved) {
       console.log('🎉 Payment is APPROVED and ACCREDITED! Processing...');
 
-      // Update stock for products
       await updateProductStock(supabase, orderId);
 
-      // If it's a service booking, update booking status
       if (orderData.order_type === 'service_booking' && orderData.booking_id) {
         console.log(`📅 Updating booking ${orderData.booking_id} status to confirmed`);
         await updateBookingStatus(supabase, orderData.booking_id, 'confirmed', paymentId);
