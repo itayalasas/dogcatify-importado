@@ -654,7 +654,7 @@ export default function Cart() {
                 </View>
                 <View style={styles.paymentMethodInfo}>
                   <Text style={[styles.paymentMethodTitle, { color: '#9CA3AF' }]}>Tarjeta de Crédito/Débito</Text>
-                  <Text style={styles.paymentMethodDescription}>
+                  <Text style={[styles.paymentMethodDescription, { color: '#9CA3AF' }]}>
                     Visa, Mastercard, American Express
                   </Text>
                 </View>
