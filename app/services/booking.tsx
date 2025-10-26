@@ -29,6 +29,7 @@ export default function ServiceBooking() {
   const [loading, setLoading] = useState(true);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [notes, setNotes] = useState('');
+  const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
 
   useEffect(() => {
     console.log('ServiceBooking - Received params:', { serviceId, partnerId, petId });
@@ -311,6 +312,11 @@ export default function ServiceBooking() {
 
   const handleTimeSelect = (time: string) => {
     setSelectedTime(time);
+  };
+
+  const handlePayWithMercadoPago = async () => {
+    setShowPaymentMethodModal(false);
+    await handleBookService();
   };
 
   const handleBookService = async () => {
@@ -607,7 +613,7 @@ export default function ServiceBooking() {
         <View style={styles.bookingButtonContainer}>
           <Button
             title={bookingLoading ? 'Procesando...' : 'Pagar'}
-            onPress={handleBookService}
+            onPress={() => setShowPaymentMethodModal(true)}
             loading={bookingLoading}
             size="large"
             disabled={!selectedDate || !selectedTime}
