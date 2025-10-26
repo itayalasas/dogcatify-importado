@@ -633,7 +633,7 @@ export default function ServiceBooking() {
 
             <View style={styles.methodsContent}>
               <View style={styles.methodsHeader}>
-                <CreditCard size={32} color="#2D6A6F" />
+                <CreditCard size={40} color="#2D6A6F" />
                 <Text style={styles.methodsTitle}>Selecciona tu método de pago</Text>
                 <Text style={styles.methodsSubtitle}>
                   Total: {formatPrice(service?.price || 0)}
@@ -927,7 +927,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingTop: 16,
-    minHeight: 400,
+    minHeight: 450,
   },
   modalHeader: {
     flexDirection: 'row',
