@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Calendar, Clock, Check } from 'lucide-react-native';
+import { ArrowLeft, Calendar, Clock, Check, CreditCard, X } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -633,7 +633,11 @@ export default function ServiceBooking() {
 
             <View style={styles.methodsContent}>
               <View style={styles.methodsHeader}>
-                <CreditCard size={40} color="#2D6A6F" />
+                <Image
+                  source={require('@/assets/images/mercadopago.png')}
+                  style={styles.mercadoPagoLogo}
+                  resizeMode="contain"
+                />
                 <Text style={styles.methodsTitle}>Selecciona tu método de pago</Text>
                 <Text style={styles.methodsSubtitle}>
                   Total: {formatPrice(service?.price || 0)}
@@ -952,6 +956,10 @@ const styles = StyleSheet.create({
   methodsHeader: {
     alignItems: 'center',
     marginBottom: 24,
+  },
+  mercadoPagoLogo: {
+    width: 80,
+    height: 80,
   },
   methodsTitle: {
     fontSize: 18,
