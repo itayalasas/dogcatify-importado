@@ -662,7 +662,8 @@ export const createMultiPartnerOrder = async (
     // Detect if we're in test mode
     // Check both the TEST- prefix AND the explicit is_test_mode flag
     const isTestMode = primaryPartnerConfig.access_token?.startsWith('TEST-') ||
-                       primaryPartnerConfig.is_test_mode === true;
+                       primaryPartnerConfig.is_test_mode === true ||
+                       primaryPartnerConfig.is_test_mode === 'true';
 
     console.log('Multi-partner order completed:', {
       isTestMode,
@@ -791,7 +792,8 @@ export const createUnifiedPaymentPreference = async (
     // Check both the TEST- prefix AND the explicit is_test_mode flag
     // Note: Test accounts in MP use "production" credentials but are still sandbox
     const isTestMode = partnerConfig.access_token?.startsWith('TEST-') ||
-                       partnerConfig.is_test_mode === true;
+                       partnerConfig.is_test_mode === true ||
+                       partnerConfig.is_test_mode === 'true';
 
     // Add application fee ONLY in production mode
     // In test mode, we skip it to avoid "mixed credentials" error

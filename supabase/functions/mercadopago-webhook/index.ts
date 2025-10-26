@@ -257,56 +257,101 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
     const paymentId = notification.data.id;
     console.log(`📨 Processing payment notification for payment ID: ${paymentId}`);
 
-    // Step 1: Get admin MP configuration to fetch payment from API
+    // Step 1: First, try to fetch payment with admin credentials to get external_reference
+    // This helps us find which partner's credentials to use
     const { data: adminConfig, error: adminError } = await supabase
       .from('admin_settings')
       .select('value')
       .eq('key', 'mercadopago_config')
       .maybeSingle();
 
-    if (adminError || !adminConfig?.value?.access_token) {
-      console.error('❌ Admin MP configuration not found:', adminError);
-      console.log('Cannot fetch payment from MP API, aborting');
-      return;
+    let paymentData: any = null;
+    let accessToken = '';
+
+    // Try with admin credentials first (for backward compatibility)
+    if (adminConfig?.value?.access_token) {
+      console.log(`🔍 Attempting to fetch payment with admin credentials...`);
+      const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+        headers: {
+          'Authorization': `Bearer ${adminConfig.value.access_token}`,
+          'Content-Type': 'application/json'
+        },
+      });
+
+      if (mpResponse.ok) {
+        paymentData = await mpResponse.json();
+        accessToken = adminConfig.value.access_token;
+        console.log('✅ Payment fetched with admin credentials');
+      } else {
+        console.log('⚠️ Could not fetch with admin credentials, will try partner credentials');
+      }
     }
 
-    // Step 2: ALWAYS fetch payment from MP API to get real status
-    const mpApiUrl = `https://api.mercadopago.com/v1/payments/${paymentId}`;
-    console.log(`🔍 Fetching payment from MP API: ${mpApiUrl}`);
-    console.log(`🔑 Using access token: ${adminConfig.value.access_token.substring(0, 20)}...`);
-    console.log(`🏷️ Test mode: ${adminConfig.value.is_test_mode}`);
+    // Step 2: If we got payment data, find the order and use partner credentials
+    let mpApiUrl = `https://api.mercadopago.com/v1/payments/${paymentId}`;
+    let mpResponse: any;
 
-    const mpResponse = await fetch(mpApiUrl, {
-      headers: {
-        'Authorization': `Bearer ${adminConfig.value.access_token}`,
-        'Content-Type': 'application/json'
-      },
-    });
+    if (paymentData?.external_reference) {
+      // We have external_reference, find the partner
+      const orderId = paymentData.external_reference;
+      console.log(`🔍 Found external_reference: ${orderId}`);
 
-    if (!mpResponse.ok) {
-      console.error(`❌ Failed to fetch payment from MP API: ${mpResponse.status}`);
-      const errorText = await mpResponse.text();
-      console.error('MP API Error:', errorText);
+      const { data: orderData } = await supabase
+        .from('orders')
+        .select('*, partners!inner(mercadopago_config)')
+        .eq('id', orderId)
+        .maybeSingle();
 
-      // Common errors and solutions
-      if (mpResponse.status === 404) {
-        console.error('💡 Payment not found (404). Possible causes:');
-        console.error('   - Payment was not completed (user abandoned checkout)');
-        console.error('   - Wrong access token (using token from different account)');
-        console.error('   - Mixed environments (test token with prod payment ID or vice versa)');
-        console.error('   - Payment ID is actually a preference_id or merchant_order_id');
-        console.log('ℹ️ This is normal if the user created a preference but never completed the payment');
-        console.log('✅ No action needed - order will remain in pending status');
-      } else if (mpResponse.status === 401) {
-        console.error('💡 Unauthorized (401). Check access token is valid and not expired');
+      if (orderData?.partners?.mercadopago_config?.access_token) {
+        accessToken = orderData.partners.mercadopago_config.access_token;
+        console.log(`🔑 Using partner credentials: ${accessToken.substring(0, 20)}...`);
+      }
+    }
+
+    // Step 3: Fetch payment with the appropriate credentials
+    if (!paymentData) {
+      console.log(`🔍 Fetching payment from MP API: ${mpApiUrl}`);
+      console.log(`🔑 Using access token: ${accessToken.substring(0, 20)}...`);
+
+      mpResponse = await fetch(mpApiUrl, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+      });
+
+      if (!mpResponse.ok) {
+        console.error(`❌ Failed to fetch payment from MP API: ${mpResponse.status}`);
+        const errorText = await mpResponse.text();
+        console.error('MP API Error:', errorText);
+
+        // Common errors and solutions
+        if (mpResponse.status === 404) {
+          console.error('💡 Payment not found (404). Possible causes:');
+          console.error('   - Payment was not completed (user abandoned checkout)');
+          console.error('   - Wrong access token (using token from different account)');
+          console.error('   - Mixed environments (test token with prod payment ID or vice versa)');
+          console.error('   - Payment ID is actually a preference_id or merchant_order_id');
+          console.log('ℹ️ This is normal if the user created a preference but never completed the payment');
+          console.log('✅ No action needed - order will remain in pending status');
+        } else if (mpResponse.status === 401) {
+          console.error('💡 Unauthorized (401). Check access token is valid and not expired');
+        }
+
+        // Return success to prevent webhook retries
+        return;
       }
 
-      // Return success to prevent webhook retries
+      // Parse payment data
+      paymentData = await mpResponse.json();
+    }
+
+    // Step 4: Validate we have payment data
+    if (!paymentData) {
+      console.error('❌ No payment data available');
       return;
     }
 
-    // Step 3: Parse payment data and extract order info
-    const paymentData = await mpResponse.json();
     console.log('✅ Payment data fetched from MP API');
     console.log(`   Status: ${paymentData.status}`);
     console.log(`   Status Detail: ${paymentData.status_detail}`);
@@ -314,7 +359,7 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
     console.log(`   External Reference: ${paymentData.external_reference}`);
     console.log(`   Payment Method: ${paymentData.payment_method_id}`);
 
-    // Step 4: Find order by external_reference or payment_id
+    // Step 5: Find order by external_reference or payment_id
     const orderId = paymentData.external_reference;
 
     if (!orderId) {
