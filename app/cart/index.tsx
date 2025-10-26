@@ -619,11 +619,7 @@ export default function Cart() {
 
             <View style={styles.methodsContent}>
               <View style={styles.methodsHeader}>
-                <Image
-                  source={require('@/assets/images/mercadopago.png')}
-                  style={styles.mercadoPagoLogo}
-                  resizeMode="contain"
-                />
+                <CreditCard size={40} color="#2D6A6F" />
                 <Text style={styles.methodsTitle}>Selecciona tu método de pago</Text>
                 <Text style={styles.methodsSubtitle}>
                   Total: {formatCurrency(getCartTotal() + 500)}
@@ -635,7 +631,11 @@ export default function Cart() {
                 onPress={handlePayWithMercadoPago}
               >
                 <View style={styles.paymentMethodIcon}>
-                  <CreditCard size={32} color="#009EE3" />
+                  <Image
+                    source={require('@/assets/images/mercadopago.png')}
+                    style={styles.mercadoPagoIcon}
+                    resizeMode="contain"
+                  />
                 </View>
                 <View style={styles.paymentMethodInfo}>
                   <Text style={styles.paymentMethodTitle}>Mercado Pago</Text>
@@ -1019,9 +1019,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
-  mercadoPagoLogo: {
-    width: 80,
-    height: 80,
+  mercadoPagoIcon: {
+    width: 48,
+    height: 48,
   },
   methodsTitle: {
     fontSize: 18,
