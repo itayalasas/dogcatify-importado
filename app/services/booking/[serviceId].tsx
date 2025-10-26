@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, TextInput, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, TextInput, ActivityIndicator, Linking, Image } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Calendar, Clock, CreditCard, X, Lock, User, FileText, CircleCheck as CheckCircle } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
@@ -820,8 +820,12 @@ export default function ServiceBooking() {
                   onPress={() => handlePaymentMethodSelect('mercadopago')}
                   disabled={paymentLoading}
                 >
-                  <View style={styles.paymentMethodIconCircle}>
-                    <CreditCard size={32} color="#2D6A6F" />
+                  <View style={styles.paymentMethodLogoCircle}>
+                    <Image
+                      source={require('../../../assets/images/mercadopago.png')}
+                      style={styles.mercadoPagoLogo}
+                      resizeMode="contain"
+                    />
                   </View>
                   <View style={styles.paymentMethodInfo}>
                     <Text style={styles.paymentMethodTitle}>Mercado Pago</Text>
@@ -1427,6 +1431,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
+  },
+  paymentMethodLogoCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#E8F5FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+    padding: 8,
+  },
+  mercadoPagoLogo: {
+    width: 40,
+    height: 40,
   },
   paymentNote: {
     fontSize: 12,
