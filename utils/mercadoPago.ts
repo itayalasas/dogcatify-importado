@@ -660,10 +660,14 @@ export const createMultiPartnerOrder = async (
     const paymentPreferences = [preference];
 
     // Detect if we're in test mode
-    const isTestMode = primaryPartnerConfig.access_token?.startsWith('TEST-');
+    // Check both the TEST- prefix AND the explicit is_test_mode flag
+    const isTestMode = primaryPartnerConfig.access_token?.startsWith('TEST-') ||
+                       primaryPartnerConfig.is_test_mode === true;
 
     console.log('Multi-partner order completed:', {
       isTestMode,
+      detectedBy: primaryPartnerConfig.access_token?.startsWith('TEST-') ? 'TEST- prefix' :
+                  primaryPartnerConfig.is_test_mode ? 'is_test_mode flag' : 'none (production)',
       ordersCount: orders.length,
       preferencesCount: paymentPreferences.length
     });
@@ -784,7 +788,10 @@ export const createUnifiedPaymentPreference = async (
     };
 
     // Detect if we're using test credentials
-    const isTestMode = partnerConfig.access_token?.startsWith('TEST-');
+    // Check both the TEST- prefix AND the explicit is_test_mode flag
+    // Note: Test accounts in MP use "production" credentials but are still sandbox
+    const isTestMode = partnerConfig.access_token?.startsWith('TEST-') ||
+                       partnerConfig.is_test_mode === true;
 
     // Add application fee ONLY in production mode
     // In test mode, we skip it to avoid "mixed credentials" error
@@ -799,7 +806,9 @@ export const createUnifiedPaymentPreference = async (
       commission_percentage: partnerConfig.commission_percentage || 5.0,
       partner_receives: totalAmount - commissionAmount,
       external_reference: preferenceData.external_reference,
-      isTestMode
+      isTestMode,
+      detectedBy: partnerConfig.access_token?.startsWith('TEST-') ? 'TEST- prefix' :
+                  partnerConfig.is_test_mode ? 'is_test_mode flag' : 'none (production)'
     });
 
     // Use partner's token to create preference (partner receives payment minus application_fee)
