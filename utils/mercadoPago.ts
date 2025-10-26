@@ -633,7 +633,61 @@ export const createUnifiedPaymentPreference = async (
     
     // Calculate commission using partner's configured percentage
     const commissionAmount = totalAmount * ((partnerConfig.commission_percentage || 5.0) / 100);
-    
+
+    // Format phone number (remove non-digits and ensure it's 8 digits)
+    const rawPhone = customerInfo.phone || '99999999';
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    const phoneNumber = cleanPhone.length >= 8 ? cleanPhone.slice(-8) : '99999999';
+
+    // Parse shipping address to extract street and number
+    let streetName = '';
+    let streetNumber = null;
+    let zipCode = '';
+
+    if (shippingAddress) {
+      // Format: "Calle Nombre 123, Localidad, Departamento - CP: 12345 - Tel: 099123456"
+      const addressParts = shippingAddress.split(',')[0]; // Get "Calle Nombre 123"
+      const zipMatch = shippingAddress.match(/CP:\s*(\d+)/);
+      zipCode = zipMatch ? zipMatch[1] : '';
+
+      // Try to extract street and number
+      const streetMatch = addressParts.match(/^(.+?)\s+(\d+)$/);
+      if (streetMatch) {
+        streetName = streetMatch[1].trim();
+        streetNumber = parseInt(streetMatch[2]);
+      } else {
+        streetName = addressParts.trim();
+      }
+    }
+
+    // Build complete payer object with all available data
+    const payerData: any = {
+      name: customerInfo.displayName || 'Cliente',
+      email: customerInfo.email,
+      phone: {
+        area_code: '598',
+        number: phoneNumber
+      }
+    };
+
+    // Add address if available
+    if (streetName) {
+      payerData.address = {
+        street_name: streetName,
+        street_number: streetNumber,
+        zip_code: zipCode
+      };
+    }
+
+    console.log('Products payer data prepared:', {
+      hasName: !!payerData.name,
+      hasEmail: !!payerData.email,
+      hasPhone: !!payerData.phone.number,
+      hasAddress: !!payerData.address,
+      phoneNumber: payerData.phone.number,
+      streetName: streetName || 'N/A'
+    });
+
     const preferenceData = {
       items: allItems.map(item => ({
         id: item.id,
@@ -648,14 +702,7 @@ export const createUnifiedPaymentPreference = async (
         unit_price: shippingCost,
         currency_id: 'UYU'
       }]),
-      payer: {
-        name: customerInfo.displayName || 'Cliente',
-        email: customerInfo.email,
-        phone: {
-          area_code: '11',
-          number: customerInfo.phone || '1234567890'
-        }
-      },
+      payer: payerData,
       back_urls: {
         success: `dogcatify://payment/success?order_id=${orderId}`,
         failure: `dogcatify://payment/failure?order_id=${orderId}`,
@@ -738,6 +785,37 @@ export const createServiceBookingOrder = async (bookingData: {
   try {
     console.log('Creating service booking order...');
     console.log('Booking data:', bookingData);
+
+    // Get complete customer profile data from database
+    const { data: customerProfile, error: profileError } = await supabaseClient
+      .from('profiles')
+      .select('display_name, email, phone, calle, numero, address_locality, barrio, codigo_postal')
+      .eq('id', bookingData.customerId)
+      .single();
+
+    if (profileError) {
+      console.warn('Could not load customer profile, using provided data:', profileError);
+    }
+
+    // Merge customer data
+    const completeCustomerInfo = {
+      ...bookingData.customerInfo,
+      displayName: customerProfile?.display_name || bookingData.customerInfo.displayName || 'Cliente',
+      email: customerProfile?.email || bookingData.customerInfo.email,
+      phone: customerProfile?.phone || bookingData.customerInfo.phone,
+      street: customerProfile?.calle,
+      number: customerProfile?.numero,
+      locality: customerProfile?.address_locality,
+      neighborhood: customerProfile?.barrio,
+      zipCode: customerProfile?.codigo_postal
+    };
+
+    console.log('Complete customer info prepared:', {
+      hasName: !!completeCustomerInfo.displayName,
+      hasEmail: !!completeCustomerInfo.email,
+      hasPhone: !!completeCustomerInfo.phone,
+      hasAddress: !!(completeCustomerInfo.street && completeCustomerInfo.number)
+    });
 
     // Get partner's Mercado Pago configuration
     const partnerConfig = await getPartnerMercadoPagoConfig(bookingData.partnerId);
@@ -827,9 +905,9 @@ export const createServiceBookingOrder = async (bookingData: {
       partner_name: bookingData.partnerName,
       service_name: bookingData.serviceName,
       pet_name: bookingData.petName,
-      customer_name: bookingData.customerInfo.displayName || 'Usuario',
-      customer_email: bookingData.customerInfo.email,
-      customer_phone: bookingData.customerInfo.phone || null,
+      customer_name: completeCustomerInfo.displayName || 'Usuario',
+      customer_email: completeCustomerInfo.email,
+      customer_phone: completeCustomerInfo.phone || null,
       items: [{
         id: bookingData.serviceId,
         name: bookingData.serviceName,
@@ -871,10 +949,10 @@ export const createServiceBookingOrder = async (bookingData: {
     
     console.log('Order created with ID:', insertedOrder.id);
     
-    // Create Mercado Pago payment preference
+    // Create Mercado Pago payment preference with complete customer info
     const preference = await createServicePaymentPreference(
       insertedOrder.id,
-      bookingData,
+      { ...bookingData, customerInfo: completeCustomerInfo },
       partnerConfig,
       commissionAmount
     );
@@ -933,7 +1011,39 @@ export const createServicePaymentPreference = async (
 ): Promise<any> => {
   try {
     const marketplaceAccessToken = await getMarketplaceAccessToken();
-    
+
+    // Format phone number (remove non-digits and ensure it's 8 digits)
+    const rawPhone = bookingData.customerInfo.phone || '99999999';
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    const phoneNumber = cleanPhone.length >= 8 ? cleanPhone.slice(-8) : '99999999';
+
+    // Build complete payer object with all available data
+    const payerData: any = {
+      name: bookingData.customerInfo.displayName || 'Cliente',
+      email: bookingData.customerInfo.email,
+      phone: {
+        area_code: '598',
+        number: phoneNumber
+      }
+    };
+
+    // Add address if available
+    if (bookingData.customerInfo.street && bookingData.customerInfo.number) {
+      payerData.address = {
+        street_name: bookingData.customerInfo.street,
+        street_number: parseInt(bookingData.customerInfo.number) || null,
+        zip_code: bookingData.customerInfo.zipCode || ''
+      };
+    }
+
+    console.log('Payer data prepared:', {
+      hasName: !!payerData.name,
+      hasEmail: !!payerData.email,
+      hasPhone: !!payerData.phone.number,
+      hasAddress: !!payerData.address,
+      phoneNumber: payerData.phone.number
+    });
+
     const preferenceData = {
       items: [{
         id: bookingData.serviceId,
@@ -942,14 +1052,7 @@ export const createServicePaymentPreference = async (
         unit_price: bookingData.totalAmount,
         currency_id: 'UYU'
       }],
-      payer: {
-        name: bookingData.customerInfo.displayName || 'Cliente',
-        email: bookingData.customerInfo.email,
-        phone: {
-          area_code: '598',
-          number: bookingData.customerInfo.phone || '99999999'
-        }
-      },
+      payer: payerData,
       back_urls: {
         success: `dogcatify://payment/success?order_id=${orderId}&type=booking`,
         failure: `dogcatify://payment/failure?order_id=${orderId}&type=booking`,

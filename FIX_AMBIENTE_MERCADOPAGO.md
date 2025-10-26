@@ -1,11 +1,20 @@
-# Fix: Separación de Ambientes MercadoPago (TEST vs PRODUCCIÓN)
+# Fix: Separación de Ambientes MercadoPago y Datos Completos del Payer
 
-## Problema Detectado
+## Problemas Detectados
+
+### 1. Mezcla de Ambientes (TEST vs PRODUCCIÓN)
 
 La aplicación estaba mezclando los ambientes de MercadoPago cuando se realizaban pagos:
 - Se creaban preferencias con credenciales de **TEST** (`TEST-xxxx`)
 - Pero se usaba el URL de **producción** (`init_point`)
 - Esto causaba el error: *"Una de las partes con la que intentas hacer el pago es de prueba."*
+
+### 2. Datos Incompletos del Payer
+
+Los datos del pagador (payer) en las preferencias estaban incompletos:
+- Faltaba información de dirección
+- Número de teléfono mal formateado
+- No se validaba la disponibilidad de datos antes de crear la preferencia
 
 ### Ejemplo del Problema
 
@@ -25,7 +34,7 @@ const initPoint = preference.sandbox_init_point || preference.init_point;
 
 Esto causaba que con credenciales TEST se abriera el checkout de producción.
 
-## Solución Implementada
+## Soluciones Implementadas
 
 ### 1. Detección de Ambiente
 
@@ -44,6 +53,68 @@ Ahora se selecciona la URL apropiada según el ambiente:
 // TEST → sandbox_init_point
 // PRODUCTION → init_point
 const paymentUrl = isTestMode ? preference.sandbox_init_point : preference.init_point;
+```
+
+### 3. Carga Completa de Datos del Cliente
+
+Para servicios, ahora se cargan los datos completos del perfil del usuario desde la base de datos:
+
+```javascript
+// Get complete customer profile data from database
+const { data: customerProfile, error: profileError } = await supabaseClient
+  .from('profiles')
+  .select('display_name, email, phone, calle, numero, address_locality, barrio, codigo_postal')
+  .eq('id', bookingData.customerId)
+  .single();
+
+// Merge customer data
+const completeCustomerInfo = {
+  ...bookingData.customerInfo,
+  displayName: customerProfile?.display_name || bookingData.customerInfo.displayName || 'Cliente',
+  email: customerProfile?.email || bookingData.customerInfo.email,
+  phone: customerProfile?.phone || bookingData.customerInfo.phone,
+  street: customerProfile?.calle,
+  number: customerProfile?.numero,
+  locality: customerProfile?.address_locality,
+  neighborhood: customerProfile?.barrio,
+  zipCode: customerProfile?.codigo_postal
+};
+```
+
+### 4. Formateo y Validación de Teléfono
+
+Se implementó lógica para formatear correctamente el número de teléfono:
+
+```javascript
+// Format phone number (remove non-digits and ensure it's 8 digits)
+const rawPhone = customerInfo.phone || '99999999';
+const cleanPhone = rawPhone.replace(/\D/g, '');
+const phoneNumber = cleanPhone.length >= 8 ? cleanPhone.slice(-8) : '99999999';
+```
+
+### 5. Inclusión de Dirección en el Payer
+
+Ahora se incluye la dirección completa del cliente cuando está disponible:
+
+```javascript
+// Build complete payer object with all available data
+const payerData: any = {
+  name: customerInfo.displayName || 'Cliente',
+  email: customerInfo.email,
+  phone: {
+    area_code: '598',
+    number: phoneNumber
+  }
+};
+
+// Add address if available
+if (customerInfo.street && customerInfo.number) {
+  payerData.address = {
+    street_name: customerInfo.street,
+    street_number: parseInt(customerInfo.number) || null,
+    zip_code: customerInfo.zipCode || ''
+  };
+}
 ```
 
 ## Archivos Modificados
@@ -159,9 +230,12 @@ URL: https://www.mercadopago.com.uy/...
 ## Beneficios
 
 1. **Separación automática de ambientes**: No se mezclan credenciales TEST con checkout de producción
-2. **Logs mejorados**: Se registra claramente qué ambiente se está usando
-3. **Consistencia**: La misma lógica se aplica en productos y servicios
-4. **Sin configuración manual**: La detección es automática basada en las credenciales
+2. **Datos completos del pagador**: MercadoPago recibe toda la información disponible del cliente
+3. **Mejor experiencia de usuario**: El checkout pre-llena datos de dirección y teléfono
+4. **Logs mejorados**: Se registra claramente qué ambiente se está usando y qué datos se envían
+5. **Consistencia**: La misma lógica se aplica en productos y servicios
+6. **Sin configuración manual**: La detección es automática basada en las credenciales
+7. **Validación de datos**: Se valida y formatea correctamente el número de teléfono
 
 ## Validación
 
@@ -191,10 +265,43 @@ Este script valida:
 4. Se abre `init_point`
 5. Checkout funciona en ambiente productivo
 
+## Ejemplo de Payer Completo
+
+### Antes (Incompleto)
+```json
+{
+  "name": "Abraham Ociel",
+  "email": "abrahamuci@gmail.com",
+  "phone": {
+    "area_code": "598",
+    "number": "095123625"
+  }
+}
+```
+
+### Ahora (Completo)
+```json
+{
+  "name": "Abraham Ociel",
+  "email": "abrahamuci@gmail.com",
+  "phone": {
+    "area_code": "598",
+    "number": "95123625"
+  },
+  "address": {
+    "street_name": "Av. Italia",
+    "street_number": 1234,
+    "zip_code": "11300"
+  }
+}
+```
+
 ## Próximos Pasos
 
-1. Probar en ambiente de desarrollo con credenciales TEST
-2. Validar que se abra el checkout de sandbox
-3. Probar en producción con credenciales APP
-4. Validar que se abra el checkout productivo
-5. Verificar que no aparezca más el error de mezcla de ambientes
+1. Asegurar que los perfiles de usuario tengan datos de dirección completos
+2. Probar en ambiente de desarrollo con credenciales TEST
+3. Validar que se abra el checkout de sandbox con datos pre-llenados
+4. Probar en producción con credenciales APP
+5. Validar que se abra el checkout productivo con datos completos
+6. Verificar que no aparezca más el error de mezcla de ambientes
+7. Confirmar que el checkout de MercadoPago muestra los datos del cliente correctamente
