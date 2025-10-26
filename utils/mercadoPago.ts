@@ -1569,33 +1569,11 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
       urlDomain: new URL(paymentUrl).hostname
     });
 
-    // Extract preference ID from URL
-    const preferenceId = paymentUrl.match(/\/checkout\/v1\/redirect\?pref_id=([^&]+)/)?.[1];
-
-    if (!preferenceId) {
-      console.warn('Could not extract preference ID, opening web URL directly');
-      await Linking.openURL(paymentUrl);
-      return { success: true, openedInApp: false };
-    }
-
-    // Try to open in Mercado Pago app first
-    // mercadopago://checkout?preference-id=PREFERENCE_ID
-    const appUrl = `mercadopago://checkout?preference-id=${preferenceId}`;
-
-    console.log('Checking if Mercado Pago app is installed...');
-
-    // Check if app can be opened
-    const canOpenApp = await Linking.canOpenURL(appUrl);
-
-    if (canOpenApp) {
-      console.log('✅ Mercado Pago app is installed, opening in app...');
-      await Linking.openURL(appUrl);
-      return { success: true, openedInApp: true };
-    } else {
-      console.log('⚠️ Mercado Pago app not installed, opening in browser...');
-      await Linking.openURL(paymentUrl);
-      return { success: true, openedInApp: false };
-    }
+    // Always open in browser for better reliability
+    // Deep linking to MP app has issues with order loading
+    console.log('Opening Mercado Pago in browser for better compatibility');
+    await Linking.openURL(paymentUrl);
+    return { success: true, openedInApp: false };
   } catch (error) {
     console.error('Error opening Mercado Pago payment:', error);
 

@@ -258,7 +258,7 @@ export default function Cart() {
           console.log('Redirecting to Mercado Pago:', initPoint);
 
           // Update message while opening
-          setPaymentMessage('Abriendo Mercado Pago...');
+          setPaymentMessage('Redirigiendo a Mercado Pago...');
 
           const openResult = await openMercadoPagoPayment(initPoint, isTestMode);
 
@@ -277,16 +277,9 @@ export default function Cart() {
               ]
             );
           } else {
-            if (openResult.openedInApp) {
-              console.log('✅ Opened in Mercado Pago app');
-              setPaymentMessage('Abriendo app de Mercado Pago...');
-            } else {
-              console.log('🌐 Opened in browser');
-              setPaymentMessage('Abriendo en navegador...');
-            }
-
-            // Give time for the message to show
-            await new Promise(resolve => setTimeout(resolve, 800));
+            console.log('✅ Opened Mercado Pago successfully');
+            // Give time for the browser to open
+            await new Promise(resolve => setTimeout(resolve, 500));
           }
         } else {
           throw new Error('No se pudo obtener el enlace de pago');
