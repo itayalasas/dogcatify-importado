@@ -8,7 +8,7 @@ import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 import { NotificationService } from '../../utils/notifications';
-import { PaymentModal } from '../../components/PaymentModal';
+import { createServiceBookingOrder, openMercadoPagoPayment } from '../../utils/mercadoPago';
 
 export default function ServiceBooking() {
   const { serviceId, partnerId, petId } = useLocalSearchParams<{ 
@@ -29,7 +29,6 @@ export default function ServiceBooking() {
   const [loading, setLoading] = useState(true);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [notes, setNotes] = useState('');
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   useEffect(() => {
     console.log('ServiceBooking - Received params:', { serviceId, partnerId, petId });
@@ -319,136 +318,86 @@ export default function ServiceBooking() {
       Alert.alert('Error', 'Por favor selecciona fecha y hora para la reserva');
       return;
     }
-    
-    // Show payment modal instead of direct booking
-    setShowPaymentModal(true);
-  };
 
-  const handlePaymentSuccess = async (paymentResult: any) => {
-    console.log('Payment successful:', paymentResult);
+    if (!service || !pet || !partnerInfo) {
+      Alert.alert('Error', 'Información incompleta para crear la reserva');
+      return;
+    }
+
     setBookingLoading(true);
     try {
-      if (!currentUser || !selectedDate || !selectedTime || !service || !pet || !partnerInfo) {
-        throw new Error('Información incompleta para crear la reserva');
-      }
-      
+      console.log('Creating service booking order...');
+
       // Create booking date by combining selected date and time
       const bookingDate = new Date(selectedDate);
-      const [hours, minutes] = selectedTime!.split(':').map(Number);
+      const [hours, minutes] = selectedTime.split(':').map(Number);
       bookingDate.setHours(hours, minutes, 0, 0);
-      
-      // Calculate end time based on service duration
-      const serviceDuration = service.duration || 60;
-      const endDate = new Date(bookingDate);
-      endDate.setMinutes(endDate.getMinutes() + serviceDuration);
-      
-      // Format time for display
-      const formatTime = (date: Date) => {
-        return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-      };
-      
-      const bookingData = {
-        partner_id: partnerId,
-        service_id: serviceId,
-        service_name: service.name,
-        service_duration: service.duration || 60,
-        partner_name: partnerInfo?.businessName || 'Proveedor',
-        customer_id: currentUser.id,
-        customer_name: currentUser.displayName || 'Usuario',
-        customer_email: currentUser.email,
-        customer_phone: currentUser.phone || null,
-        pet_id: petId,
-        pet_name: pet.name,
-        date: bookingDate.toISOString(),
-        time: formatTime(bookingDate),
-        end_time: formatTime(endDate),
-        status: 'confirmed', // Auto-confirm when payment is successful
-        total_amount: service.price,
-        payment_status: 'paid',
-        payment_method: 'credit_card',
-        payment_transaction_id: paymentResult.transactionId,
-        payment_confirmed_at: new Date().toISOString(),
+
+      // Create the booking order with Mercado Pago
+      const result = await createServiceBookingOrder({
+        serviceId: serviceId,
+        partnerId: partnerId,
+        customerId: currentUser.id,
+        petId: petId,
+        date: bookingDate,
+        time: selectedTime,
         notes: notes.trim() || null,
-        created_at: new Date().toISOString(),
-      };
-      
-      console.log('Final booking data:', bookingData);
-      
-      // Insert booking using Supabase
-      const { error } = await supabaseClient
-        .from('bookings')
-        .insert([bookingData]);
-      
-      if (error) {
-        console.error('Supabase booking insert error:', error);
-        throw new Error(`Error al crear la reserva: ${error.message || error.details || 'Error desconocido'}`);
+        serviceName: service.name,
+        partnerName: partnerInfo.businessName,
+        petName: pet.name,
+        totalAmount: service.price,
+        customerInfo: currentUser
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'No se pudo crear la orden');
       }
-      
-      console.log('Booking created successfully');
-      
-      // Block the time slots in the bookedSlots state
-      const dateString = selectedDate.toDateString();
-      if (!bookedSlots[dateString]) {
-        bookedSlots[dateString] = [];
+
+      if (!result.paymentUrl) {
+        throw new Error('No se pudo obtener la URL de pago');
       }
-      
-      // Block all time slots that overlap with this booking
-      const numSlotsToBlock = Math.ceil(serviceDuration / 60);
-      for (let i = 0; i < numSlotsToBlock; i++) {
-        const slotTime = new Date(bookingDate);
-        slotTime.setHours(slotTime.getHours() + i);
-        const timeSlot = formatTime(slotTime);
-        bookedSlots[dateString].push(timeSlot);
-      }
-      
-      setBookedSlots({...bookedSlots});
-      
-      // Send booking confirmation email
-      try {
-        console.log('Sending booking confirmation email...');
-        await NotificationService.sendBookingConfirmationEmail(
-          currentUser.email,
-          currentUser.displayName || 'Usuario',
-          service.name,
-          partnerInfo?.businessName || 'Proveedor',
-          selectedDate.toLocaleDateString(),
-          selectedTime!,
-          pet.name
+
+      console.log('Opening Mercado Pago for payment...');
+
+      // Open Mercado Pago (app or web)
+      const isTestMode = result.paymentUrl.includes('sandbox.mercadopago');
+      const openResult = await openMercadoPagoPayment(result.paymentUrl, isTestMode);
+
+      if (!openResult.success) {
+        Alert.alert(
+          'Error',
+          openResult.error || 'No se pudo abrir Mercado Pago',
+          [
+            { text: 'OK' }
+          ]
         );
-        console.log('Booking confirmation email sent successfully');
-      } catch (emailError) {
-        console.error('Error sending booking confirmation email:', emailError);
-        // Continue with booking process even if email fails
+      } else {
+        console.log(openResult.openedInApp
+          ? '✅ Opened in Mercado Pago app'
+          : '🌐 Opened in browser');
       }
-      
-      Alert.alert(
-        'Reserva Exitosa',
-        `¡Perfecto! Tu reserva ha sido confirmada automáticamente.\n\n📅 ${selectedDate.toLocaleDateString()} a las ${selectedTime}\n💰 Pago: ${formatPrice(service?.price || 0)}\n\nEl proveedor ha sido notificado y recibirás un correo de confirmación.`,
-        [{ text: 'OK', onPress: () => router.push('/(tabs)') }]
-      );
     } catch (error) {
       console.error('Error creating booking:', error);
-      
+
       let errorMessage = 'No se pudo crear la reserva';
       if (error instanceof Error) {
         errorMessage = error.message;
       } else if (typeof error === 'string') {
         errorMessage = error;
       }
-      
+
       Alert.alert(
-        'Error al crear reserva', 
+        'Error al crear reserva',
         `${errorMessage}\n\nPor favor intenta nuevamente o contacta con soporte si el problema persiste.`,
         [
-          { text: 'Reintentar', onPress: () => setShowPaymentModal(true) },
-          { text: 'Cancelar', style: 'cancel' }
+          { text: 'OK' }
         ]
       );
     } finally {
       setBookingLoading(false);
-      setShowPaymentModal(false);
     }
   };
+
 
   const generateDateOptions = () => {
     const dates = [];
@@ -666,21 +615,6 @@ export default function ServiceBooking() {
         </View>
       </ScrollView>
 
-      {/* Payment Modal */}
-      <PaymentModal
-        visible={showPaymentModal}
-        onClose={() => setShowPaymentModal(false)}
-        onPaymentSuccess={handlePaymentSuccess}
-        paymentData={{
-          serviceName: service?.name || 'Servicio',
-          providerName: partnerInfo?.businessName || 'Proveedor',
-          price: service?.price || 0,
-          hasShipping: false,
-          petName: pet?.name,
-          date: selectedDate?.toLocaleDateString(),
-          time: selectedTime || ''
-        }}
-      />
     </SafeAreaView>
   );
 }
