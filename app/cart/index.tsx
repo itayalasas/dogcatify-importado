@@ -246,13 +246,21 @@ export default function Cart() {
           initPoint = preference.init_point;
         }
 
-        console.log('Payment URL selection:', {
-          isTestMode,
-          hasSandboxUrl: !!preference.sandbox_init_point,
-          hasProductionUrl: !!preference.init_point,
-          selectedUrl: initPoint,
-          urlDomain: initPoint ? new URL(initPoint).hostname : 'none'
-        });
+        console.log('═══════════════════════════════════════');
+        console.log('🛒 CART PAYMENT URL SELECTION');
+        console.log('═══════════════════════════════════════');
+        console.log('Is Test Mode:', isTestMode);
+        console.log('Has Sandbox URL:', !!preference.sandbox_init_point);
+        console.log('Has Production URL:', !!preference.init_point);
+        console.log('Selected URL:', initPoint);
+        console.log('URL Domain:', initPoint ? new URL(initPoint).hostname : 'none');
+
+        if (initPoint && new URL(initPoint).hostname.includes('sandbox')) {
+          console.log('⚠️  WARNING: This is a SANDBOX URL');
+          console.log('⚠️  Sandbox URLs typically OPEN IN BROWSER, not app');
+          console.log('⚠️  To open in app, use production credentials with test cards');
+        }
+        console.log('═══════════════════════════════════════\n');
 
         if (initPoint) {
           console.log('Redirecting to Mercado Pago:', initPoint);
