@@ -501,42 +501,32 @@ export default function ServiceBooking() {
         console.log('URL de pago:', result.paymentUrl);
         console.log('ID de orden:', result.orderId);
 
-        setShowPaymentModal(false);
-
         // Detect environment from payment URL
         const isTestMode = result.paymentUrl!.includes('sandbox');
 
-        Alert.alert(
-          'Redirigiendo a Mercado Pago',
-          'Se abrirá la página de pago de Mercado Pago. Una vez completado el pago, recibirás una confirmación por email.',
-          [
-            {
-              text: 'Continuar',
-              onPress: async () => {
-                try {
-                  // Use intelligent Mercado Pago opening (app first, then browser)
-                  const openResult = await openMercadoPagoPayment(result.paymentUrl!, isTestMode);
+        // Open Mercado Pago directly without showing alert
+        try {
+          // Use intelligent Mercado Pago opening (app first, then browser)
+          const openResult = await openMercadoPagoPayment(result.paymentUrl!, isTestMode);
 
-                  if (!openResult.success) {
-                    Alert.alert(
-                      'Error',
-                      openResult.error || 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.'
-                    );
-                  } else {
-                    console.log(openResult.openedInApp
-                      ? '✅ Opened in Mercado Pago app'
-                      : '🌐 Opened in browser');
-                    // Redirigir al usuario a la pantalla de servicios después de abrir MP
-                    router.replace('/(tabs)/services');
-                  }
-                } catch (linkError) {
-                  console.error('Error abriendo URL de Mercado Pago:', linkError);
-                  Alert.alert('Error', 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.');
-                }
-              }
-            }
-          ]
-        );
+          if (!openResult.success) {
+            Alert.alert(
+              'Error',
+              openResult.error || 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.'
+            );
+          } else {
+            console.log(openResult.openedInApp
+              ? '✅ Opened in Mercado Pago app'
+              : '🌐 Opened in browser');
+            // Close modal AFTER successfully opening MP
+            setShowPaymentModal(false);
+            // DO NOT redirect here - let the user complete payment
+            // MP will redirect back to the app via dogcatify://payment/success
+          }
+        } catch (linkError) {
+          console.error('Error abriendo URL de Mercado Pago:', linkError);
+          Alert.alert('Error', 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.');
+        }
       } else {
         console.error('❌ Error en la respuesta:', result.error);
         throw new Error(result.error || 'Error creando la orden');

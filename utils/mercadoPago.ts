@@ -1542,6 +1542,7 @@ export const validateCredentialsFormat = (accessToken: string, publicKey: string
  * Open Mercado Pago payment URL intelligently
  * - Try to open native Mercado Pago app first
  * - Fallback to web browser if app is not installed
+ * - Always opens web URL for now due to Android compatibility issues
  */
 export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boolean): Promise<{
   success: boolean;
@@ -1557,6 +1558,13 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
       urlDomain: new URL(paymentUrl).hostname
     });
 
+    // TEMPORARY: Always use web URL for better compatibility
+    // The deep link scheme for MP app causes navigation issues on Android
+    console.log('Opening Mercado Pago in browser (web URL)');
+    await Linking.openURL(paymentUrl);
+    return { success: true, openedInApp: false };
+
+    /* Commented out for now - app deep link causes issues
     // Extract preference ID from URL
     const preferenceId = paymentUrl.match(/\/checkout\/v1\/redirect\?pref_id=([^&]+)/)?.[1];
 
@@ -1584,6 +1592,7 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
       await Linking.openURL(paymentUrl);
       return { success: true, openedInApp: false };
     }
+    */
   } catch (error) {
     console.error('Error opening Mercado Pago payment:', error);
 
