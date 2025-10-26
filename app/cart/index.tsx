@@ -21,7 +21,7 @@ export default function Cart() {
   const [productStocks, setProductStocks] = useState<Record<string, number>>({});
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
-  const [paymentMessage, setPaymentMessage] = useState('Preparando tu pago seguro con Mercado Pago');
+  const [paymentMessage, setPaymentMessage] = useState('Preparando tu pago con Mercado Pago');
   const [savedAddress, setSavedAddress] = useState({
     street: '',
     number: '',
@@ -258,7 +258,7 @@ export default function Cart() {
           console.log('Redirecting to Mercado Pago:', initPoint);
 
           // Update message while opening
-          setPaymentMessage('Redirigiendo a Mercado Pago...');
+          setPaymentMessage('Abriendo Mercado Pago...');
 
           const openResult = await openMercadoPagoPayment(initPoint, isTestMode);
 
@@ -293,7 +293,7 @@ export default function Cart() {
     } finally {
       setLoading(false);
       setPaymentLoading(false);
-      setPaymentMessage('Preparando tu pago seguro con Mercado Pago');
+      setPaymentMessage('Preparando tu pago con Mercado Pago');
     }
   };
 

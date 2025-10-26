@@ -1561,19 +1561,35 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
   error?: string;
 }> => {
   try {
-    const { Linking } = await import('react-native');
+    const { Linking, Platform } = await import('react-native');
 
     console.log('Opening Mercado Pago payment:', {
       isTestMode,
       urlLength: paymentUrl.length,
-      urlDomain: new URL(paymentUrl).hostname
+      urlDomain: new URL(paymentUrl).hostname,
+      platform: Platform.OS
     });
 
-    // Always open in browser for better reliability
-    // Deep linking to MP app has issues with order loading
-    console.log('Opening Mercado Pago in browser for better compatibility');
+    // La app de Mercado Pago intercepta automáticamente las URLs de checkout
+    // Si el usuario tiene la app instalada, se abrirá la app
+    // Si no, se abrirá en el navegador
+    console.log('Opening Mercado Pago URL (app will intercept if installed)...');
+
+    const canOpen = await Linking.canOpenURL(paymentUrl);
+
+    if (!canOpen) {
+      console.error('Cannot open URL:', paymentUrl);
+      throw new Error('No se puede abrir la URL de pago');
+    }
+
     await Linking.openURL(paymentUrl);
-    return { success: true, openedInApp: false };
+
+    // En Android/iOS, si la app está instalada se abrirá automáticamente
+    // No podemos detectar con certeza si se abrió en app o navegador
+    // pero la URL correcta permite que la app intercepte
+    console.log('✅ Mercado Pago URL opened successfully');
+    return { success: true, openedInApp: false }; // Retornamos false porque no podemos detectarlo
+
   } catch (error) {
     console.error('Error opening Mercado Pago payment:', error);
 
