@@ -1096,7 +1096,11 @@ export const createServicePaymentPreference = async (
 ): Promise<any> => {
   try {
     // Detect if we're using test credentials
-    const isTestMode = partnerConfig.access_token?.startsWith('TEST-');
+    // Check both the TEST- prefix AND the explicit is_test_mode flag
+    // This ensures we respect both sandbox credentials AND manual test mode configuration
+    const isTestMode = partnerConfig.access_token?.startsWith('TEST-') ||
+                       partnerConfig.is_test_mode === true ||
+                       partnerConfig.is_test_mode === 'true';
     const tokenPrefix = partnerConfig.access_token?.substring(0, 20) || 'N/A';
 
     console.log('Creating service payment preference:', {
@@ -1104,7 +1108,9 @@ export const createServicePaymentPreference = async (
       isTestMode,
       tokenPrefix: tokenPrefix + '...',
       commissionAmount,
-      willSkipApplicationFee: isTestMode
+      willSkipApplicationFee: isTestMode,
+      detectedBy: partnerConfig.access_token?.startsWith('TEST-') ? 'TEST- prefix' :
+                  partnerConfig.is_test_mode ? 'is_test_mode flag' : 'none (production)'
     });
 
     // CRITICAL: In TEST mode, Mercado Pago does NOT support marketplace features
