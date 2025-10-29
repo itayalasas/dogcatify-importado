@@ -314,18 +314,18 @@ export const createOrder = async (
       created_at: new Date().toISOString()
     };
 
-    const insertResult = await supabaseClient
+    const { data: insertedOrder, error } = await supabaseClient
       .from('orders')
-      .insert(orderData);
-    
-    const { data, error } = insertResult;
+      .insert(orderData)
+      .select('id')
+      .single();
 
-    if (error) throw error;
-    
-    // Since our custom implementation doesn't support .select().single(), 
-    // we'll return the orderData with a generated ID
-    const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-    return { ...orderData, id: orderId };
+    if (error || !insertedOrder) {
+      console.error('Error inserting order:', error);
+      throw error || new Error('Failed to create order');
+    }
+
+    return { ...orderData, id: insertedOrder.id };
   } catch (error) {
     console.error('Error creating order:', error);
     throw error;
@@ -531,9 +531,6 @@ export const createMultiPartnerOrder = async (
       partner_amount: partnerAmount
     });
 
-    // Generate a simple unique ID for temporary use
-    const tempOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-
     // Add IVA info to each item
     const itemsWithIVA = cartItems.map(item => {
       // Use item's IVA rate if available, otherwise use partner's IVA rate
@@ -615,20 +612,21 @@ export const createMultiPartnerOrder = async (
     };
 
     // Insert the unified order into database (let PostgreSQL generate the UUID)
-    const insertResult = await supabaseClient
+    const { data: insertedOrder, error: insertError } = await supabaseClient
       .from('orders')
-      .insert([orderData]);
+      .insert([orderData])
+      .select('id')
+      .single();
 
-    if (insertResult.error) {
-      console.error('Error creating unified order:', insertResult.error);
-      throw insertResult.error;
+    if (insertError || !insertedOrder) {
+      console.error('Error creating unified order:', insertError);
+      throw insertError || new Error('Failed to create order');
     }
 
-    console.log('Unified order created successfully');
-    
-    // Since we can't get the generated ID easily, we'll use the temp ID for the payment preference
-    // The webhook will match by external_reference
-    const orderIdForPayment = tempOrderId;
+    console.log('Unified order created successfully with ID:', insertedOrder.id);
+
+    // Use the real order ID from database
+    const orderIdForPayment = insertedOrder.id;
 
     // Create the unified order object for return
     const unifiedOrder = {
