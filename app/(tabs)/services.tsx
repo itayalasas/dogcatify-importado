@@ -30,8 +30,8 @@ export default function Services() {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Configuración de paginación
-  const ITEMS_PER_PAGE = 6;
-  const INITIAL_LOAD = 4;
+  const ITEMS_PER_PAGE = 10;
+  const INITIAL_LOAD = 10;
   React.useEffect(() => {
     if (!currentUser) {
       setLoading(false);
@@ -140,11 +140,10 @@ export default function Services() {
         console.log(`✅ Processed ${allPartnersWithServices.length} partners with services`);
         setPartners(allPartnersWithServices);
 
-        // Carga inicial paginada
-        const initialPartners = allPartnersWithServices.slice(0, INITIAL_LOAD);
-        setDisplayedPartners(initialPartners);
+        // Cargar todos los servicios de una vez
+        setDisplayedPartners(allPartnersWithServices);
         setCurrentPage(1);
-        setHasMoreData(allPartnersWithServices.length > INITIAL_LOAD);
+        setHasMoreData(false);
       }
     } catch (err) {
       console.error("Error fetching partners:", err);
