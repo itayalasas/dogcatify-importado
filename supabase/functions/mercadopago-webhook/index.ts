@@ -394,20 +394,37 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
     if (!uuidRegex.test(orderId)) {
       console.warn(`⚠️ external_reference is not a valid UUID: ${orderId}`);
 
-      // Intentar buscar la orden usando payment_preference_id si el external_reference no es UUID
+      // Intentar buscar la orden usando el preference_id del payment
+      const preferenceId = paymentData.metadata?.preference_id || paymentData.order?.id;
+
       console.log('🔍 Attempting to find order by payment_preference_id...');
+      console.log('   Payment ID:', paymentData.id);
+      console.log('   Preference ID from metadata:', paymentData.metadata?.preference_id);
+      console.log('   Order ID from payment:', paymentData.order?.id);
+
+      if (!preferenceId) {
+        console.error('❌ No preference_id found in payment data');
+        console.log('Payment data structure:', JSON.stringify({
+          id: paymentData.id,
+          metadata: paymentData.metadata,
+          order: paymentData.order,
+          external_reference: paymentData.external_reference
+        }, null, 2));
+        console.error('This payment may belong to a preference that was never converted to an order');
+        return;
+      }
 
       const { data: orderByPref, error: prefError } = await supabase
         .from('orders')
         .select('*, partners!inner(mercadopago_config)')
-        .eq('payment_preference_id', paymentData.id)
+        .eq('payment_preference_id', preferenceId)
         .maybeSingle();
 
       if (orderByPref) {
         console.log(`✅ Found order by payment_preference_id: ${orderByPref.id}`);
         orderId = orderByPref.id;
       } else {
-        console.error(`❌ Could not find order with payment_preference_id: ${paymentData.id}`);
+        console.error(`❌ Could not find order with payment_preference_id: ${preferenceId}`);
         console.error('This payment may belong to a preference that was never converted to an order');
         return;
       }
