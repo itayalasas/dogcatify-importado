@@ -574,6 +574,7 @@ export const createMultiPartnerOrder = async (
       iva_rate: ivaCalculation.ivaRate,
       iva_amount: ivaCalculation.ivaAmount,
       iva_included_in_price: ivaCalculation.ivaIncluded,
+      shipping_cost: totalShippingCost,
       total_amount: totalAmount,
       commission_amount: commissionAmount,
       partner_amount: partnerAmount,
