@@ -429,7 +429,7 @@ export default function Services() {
                         </View>
 
                         {/* Price Badge */}
-                        {item.price && (
+                        {(item.price !== undefined && item.price !== null && item.price > 0) && (
                           <View style={styles.priceBadge}>
                             <Text style={styles.priceBadgeText}>
                               ${item.price.toLocaleString()}
@@ -441,7 +441,7 @@ export default function Services() {
 
                     {/* Bottom Content */}
                     <View style={styles.cardBottomContent}>
-                      {item.partnerPhone && (
+                      {!!item.partnerPhone && (
                         <View style={styles.infoRow}>
                           <Phone size={13} color="#6B7280" strokeWidth={2} />
                           <Text style={styles.infoText} numberOfLines={1}>
@@ -450,7 +450,7 @@ export default function Services() {
                         </View>
                       )}
 
-                      {item.partnerAddress && (
+                      {!!item.partnerAddress && (
                         <View style={styles.infoRow}>
                           <MapPin size={13} color="#6B7280" strokeWidth={2} />
                           <Text style={styles.infoText} numberOfLines={1}>
