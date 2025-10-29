@@ -956,13 +956,27 @@ export const createServiceBookingOrder = async (bookingData: {
       ivaRate = partnerConfig.iva_rate;
     }
 
-    // Calculate IVA (included in price)
-    const subtotal = ivaRate > 0 ? bookingData.totalAmount / (1 + ivaRate / 100) : bookingData.totalAmount;
-    const ivaAmount = bookingData.totalAmount - subtotal;
+    // Get IVA included flag: partner config (default true)
+    const ivaIncluded = partnerConfig.iva_included_in_price !== false;
+
+    // Calculate IVA
+    let subtotal: number;
+    let ivaAmount: number;
+
+    if (ivaIncluded) {
+      // IVA incluido: extraer del precio total
+      subtotal = ivaRate > 0 ? bookingData.totalAmount / (1 + ivaRate / 100) : bookingData.totalAmount;
+      ivaAmount = bookingData.totalAmount - subtotal;
+    } else {
+      // IVA no incluido: agregar al precio
+      subtotal = bookingData.totalAmount;
+      ivaAmount = ivaRate > 0 ? subtotal * (ivaRate / 100) : 0;
+    }
 
     console.log('IVA calculation:', {
       total: bookingData.totalAmount,
       iva_rate: ivaRate,
+      iva_included: ivaIncluded,
       subtotal: subtotal.toFixed(2),
       iva_amount: ivaAmount.toFixed(2)
     });
@@ -1048,6 +1062,7 @@ export const createServiceBookingOrder = async (bookingData: {
       subtotal: subtotal,
       iva_rate: ivaRate,
       iva_amount: ivaAmount,
+      iva_included_in_price: ivaIncluded,
       total_amount: bookingData.totalAmount,
       commission_amount: commissionAmount,
       partner_amount: partnerAmount,
