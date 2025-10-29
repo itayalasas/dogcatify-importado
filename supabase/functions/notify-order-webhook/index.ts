@@ -37,10 +37,18 @@ async function generateSignature(payload: string, secret: string): Promise<strin
 
 async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]> {
   const partnersArray: any[] = [];
+
+  // Si hay partner_breakdown (productos), usar ese
   const partnerBreakdown = orderData.partner_breakdown?.partners || {};
-  const partnerIds = Object.keys(partnerBreakdown);
+  let partnerIds = Object.keys(partnerBreakdown);
+
+  // Si no hay partner_breakdown pero hay partner_id (servicios), usar ese
+  if (partnerIds.length === 0 && orderData.partner_id) {
+    partnerIds = [orderData.partner_id];
+  }
 
   if (partnerIds.length === 0) {
+    console.warn("⚠️ No se encontraron partners para esta orden");
     return [];
   }
 
@@ -58,15 +66,35 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
   // Construir el array de partners con sus items
   for (const partnerId of partnerIds) {
     const partnerInfo = partnersData.find((p: any) => p.id === partnerId);
-    const breakdown = partnerBreakdown[partnerId];
 
-    if (!partnerInfo || !breakdown) continue;
+    if (!partnerInfo) {
+      console.warn(`⚠️ No se encontró información del partner ${partnerId}`);
+      continue;
+    }
 
-    // Obtener items de este partner de la lista de items de la orden
-    const partnerItems = (orderData.items || []).filter((item: any) => item.partnerId === partnerId);
+    // Para productos: usar breakdown
+    // Para servicios: calcular a partir de la orden
+    let partnerItems = (orderData.items || []).filter((item: any) => item.partnerId === partnerId || item.partner_id === partnerId);
+    let subtotal = 0;
+    let ivaAmount = 0;
 
-    // Calcular totales para este partner
-    const subtotal = breakdown.subtotal || 0;
+    if (partnerBreakdown[partnerId]) {
+      // Productos con breakdown
+      subtotal = partnerBreakdown[partnerId].subtotal || 0;
+      ivaAmount = partnerItems.reduce((sum: number, item: any) => sum + (item.iva_amount || 0), 0);
+    } else {
+      // Servicios sin breakdown - calcular desde items o totales de la orden
+      if (partnerItems.length > 0) {
+        subtotal = partnerItems.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
+        ivaAmount = partnerItems.reduce((sum: number, item: any) => sum + (item.iva_amount || 0), 0);
+      } else {
+        // Si no hay items, usar los totales de la orden
+        subtotal = orderData.total_amount || 0;
+        ivaAmount = orderData.iva_amount || 0;
+      }
+    }
+
+    // Calcular comisión
     const commissionPercentage = partnerInfo.commission_percentage || 5.0;
     const commissionAmount = (subtotal * commissionPercentage) / 100;
     const partnerAmount = subtotal - commissionAmount;
@@ -85,7 +113,7 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
       is_primary: partnerId === orderData.partner_id,
       items: partnerItems,
       subtotal: subtotal,
-      iva_amount: partnerItems.reduce((sum: number, item: any) => sum + (item.iva_amount || 0), 0),
+      iva_amount: ivaAmount,
       commission_amount: Number(commissionAmount.toFixed(2)),
       partner_amount: Number(partnerAmount.toFixed(2)),
       total: subtotal
