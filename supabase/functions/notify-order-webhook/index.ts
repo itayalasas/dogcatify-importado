@@ -74,16 +74,20 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
 
     // Para productos: usar breakdown
     // Para servicios: calcular a partir de la orden
-    let partnerItems = (orderData.items || []).filter((item: any) => item.partnerId === partnerId || item.partner_id === partnerId);
+    let partnerItems: any[] = [];
     let subtotal = 0;
     let ivaAmount = 0;
 
     if (partnerBreakdown[partnerId]) {
-      // Productos con breakdown
+      // Productos con breakdown - filtrar items por partnerId
+      partnerItems = (orderData.items || []).filter((item: any) => item.partnerId === partnerId || item.partner_id === partnerId);
       subtotal = partnerBreakdown[partnerId].subtotal || 0;
       ivaAmount = partnerItems.reduce((sum: number, item: any) => sum + (item.iva_amount || 0), 0);
     } else {
-      // Servicios sin breakdown - calcular desde items o totales de la orden
+      // Servicios sin breakdown
+      // En servicios hay un solo partner, así que todos los items son de ese partner
+      partnerItems = orderData.items || [];
+
       if (partnerItems.length > 0) {
         subtotal = partnerItems.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
         ivaAmount = partnerItems.reduce((sum: number, item: any) => sum + (item.iva_amount || 0), 0);
