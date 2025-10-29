@@ -245,22 +245,6 @@ export default function Cart() {
           paymentUrl = preference.init_point;
         }
 
-        console.log('═══════════════════════════════════════');
-        console.log('🛒 CART PAYMENT URL SELECTION');
-        console.log('═══════════════════════════════════════');
-        console.log('Is Test Mode:', isTestMode);
-        console.log('Has Sandbox URL:', !!preference.sandbox_init_point);
-        console.log('Has Production URL:', !!preference.init_point);
-        console.log('Selected URL:', paymentUrl);
-        console.log('URL Domain:', paymentUrl ? new URL(paymentUrl).hostname : 'none');
-
-        if (paymentUrl && new URL(paymentUrl).hostname.includes('sandbox')) {
-          console.log('⚠️  WARNING: This is a SANDBOX URL');
-          console.log('⚠️  Sandbox URLs typically OPEN IN BROWSER, not app');
-          console.log('⚠️  To open in app, use production credentials with test cards');
-        }
-        console.log('═══════════════════════════════════════\n');
-
         if (!paymentUrl) {
           throw new Error('No se pudo obtener la URL de pago');
         }
