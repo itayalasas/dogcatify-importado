@@ -378,7 +378,7 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
     console.log(`   External Reference: ${paymentData.external_reference}`);
     console.log(`   Payment Method: ${paymentData.payment_method_id}`);
 
-    const orderId = paymentData.external_reference;
+    let orderId = paymentData.external_reference;
 
     if (!orderId) {
       console.error('❌ No external_reference found in payment. Cannot identify order.');
@@ -388,6 +388,31 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
 
     console.log(`🔍 Looking for order: ${orderId}`);
 
+    // Verificar si el orderId es un UUID válido
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    if (!uuidRegex.test(orderId)) {
+      console.warn(`⚠️ external_reference is not a valid UUID: ${orderId}`);
+
+      // Intentar buscar la orden usando payment_preference_id si el external_reference no es UUID
+      console.log('🔍 Attempting to find order by payment_preference_id...');
+
+      const { data: orderByPref, error: prefError } = await supabase
+        .from('orders')
+        .select('*, partners!inner(mercadopago_config)')
+        .eq('payment_preference_id', paymentData.id)
+        .maybeSingle();
+
+      if (orderByPref) {
+        console.log(`✅ Found order by payment_preference_id: ${orderByPref.id}`);
+        orderId = orderByPref.id;
+      } else {
+        console.error(`❌ Could not find order with payment_preference_id: ${paymentData.id}`);
+        console.error('This payment may belong to a preference that was never converted to an order');
+        return;
+      }
+    }
+
     const { data: orderData, error: orderError } = await supabase
       .from('orders')
       .select('*, partners!inner(mercadopago_config)')
@@ -395,7 +420,11 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
       .maybeSingle();
 
     if (orderError || !orderData) {
-      console.error('❌ Error fetching order or order not found:', orderError);
+      console.error('❌ Error fetching order or order not found:', {
+        error: orderError,
+        orderId,
+        hint: 'The order may not exist or the external_reference format is incorrect'
+      });
       return;
     }
 
