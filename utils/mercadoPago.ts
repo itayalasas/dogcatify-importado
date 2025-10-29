@@ -1727,13 +1727,14 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
       console.log('⚠️  This will ensure the app opens correctly');
     }
 
-    // ESTRATEGIA 1: Intentar deep link directo a la app
-    // SIEMPRE intentamos el deep link en móvil, sin importar la detección de la app
-    // La detección puede fallar en Android por razones de privacidad
+    // ESTRATEGIA 1: Intentar deep link directo a la app (SOLO PARA PRODUCCIÓN)
+    // El deep link mercadopago://checkout?preference_id=... NO funciona con sandbox
+    // Para sandbox, debemos usar la URL web completa
     const preferenceId = extractPreferenceId(paymentUrl);
-    if (preferenceId && Platform.OS !== 'web') {
+
+    if (!isSandboxUrl && preferenceId && Platform.OS !== 'web') {
       console.log('');
-      console.log('🔗 STRATEGY 1: Try deep link to app');
+      console.log('🔗 STRATEGY 1: Try deep link to app (PRODUCTION ONLY)');
       console.log('Deep Link:', `mercadopago://checkout?preference_id=${preferenceId}`);
 
       try {
@@ -1749,9 +1750,14 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
         return { success: true, openedInApp: true };
       } catch (deepLinkError) {
         console.log('❌ Deep link failed:', deepLinkError.message);
-        console.log('   This means the app is not installed');
+        console.log('   This means the app is not installed or deep link not supported');
         console.log('   Falling back to web URL...');
       }
+    } else if (isSandboxUrl) {
+      console.log('');
+      console.log('⚠️  SANDBOX URL DETECTED');
+      console.log('   Deep links do not work with sandbox URLs');
+      console.log('   Will open web URL directly - OS will decide app vs browser');
     }
 
     // ESTRATEGIA 2: Abrir URL web normal
