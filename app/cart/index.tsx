@@ -268,13 +268,10 @@ export default function Cart() {
         console.log('✅ Orden creada exitosamente');
         console.log('URL de pago:', paymentUrl);
 
-        // CRÍTICO: Detectar modo test desde la URL (no desde las credenciales)
-        // Esto asegura que si tenemos credenciales de producción, siempre abrimos la app
+        // Detect environment from payment URL (same as services)
         const isTestModeByUrl = paymentUrl.includes('sandbox');
-        console.log('🔍 Is Test Mode (by URL):', isTestModeByUrl);
-        console.log('🔍 Is Test Mode (by credentials):', isTestMode);
 
-        // Abrir Mercado Pago usando detección por URL
+        // Open Mercado Pago directly (same as services)
         setPaymentMessage('Abriendo Mercado Pago...');
         const openResult = await openMercadoPagoPayment(paymentUrl, isTestModeByUrl);
 
