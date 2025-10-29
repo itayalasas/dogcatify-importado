@@ -541,7 +541,7 @@ export default function ServiceBooking() {
     } catch (error: any) {
       console.error('❌ Error with Mercado Pago payment:', error);
 
-      // CRÍTICO: Ocultar loader inmediatamente
+      // CRÍTICO: Ocultar loader ANTES de mostrar cualquier alerta
       setPaymentLoading(false);
       setPaymentMessage('Preparando tu pago con Mercado Pago');
 
@@ -550,17 +550,21 @@ export default function ServiceBooking() {
         errorMessage = error.message;
       }
 
-      // Reabrir el modal en caso de error
-      setShowPaymentModal(true);
+      // Esperar un momento para asegurar que el loader se oculte completamente
+      // antes de mostrar el Alert
+      setTimeout(() => {
+        // Reabrir el modal en caso de error
+        setShowPaymentModal(true);
 
-      Alert.alert(
-        'Error al procesar el pago',
-        errorMessage + '\n\nPor favor verifica que el partner tenga Mercado Pago configurado e intenta nuevamente.',
-        [
-          { text: 'Reintentar', onPress: () => setPaymentStep('methods') },
-          { text: 'Cancelar', style: 'cancel', onPress: () => setShowPaymentModal(false) }
-        ]
-      );
+        Alert.alert(
+          'Error al procesar el pago',
+          errorMessage + '\n\nPor favor verifica que el partner tenga Mercado Pago configurado e intenta nuevamente.',
+          [
+            { text: 'Reintentar', onPress: () => setPaymentStep('methods') },
+            { text: 'Cancelar', style: 'cancel', onPress: () => setShowPaymentModal(false) }
+          ]
+        );
+      }, 100); // Pequeño delay para que se desmonte el modal de loading
     }
   };
 
