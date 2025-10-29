@@ -541,6 +541,10 @@ export default function ServiceBooking() {
     } catch (error: any) {
       console.error('❌ Error with Mercado Pago payment:', error);
 
+      // CRÍTICO: Ocultar loader inmediatamente
+      setPaymentLoading(false);
+      setPaymentMessage('Preparando tu pago con Mercado Pago');
+
       let errorMessage = 'No se pudo procesar el pago con Mercado Pago';
       if (error.message) {
         errorMessage = error.message;
@@ -557,9 +561,6 @@ export default function ServiceBooking() {
           { text: 'Cancelar', style: 'cancel', onPress: () => setShowPaymentModal(false) }
         ]
       );
-    } finally {
-      setPaymentLoading(false);
-      setPaymentMessage('Preparando tu pago con Mercado Pago');
     }
   };
 

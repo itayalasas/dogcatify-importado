@@ -871,7 +871,45 @@ export const createServiceBookingOrder = async (bookingData: {
     console.log('Creating service booking order...');
     console.log('Booking data:', bookingData);
 
-    // Get complete customer profile data from database
+    // PASO 1: VALIDAR MERCADO PAGO ANTES DE CREAR NADA
+    console.log('⚠️ STEP 1: Validating Mercado Pago configuration...');
+    let partnerConfig;
+    try {
+      partnerConfig = await getPartnerMercadoPagoConfig(bookingData.partnerId);
+      console.log('✅ Partner MP config loaded for:', partnerConfig.business_name);
+    } catch (mpError) {
+      console.error('❌ MP Configuration Error:', mpError);
+      throw new Error(`Configuración de pago inválida: ${mpError.message}`);
+    }
+
+    // PASO 2: VALIDAR ACCESS TOKEN
+    console.log('⚠️ STEP 2: Validating access token...');
+    if (!partnerConfig.access_token || partnerConfig.access_token.length < 20) {
+      throw new Error('Token de acceso de Mercado Pago inválido o no configurado');
+    }
+
+    // Test del token haciendo una llamada simple a la API
+    try {
+      const testResponse = await fetch(`${MP_BASE_URL}/users/me`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${partnerConfig.access_token}`
+        }
+      });
+
+      if (!testResponse.ok) {
+        const errorData = await testResponse.json();
+        console.error('❌ Token validation failed:', errorData);
+        throw new Error(`Token de Mercado Pago inválido o vencido (${errorData.message || testResponse.status})`);
+      }
+      console.log('✅ Access token is valid');
+    } catch (tokenError) {
+      console.error('❌ Token validation error:', tokenError);
+      throw new Error('Token de Mercado Pago inválido o vencido. Por favor, reconfigura la conexión con Mercado Pago.');
+    }
+
+    // PASO 3: OBTENER DATOS DEL CLIENTE
+    console.log('⚠️ STEP 3: Loading customer profile...');
     const { data: customerProfile, error: profileError } = await supabaseClient
       .from('profiles')
       .select('display_name, email, phone, calle, numero, address_locality, barrio, codigo_postal')
@@ -902,11 +940,8 @@ export const createServiceBookingOrder = async (bookingData: {
       hasAddress: !!(completeCustomerInfo.street && completeCustomerInfo.number)
     });
 
-    // Get partner's Mercado Pago configuration
-    const partnerConfig = await getPartnerMercadoPagoConfig(bookingData.partnerId);
-    console.log('Partner MP config loaded for:', partnerConfig.business_name);
-
-    // Get service details to obtain IVA rate and currency
+    // PASO 4: OBTENER DETALLES DEL SERVICIO (IVA, moneda)
+    console.log('⚠️ STEP 4: Loading service details...');
     const { data: serviceData, error: serviceError } = await supabaseClient
       .from('partner_services')
       .select('iva_rate, currency, currency_code_dgi')
@@ -931,19 +966,21 @@ export const createServiceBookingOrder = async (bookingData: {
       subtotal: subtotal.toFixed(2),
       iva_amount: ivaAmount.toFixed(2)
     });
-    
+
     // Calculate commission
     const commissionAmount = bookingData.totalAmount * ((partnerConfig.commission_percentage || 5.0) / 100);
     const partnerAmount = bookingData.totalAmount - commissionAmount;
-    
+
     console.log('Commission calculation:', {
       total: bookingData.totalAmount,
       commission_rate: partnerConfig.commission_percentage || 5.0,
       commission_amount: commissionAmount,
       partner_amount: partnerAmount
     });
-    
-    // Create booking record in database
+
+    // PASO 5: CREAR BOOKING EN LA BASE DE DATOS
+    // Solo llegamos aquí si MP está configurado correctamente
+    console.log('⚠️ STEP 5: Creating booking record...');
     const bookingRecord = {
       service_id: bookingData.serviceId,
       partner_id: bookingData.partnerId,
@@ -1033,16 +1070,33 @@ export const createServiceBookingOrder = async (bookingData: {
     }
     
     console.log('Order created with ID:', insertedOrder.id);
-    
-    // Create Mercado Pago payment preference with complete customer info
-    const preference = await createServicePaymentPreference(
-      insertedOrder.id,
-      { ...bookingData, customerInfo: completeCustomerInfo },
-      partnerConfig,
-      commissionAmount
-    );
-    
-    console.log('Payment preference created:', preference.id);
+
+    // PASO 7: CREAR PREFERENCIA DE PAGO EN MERCADO PAGO
+    console.log('⚠️ STEP 7: Creating payment preference...');
+    let preference;
+    try {
+      preference = await createServicePaymentPreference(
+        insertedOrder.id,
+        { ...bookingData, customerInfo: completeCustomerInfo },
+        partnerConfig,
+        commissionAmount
+      );
+      console.log('✅ Payment preference created:', preference.id);
+    } catch (mpError) {
+      console.error('❌ Failed to create MP preference:', mpError);
+
+      // ROLLBACK: Eliminar la orden y booking si falló la preferencia
+      console.warn('⚠️ Rolling back order and booking...');
+      try {
+        await supabaseClient.from('orders').delete().eq('id', insertedOrder.id);
+        await supabaseClient.from('bookings').delete().eq('id', insertedBooking.id);
+        console.log('✅ Rollback completed');
+      } catch (rollbackError) {
+        console.error('❌ Rollback failed:', rollbackError);
+      }
+
+      throw new Error(`Error al crear preferencia de pago: ${mpError.message || 'Error desconocido'}`);
+    }
     
     // Update order with payment preference ID
     await supabaseClient
