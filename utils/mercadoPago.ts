@@ -1727,37 +1727,11 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
       console.log('⚠️  This will ensure the app opens correctly');
     }
 
-    // ESTRATEGIA 1: Intentar deep link directo a la app
-    // SIEMPRE intentamos el deep link, incluso para sandbox
-    // El intento hace que el OS detecte que Mercado Pago puede manejar la URL
-    const preferenceId = extractPreferenceId(paymentUrl);
-
-    if (preferenceId && Platform.OS !== 'web') {
-      console.log('');
-      console.log('🔗 STRATEGY 1: Try deep link to app');
-      console.log('Deep Link:', `mercadopago://checkout?preference_id=${preferenceId}`);
-
-      try {
-        const deepLink = `mercadopago://checkout?preference_id=${preferenceId}`;
-
-        // Intentar abrir directamente sin verificar canOpenURL
-        // Si la app está instalada, se abrirá. Si no, lanzará un error.
-        await Linking.openURL(deepLink);
-
-        // Si llegamos aquí, el deep link funcionó
-        console.log('✅ SUCCESS: Opened in Mercado Pago app via deep link');
-        console.log('═══════════════════════════════════════\n');
-        return { success: true, openedInApp: true };
-      } catch (deepLinkError) {
-        console.log('❌ Deep link failed:', deepLinkError.message);
-        console.log('   Falling back to web URL...');
-      }
-    }
-
-    // ESTRATEGIA 2: Abrir URL web normal
-    // El OS decide si abre en app o navegador basado en el dominio
+    // ESTRATEGIA: Abrir URL web directamente
+    // El sistema operativo decidirá automáticamente si abre en la app de Mercado Pago
+    // o en el navegador, basado en si la app está instalada y puede manejar la URL
     console.log('');
-    console.log('🌐 STRATEGY 2: Open web URL (OS will decide)');
+    console.log('🌐 Opening payment URL (OS will decide app vs browser)');
     console.log('Checking if URL can be opened...');
 
     const canOpen = await Linking.canOpenURL(paymentUrl);
@@ -1770,21 +1744,13 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
     console.log('✅ URL can be opened, proceeding...');
     await Linking.openURL(paymentUrl);
 
-    // Si llegamos aquí desde la estrategia 2, es porque el deep link falló
-    // Por lo tanto, la app probablemente no está instalada o no soporta deep links
-    if (isSandboxUrl) {
-      console.log('⚠️  SUCCESS: Opened in web browser');
-      console.log('   (Sandbox URLs typically open in browser)');
-    } else {
-      console.log('✅ SUCCESS: Opened, OS decided destination');
-      console.log('   (App if installed, browser otherwise)');
-    }
-
+    console.log('✅ SUCCESS: Payment URL opened');
+    console.log('   OS will open in Mercado Pago app if installed, browser otherwise');
     console.log('═══════════════════════════════════════\n');
 
     return {
       success: true,
-      openedInApp: false // Si llegamos aquí, no usamos el deep link
+      openedInApp: false // El OS decide, no controlamos si fue app o browser
     };
 
   } catch (error) {
