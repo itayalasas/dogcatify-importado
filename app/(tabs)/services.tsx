@@ -459,7 +459,7 @@ export default function Services() {
                         </View>
                       )}
 
-                      {(item.rating || item.reviews >= 0) && (
+                      {(item.rating || (item.reviews !== undefined && item.reviews !== null)) && (
                         <TouchableOpacity
                           style={styles.ratingRow}
                           onPress={() => handleRatingPress(item)}
