@@ -35,6 +35,66 @@ async function generateSignature(payload: string, secret: string): Promise<strin
   return hashHex;
 }
 
+async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]> {
+  const partnersArray: any[] = [];
+  const partnerBreakdown = orderData.partner_breakdown?.partners || {};
+  const partnerIds = Object.keys(partnerBreakdown);
+
+  if (partnerIds.length === 0) {
+    return [];
+  }
+
+  // Obtener información de todos los partners
+  const { data: partnersData, error } = await supabase
+    .from("partners")
+    .select("id, business_name, email, phone, calle, numero, barrio, codigo_postal, rut, commission_percentage")
+    .in("id", partnerIds);
+
+  if (error || !partnersData) {
+    console.error("❌ Error al obtener datos de partners:", error);
+    return [];
+  }
+
+  // Construir el array de partners con sus items
+  for (const partnerId of partnerIds) {
+    const partnerInfo = partnersData.find((p: any) => p.id === partnerId);
+    const breakdown = partnerBreakdown[partnerId];
+
+    if (!partnerInfo || !breakdown) continue;
+
+    // Obtener items de este partner de la lista de items de la orden
+    const partnerItems = (orderData.items || []).filter((item: any) => item.partnerId === partnerId);
+
+    // Calcular totales para este partner
+    const subtotal = breakdown.subtotal || 0;
+    const commissionPercentage = partnerInfo.commission_percentage || 5.0;
+    const commissionAmount = (subtotal * commissionPercentage) / 100;
+    const partnerAmount = subtotal - commissionAmount;
+
+    partnersArray.push({
+      id: partnerInfo.id,
+      business_name: partnerInfo.business_name,
+      email: partnerInfo.email,
+      phone: partnerInfo.phone,
+      rut: partnerInfo.rut,
+      calle: partnerInfo.calle,
+      numero: partnerInfo.numero,
+      barrio: partnerInfo.barrio,
+      codigo_postal: partnerInfo.codigo_postal,
+      commission_percentage: commissionPercentage,
+      is_primary: partnerId === orderData.partner_id,
+      items: partnerItems,
+      subtotal: subtotal,
+      iva_amount: partnerItems.reduce((sum: number, item: any) => sum + (item.iva_amount || 0), 0),
+      commission_amount: Number(commissionAmount.toFixed(2)),
+      partner_amount: Number(partnerAmount.toFixed(2)),
+      total: subtotal
+    });
+  }
+
+  return partnersArray;
+}
+
 async function sendWebhookNotification(
   subscription: WebhookSubscription,
   orderId: string,
@@ -65,10 +125,48 @@ async function sendWebhookNotification(
       shipping_address: null,
     };
 
+    // Construir array de partners
+    const partnersArray = await buildPartnersArray(orderData, supabase);
+    const totalPartners = partnersArray.length;
+
     const payload = {
       data: {
-        ...orderData,
+        id: orderData.id,
+        status: orderData.status,
+        order_type: orderData.order_type,
+        payment_method: orderData.payment_method,
+        customer: orderData.customer,
+        partners: partnersArray,
+        totals: {
+          subtotal: orderData.subtotal,
+          iva_amount: orderData.iva_amount,
+          iva_rate: orderData.iva_rate,
+          iva_included_in_price: orderData.iva_included_in_price,
+          shipping_cost: shippingCost,
+          shipping_iva_amount: shippingIvaAmount,
+          total_commission: orderData.commission_amount,
+          total_partner_amount: orderData.partner_amount,
+          total_amount: orderData.total_amount,
+          total_partners: totalPartners
+        },
         shipping_info: shippingInfo,
+        payment_info: {
+          payment_id: orderData.payment_id,
+          payment_status: orderData.payment_status,
+          payment_method: orderData.payment_method,
+          payment_preference_id: orderData.payment_preference_id
+        },
+        booking_info: orderData.booking_id ? {
+          booking_id: orderData.booking_id,
+          service_id: orderData.service_id,
+          appointment_date: orderData.appointment_date,
+          appointment_time: orderData.appointment_time,
+          pet_id: orderData.pet_id,
+          pet_name: orderData.pet_name,
+          booking_notes: orderData.booking_notes
+        } : null,
+        created_at: orderData.created_at,
+        updated_at: orderData.updated_at
       },
       event: eventType,
       order_id: orderId,
@@ -299,7 +397,8 @@ Deno.serve(async (req: Request) => {
           numero,
           barrio,
           codigo_postal,
-          rut
+          rut,
+          commission_percentage
         )
       `)
       .eq("id", order_id)
