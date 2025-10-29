@@ -659,16 +659,11 @@ export const createMultiPartnerOrder = async (
     const orders = [unifiedOrder];
     const paymentPreferences = [preference];
 
-    // Detect if we're in test mode
-    // Check both the TEST- prefix AND the explicit is_test_mode flag
-    const isTestMode = primaryPartnerConfig.access_token?.startsWith('TEST-') ||
-                       primaryPartnerConfig.is_test_mode === true ||
-                       primaryPartnerConfig.is_test_mode === 'true';
+    // Detect if we're in test mode (only by token prefix)
+    const isTestMode = primaryPartnerConfig.access_token?.startsWith('TEST-');
 
     console.log('Multi-partner order completed:', {
       isTestMode,
-      detectedBy: primaryPartnerConfig.access_token?.startsWith('TEST-') ? 'TEST- prefix' :
-                  primaryPartnerConfig.is_test_mode ? 'is_test_mode flag' : 'none (production)',
       ordersCount: orders.length,
       preferencesCount: paymentPreferences.length
     });
@@ -788,12 +783,8 @@ export const createUnifiedPaymentPreference = async (
       statement_descriptor: 'DOGCATIFY'
     };
 
-    // Detect if we're using test credentials
-    // Check both the TEST- prefix AND the explicit is_test_mode flag
-    // Note: Test accounts in MP use "production" credentials but are still sandbox
-    const isTestMode = partnerConfig.access_token?.startsWith('TEST-') ||
-                       partnerConfig.is_test_mode === true ||
-                       partnerConfig.is_test_mode === 'true';
+    // Detect if we're using test credentials (only by token prefix)
+    const isTestMode = partnerConfig.access_token?.startsWith('TEST-');
 
     // Add application fee ONLY in production mode
     // In test mode, we skip it to avoid "mixed credentials" error
@@ -808,9 +799,7 @@ export const createUnifiedPaymentPreference = async (
       commission_percentage: partnerConfig.commission_percentage || 5.0,
       partner_receives: totalAmount - commissionAmount,
       external_reference: preferenceData.external_reference,
-      isTestMode,
-      detectedBy: partnerConfig.access_token?.startsWith('TEST-') ? 'TEST- prefix' :
-                  partnerConfig.is_test_mode ? 'is_test_mode flag' : 'none (production)'
+      isTestMode
     });
 
     // Use partner's token to create preference (partner receives payment minus application_fee)
@@ -1158,12 +1147,8 @@ export const createServicePaymentPreference = async (
   commissionAmount: number
 ): Promise<any> => {
   try {
-    // Detect if we're using test credentials
-    // Check both the TEST- prefix AND the explicit is_test_mode flag
-    // This ensures we respect both sandbox credentials AND manual test mode configuration
-    const isTestMode = partnerConfig.access_token?.startsWith('TEST-') ||
-                       partnerConfig.is_test_mode === true ||
-                       partnerConfig.is_test_mode === 'true';
+    // Detect if we're using test credentials (only by token prefix)
+    const isTestMode = partnerConfig.access_token?.startsWith('TEST-');
     const tokenPrefix = partnerConfig.access_token?.substring(0, 20) || 'N/A';
 
     console.log('Creating service payment preference:', {
@@ -1171,9 +1156,7 @@ export const createServicePaymentPreference = async (
       isTestMode,
       tokenPrefix: tokenPrefix + '...',
       commissionAmount,
-      willSkipApplicationFee: isTestMode,
-      detectedBy: partnerConfig.access_token?.startsWith('TEST-') ? 'TEST- prefix' :
-                  partnerConfig.is_test_mode ? 'is_test_mode flag' : 'none (production)'
+      willSkipApplicationFee: isTestMode
     });
 
     // CRITICAL: In TEST mode, Mercado Pago does NOT support marketplace features
