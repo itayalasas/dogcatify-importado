@@ -1038,6 +1038,8 @@ export const createServiceBookingOrder = async (bookingData: {
         price: bookingData.totalAmount,
         quantity: 1,
         type: 'service',
+        partnerId: bookingData.partnerId,
+        partnerName: bookingData.partnerName,
         partner_name: bookingData.partnerName,
         iva_rate: ivaRate,
         subtotal: subtotal,
