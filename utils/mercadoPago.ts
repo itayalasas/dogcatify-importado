@@ -1123,7 +1123,9 @@ export const createServiceBookingOrder = async (bookingData: {
       .eq('id', insertedOrder.id);
     
     // Determine if we're using test credentials
-    const isTestMode = partnerConfig.access_token?.startsWith('TEST-');
+    const isTestModeByToken = partnerConfig.access_token?.startsWith('TEST-');
+    const isTestModeByFlag = partnerConfig.is_test_mode === true;
+    const isTestMode = isTestModeByToken || isTestModeByFlag;
 
     // Get payment URL based on environment
     const paymentUrl = isTestMode ? preference.sandbox_init_point : preference.init_point;
@@ -1132,11 +1134,27 @@ export const createServiceBookingOrder = async (bookingData: {
       throw new Error('No se pudo obtener la URL de pago');
     }
 
-    console.log('Payment URL selected:', {
-      isTestMode,
-      urlType: isTestMode ? 'sandbox_init_point' : 'init_point',
-      url: paymentUrl
-    });
+    console.log('═══════════════════════════════════════');
+    console.log('🔧 SERVICE PAYMENT URL SELECTION');
+    console.log('═══════════════════════════════════════');
+    console.log('Partner:', partnerConfig.business_name);
+    console.log('Is Test Mode (by token):', isTestModeByToken);
+    console.log('Is Test Mode (by flag):', isTestModeByFlag);
+    console.log('Final Test Mode:', isTestMode);
+    console.log('Has Sandbox URL:', !!preference.sandbox_init_point);
+    console.log('Has Production URL:', !!preference.init_point);
+    console.log('Selected URL:', paymentUrl);
+    console.log('URL Domain:', paymentUrl ? new URL(paymentUrl).hostname : 'none');
+
+    if (paymentUrl && new URL(paymentUrl).hostname.includes('sandbox')) {
+      console.log('⚠️  WARNING: This is a SANDBOX URL');
+      console.log('⚠️  Sandbox URLs typically OPEN IN BROWSER, not app');
+      console.log('⚠️  To open in app, use production credentials with test cards');
+    } else {
+      console.log('✅ This is a PRODUCTION URL');
+      console.log('✅ Should open Mercado Pago app if installed');
+    }
+    console.log('═══════════════════════════════════════\n');
     
     console.log('Payment URL generated successfully');
     
