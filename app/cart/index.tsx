@@ -198,11 +198,12 @@ export default function Cart() {
   };
 
   const handlePayWithMercadoPago = async () => {
+    // Cerrar el modal de pago para mostrar el loader en pantalla completa
     setShowPaymentMethodModal(false);
     setPaymentLoading(true);
-    setLoading(true);
+
     try {
-      console.log('Starting checkout process...');
+      console.log('=== Iniciando proceso de checkout ===');
       console.log('Cart items:', cart);
       console.log('Customer info:', currentUser);
 
@@ -218,6 +219,7 @@ export default function Cart() {
 
       const totalShippingCost = 500;
 
+      setPaymentMessage('Creando orden de compra...');
       const { orders, paymentPreferences, isTestMode } = await createMultiPartnerOrder(
         cart,
         currentUser,
@@ -232,18 +234,15 @@ export default function Cart() {
       if (paymentPreferences.length > 0) {
         const preference = paymentPreferences[0];
 
-        // NO limpiar el carrito aquí - lo haremos cuando el webhook confirme el pago
-        // clearCart();
-
-        let initPoint: string | undefined;
+        let paymentUrl: string | undefined;
 
         if (isTestMode) {
-          initPoint = preference.sandbox_init_point || preference.init_point;
+          paymentUrl = preference.sandbox_init_point || preference.init_point;
           if (!preference.sandbox_init_point) {
             console.warn('⚠️ sandbox_init_point not available, falling back to init_point');
           }
         } else {
-          initPoint = preference.init_point;
+          paymentUrl = preference.init_point;
         }
 
         console.log('═══════════════════════════════════════');
@@ -252,58 +251,71 @@ export default function Cart() {
         console.log('Is Test Mode:', isTestMode);
         console.log('Has Sandbox URL:', !!preference.sandbox_init_point);
         console.log('Has Production URL:', !!preference.init_point);
-        console.log('Selected URL:', initPoint);
-        console.log('URL Domain:', initPoint ? new URL(initPoint).hostname : 'none');
+        console.log('Selected URL:', paymentUrl);
+        console.log('URL Domain:', paymentUrl ? new URL(paymentUrl).hostname : 'none');
 
-        if (initPoint && new URL(initPoint).hostname.includes('sandbox')) {
+        if (paymentUrl && new URL(paymentUrl).hostname.includes('sandbox')) {
           console.log('⚠️  WARNING: This is a SANDBOX URL');
           console.log('⚠️  Sandbox URLs typically OPEN IN BROWSER, not app');
           console.log('⚠️  To open in app, use production credentials with test cards');
         }
         console.log('═══════════════════════════════════════\n');
 
-        if (initPoint) {
-          console.log('Redirecting to Mercado Pago:', initPoint);
+        if (!paymentUrl) {
+          throw new Error('No se pudo obtener la URL de pago');
+        }
 
-          // Update message while opening
-          setPaymentMessage('Verificando app de Mercado Pago...');
+        console.log('✅ Orden creada exitosamente');
+        console.log('URL de pago:', paymentUrl);
 
-          const openResult = await openMercadoPagoPayment(initPoint, isTestMode);
+        // Abrir Mercado Pago
+        setPaymentMessage('Abriendo Mercado Pago...');
+        const openResult = await openMercadoPagoPayment(paymentUrl, isTestMode);
 
-          if (!openResult.success) {
-            Alert.alert(
-              'Error',
-              openResult.error || 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.',
-              [
-                {
-                  text: 'Copiar enlace',
-                  onPress: () => {
-                    console.log('Payment URL:', initPoint);
-                  }
-                },
-                { text: 'OK' }
-              ]
-            );
-          } else {
-            const openedInText = openResult.openedInApp ? 'app de Mercado Pago' : 'navegador web';
-            console.log(`✅ Opened Mercado Pago successfully in ${openedInText}`);
-            setPaymentMessage(`Abriendo ${openedInText}...`);
-            // Give time for the browser/app to open
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
+        if (!openResult.success) {
+          Alert.alert(
+            'Error',
+            openResult.error || 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.'
+          );
         } else {
-          throw new Error('No se pudo obtener el enlace de pago');
+          console.log('✅ Opened Mercado Pago successfully');
+          // Dar tiempo para que se abra el navegador/app
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
       } else {
         throw new Error('No se pudo crear la preferencia de pago');
       }
     } catch (error: any) {
-      console.error('Checkout error:', error);
-      Alert.alert('Error', error?.message || 'No se pudo procesar tu pedido');
-    } finally {
-      setLoading(false);
+      console.error('❌ Error with cart checkout:', error);
+
+      // CRÍTICO: Ocultar loader inmediatamente
       setPaymentLoading(false);
       setPaymentMessage('Preparando tu pago con Mercado Pago');
+
+      let errorMessage = 'No se pudo procesar tu pedido';
+      if (error.message) {
+        errorMessage = error.message;
+      }
+
+      // Esperar para asegurar que el loader se oculte completamente
+      setTimeout(() => {
+        Alert.alert(
+          'Error al procesar el pago',
+          errorMessage + '\n\nPor favor verifica que haya productos disponibles e intenta nuevamente.',
+          [
+            { text: 'Reintentar', onPress: () => {
+              setShowPaymentMethodModal(true);
+            }},
+            { text: 'Cancelar', style: 'cancel' }
+          ]
+        );
+      }, 300);
+    } finally {
+      // Solo ocultar loader si todavía está visible
+      if (paymentLoading) {
+        setPaymentLoading(false);
+        setPaymentMessage('Preparando tu pago con Mercado Pago');
+      }
     }
   };
 
