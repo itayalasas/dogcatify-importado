@@ -72,16 +72,34 @@ export default function PartnerClients() {
         .from('bookings')
         .select('*')
         .eq('partner_id', partnerId);
-      
+
       if (bookingsError) throw bookingsError;
-      
+
       const bookings = bookingsData || [];
+
+      // Get all orders for this partner
+      const { data: ordersData, error: ordersError } = await supabaseClient
+        .from('orders')
+        .select('*')
+        .eq('partner_id', partnerId);
+
+      if (ordersError) throw ordersError;
+
+      const orders = ordersData || [];
+
       const customerIds = new Set<string>();
-      
-      // Extract unique customer IDs
+
+      // Extract unique customer IDs from bookings
       bookings.forEach(booking => {
         if (booking.customer_id) {
           customerIds.add(booking.customer_id);
+        }
+      });
+
+      // Extract unique customer IDs from orders
+      orders.forEach(order => {
+        if (order.customer_id) {
+          customerIds.add(order.customer_id);
         }
       });
 
@@ -101,7 +119,24 @@ export default function PartnerClients() {
             // Count bookings for this customer from the bookings array
             const customerBookings = bookings.filter(
               booking => booking.customer_id === customerId);
-            
+
+            // Count orders for this customer
+            const customerOrders = orders.filter(
+              order => order.customer_id === customerId);
+
+            // Get the last interaction (booking or order)
+            const lastBookingDate = customerBookings.length > 0
+              ? new Date(customerBookings[customerBookings.length - 1].created_at)
+              : null;
+            const lastOrderDate = customerOrders.length > 0
+              ? new Date(customerOrders[customerOrders.length - 1].created_at)
+              : null;
+
+            let lastInteraction = lastBookingDate;
+            if (lastOrderDate && (!lastBookingDate || lastOrderDate > lastBookingDate)) {
+              lastInteraction = lastOrderDate;
+            }
+
             clientsData.push({
               id: customerId,
               displayName: userData.display_name,
@@ -109,9 +144,9 @@ export default function PartnerClients() {
               photoURL: userData.photo_url,
               phone: userData.phone,
               bookingsCount: customerBookings.length,
-              lastBooking: customerBookings.length > 0
-                ? new Date(customerBookings[customerBookings.length - 1].created_at)
-                : null
+              ordersCount: customerOrders.length,
+              totalInteractions: customerBookings.length + customerOrders.length,
+              lastBooking: lastInteraction
             });
           }
         } catch (error) {
@@ -119,7 +154,7 @@ export default function PartnerClients() {
         }
       }
 
-      // Sort by most recent booking
+      // Sort by most recent interaction
       clientsData.sort((a, b) => {
         if (!a.lastBooking) return 1;
         if (!b.lastBooking) return -1;
@@ -127,6 +162,44 @@ export default function PartnerClients() {
       });
 
       setClients(clientsData);
+
+      // Set up real-time subscriptions for both bookings and orders
+      const bookingsSubscription = supabaseClient
+        .channel('bookings-changes-clients')
+        .on('postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'bookings',
+            filter: `partner_id=eq.${partnerId}`
+          },
+          () => {
+            console.log('Booking changed, refreshing clients');
+            fetchClients();
+          }
+        )
+        .subscribe();
+
+      const ordersSubscription = supabaseClient
+        .channel('orders-changes-clients')
+        .on('postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'orders',
+            filter: `partner_id=eq.${partnerId}`
+          },
+          () => {
+            console.log('Order changed, refreshing clients');
+            fetchClients();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        bookingsSubscription.unsubscribe();
+        ordersSubscription.unsubscribe();
+      };
     } catch (error) {
       console.error('Error fetching clients:', error);
     } finally {
@@ -135,7 +208,7 @@ export default function PartnerClients() {
   };
 
   const formatLastBooking = (date: Date | null) => {
-    if (!date) return 'Sin reservas';
+    if (!date) return 'Sin interacciones';
     
     const now = new Date();
     const diffInDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
@@ -170,8 +243,14 @@ export default function PartnerClients() {
           )}
         </View>
         <View style={styles.clientStats}>
-          <Text style={styles.bookingsCount}>{client.bookingsCount}</Text>
-          <Text style={styles.bookingsLabel}>reservas</Text>
+          <Text style={styles.bookingsCount}>{client.totalInteractions || client.bookingsCount}</Text>
+          <Text style={styles.bookingsLabel}>
+            {client.ordersCount > 0 && client.bookingsCount > 0
+              ? 'interacciones'
+              : client.ordersCount > 0
+              ? 'pedidos'
+              : 'reservas'}
+          </Text>
         </View>
       </View>
 
@@ -179,7 +258,7 @@ export default function PartnerClients() {
         <View style={styles.lastBooking}>
           <Calendar size={14} color="#6B7280" />
           <Text style={styles.lastBookingText}>
-            Última reserva: {formatLastBooking(client.lastBooking)}
+            Última interacción: {formatLastBooking(client.lastBooking)}
           </Text>
         </View>
         
@@ -230,9 +309,9 @@ export default function PartnerClients() {
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
-                {clients.reduce((sum, client) => sum + client.bookingsCount, 0)}
+                {clients.reduce((sum, client) => sum + (client.totalInteractions || client.bookingsCount), 0)}
               </Text>
-              <Text style={styles.statLabel}>Reservas totales</Text>
+              <Text style={styles.statLabel}>Interacciones</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
@@ -258,7 +337,7 @@ export default function PartnerClients() {
             <User size={48} color="#9CA3AF" />
             <Text style={styles.emptyTitle}>Aún no tienes clientes</Text>
             <Text style={styles.emptySubtitle}>
-              Los clientes aparecerán aquí cuando hagan reservas de tus servicios
+              Los clientes aparecerán aquí cuando hagan reservas de tus servicios o compren productos
             </Text>
           </Card>
         ) : (
