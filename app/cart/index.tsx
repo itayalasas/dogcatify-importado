@@ -271,15 +271,14 @@ export default function Cart() {
             'Error',
             openResult.error || 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.'
           );
-          // CRÍTICO: Ocultar loader si falló
+          // CRÍTICO: Ocultar loader si falló al abrir
           setPaymentLoading(false);
           setPaymentMessage('Preparando tu pago con Mercado Pago');
         } else {
           console.log('✅ Opened Mercado Pago successfully');
-          // CRÍTICO: Ocultar loader inmediatamente después de abrir MercadoPago
-          setPaymentLoading(false);
-          setPaymentMessage('Preparando tu pago con Mercado Pago');
-          console.log('✅ Loader ocultado después de abrir MercadoPago');
+          // IMPORTANTE: NO ocultar el loader aquí, se ocultará automáticamente cuando el usuario vuelva a la app
+          // El useFocusEffect (líneas 56-69) se encarga de ocultar el loader cuando regresa
+          console.log('⏳ Loader permanece visible mientras el usuario está en MercadoPago');
         }
       } else {
         throw new Error('No se pudo crear la preferencia de pago');
