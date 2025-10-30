@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, TextInput, ActivityIndicator, Linking, Image } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { ArrowLeft, Calendar, Clock, CreditCard, X, Lock, User, FileText, CircleCheck as CheckCircle } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
@@ -86,6 +87,18 @@ export default function ServiceBooking() {
       }
     }
   }, [serviceId, partnerId, petId, discount]);
+
+  // Ocultar loader cuando el usuario regresa a la pantalla (al volver de MercadoPago)
+  useFocusEffect(
+    React.useCallback(() => {
+      // CRÍTICO: Ocultar el loader si está visible cuando volvemos a la pantalla
+      if (paymentLoading) {
+        console.log('🔄 Usuario regresó a la pantalla de reserva, ocultando loader');
+        setPaymentLoading(false);
+        setPaymentMessage('Preparando tu pago con Mercado Pago');
+      }
+    }, [paymentLoading])
+  );
 
   // Detect card type based on number
   useEffect(() => {
@@ -521,10 +534,15 @@ export default function ServiceBooking() {
               'Error',
               openResult.error || 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.'
             );
+            // CRÍTICO: Ocultar loader si falló
+            setPaymentLoading(false);
+            setPaymentMessage('Preparando tu pago con Mercado Pago');
           } else {
             console.log('✅ Opened Mercado Pago successfully');
-            // Give time for the browser to open
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // CRÍTICO: Ocultar loader inmediatamente después de abrir MercadoPago
+            setPaymentLoading(false);
+            setPaymentMessage('Preparando tu pago con Mercado Pago');
+            console.log('✅ Loader ocultado después de abrir MercadoPago');
 
             // Modal already closed when paymentLoading started
             // DO NOT redirect here - let the user complete payment
