@@ -93,8 +93,8 @@ export default function ForgotPassword() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
-        <Image 
-          source={require('../../assets/images/icon.png')} 
+        <Image
+          source={require('../../assets/images/logo-transp.png')}
            style={styles.logo} 
            />
       </View>

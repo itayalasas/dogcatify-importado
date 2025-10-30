@@ -92,7 +92,7 @@ const FeedLoader = () => {
         ]}
       >
         <Image
-          source={require('../../assets/images/icon.png')}
+          source={require('../../assets/images/logo-transp.png')}
           style={styles.loaderLogo}
           resizeMode="contain"
         />

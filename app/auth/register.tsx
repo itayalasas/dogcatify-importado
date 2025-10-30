@@ -155,7 +155,7 @@ export default function Register() {
             <ArrowLeft size={24} color="#111827" />
           </TouchableOpacity>
           <Image
-            source={require('../../assets/images/icon.png')}
+            source={require('../../assets/images/logo-transp.png')}
             style={styles.logo}
           />
         </View>
