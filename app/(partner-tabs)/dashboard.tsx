@@ -82,25 +82,59 @@ export default function PartnerDashboard() {
     };
     
     fetchPartnerProfile();
-    
-    // Set up real-time subscription
-    const subscription = supabaseClient
+
+    // Set up real-time subscriptions for partners, bookings, and orders
+    const partnerSubscription = supabaseClient
       .channel('partner-profile-changes')
-      .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
+      .on('postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
           table: 'partners',
           filter: `id=eq.${businessId}`
-        }, 
+        },
         () => {
           fetchPartnerProfile();
         }
       )
       .subscribe();
-    
+
+    const bookingsSubscription = supabaseClient
+      .channel('bookings-changes')
+      .on('postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'bookings',
+          filter: `partner_id=eq.${businessId}`
+        },
+        (payload) => {
+          console.log('Booking changed, refreshing dashboard data');
+          fetchDashboardData(businessId as string);
+        }
+      )
+      .subscribe();
+
+    const ordersSubscription = supabaseClient
+      .channel('orders-changes')
+      .on('postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+          filter: `partner_id=eq.${businessId}`
+        },
+        (payload) => {
+          console.log('Order changed, refreshing dashboard data');
+          fetchDashboardData(businessId as string);
+        }
+      )
+      .subscribe();
+
     return () => {
-      subscription.unsubscribe();
+      partnerSubscription.unsubscribe();
+      bookingsSubscription.unsubscribe();
+      ordersSubscription.unsubscribe();
     };
   }, [currentUser, businessId]);
 
