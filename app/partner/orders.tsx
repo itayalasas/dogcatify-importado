@@ -88,6 +88,7 @@ export default function PartnerOrders() {
           customerId: order.customer_id,
           totalAmount: order.total_amount,
           shippingAddress: order.shipping_address,
+          shippingCost: order.shipping_cost || 0,
           createdAt: new Date(order.created_at),
           updatedAt: order.updated_at ? new Date(order.updated_at) : null
         }));
@@ -125,6 +126,15 @@ export default function PartnerOrders() {
 
   const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
+      // Optimistic update: actualizar el estado localmente primero
+      setOrders(prevOrders =>
+        prevOrders.map(order =>
+          order.id === orderId
+            ? { ...order, status: newStatus, updatedAt: new Date() }
+            : order
+        )
+      );
+
       const { error } = await supabaseClient
         .from('orders')
         .update({
@@ -132,20 +142,24 @@ export default function PartnerOrders() {
           updated_at: new Date().toISOString()
         })
         .eq('id', orderId);
-      
+
       if (error) throw error;
-      
+
       const statusMessages = {
         processing: 'Pedido en procesamiento',
         shipped: 'Pedido enviado',
         delivered: 'Pedido entregado',
         cancelled: 'Pedido cancelado'
       };
-      
+
       Alert.alert('Éxito', statusMessages[newStatus as keyof typeof statusMessages]);
     } catch (error) {
       console.error('Error updating order status:', error);
       Alert.alert('Error', 'No se pudo actualizar el pedido');
+      // Revertir el cambio optimista recargando los datos
+      if (partnerId) {
+        fetchOrders(partnerId as string);
+      }
     }
   };
 
@@ -254,7 +268,7 @@ export default function PartnerOrders() {
             {order.createdAt.toLocaleDateString()} {order.createdAt.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
           </Text>
         </View>
-        
+
         {order.shippingAddress && (
           <View style={styles.orderDetail}>
             <MapPin size={16} color="#6B7280" />
@@ -265,9 +279,29 @@ export default function PartnerOrders() {
         )}
       </View>
 
-      <View style={styles.orderTotal}>
-        <Text style={styles.totalLabel}>Total:</Text>
-        <Text style={styles.totalAmount}>{formatCurrency(order.totalAmount || 0)}</Text>
+      <View style={styles.orderPricing}>
+        {/* Subtotal de productos */}
+        <View style={styles.pricingRow}>
+          <Text style={styles.pricingLabel}>Subtotal:</Text>
+          <Text style={styles.pricingValue}>
+            {formatCurrency(order.items?.reduce((sum: number, item: any) =>
+              sum + ((item.price || 0) * (item.quantity || 1)), 0) || 0)}
+          </Text>
+        </View>
+
+        {/* Costo de envío si existe */}
+        {order.shippingCost && order.shippingCost > 0 && (
+          <View style={styles.pricingRow}>
+            <Text style={styles.pricingLabel}>Envío:</Text>
+            <Text style={styles.pricingValue}>{formatCurrency(order.shippingCost)}</Text>
+          </View>
+        )}
+
+        {/* Total final */}
+        <View style={styles.orderTotal}>
+          <Text style={styles.totalLabel}>Total:</Text>
+          <Text style={styles.totalAmount}>{formatCurrency(order.totalAmount || 0)}</Text>
+        </View>
       </View>
 
       <View style={styles.orderActions}>
@@ -660,6 +694,28 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#374151',
     marginLeft: 6,
+  },
+  orderPricing: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 12,
+    marginBottom: 12,
+  },
+  pricingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  pricingLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  pricingValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
   },
   orderTotal: {
     flexDirection: 'row',
