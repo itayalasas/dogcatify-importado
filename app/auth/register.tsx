@@ -91,45 +91,21 @@ export default function Register() {
       }
 
       console.log('Step 2: User created successfully. User ID:', authData.user.id);
+      console.log('Step 3: Profile will be auto-created by database trigger with name:', trimmedName);
 
-      console.log('Step 3: Creating user profile in database...');
-      const { error: profileError } = await supabaseClient
-        .from('profiles')
-        .insert({
-          id: authData.user.id,
-          email: trimmedEmail,
-          display_name: trimmedName,
-          is_owner: true,
-          is_partner: false,
-          email_confirmed: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          followers: [],
-          following: []
-        });
-
-      if (profileError) {
-        console.error('Error creating user profile:', profileError);
-        // Si falla la creación del perfil, eliminar el usuario de auth
-        await supabaseClient.auth.admin.deleteUser(authData.user.id);
-        throw new Error('Error creating user profile');
-      }
-
-      console.log('Step 4: User profile created successfully');
-
-      console.log('Step 5: Creating email confirmation token using helper function...');
+      console.log('Step 4: Creating email confirmation token using helper function...');
       const confirmationToken = await createEmailConfirmationToken(
         authData.user.id,
         trimmedEmail,
         'signup'
       );
-      console.log('Step 6: Confirmation token created:', confirmationToken);
+      console.log('Step 5: Confirmation token created:', confirmationToken);
 
-      console.log('Step 7: Generating confirmation URL using helper function...');
+      console.log('Step 6: Generating confirmation URL using helper function...');
       const confirmationUrl = generateConfirmationUrl(confirmationToken, 'signup');
-      console.log('Step 8: Confirmation URL generated:', confirmationUrl);
+      console.log('Step 7: Confirmation URL generated:', confirmationUrl);
 
-      console.log('Step 9: Sending confirmation email using API helper function...');
+      console.log('Step 8: Sending confirmation email using API helper function...');
       const emailResult = await sendConfirmationEmailAPI(
         trimmedEmail,
         trimmedName,

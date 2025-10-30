@@ -668,74 +668,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = async (email: string, password: string, displayName: string) => {
     try {
-      console.log('AuthContext - Attempting registration for:', email);
-      
-      // Simplificar signUp para evitar comportamientos automáticos
-      // IMPORTANTE: Desactivar el email automático de Supabase Auth
-      const { data, error } = await supabaseClient.auth.signUp({
-        email,
-        password,
-        options: {
-          // Desactivar el email de confirmación automático de Supabase
-          emailRedirectTo: undefined,
-          // No enviar email automáticamente (usamos nuestro sistema personalizado)
-          data: {
-            skip_confirmation_email: true
-          }
-        }
-      });
-      
-      if (error) {
-        console.error('Registration error:', error);
-        throw error;
-      }
-      
-      console.log('AuthContext - Registration successful');
-      
-      if (data.user) {
-        // Crear perfil manualmente después del registro
-        try {
-          await updateUserProfile(data.user.id, {
-            display_name: displayName,
-            email: email,
-            is_owner: true,
-            is_partner: false,
-            email_confirmed: false,
-            created_at: new Date().toISOString()
-          });
-          console.log('User profile created successfully');
-        } catch (profileError) {
-          console.error('Error creating user profile:', profileError);
-          // Continue with registration even if profile creation fails
-        }
-        
-        console.log('Creating custom email confirmation token for user:', data.user.id);
-
-        // Create our custom email confirmation token
-        const { createEmailConfirmationToken, generateConfirmationUrl, sendConfirmationEmailAPI } = await import('../utils/emailConfirmation');
-        const token = await createEmailConfirmationToken(data.user.id, email, 'signup');
-        const confirmationUrl = generateConfirmationUrl(token, 'signup');
-
-        console.log('Custom confirmation token created:', token);
-
-        // Send our custom confirmation email using new API
-        const emailResult = await sendConfirmationEmailAPI(
-          email,
-          displayName,
-          confirmationUrl
-        );
-
-        if (emailResult.success) {
-          console.log('Custom confirmation email sent successfully via new API. Log ID:', emailResult.log_id);
-        } else {
-          console.error('Failed to send confirmation email:', emailResult.error);
-        }
-      }
-      
-      // Sign out inmediatamente para evitar cualquier modal automático
-      await supabaseClient.auth.signOut();
-      
-      console.log('Registration completed successfully, user needs to confirm email');
+      console.log('AuthContext - Register function called, but registration is now handled in register.tsx');
+      console.log('This function should not be called anymore. Throwing error to prevent duplicate registration.');
+      throw new Error('Register function in AuthContext is deprecated. Use the registration flow in register.tsx instead.');
     } catch (error) {
       console.error('Register error:', error);
       throw error;
