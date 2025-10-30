@@ -52,13 +52,20 @@ export default function Cart() {
     }
   }, [cart]);
 
-  // Recargar stocks cada vez que la pantalla se enfoca (al volver desde Mercado Pago)
+  // Recargar stocks y ocultar loader cada vez que la pantalla se enfoca (al volver desde Mercado Pago)
   useFocusEffect(
     React.useCallback(() => {
+      // CRÍTICO: Ocultar el loader si está visible cuando volvemos a la pantalla
+      if (paymentLoading) {
+        console.log('🔄 Usuario regresó a la pantalla del carrito, ocultando loader');
+        setPaymentLoading(false);
+        setPaymentMessage('Preparando tu pago con Mercado Pago');
+      }
+
       if (cart && cart.length > 0) {
         loadProductStocks();
       }
-    }, [cart])
+    }, [cart, paymentLoading])
   );
 
   const loadProductStocks = async () => {
@@ -264,10 +271,15 @@ export default function Cart() {
             'Error',
             openResult.error || 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.'
           );
+          // CRÍTICO: Ocultar loader si falló
+          setPaymentLoading(false);
+          setPaymentMessage('Preparando tu pago con Mercado Pago');
         } else {
           console.log('✅ Opened Mercado Pago successfully');
-          // Dar tiempo para que se abra el navegador/app
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // CRÍTICO: Ocultar loader inmediatamente después de abrir MercadoPago
+          setPaymentLoading(false);
+          setPaymentMessage('Preparando tu pago con Mercado Pago');
+          console.log('✅ Loader ocultado después de abrir MercadoPago');
         }
       } else {
         throw new Error('No se pudo crear la preferencia de pago');
