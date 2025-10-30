@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, Image } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Plus, Clock, DollarSign, X, Edit } from 'lucide-react-native';
+import { ArrowLeft, Plus, Clock, DollarSign, X, Edit, Package } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -17,6 +17,8 @@ interface Activity {
   isActive: boolean;
   category?: string;
   images?: string[];
+  stock?: number; // Para productos
+  brand?: string; // Para productos
 }
 
 export default function ConfigureActivities() {
@@ -88,47 +90,74 @@ export default function ConfigureActivities() {
   const fetchActivities = async () => {
     try {
       console.log('Fetching activities for partner:', partnerId);
+      console.log('Business type:', businessType);
+
+      // Para tiendas, buscar en partner_products; para otros, en partner_services
+      const tableName = businessType === 'shop' ? 'partner_products' : 'partner_services';
+
       const { data, error } = await supabaseClient
-        .from('partner_services')
+        .from(tableName)
         .select('*')
         .eq('partner_id', partnerId);
-      
+
       if (error) throw error;
-      
-      console.log('Activities fetched:', data?.length || 0);
-      const activitiesData = data.map(activity => ({
-        id: activity.id,
-        name: activity.name,
-        description: activity.description || '',
-        duration: activity.duration || 0,
-        price: activity.price || 0,
-        isActive: activity.is_active,
-        category: activity.category || '',
-        images: activity.images || []
-      })) as Activity[];
-      
+
+      console.log('Activities/Products fetched:', data?.length || 0);
+
+      // Mapear datos según el tipo de tabla
+      const activitiesData = data.map(item => {
+        if (businessType === 'shop') {
+          // Mapeo para productos
+          return {
+            id: item.id,
+            name: item.name,
+            description: item.description || '',
+            duration: 0, // Los productos no tienen duración
+            price: item.price || 0,
+            isActive: item.is_active,
+            category: item.category || '',
+            images: item.images || [],
+            stock: item.stock || 0, // Agregar stock para productos
+            brand: item.brand || '',
+          };
+        } else {
+          // Mapeo para servicios
+          return {
+            id: item.id,
+            name: item.name,
+            description: item.description || '',
+            duration: item.duration || 0,
+            price: item.price || 0,
+            isActive: item.is_active,
+            category: item.category || '',
+            images: item.images || []
+          };
+        }
+      }) as Activity[];
+
       setActivities(activitiesData);
-      console.log('Activities state updated with:', activitiesData.length, 'items');
+      console.log('Activities/Products state updated with:', activitiesData.length, 'items');
     } catch (error) {
       console.error('Error fetching activities:', error);
     }
-    
+
     // Set up real-time subscription
+    const tableName = businessType === 'shop' ? 'partner_products' : 'partner_services';
     const subscription = supabaseClient
       .channel('activities-changes')
-      .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'partner_services',
+      .on('postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: tableName,
           filter: `partner_id=eq.${partnerId}`
-        }, 
+        },
         () => {
           fetchActivities();
         }
       )
       .subscribe();
-    
+
     return () => {
       subscription.unsubscribe();
     };
@@ -216,36 +245,47 @@ export default function ConfigureActivities() {
 
   const handleToggleActivity = async (activityId: string, isActive: boolean) => {
     try {
+      const tableName = businessType === 'shop' ? 'partner_products' : 'partner_services';
       const { error } = await supabaseClient
-        .from('partner_services')
+        .from(tableName)
         .update({
           is_active: !isActive,
           updated_at: new Date().toISOString()
         })
         .eq('id', activityId);
-      
+
       if (error) throw error;
     } catch (error) {
       console.error('Error toggling activity:', error);
-      Alert.alert('Error', 'No se pudo actualizar la actividad');
+      Alert.alert('Error', `No se pudo actualizar ${businessType === 'shop' ? 'el producto' : 'la actividad'}`);
     }
   };
 
   const handleEditActivity = (activityId: string) => {
-    router.push({
-      pathname: '/partner/edit-service',
-      params: {
-        serviceId: activityId,
-        partnerId: partnerId || '',
-        businessType: businessType || ''
-      }
-    });
+    if (businessType === 'shop') {
+      router.push({
+        pathname: '/partner/edit-product',
+        params: {
+          productId: activityId
+        }
+      });
+    } else {
+      router.push({
+        pathname: '/partner/edit-service',
+        params: {
+          serviceId: activityId,
+          partnerId: partnerId || '',
+          businessType: businessType || ''
+        }
+      });
+    }
   };
 
   const handleDeleteActivity = (activityId: string) => {
+    const isProduct = businessType === 'shop';
     Alert.alert(
-      'Eliminar Actividad',
-      '¿Estás seguro de que quieres eliminar esta actividad?',
+      `Eliminar ${isProduct ? 'Producto' : 'Actividad'}`,
+      `¿Estás seguro de que quieres eliminar ${isProduct ? 'este producto' : 'esta actividad'}?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -253,17 +293,18 @@ export default function ConfigureActivities() {
           style: 'destructive',
           onPress: async () => {
             try {
+              const tableName = businessType === 'shop' ? 'partner_products' : 'partner_services';
               const { error } = await supabaseClient
-                .from('partner_services')
+                .from(tableName)
                 .delete()
                 .eq('id', activityId);
-              
+
               if (error) throw error;
-              
-              Alert.alert('Éxito', 'Actividad eliminada correctamente');
+
+              Alert.alert('Éxito', `${isProduct ? 'Producto' : 'Actividad'} eliminado correctamente`);
             } catch (error) {
               console.error('Error deleting activity:', error);
-              Alert.alert('Error', 'No se pudo eliminar la actividad');
+              Alert.alert('Error', `No se pudo eliminar ${isProduct ? 'el producto' : 'la actividad'}`);
             }
           }
         }
@@ -373,8 +414,23 @@ export default function ConfigureActivities() {
                   </View>
                 </View>
 
-                {/* Solo mostrar duración y precio si NO es servicio de Pensión */}
-                {businessType !== 'boarding' && (
+                {/* Mostrar duración y precio para servicios, stock y precio para productos */}
+                {businessType === 'shop' ? (
+                  <View style={styles.activityDetails}>
+                    <View style={styles.activityDetail}>
+                      <Package size={16} color="#6B7280" />
+                      <Text style={styles.activityDetailText}>
+                        Stock: {activity.stock || 0}
+                      </Text>
+                    </View>
+                    <View style={styles.activityDetail}>
+                      <DollarSign size={16} color="#10B981" />
+                      <Text style={styles.activityDetailText}>
+                        ${activity.price.toLocaleString()}
+                      </Text>
+                    </View>
+                  </View>
+                ) : businessType !== 'boarding' && (
                   <View style={styles.activityDetails}>
                     <View style={styles.activityDetail}>
                       <Clock size={16} color="#6B7280" />

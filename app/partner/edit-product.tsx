@@ -44,33 +44,43 @@ export default function EditProduct() {
 
   const fetchProductDetails = async () => {
     try {
-      const productDoc = await getDoc(doc(db, 'partnerProducts', productId as string));
-      
-      if (productDoc.exists()) {
-        const data = productDoc.data();
+      const { data, error } = await supabaseClient
+        .from('partner_products')
+        .select('*')
+        .eq('id', productId)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
         setProductName(data.name || '');
         setDescription(data.description || '');
         setCategory(data.category || '');
         setPrice(data.price?.toString() || '');
-        setStock(data.stock?.toString() || ''); 
+        setStock(data.stock?.toString() || '');
         setBrand(data.brand || '');
         setWeight(data.weight || '');
         setSize(data.size || '');
         setColor(data.color || '');
-        setAgeRange(data.ageRange || '');
-        setPetType(data.petType || '');
-        
+        setAgeRange(data.age_range || '');
+        setPetType(data.pet_type || '');
+
         // Store existing images separately
         if (data.images && data.images.length > 0) {
           setExistingImages(data.images);
         }
-        
+
         // Fetch partner info
-        if (data.partnerId) {
-          setPartnerId(data.partnerId);
-          const partnerDoc = await getDoc(doc(db, 'partners', data.partnerId));
-          if (partnerDoc.exists()) {
-            setPartnerProfile(partnerDoc.data());
+        if (data.partner_id) {
+          setPartnerId(data.partner_id);
+          const { data: partnerData, error: partnerError } = await supabaseClient
+            .from('partners')
+            .select('*')
+            .eq('id', data.partner_id)
+            .single();
+
+          if (!partnerError && partnerData) {
+            setPartnerProfile(partnerData);
           }
         }
       } else {
@@ -159,11 +169,11 @@ export default function EditProduct() {
     try {
       // Upload any new images
       const newImageUrls: string[] = [];
-      
+
       for (const image of images) {
         const imageUrl = await uploadImage(
-          image.uri, 
-          `partners/${partnerProfile.id}/products/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`
+          image.uri,
+          `partners/${partnerId}/products/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`
         );
         newImageUrls.push(imageUrl);
       }
@@ -172,25 +182,29 @@ export default function EditProduct() {
       const allImageUrls = [...existingImages, ...newImageUrls];
 
       // Update product data
-      const productRef = doc(db, 'partnerProducts', productId as string);
-      await updateDoc(productRef, {
-        name: productName.trim(),
-        description: description.trim(),
-        category: category.trim(),
-        price: parseFloat(price), 
-        stock: parseInt(stock), 
-        brand: brand.trim() || null,
-        weight: weight.trim() || null,
-        size: size.trim() || null,
-        color: color.trim() || null,
-        ageRange: ageRange.trim() || null,
-        petType: petType.trim() || null,
-        images: allImageUrls,
-        updatedAt: new Date(),
-      });
+      const { error } = await supabaseClient
+        .from('partner_products')
+        .update({
+          name: productName.trim(),
+          description: description.trim(),
+          category: category.trim(),
+          price: parseFloat(price),
+          stock: parseInt(stock),
+          brand: brand.trim() || null,
+          weight: weight.trim() || null,
+          size: size.trim() || null,
+          color: color.trim() || null,
+          age_range: ageRange.trim() || null,
+          pet_type: petType.trim() || null,
+          images: allImageUrls,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', productId);
+
+      if (error) throw error;
 
       Alert.alert('Éxito', 'Producto actualizado correctamente', [
-        { text: 'OK', onPress: () => router.replace(`/services/partner/${partnerId}?refresh=${Date.now()}`) }
+        { text: 'OK', onPress: () => router.back() }
       ]);
     } catch (error) {
       console.error('Error updating product:', error);
