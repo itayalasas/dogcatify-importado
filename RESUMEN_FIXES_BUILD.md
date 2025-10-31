@@ -113,37 +113,71 @@ Unexpected token 'typeof'
 - ✅ `expo-notifications`
 - ✅ `expo-updates` (simplificado)
 
-## 5. DataDog sin Plugin
+## 5. DataDog - Solución CORRECTA con expo-datadog
 
-DataDog sigue funcionando perfectamente sin el plugin porque:
+### El Problema Real
 
-1. **Dependencia instalada:**
-   ```json
-   "@datadog/mobile-react-native": "^2.13.0"
-   ```
+Intentamos usar `@datadog/mobile-react-native` como plugin de Expo, pero NO es un plugin válido.
 
-2. **Inicialización en código:**
-   ```typescript
-   // utils/datadogLogger.ts
-   import { DdSdkReactNative } from '@datadog/mobile-react-native';
-   
-   DdSdkReactNative.initialize({
-     clientToken: DATADOG_CLIENT_TOKEN,
-     env: DATADOG_ENV,
-     applicationId: DATADOG_APPLICATION_ID,
-     trackInteractions: true,
-     trackResources: true
-   });
-   ```
+### La Solución
 
-3. **Variables de entorno en app.json:**
-   ```json
-   "extra": {
-     "DATADOG_CLIENT_TOKEN": "...",
-     "DATADOG_APPLICATION_ID": "dogcatify-app",
-     "DATADOG_ENV": "production"
-   }
-   ```
+Usar el paquete oficial `expo-datadog` que SÍ es un plugin válido de Expo.
+
+### ¿Por qué necesitamos el plugin?
+
+**Sin plugin:**
+- ⚠️ Los logs funcionan
+- ⚠️ Las métricas funcionan
+- ❌ Los stack traces de crashes NO son legibles
+- ❌ Los errores muestran código ofuscado
+- ❌ No puedes ver las líneas exactas de código con errores
+
+**Con plugin expo-datadog:**
+- ✅ Stack traces completamente legibles
+- ✅ Subida automática de debug symbols en cada build
+- ✅ Mapeo de código minificado a código fuente
+- ✅ Source maps subidos automáticamente
+- ✅ ProGuard mapping files (Android) subidos automáticamente
+
+### Implementación Completa
+
+**1. Instalar paquetes:**
+```bash
+npm install expo-datadog@54.x.x
+npm install --save-dev @datadog/datadog-ci
+```
+
+**2. Configurar app.json:**
+```json
+{
+  "expo": {
+    "plugins": [
+      "expo-router",
+      ["expo-notifications", { ... }],
+      "expo-updates",
+      "expo-datadog"
+    ]
+  }
+}
+```
+
+**3. Agregar API key en eas.json:**
+```json
+{
+  "build": {
+    "production": {
+      "env": {
+        "DATADOG_API_KEY": "tu_api_key",
+        "DATADOG_SITE": "datadoghq.com"
+      }
+    }
+  }
+}
+```
+
+**Obtener API key:** https://app.datadoghq.com/organization-settings/api-keys
+
+Ver documentación completa: `DATADOG_INTEGRACION_COMPLETA.md`
 
 ## 6. Comando para Build
 
