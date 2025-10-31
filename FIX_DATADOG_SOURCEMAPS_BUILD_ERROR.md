@@ -49,7 +49,7 @@ apply plugin: "com.facebook.react"
 // apply plugin: "com.datadoghq.dd-sdk-android-gradle-plugin"
 ```
 
-**Importante:** El SDK de Datadog (`dd-sdk-android-logs`) **sigue activo** en las dependencias de `android/app/build.gradle`, por lo que Datadog funciona normalmente en la app. Solo se removió el plugin de Gradle que causaba problemas durante el build.
+**Actualización Importante (31 Oct 2025):** También se removió `dd-sdk-android-logs` de las dependencias nativas porque causaba conflictos de clases duplicadas. El SDK de React Native (`@datadog/mobile-react-native`) **ya incluye todas las dependencias necesarias** y Datadog funciona normalmente sin la dependencia nativa adicional.
 
 ## ¿Qué Cambia?
 

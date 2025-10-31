@@ -16,12 +16,13 @@ import com.facebook.react.defaults.DefaultReactNativeHost
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 
-import com.datadog.android.Datadog
-import com.datadog.android.DatadogSite
-import com.datadog.android.core.configuration.Configuration
-import com.datadog.android.core.configuration.Credentials
-import com.datadog.android.log.Logs
-import com.datadog.android.log.LogsConfiguration
+// DataDog imports comentados - @datadog/mobile-react-native maneja la inicialización desde JS
+// import com.datadog.android.Datadog
+// import com.datadog.android.DatadogSite
+// import com.datadog.android.core.configuration.Configuration
+// import com.datadog.android.core.configuration.Credentials
+// import com.datadog.android.log.Logs
+// import com.datadog.android.log.LogsConfiguration
 
 class MainApplication : Application(), ReactApplication {
 
@@ -48,7 +49,11 @@ class MainApplication : Application(), ReactApplication {
   override fun onCreate() {
     super.onCreate()
 
-    // Initialize DataDog SDK natively
+    // DataDog initialization REMOVIDA - @datadog/mobile-react-native se encarga desde JavaScript
+    // La inicialización nativa causaba conflictos de clases duplicadas
+    // Ver utils/datadogLogger.ts para la configuración actual
+
+    /*
     val credentials = Credentials(
       clientToken = "068208a98b131a96831ca92a86d4f158",
       envName = "production",
@@ -67,12 +72,12 @@ class MainApplication : Application(), ReactApplication {
 
     Datadog.initialize(this, credentials, configuration, trackingConsent = com.datadog.android.privacy.TrackingConsent.GRANTED)
 
-    // Enable Logs feature
     val logsConfig = LogsConfiguration.Builder()
       .setNetworkInfoEnabled(true)
       .setLogcatLogsEnabled(true)
       .build()
     Logs.enable(logsConfig)
+    */
 
     DefaultNewArchitectureEntryPoint.releaseLevel = try {
       ReleaseLevel.valueOf(BuildConfig.REACT_NATIVE_RELEASE_LEVEL.uppercase())

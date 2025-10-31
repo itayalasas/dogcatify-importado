@@ -48,7 +48,7 @@ dependencies {
 }
 ```
 
-#### Archivo: `android/app/build.gradle`
+#### Archivo: `android/app/build.gradle` - Plugins
 ```gradle
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
@@ -56,9 +56,38 @@ apply plugin: "com.facebook.react"
 // Plugin de Datadog REMOVIDO
 ```
 
-**Importante:** El SDK de Datadog sigue funcionando en la app.
+#### Archivo: `android/app/build.gradle` - Dependencies
+```gradle
+dependencies {
+    implementation("com.facebook.react:react-android")
+
+    // DataDog SDK nativo REMOVIDO (conflicto de clases duplicadas)
+    // El SDK de React Native ya incluye todo lo necesario
+    // implementation "com.datadoghq:dd-sdk-android-logs:latest.release"
+
+    // Firebase dependencies
+    implementation platform('com.google.firebase:firebase-bom:32.7.0')
+    implementation 'com.google.firebase:firebase-messaging'
+}
+```
+
+**Importante:** El SDK de Datadog (`@datadog/mobile-react-native`) **sigue funcionando** en la app. Solo se removieron las dependencias nativas que causaban conflictos.
 
 **Documentación:** `FIX_DATADOG_SOURCEMAPS_BUILD_ERROR.md`
+
+---
+
+### 3. ❌ Error: Duplicate Class (Datadog)
+**Error:**
+```
+Duplicate class com.datadog.android.rum.DdRumContentProvider found in modules dd-sdk-android-internal-3.2.0 and dd-sdk-android-rum-2.26.2
+```
+
+**Causa:**
+Conflicto entre dependencias de Datadog nativas y las que trae `@datadog/mobile-react-native`.
+
+**Solución:**
+Se removió `dd-sdk-android-logs` de las dependencias nativas en `android/app/build.gradle`. El paquete de React Native ya incluye todas las dependencias necesarias.
 
 ---
 

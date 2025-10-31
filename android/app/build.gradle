@@ -166,8 +166,9 @@ dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
-    // DataDog SDK for Android
-    implementation "com.datadoghq:dd-sdk-android-logs:latest.release"
+    // DataDog SDK for Android - REMOVIDO para evitar conflicto de clases duplicadas
+    // El SDK de React Native (@datadog/mobile-react-native) ya incluye las dependencias necesarias
+    // implementation "com.datadoghq:dd-sdk-android-logs:latest.release"
 
     // Firebase dependencies
     implementation platform('com.google.firebase:firebase-bom:32.7.0')
