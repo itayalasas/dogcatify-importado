@@ -22,6 +22,13 @@ export default function Cart() {
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState('Preparando tu pago con Mercado Pago');
+  const [partnerInfo, setPartnerInfo] = useState<{
+    has_shipping: boolean;
+    shipping_cost: number;
+    calle: string;
+    barrio: string;
+    city: string;
+  } | null>(null);
   const [savedAddress, setSavedAddress] = useState({
     street: '',
     number: '',
@@ -44,6 +51,13 @@ export default function Cart() {
       loadUserAddress();
     }
   }, [currentUser]);
+
+  // Cargar información del negocio (shipping)
+  useEffect(() => {
+    if (cart && cart.length > 0) {
+      loadPartnerShippingInfo();
+    }
+  }, [cart]);
 
   // Cargar stocks de los productos en el carrito
   useEffect(() => {
@@ -87,6 +101,40 @@ export default function Cart() {
       }
     } catch (error) {
       console.error('Error loading product stocks:', error);
+    }
+  };
+
+  const loadPartnerShippingInfo = async () => {
+    if (!cart || cart.length === 0) return;
+
+    try {
+      // Obtener el partner_id del primer producto (asumiendo mismo partner)
+      const firstItem = cart[0];
+      const { data: productData } = await supabaseClient
+        .from('partner_products')
+        .select('partner_id')
+        .eq('id', firstItem.id)
+        .maybeSingle();
+
+      if (productData?.partner_id) {
+        const { data: partnerData } = await supabaseClient
+          .from('partners')
+          .select('has_shipping, shipping_cost, calle, barrio, city')
+          .eq('id', productData.partner_id)
+          .maybeSingle();
+
+        if (partnerData) {
+          setPartnerInfo({
+            has_shipping: partnerData.has_shipping || false,
+            shipping_cost: partnerData.shipping_cost || 0,
+            calle: partnerData.calle || '',
+            barrio: partnerData.barrio || '',
+            city: partnerData.city || '',
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading partner shipping info:', error);
     }
   };
 
@@ -195,9 +243,12 @@ export default function Cart() {
 
     const addressToUse = useNewAddress ? newAddress : savedAddress;
 
-    if (!addressToUse.street.trim() || !addressToUse.number.trim() || !addressToUse.locality.trim() || !addressToUse.department.trim()) {
-      Alert.alert('Error', 'Por favor completa los campos obligatorios de dirección (calle, número, localidad, departamento)');
-      return;
+    // Solo validar dirección si tiene envío
+    if (partnerInfo?.has_shipping) {
+      if (!addressToUse.street.trim() || !addressToUse.number.trim() || !addressToUse.locality.trim() || !addressToUse.department.trim()) {
+        Alert.alert('Error', 'Por favor completa los campos obligatorios de dirección (calle, número, localidad, departamento)');
+        return;
+      }
     }
 
     // Mostrar modal de métodos de pago
@@ -216,15 +267,26 @@ export default function Cart() {
 
       const addressToUse = useNewAddress ? newAddress : savedAddress;
 
-      let fullAddress = `${addressToUse.street} ${addressToUse.number}`;
-      if (addressToUse.locality) fullAddress += `, ${addressToUse.locality}`;
-      fullAddress += `, ${addressToUse.department}`;
-      if (addressToUse.codigo_postal) fullAddress += ` - CP: ${addressToUse.codigo_postal}`;
-      if (addressToUse.phone) fullAddress += ` - Tel: ${addressToUse.phone}`;
+      let fullAddress = '';
+
+      if (partnerInfo?.has_shipping) {
+        // Dirección del usuario para envío
+        fullAddress = `${addressToUse.street} ${addressToUse.number}`;
+        if (addressToUse.locality) fullAddress += `, ${addressToUse.locality}`;
+        fullAddress += `, ${addressToUse.department}`;
+        if (addressToUse.codigo_postal) fullAddress += ` - CP: ${addressToUse.codigo_postal}`;
+        if (addressToUse.phone) fullAddress += ` - Tel: ${addressToUse.phone}`;
+      } else {
+        // Dirección de la tienda para retiro
+        fullAddress = 'Retiro en tienda: ';
+        if (partnerInfo?.calle) fullAddress += partnerInfo.calle;
+        if (partnerInfo?.barrio) fullAddress += `, ${partnerInfo.barrio}`;
+        if (partnerInfo?.city) fullAddress += `, ${partnerInfo.city}`;
+      }
 
       console.log('Shipping address:', fullAddress);
 
-      const totalShippingCost = 500;
+      const totalShippingCost = partnerInfo?.has_shipping ? (partnerInfo.shipping_cost || 0) : 0;
 
       setPaymentMessage('Creando orden de compra...');
       const { orders, paymentPreferences, isTestMode } = await createMultiPartnerOrder(
@@ -464,16 +526,24 @@ export default function Cart() {
                 </Text>
               </View>
               
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Envío</Text>
-                <Text style={styles.summaryValue}>{formatCurrency(500)}</Text>
-              </View>
-              
+              {partnerInfo?.has_shipping ? (
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Envío</Text>
+                  <Text style={styles.summaryValue}>{formatCurrency(partnerInfo.shipping_cost)}</Text>
+                </View>
+              ) : (
+                <View style={styles.pickupNotice}>
+                  <Text style={styles.pickupNoticeText}>🏪 Retiro en tienda</Text>
+                </View>
+              )}
+
               <View style={styles.divider} />
-              
+
               <View style={styles.summaryRow}>
                 <Text style={styles.totalLabel}>Total</Text>
-                <Text style={styles.totalValue}>{formatCurrency(getCartTotal() + 500)}</Text>
+                <Text style={styles.totalValue}>
+                  {formatCurrency(getCartTotal() + (partnerInfo?.has_shipping ? (partnerInfo.shipping_cost || 0) : 0))}
+                </Text>
               </View>
 
               <View style={styles.divider} />
@@ -486,7 +556,9 @@ export default function Cart() {
                 <View style={styles.addressHeaderLeft}>
                   <MapPin size={20} color="#3B82F6" />
                   <View style={styles.addressHeaderText}>
-                    <Text style={styles.addressHeaderTitle}>Dirección de Envío</Text>
+                    <Text style={styles.addressHeaderTitle}>
+                      {partnerInfo?.has_shipping ? 'Dirección de Envío' : 'Dirección de la Tienda'}
+                    </Text>
                     {!loadingAddress && !isAddressExpanded && (
                       <>
                         {hasPartialAddress() && getCompactAddress() && (
@@ -512,6 +584,20 @@ export default function Cart() {
 
               {isAddressExpanded && (
                 <View style={styles.addressExpandedContent}>
+                  {!partnerInfo?.has_shipping && partnerInfo ? (
+                    // Mostrar dirección de la tienda
+                    <View style={styles.storeAddressContainer}>
+                      <Text style={styles.storeAddressTitle}>Dirección de retiro:</Text>
+                      <Text style={styles.storeAddressText}>
+                        {partnerInfo.calle}
+                        {partnerInfo.barrio ? `, ${partnerInfo.barrio}` : ''}
+                        {partnerInfo.city ? `, ${partnerInfo.city}` : ''}
+                      </Text>
+                      <Text style={styles.storeAddressNote}>
+                        📦 Podrás retirar tu pedido una vez confirmado el pago
+                      </Text>
+                    </View>
+                  ) : (
                   <TouchableOpacity
                     style={styles.checkboxContainer}
                     onPress={() => setUseNewAddress(!useNewAddress)}
@@ -612,6 +698,7 @@ export default function Cart() {
                       )}
                     </View>
                   )}
+                  )}
                 </View>
               )}
             </Card>
@@ -650,7 +737,7 @@ export default function Cart() {
                 <CreditCard size={40} color="#2D6A6F" />
                 <Text style={styles.methodsTitle}>Selecciona tu método de pago</Text>
                 <Text style={styles.methodsSubtitle}>
-                  Total: {formatCurrency(getCartTotal() + 500)}
+                  Total: {formatCurrency(getCartTotal() + (partnerInfo?.has_shipping ? (partnerInfo.shipping_cost || 0) : 0))}
                 </Text>
               </View>
 
@@ -1159,5 +1246,44 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  pickupNotice: {
+    backgroundColor: '#DBEAFE',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginVertical: 4,
+  },
+  pickupNoticeText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E40AF',
+    textAlign: 'center',
+  },
+  storeAddressContainer: {
+    backgroundColor: '#F0FDF4',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  storeAddressTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#166534',
+    marginBottom: 8,
+  },
+  storeAddressText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#15803D',
+    marginBottom: 12,
+    lineHeight: 22,
+  },
+  storeAddressNote: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#16A34A',
+    fontStyle: 'italic',
   },
 });
