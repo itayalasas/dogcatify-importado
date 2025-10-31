@@ -16,6 +16,13 @@ import com.facebook.react.defaults.DefaultReactNativeHost
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 
+import com.datadog.android.Datadog
+import com.datadog.android.DatadogSite
+import com.datadog.android.core.configuration.Configuration
+import com.datadog.android.core.configuration.Credentials
+import com.datadog.android.log.Logs
+import com.datadog.android.log.LogsConfiguration
+
 class MainApplication : Application(), ReactApplication {
 
   override val reactNativeHost: ReactNativeHost = ReactNativeHostWrapper(
@@ -40,6 +47,33 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+
+    // Initialize DataDog SDK natively
+    val credentials = Credentials(
+      clientToken = "068208a98b131a96831ca92a86d4f158",
+      envName = "production",
+      variant = "",
+      rumApplicationId = "dogcatify-app"
+    )
+
+    val configuration = Configuration.Builder(
+      logsEnabled = true,
+      tracesEnabled = true,
+      crashReportsEnabled = true,
+      rumEnabled = false
+    )
+      .useSite(DatadogSite.US1)
+      .build()
+
+    Datadog.initialize(this, credentials, configuration, trackingConsent = com.datadog.android.privacy.TrackingConsent.GRANTED)
+
+    // Enable Logs feature
+    val logsConfig = LogsConfiguration.Builder()
+      .setNetworkInfoEnabled(true)
+      .setLogcatLogsEnabled(true)
+      .build()
+    Logs.enable(logsConfig)
+
     DefaultNewArchitectureEntryPoint.releaseLevel = try {
       ReleaseLevel.valueOf(BuildConfig.REACT_NATIVE_RELEASE_LEVEL.uppercase())
     } catch (e: IllegalArgumentException) {

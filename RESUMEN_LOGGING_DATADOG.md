@@ -26,6 +26,9 @@ Se ha implementado un sistema completo de logging con DataDog en la aplicación 
 2. `app.json` - Configuración Expo
 3. `metro.config.js` - Metro bundler
 4. `package.json` - Scripts npm
+5. `android/build.gradle` - Plugin de DataDog ✨ NUEVO
+6. `android/app/build.gradle` - SDK nativo de Android ✨ NUEVO
+7. `android/app/src/main/java/com/dogcatify/app/MainApplication.kt` - Inicialización nativa ✨ NUEVO
 
 ## 🔍 Cobertura de Logging
 
@@ -201,6 +204,24 @@ El sistema de logging está **100% funcional** y listo para producción:
 
 ---
 
+## 🆕 Configuración Nativa Agregada
+
+Se ha implementado la configuración nativa de DataDog según la documentación oficial:
+
+### Android ✅ COMPLETO
+- Plugin de Gradle agregado
+- SDK nativo instalado
+- Inicialización en MainApplication.kt
+- Ver: `CONFIGURACION_NATIVA_DATADOG.md`
+
+### Beneficios
+- Captura de crashes nativos
+- Inicialización temprana
+- Mejor rendimiento
+- Source mapping automático
+
+---
+
 **Dashboard de DataDog**: https://app.datadoghq.com/
-**Documentación**: Ver archivos `DATADOG_*.md`
+**Documentación**: Ver archivos `DATADOG_*.md` y `CONFIGURACION_NATIVA_DATADOG.md`
 **Verificar config**: `npm run test:datadog`
