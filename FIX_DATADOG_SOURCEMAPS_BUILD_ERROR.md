@@ -22,20 +22,34 @@ El plugin de Datadog para React Native intenta subir los sourcemaps automáticam
 2. El plugin espera las variables de entorno `DATADOG_API_KEY` o `DD_API_KEY` pero no las encuentra
 3. Esto hace que el build falle completamente
 
-## Solución Aplicada
+## Solución Aplicada (ACTUALIZADA)
 
-Se deshabilitó la **subida automática de sourcemaps** durante el build modificando `android/app/build.gradle`:
+Se **removió completamente el plugin de Datadog Gradle** que causaba el error. Esto NO afecta el funcionamiento de Datadog en runtime.
+
+### Cambios en `android/build.gradle`:
 
 ```gradle
-apply plugin: "com.datadoghq.dd-sdk-android-gradle-plugin"
-
-// Configurar Datadog plugin
-datadog {
-    // Deshabilitar upload de sourcemaps durante build para evitar errores
-    // Los sourcemaps aún se generan pero no se suben automáticamente
-    uploadSourcemaps = false
+dependencies {
+    classpath('com.android.tools.build:gradle')
+    classpath('com.facebook.react:react-native-gradle-plugin')
+    classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')
+    classpath('com.google.gms:google-services:4.4.0')
+    // Datadog Gradle plugin deshabilitado para evitar error en upload de sourcemaps
+    // classpath('com.datadoghq:dd-sdk-android-gradle-plugin:latest.release')
 }
 ```
+
+### Cambios en `android/app/build.gradle`:
+
+```gradle
+apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+// Plugin de Datadog Gradle REMOVIDO (causaba error con uploadSourcemaps)
+// apply plugin: "com.datadoghq.dd-sdk-android-gradle-plugin"
+```
+
+**Importante:** El SDK de Datadog (`dd-sdk-android-logs`) **sigue activo** en las dependencias de `android/app/build.gradle`, por lo que Datadog funciona normalmente en la app. Solo se removió el plugin de Gradle que causaba problemas durante el build.
 
 ## ¿Qué Cambia?
 
@@ -136,9 +150,10 @@ Ya no deberías ver:
 
 Los sourcemaps son útiles pero **no críticos** para que la app funcione.
 
-## Archivo Modificado
+## Archivos Modificados
 
-- ✅ `android/app/build.gradle` - Agregado bloque `datadog { uploadSourcemaps = false }`
+- ✅ `android/build.gradle` - Comentado `classpath` del plugin de Datadog Gradle
+- ✅ `android/app/build.gradle` - Removido `apply plugin` de Datadog Gradle
 
 ## Próximo Paso
 
