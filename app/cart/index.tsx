@@ -598,20 +598,21 @@ export default function Cart() {
                       </Text>
                     </View>
                   ) : (
-                  <TouchableOpacity
-                    style={styles.checkboxContainer}
-                    onPress={() => setUseNewAddress(!useNewAddress)}
-                  >
-                    <View style={[styles.checkbox, useNewAddress && styles.checkboxChecked]}>
-                      {useNewAddress && <Text style={styles.checkboxMark}>✓</Text>}
-                    </View>
-                    <Text style={styles.checkboxLabel}>Usar dirección diferente</Text>
-                  </TouchableOpacity>
+                    <>
+                      <TouchableOpacity
+                        style={styles.checkboxContainer}
+                        onPress={() => setUseNewAddress(!useNewAddress)}
+                      >
+                        <View style={[styles.checkbox, useNewAddress && styles.checkboxChecked]}>
+                          {useNewAddress && <Text style={styles.checkboxMark}>✓</Text>}
+                        </View>
+                        <Text style={styles.checkboxLabel}>Usar dirección diferente</Text>
+                      </TouchableOpacity>
 
-                  {loadingAddress ? (
-                    <Text style={styles.loadingText}>Cargando dirección...</Text>
-                  ) : (
-                    <View style={styles.addressForm}>
+                      {loadingAddress ? (
+                        <Text style={styles.loadingText}>Cargando dirección...</Text>
+                      ) : (
+                        <View style={styles.addressForm}>
                       <View style={styles.addressRow}>
                         <View style={styles.addressFieldLarge}>
                           <Input
@@ -696,8 +697,9 @@ export default function Cart() {
                           </Text>
                         </View>
                       )}
-                    </View>
-                  )}
+                        </View>
+                      )}
+                    </>
                   )}
                 </View>
               )}
