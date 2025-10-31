@@ -305,10 +305,12 @@ export default function Profile() {
 
   const handleToggleBiometric = async () => {
     try {
+      // Solo permitir desactivar desde el perfil
+      // La activación solo se puede hacer desde la pantalla de login
       if (isBiometricEnabled) {
         Alert.alert(
           'Desactivar autenticación biométrica',
-          '¿Estás seguro de que quieres desactivar la autenticación biométrica?',
+          '¿Estás seguro de que quieres desactivar la autenticación biométrica? Solo podrás volver a habilitarla desde la pantalla de inicio de sesión.',
           [
             { text: 'Cancelar', style: 'cancel' },
             {
@@ -317,80 +319,12 @@ export default function Profile() {
               onPress: async () => {
                 try {
                   await disableBiometric();
-                  Alert.alert('Desactivado', 'La autenticación biométrica ha sido desactivada');
-                } catch (error) {
-                  Alert.alert('Error', 'No se pudo desactivar la autenticación biométrica');
-                }
-              }
-            }
-          ]
-        );
-      } else {
-        // Habilitar biometría directamente desde el perfil
-        Alert.alert(
-          'Habilitar autenticación biométrica',
-          `¿Quieres usar tu ${biometricType || 'biometría'} para iniciar sesión más rápido?`,
-          [
-            { text: 'Cancelar', style: 'cancel' },
-            {
-              text: 'Habilitar',
-              onPress: async () => {
-                try {
-                  if (!currentUser?.email) {
-                    Alert.alert('Error', 'No se pudo obtener la información del usuario');
-                    return;
-                  }
-
-                  // Solicitar la contraseña actual para habilitar biometría
-                  Alert.prompt(
-                    'Confirmar identidad',
-                    'Ingresa tu contraseña actual para habilitar la autenticación biométrica:',
-                    [
-                      { text: 'Cancelar', style: 'cancel' },
-                      {
-                        text: 'Confirmar',
-                        onPress: async (password) => {
-                          if (!password) {
-                            Alert.alert('Error', 'La contraseña es requerida');
-                            return;
-                          }
-
-                          try {
-                            // Verificar la contraseña con Supabase
-                            const { error: signInError } = await supabaseClient.auth.signInWithPassword({
-                              email: currentUser.email,
-                              password: password
-                            });
-
-                            if (signInError) {
-                              Alert.alert('Error', 'Contraseña incorrecta');
-                              return;
-                            }
-
-                            // Habilitar biometría con las credenciales verificadas
-                            const { enableBiometric } = useBiometric();
-                            const success = await enableBiometric(currentUser.email, password);
-                            
-                            if (success) {
-                              Alert.alert(
-                                'Biometría habilitada',
-                                `${biometricType || 'La autenticación biométrica'} ha sido configurada correctamente. Ahora puedes usarla para iniciar sesión.`
-                              );
-                            } else {
-                              Alert.alert('Error', 'No se pudo habilitar la autenticación biométrica');
-                            }
-                          } catch (enableError) {
-                            console.error('Error enabling biometric:', enableError);
-                            Alert.alert('Error', 'No se pudo habilitar la autenticación biométrica');
-                          }
-                        }
-                      }
-                    ],
-                    'secure-text'
+                  Alert.alert(
+                    'Desactivado',
+                    'La autenticación biométrica ha sido desactivada. Puedes volver a habilitarla desde la pantalla de inicio de sesión.'
                   );
                 } catch (error) {
-                  console.error('Error in biometric setup:', error);
-                  Alert.alert('Error', 'No se pudo configurar la autenticación biométrica');
+                  Alert.alert('Error', 'No se pudo desactivar la autenticación biométrica');
                 }
               }
             }
@@ -889,8 +823,8 @@ export default function Profile() {
             )}
           </View>
 
-          {/* Biometric Authentication - Estilo consistente */}
-          {isBiometricSupported && (
+          {/* Biometric Authentication - Solo mostrar cuando está habilitada */}
+          {isBiometricSupported && isBiometricEnabled && (
             <View style={styles.biometricCard}>
               <View style={styles.biometricHeader}>
                 <View style={styles.biometricIconContainer}>
@@ -901,34 +835,29 @@ export default function Profile() {
                     Autenticación {biometricType || 'Biométrica'}
                   </Text>
                   <Text style={styles.biometricDescription}>
-                    {isBiometricEnabled ? 
-                      '✅ Acceso rápido y seguro habilitado' :
-                      '🔒 Habilita para acceso instantáneo'
-                    }
+                    🔓 Habilita para acceso instantáneo
                   </Text>
                 </View>
                 <TouchableOpacity
                   style={[
                     styles.biometricToggle,
-                    isBiometricEnabled && styles.biometricToggleActive
+                    styles.biometricToggleActive
                   ]}
                   onPress={handleToggleBiometric}
                 >
                   <View style={[
                     styles.biometricToggleHandle,
-                    isBiometricEnabled && styles.biometricToggleHandleActive
+                    styles.biometricToggleHandleActive
                   ]} />
                 </TouchableOpacity>
               </View>
-              
-              {!isBiometricEnabled && (
-                <View style={styles.biometricBenefits}>
-                  <Text style={styles.benefitsTitle}>Beneficios:</Text>
-                  <Text style={styles.benefitItem}>• Acceso instantáneo sin contraseñas</Text>
-                  <Text style={styles.benefitItem}>• Máxima seguridad con tu {biometricType?.toLowerCase() || 'biometría'}</Text>
-                  <Text style={styles.benefitItem}>• Credenciales protegidas en tu dispositivo</Text>
-                </View>
-              )}
+
+              <View style={styles.biometricBenefits}>
+                <Text style={styles.benefitsTitle}>Beneficios:</Text>
+                <Text style={styles.benefitItem}>• Acceso instantáneo sin contraseñas</Text>
+                <Text style={styles.benefitItem}>• Máxima seguridad con tu {biometricType?.toLowerCase() || 'biometría'}</Text>
+                <Text style={styles.benefitItem}>• Credenciales protegidas en tu dispositivo</Text>
+              </View>
             </View>
           )}
 
