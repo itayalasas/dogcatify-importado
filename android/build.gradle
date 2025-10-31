@@ -10,7 +10,8 @@ buildscript {
     classpath('com.facebook.react:react-native-gradle-plugin')
     classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')
     classpath('com.google.gms:google-services:4.4.0')
-    classpath('com.datadoghq:dd-sdk-android-gradle-plugin:latest.release')
+    // Datadog Gradle plugin deshabilitado para evitar error en upload de sourcemaps
+    // classpath('com.datadoghq:dd-sdk-android-gradle-plugin:latest.release')
   }
 }
 

@@ -1,14 +1,6 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
-apply plugin: "com.datadoghq.dd-sdk-android-gradle-plugin"
-
-// Configurar Datadog plugin
-datadog {
-    // Deshabilitar upload de sourcemaps durante build para evitar errores
-    // Los sourcemaps aún se generan pero no se suben automáticamente
-    uploadSourcemaps = false
-}
 
 // Copiar google-services.json desde la raíz si existe
 def rootGoogleServices = new File(projectDir.getParentFile().getParentFile(), 'google-services.json')
