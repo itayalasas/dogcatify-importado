@@ -1,12 +1,4 @@
 import { Platform } from 'react-native';
-import {
-  DdSdkReactNative,
-  DdSdkReactNativeConfiguration,
-  DdLogs,
-  ErrorSource,
-  LogLevel,
-  UploadFrequency,
-} from '@datadog/mobile-react-native';
 import Constants from 'expo-constants';
 
 const DATADOG_CLIENT_TOKEN = Constants.expoConfig?.extra?.DATADOG_CLIENT_TOKEN ||
@@ -15,6 +7,26 @@ const DATADOG_APPLICATION_ID = Constants.expoConfig?.extra?.DATADOG_APPLICATION_
   process.env.EXPO_PUBLIC_DATADOG_APPLICATION_ID;
 const DATADOG_ENV = Constants.expoConfig?.extra?.DATADOG_ENV ||
   process.env.EXPO_PUBLIC_DATADOG_ENV || 'production';
+
+// Dynamic import for DataDog SDK (only on native platforms)
+let DdSdkReactNative: any;
+let DdSdkReactNativeConfiguration: any;
+let DdLogs: any;
+let ErrorSource: any;
+let UploadFrequency: any;
+
+if (Platform.OS !== 'web') {
+  try {
+    const DatadogSDK = require('@datadog/mobile-react-native');
+    DdSdkReactNative = DatadogSDK.DdSdkReactNative;
+    DdSdkReactNativeConfiguration = DatadogSDK.DdSdkReactNativeConfiguration;
+    DdLogs = DatadogSDK.DdLogs;
+    ErrorSource = DatadogSDK.ErrorSource;
+    UploadFrequency = DatadogSDK.UploadFrequency;
+  } catch (error) {
+    console.warn('DataDog SDK not available:', error);
+  }
+}
 
 class DataDogLogger {
   private initialized = false;
@@ -26,6 +38,11 @@ class DataDogLogger {
 
     if (Platform.OS === 'web') {
       console.log('DataDog is not available on web platform');
+      return;
+    }
+
+    if (!DdSdkReactNative || !DdSdkReactNativeConfiguration) {
+      console.log('DataDog SDK not loaded');
       return;
     }
 
@@ -61,7 +78,7 @@ class DataDogLogger {
   }
 
   debug(message: string, context?: Record<string, any>) {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' || !DdLogs) {
       console.debug(message, context);
       return;
     }
@@ -79,7 +96,7 @@ class DataDogLogger {
   }
 
   info(message: string, context?: Record<string, any>) {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' || !DdLogs) {
       console.info(message, context);
       return;
     }
@@ -97,7 +114,7 @@ class DataDogLogger {
   }
 
   warn(message: string, context?: Record<string, any>) {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' || !DdLogs) {
       console.warn(message, context);
       return;
     }
@@ -115,7 +132,7 @@ class DataDogLogger {
   }
 
   error(message: string, error?: Error, context?: Record<string, any>) {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' || !DdLogs) {
       console.error(message, error, context);
       return;
     }
@@ -139,7 +156,7 @@ class DataDogLogger {
   }
 
   setUser(userId: string, userInfo?: Record<string, any>) {
-    if (Platform.OS === 'web' || !this.initialized) {
+    if (Platform.OS === 'web' || !this.initialized || !DdSdkReactNative) {
       return;
     }
 
@@ -154,7 +171,7 @@ class DataDogLogger {
   }
 
   clearUser() {
-    if (Platform.OS === 'web' || !this.initialized) {
+    if (Platform.OS === 'web' || !this.initialized || !DdSdkReactNative) {
       return;
     }
 
@@ -166,7 +183,7 @@ class DataDogLogger {
   }
 
   addAttribute(key: string, value: any) {
-    if (Platform.OS === 'web' || !this.initialized) {
+    if (Platform.OS === 'web' || !this.initialized || !DdSdkReactNative) {
       return;
     }
 
@@ -180,7 +197,7 @@ class DataDogLogger {
   }
 
   trackError(error: Error, source: string, context?: Record<string, any>) {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' || !DdSdkReactNative) {
       console.error(`[${source}]`, error, context);
       return;
     }
