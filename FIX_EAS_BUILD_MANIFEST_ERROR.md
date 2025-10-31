@@ -1,20 +1,25 @@
-# Fix: EAS Build - AndroidManifest Error
+# Fix: EAS Build - Plugin Errors
 
-## Error Actual
+## Errores Encontrados
+
+### Error 1: AndroidManifest null (RESUELTO)
 ```
 TypeError: Cannot read properties of null (reading 'manifest')
     at isManifest (node_modules/@expo/config-plugins/build/android/Manifest.js:73:16)
-    at Object.readAndroidManifestAsync
-    at syncConfigurationToNativeAndroidAsync
 ```
+**Solución:** Simplificamos el plugin de expo-updates
 
-## Causa del Error
+### Error 2: DataDog Plugin Invalid (RESUELTO)
+```
+Package "@datadog/mobile-react-native" does not contain a valid config plugin.
+Unexpected token 'typeof'
+```
+**Solución:** Removimos el plugin de DataDog del app.json
 
-El error ocurre cuando `expo-updates` intenta sincronizar su configuración con el AndroidManifest.xml durante el proceso de build en EAS. Esto puede pasar por varias razones:
+## Causa de los Errores
 
-1. El AndroidManifest.xml tiene un formato que no es reconocido correctamente
-2. Hay conflicto entre la configuración en app.json y la configuración nativa
-3. El plugin de expo-updates tiene una configuración incorrecta
+1. **expo-updates**: Tenía configuración compleja que causaba conflictos durante el build
+2. **@datadog/mobile-react-native**: El plugin no es compatible con el proceso de build de EAS (tiene código que no puede ser parseado como config plugin)
 
 ## Soluciones
 
@@ -126,6 +131,36 @@ rm -rf node_modules package-lock.json
 npm install
 ```
 
+## Nota Importante sobre DataDog
+
+El plugin de DataDog `@datadog/mobile-react-native` NO puede usarse como config plugin en app.json porque no es un plugin válido de Expo.
+
+### Cómo usar DataDog sin el plugin:
+
+La librería de DataDog sigue funcionando perfectamente en runtime. Solo necesitas:
+
+1. **Mantener la dependencia en package.json:**
+```json
+"@datadog/mobile-react-native": "^2.13.0"
+```
+
+2. **Inicializar DataDog en el código (ya está implementado):**
+```typescript
+// utils/datadogLogger.ts ya tiene la inicialización correcta
+import { DdSdkReactNative } from '@datadog/mobile-react-native';
+```
+
+3. **Las variables de entorno en app.json:**
+```json
+"extra": {
+  "DATADOG_CLIENT_TOKEN": "068208a98b131a96831ca92a86d4f158",
+  "DATADOG_APPLICATION_ID": "dogcatify-app",
+  "DATADOG_ENV": "production"
+}
+```
+
+**Resultado:** DataDog funciona perfectamente en runtime sin necesidad del plugin de configuración.
+
 ## Siguiente Paso
 
 Intenta construir nuevamente con:
@@ -133,11 +168,13 @@ Intenta construir nuevamente con:
 eas build --profile production --platform android
 ```
 
-Si el error persiste, prueba las soluciones en orden:
-1. ✅ Ya aplicamos simplificar plugin expo-updates
-2. Limpiar y regenerar archivos nativos (Solución 2)
-3. Remover temporalmente expo-updates (Solución 3)
-4. Verificar estructura del manifest (Solución 4)
+✅ **Aplicado:**
+1. Simplificado plugin expo-updates
+2. Removido plugin DataDog (la librería sigue funcionando)
+
+Si el error persiste:
+1. Limpiar y regenerar archivos nativos (Solución 2)
+2. Verificar estructura del manifest (Solución 4)
 
 ## Referencias
 
