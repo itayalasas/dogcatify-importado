@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { Alert, AppState, AppStateStatus } from 'react-native';
 import { router } from 'expo-router';
-import { supabaseClient, getUserProfile, updateUserProfile, signIn as supabaseSignIn, signUp as supabaseSignUp, signOut as supabaseSignOut } from '../lib/supabase';
+import { supabaseClient, getUserProfile, updateUserProfile, signIn as supabaseSignIn, signUp as supabaseSignUp, signOut as supabaseSignOut, setTokenExpirationCallback } from '../lib/supabase';
 import { User } from '../types';
 
 interface AuthContextType {
@@ -37,6 +37,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const tokenCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const appState = useRef(AppState.currentState);
   const isHandlingExpirationRef = useRef(false);
+  const lastValidationRef = useRef<number>(0);
 
   const updateCurrentUser = (updatedUser: User) => {
     setCurrentUser(updatedUser);
@@ -46,7 +47,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let mounted = true;
     let initializationComplete = false;
 
-    // Safety timeout to ensure auth initialization completes
+    setTokenExpirationCallback(() => {
+      console.log('Token expiration detected from global error handler');
+      if (mounted && !isHandlingExpirationRef.current) {
+        handleTokenExpiration();
+      }
+    });
+
     const safetyTimeout = setTimeout(() => {
       if (!initializationComplete && mounted) {
         console.warn('Auth initialization timed out after 10 seconds');
@@ -369,13 +376,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       tokenCheckIntervalRef.current = setInterval(async () => {
         if (!isHandlingExpirationRef.current) {
+          const now = Date.now();
+          if (now - lastValidationRef.current < 30000) {
+            return;
+          }
+          lastValidationRef.current = now;
           const isValid = await checkTokenValidity();
           if (!isValid) {
-            console.log('Token expired, redirecting to login...');
+            console.log('Token expired in periodic check, redirecting to login...');
             await handleTokenExpiration();
           }
         }
-      }, 2 * 60 * 1000);
+      }, 60 * 1000);
 
       const subscription = AppState.addEventListener('change', async (nextAppState: AppStateStatus) => {
         if (
@@ -415,6 +427,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (error) {
         console.error('Error checking session:', error);
+        if (error.message?.includes('refresh_token_not_found') ||
+            error.message?.includes('session_not_found') ||
+            error.message?.includes('Invalid Refresh Token')) {
+          console.log('Session completely invalid, cannot refresh');
+          return false;
+        }
         return false;
       }
 
@@ -428,21 +446,60 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const timeUntilExpiry = tokenExp - now;
 
       if (now >= tokenExp) {
-        console.log('Token has expired');
-        return false;
+        console.log('Token has expired, attempting refresh...');
+        try {
+          const { data: refreshData, error: refreshError } = await supabaseClient.auth.refreshSession();
+
+          if (refreshError) {
+            console.error('Failed to refresh expired session:', refreshError);
+            if (refreshError.message?.includes('refresh_token_not_found') ||
+                refreshError.message?.includes('Invalid Refresh Token')) {
+              console.log('Refresh token invalid, session cannot be recovered');
+              return false;
+            }
+            return false;
+          }
+
+          if (!refreshData.session) {
+            console.log('No session returned after refresh');
+            return false;
+          }
+
+          console.log('Session refreshed successfully after expiration');
+          setSession(refreshData.session);
+          return true;
+        } catch (refreshError) {
+          console.error('Exception during session refresh:', refreshError);
+          return false;
+        }
       }
 
       if (timeUntilExpiry < 300) {
-        console.log('Token expires soon, attempting refresh...');
-        const { data: refreshData, error: refreshError } = await supabaseClient.auth.refreshSession();
+        console.log('Token expires soon (< 5 min), attempting preemptive refresh...');
+        try {
+          const { data: refreshData, error: refreshError } = await supabaseClient.auth.refreshSession();
 
-        if (refreshError || !refreshData.session) {
-          console.error('Failed to refresh session:', refreshError);
+          if (refreshError) {
+            console.error('Failed to preemptively refresh session:', refreshError);
+            if (timeUntilExpiry > 60) {
+              console.log('Still have time, continuing with current session');
+              return true;
+            }
+            return false;
+          }
+
+          if (refreshData.session) {
+            console.log('Session preemptively refreshed successfully');
+            setSession(refreshData.session);
+          }
+          return true;
+        } catch (refreshError) {
+          console.error('Exception during preemptive refresh:', refreshError);
+          if (timeUntilExpiry > 60) {
+            return true;
+          }
           return false;
         }
-
-        console.log('Session refreshed successfully');
-        return true;
       }
 
       const { error: testError } = await supabaseClient
@@ -458,14 +515,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             testError.message?.includes('expired') ||
             testError.message?.includes('invalid') ||
             testError.code === 'PGRST301') {
-          console.log('JWT error detected, token is invalid');
+          console.log('JWT error detected during validation, token is invalid');
           return false;
         }
       }
 
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error in checkTokenValidity:', error);
+      if (error?.message?.includes('JWT') ||
+          error?.message?.includes('expired') ||
+          error?.message?.includes('session_not_found')) {
+        console.log('Critical session error detected');
+        return false;
+      }
       return false;
     }
   };
@@ -486,11 +549,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         tokenCheckIntervalRef.current = null;
       }
 
+      setLoading(false);
       setCurrentUser(null);
       setSession(null);
       setIsEmailConfirmed(false);
 
-      await supabaseClient.auth.signOut();
+      try {
+        await supabaseClient.auth.signOut();
+      } catch (signOutError) {
+        console.error('Error during sign out:', signOutError);
+      }
+
+      setTimeout(() => {
+        try {
+          router.replace('/auth/login');
+        } catch (routerError) {
+          console.error('Error navigating to login:', routerError);
+        }
+      }, 100);
 
       Alert.alert(
         'Sesión expirada',
@@ -499,28 +575,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           {
             text: 'OK',
             onPress: () => {
-              setTimeout(() => {
-                try {
-                  router.replace('/auth/login');
-                } catch (error) {
-                  console.error('Error navigating to login:', error);
-                }
-                isHandlingExpirationRef.current = false;
-              }, 100);
+              isHandlingExpirationRef.current = false;
             }
           }
         ],
-        { cancelable: false }
+        {
+          cancelable: false,
+          onDismiss: () => {
+            isHandlingExpirationRef.current = false;
+          }
+        }
       );
     } catch (error) {
       console.error('Error handling token expiration:', error);
+      isHandlingExpirationRef.current = false;
       setTimeout(() => {
         try {
           router.replace('/auth/login');
         } catch (routerError) {
           console.error('Error in fallback navigation:', routerError);
         }
-        isHandlingExpirationRef.current = false;
       }, 100);
     }
   };

@@ -23,6 +23,14 @@ export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+supabaseClient.auth.onAuthStateChange((event, session) => {
+  if (event === 'TOKEN_REFRESHED') {
+    console.log('Token refreshed automatically by Supabase');
+  } else if (event === 'SIGNED_OUT') {
+    console.log('User signed out');
+  }
+});
+
 // Add global error handler for API calls
 const originalFrom = supabaseClient.from;
 supabaseClient.from = function(table: string) {
@@ -80,21 +88,32 @@ const addErrorHandling = (queryBuilder: any) => {
   return queryBuilder;
 };
 
-// Handle Supabase errors globally
+let tokenExpirationCallback: (() => void) | null = null;
+
+export const setTokenExpirationCallback = (callback: () => void) => {
+  tokenExpirationCallback = callback;
+};
+
 const handleSupabaseError = (error: any) => {
   if (error && typeof error === 'object') {
-    const errorMessage = error.message || '';
-    
-    // Check for JWT expiration errors
-    if (errorMessage.includes('JWT') && 
-        (errorMessage.includes('expired') || 
-         errorMessage.includes('invalid') ||
-         errorMessage.includes('malformed'))) {
-      
-      console.log('JWT error detected in API call:', errorMessage);
-      
-      // For React Native, we'll handle this through the AuthContext directly
-      // The AuthContext already has periodic token checking
+    const errorMessage = (error.message || '').toLowerCase();
+    const errorCode = (error.code || '').toLowerCase();
+
+    const isJWTError =
+      errorMessage.includes('jwt') ||
+      errorMessage.includes('expired') ||
+      errorMessage.includes('invalid') ||
+      errorMessage.includes('session_not_found') ||
+      errorMessage.includes('refresh_token_not_found') ||
+      errorCode === 'pgrst301';
+
+    if (isJWTError) {
+      console.log('JWT/Session error detected in API call:', errorMessage);
+
+      if (tokenExpirationCallback) {
+        console.log('Triggering token expiration callback');
+        tokenExpirationCallback();
+      }
     }
   }
 };
