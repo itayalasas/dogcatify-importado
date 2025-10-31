@@ -13,10 +13,14 @@ import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { Platform, Alert, View } from 'react-native';
 import { supabaseClient } from '@/lib/supabase';
 import { SafeAppWrapper } from '../components/SafeAppWrapper';
+import { logger } from '@/utils/datadogLogger';
 
-// Sentry initialization - disabled for development builds to avoid issues
-// import * as Sentry from '@sentry/react-native';
-// import { isRunningInExpoGo } from 'expo';
+// Initialize DataDog
+if (Platform.OS !== 'web') {
+  logger.initialize().catch((error) => {
+    console.error('Failed to initialize DataDog:', error);
+  });
+}
 
 // Global error handler
 if (typeof ErrorUtils !== 'undefined') {
@@ -28,7 +32,8 @@ if (typeof ErrorUtils !== 'undefined') {
     console.error('Stack:', error.stack);
     console.error('===================');
 
-    // Call original handler
+    logger.trackError(error, 'GlobalErrorHandler', { isFatal });
+
     if (originalHandler) {
       originalHandler(error, isFatal);
     }
@@ -43,6 +48,9 @@ global.onunhandledrejection = (event: any) => {
   console.error('Promise:', event.promise);
   console.error('===================================');
 
+  const error = event.reason instanceof Error ? event.reason : new Error(String(event.reason));
+  logger.trackError(error, 'UnhandledPromiseRejection');
+
   if (originalUnhandled) {
     originalUnhandled(event);
   }
@@ -53,8 +61,10 @@ function RootLayout() {
 
   // Add navigation state logging
   useEffect(() => {
-    console.log('=== RootLayout Mount ===');
-    console.log('Available routes being registered...');
+    logger.info('RootLayout Mount', {
+      platform: Platform.OS,
+      version: Platform.Version,
+    });
   }, []);
 
   // Prevent Supabase from showing automatic modals
@@ -62,12 +72,10 @@ function RootLayout() {
     try {
       const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
         (event, session) => {
-          console.log('Auth event intercepted:', event);
+          logger.debug('Auth event intercepted', { event, hasSession: !!session });
 
-          // Only block SIGNED_UP to prevent the confirmation modal
           if (event === 'SIGNED_UP') {
-            console.log('Blocking SIGNED_UP event to prevent modal');
-            // Don't sign out immediately, just log it
+            logger.info('Blocking SIGNED_UP event to prevent modal');
           }
         }
       );
@@ -76,7 +84,7 @@ function RootLayout() {
         subscription?.unsubscribe();
       };
     } catch (error) {
-      console.error('Error setting up auth listener:', error);
+      logger.error('Error setting up auth listener', error as Error);
     }
   }, []);
 
@@ -84,52 +92,42 @@ function RootLayout() {
   useEffect(() => {
     const handleDeepLink = (event: { url: string }) => {
       const url = event.url;
-      console.log('Deep link received:', url);
+      logger.info('Deep link received', { url });
 
       try {
-        // Parse the URL
         const { hostname, path, queryParams } = Linking.parse(url);
+        logger.debug('Parsed URL', { hostname, path, queryParams });
 
-        console.log('Parsed URL:', { hostname, path, queryParams });
-
-        // Handle album links: dogcatify://album/[id] or https://dogcatify.app/album/[id]
         if (path?.startsWith('album/')) {
           const albumId = path.replace('album/', '');
-          console.log('Navigating to album:', albumId);
+          logger.info('Navigating to album', { albumId });
 
-          // Use setTimeout to ensure navigation happens after app is ready
           setTimeout(() => {
-            // Navigate to album view
             const router = require('expo-router').router;
             router.push(`/pets/albums/${albumId}`);
           }, 500);
         }
-        // Handle post links: dogcatify://post/[id] or https://dogcatify.app/post/[id]
         else if (path?.startsWith('post/')) {
           const postId = path.replace('post/', '');
-          console.log('Navigating to post:', postId);
+          logger.info('Navigating to post', { postId });
 
           setTimeout(() => {
-            // Navigate to feed (posts are shown in the main feed)
             const router = require('expo-router').router;
             router.push('/(tabs)');
-            // You could add logic here to scroll to specific post
           }, 500);
         }
       } catch (error) {
-        console.error('Error handling deep link:', error);
+        logger.error('Error handling deep link', error as Error, { url });
       }
     };
 
-    // Get initial URL (if app was opened from a link)
     Linking.getInitialURL().then((url) => {
       if (url) {
-        console.log('Initial URL:', url);
+        logger.info('Initial URL detected', { url });
         handleDeepLink({ url });
       }
     });
 
-    // Listen for deep links while app is running
     const subscription = Linking.addEventListener('url', handleDeepLink);
 
     return () => {
