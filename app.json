@@ -30,6 +30,17 @@
         {
           "username": "pedro86cu"
         }
+      ],
+      [
+        "@datadog/mobile-react-native",
+        {
+          "iosConfiguration": {
+            "datadogClientToken": "068208a98b131a96831ca92a86d4f158",
+            "datadogApplicationId": "dogcatify-app",
+            "datadogSite": "US1",
+            "datadogEnvironment": "production"
+          }
+        }
       ]
     ],
     "experiments": { "typedRoutes": true },

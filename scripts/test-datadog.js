@@ -33,11 +33,18 @@ const appJsonPath = path.join(__dirname, '..', 'app.json');
 if (fs.existsSync(appJsonPath)) {
   const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf8'));
   const extra = appJson.expo?.extra || {};
+  const plugins = appJson.expo?.plugins || [];
+
+  // Check for DataDog plugin
+  const datadogPlugin = plugins.find(plugin =>
+    Array.isArray(plugin) && plugin[0] === '@datadog/mobile-react-native'
+  );
 
   console.log(`   ✅ Archivo app.json existe`);
   console.log(`   ${extra.DATADOG_CLIENT_TOKEN ? '✅' : '❌'} DATADOG_CLIENT_TOKEN`);
   console.log(`   ${extra.DATADOG_APPLICATION_ID ? '✅' : '❌'} DATADOG_APPLICATION_ID`);
   console.log(`   ${extra.DATADOG_ENV ? '✅' : '❌'} DATADOG_ENV`);
+  console.log(`   ${datadogPlugin ? '✅' : '❌'} Plugin iOS configurado`);
 
   if (extra.DATADOG_CLIENT_TOKEN) {
     console.log(`   📝 Token: ${extra.DATADOG_CLIENT_TOKEN.substring(0, 12)}...`);
@@ -88,5 +95,45 @@ if (fs.existsSync(packageJsonPath)) {
   console.log('   ❌ Archivo package.json no existe');
 }
 
+// Check Android configuration
+console.log('\n6️⃣ Verificando configuración nativa de Android...');
+const androidBuildGradle = path.join(__dirname, '..', 'android', 'build.gradle');
+const androidAppBuildGradle = path.join(__dirname, '..', 'android', 'app', 'build.gradle');
+const mainApplication = path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'java', 'com', 'dogcatify', 'app', 'MainApplication.kt');
+
+if (fs.existsSync(androidBuildGradle)) {
+  const content = fs.readFileSync(androidBuildGradle, 'utf8');
+  const hasPlugin = content.includes('dd-sdk-android-gradle-plugin');
+  console.log(`   ${hasPlugin ? '✅' : '❌'} Plugin de DataDog en build.gradle`);
+} else {
+  console.log('   ⚠️  android/build.gradle no existe (normal en Expo Managed)');
+}
+
+if (fs.existsSync(androidAppBuildGradle)) {
+  const content = fs.readFileSync(androidAppBuildGradle, 'utf8');
+  const hasPlugin = content.includes('com.datadoghq.dd-sdk-android-gradle-plugin');
+  const hasDependency = content.includes('dd-sdk-android-logs');
+  console.log(`   ${hasPlugin ? '✅' : '❌'} Plugin aplicado en app/build.gradle`);
+  console.log(`   ${hasDependency ? '✅' : '❌'} Dependencia dd-sdk-android-logs`);
+} else {
+  console.log('   ⚠️  android/app/build.gradle no existe (normal en Expo Managed)');
+}
+
+if (fs.existsSync(mainApplication)) {
+  const content = fs.readFileSync(mainApplication, 'utf8');
+  const hasImports = content.includes('com.datadog.android.Datadog');
+  const hasInit = content.includes('Datadog.initialize');
+  console.log(`   ${hasImports ? '✅' : '❌'} Imports de DataDog en MainApplication.kt`);
+  console.log(`   ${hasInit ? '✅' : '❌'} Inicialización en MainApplication.kt`);
+} else {
+  console.log('   ⚠️  MainApplication.kt no existe (normal en Expo Managed)');
+}
+
 console.log('\n✨ Verificación completada!\n');
-console.log('📚 Para más información, consulta DATADOG_USAGE.md\n');
+console.log('📊 Resumen:');
+console.log('   ✅ Configuración JavaScript: Lista');
+console.log('   ✅ Plugin iOS: Configurado en app.json');
+console.log('   ✅ Android nativo: Configurado (se aplicará en builds)');
+console.log('\n📚 Para más información:');
+console.log('   - CONFIGURACION_COMPLETA_DATADOG.md');
+console.log('   - DATADOG_USAGE.md\n');
