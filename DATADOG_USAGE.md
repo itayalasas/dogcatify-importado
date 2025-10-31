@@ -2,13 +2,35 @@
 
 ## Configuración
 
-DataDog ha sido configurado para gestionar logs en toda la aplicación. El token de cliente está configurado en el archivo `.env`:
+DataDog ha sido configurado para gestionar logs en toda la aplicación.
 
+### Variables de Entorno
+
+Las credenciales están configuradas en dos lugares:
+
+1. **Archivo `.env`** (para desarrollo web):
 ```env
 EXPO_PUBLIC_DATADOG_CLIENT_TOKEN=068208a98b131a96831ca92a86d4f158
 EXPO_PUBLIC_DATADOG_APPLICATION_ID=dogcatify-app
 EXPO_PUBLIC_DATADOG_ENV=production
 ```
+
+2. **Archivo `app.json`** (para iOS/Android):
+```json
+{
+  "expo": {
+    "extra": {
+      "DATADOG_CLIENT_TOKEN": "068208a98b131a96831ca92a86d4f158",
+      "DATADOG_APPLICATION_ID": "dogcatify-app",
+      "DATADOG_ENV": "production"
+    }
+  }
+}
+```
+
+### Metro Config
+
+El `metro.config.js` está configurado para incluir el plugin de DataDog que permite el source mapping correcto.
 
 ## Importar el Logger
 
@@ -142,6 +164,21 @@ Los siguientes contextos ya tienen DataDog integrado:
 1. **AuthContext**: Logs de login, logout, errores de autenticación
 2. **RootLayout**: Logs de navegación, deep links, errores globales
 3. **MercadoPago Utils**: Logs de pagos, configuración de MP, errores de API
+
+## Verificar Configuración
+
+Para verificar que DataDog está correctamente configurado:
+
+```bash
+npm run test:datadog
+```
+
+Este script verificará:
+- ✅ Variables de entorno en `.env`
+- ✅ Configuración en `app.json`
+- ✅ Metro config para DataDog
+- ✅ Logger correctamente implementado
+- ✅ Dependencias instaladas
 
 ## Ver Logs en DataDog
 

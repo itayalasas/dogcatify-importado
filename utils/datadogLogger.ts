@@ -47,7 +47,7 @@ class DataDogLogger {
     }
 
     if (!DATADOG_CLIENT_TOKEN || !DATADOG_APPLICATION_ID) {
-      console.error('DataDog configuration is missing');
+      console.warn('DataDog configuration is missing. Logs will only be displayed in console.');
       return;
     }
 
