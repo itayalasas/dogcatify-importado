@@ -1,4 +1,5 @@
 import { supabaseClient } from '@/lib/supabase';
+import { logger } from '@/utils/datadogLogger';
 
 /**
  * Mercado Pago OAuth2 Marketplace Implementation
@@ -79,7 +80,7 @@ const getAdminMercadoPagoConfig = async () => {
       is_test_mode: data.value.is_test_mode || false
     };
   } catch (error) {
-    console.error('Error getting admin MP config:', error);
+    logger.error('Error getting admin MP config', error as Error);
     throw error;
   }
 };
@@ -114,7 +115,7 @@ export const generateOAuth2AuthorizationUrlWithConfig = async (partnerId: string
 
     return `https://auth.mercadopago.com/authorization?${params.toString()}`;
   } catch (error) {
-    console.error('Error generating OAuth2 URL:', error);
+    logger.error('Error generating OAuth2 URL', error as Error);
     throw error;
   }
 };
@@ -160,7 +161,7 @@ export const exchangeCodeForTokens = async (
 
     return tokenData;
   } catch (error) {
-    console.error('Error exchanging code for tokens:', error);
+    logger.error('Error exchanging code for tokens', error as Error);
     throw error;
   }
 };
@@ -180,7 +181,7 @@ const storePartnerTokens = async (partnerId: string, tokenData: any) => {
 
     if (partnerError) throw partnerError;
 
-    console.log('Storing MP tokens for all businesses of user:', partnerData.user_id);
+    logger.info('Storing MP tokens for all businesses of user', { userId: partnerData.user_id });
 
     // Update ALL partners with the same user_id
     const { error } = await supabaseClient
@@ -200,9 +201,9 @@ const storePartnerTokens = async (partnerId: string, tokenData: any) => {
 
     if (error) throw error;
 
-    console.log('MP tokens stored successfully for ALL businesses');
+    logger.info('MP tokens stored successfully for ALL businesses');
   } catch (error) {
-    console.error('Error storing partner tokens:', error);
+    logger.error('Error storing partner tokens', error as Error);
     throw error;
   }
 };
@@ -226,7 +227,7 @@ const getMarketplaceAccessToken = async (): Promise<string> => {
 
     return data.value.access_token;
   } catch (error) {
-    console.error('Error getting marketplace access token:', error);
+    logger.error('Error getting marketplace access token', error as Error);
     throw error;
   }
 };
@@ -236,7 +237,7 @@ const getMarketplaceAccessToken = async (): Promise<string> => {
  */
 export const getPartnerMercadoPagoConfig = async (partnerId: string) => {
   try {
-    console.log('Getting MP config for partner:', partnerId);
+    logger.debug('Getting MP config for partner', { partnerId });
     
     const { data, error } = await supabaseClient
       .from('partners')
@@ -245,11 +246,11 @@ export const getPartnerMercadoPagoConfig = async (partnerId: string) => {
       .single();
 
     if (error) throw error;
-    
-    console.log('Partner data found:', data);
+
+    logger.debug('Partner data found', { hasData: !!data });
 
     if (!data?.mercadopago_connected || !data?.mercadopago_config) {
-      console.log('Partner MP status:', {
+      logger.debug('Partner MP status', {
         mercadopago_connected: data?.mercadopago_connected,
         has_config: !!data?.mercadopago_config,
         has_access_token: !!data?.mercadopago_config?.access_token
@@ -272,7 +273,7 @@ export const getPartnerMercadoPagoConfig = async (partnerId: string) => {
       user_id: data.mercadopago_config.user_id || data.mercadopago_config.account_id || partnerId
     };
 
-    console.log('✅ MP config returned:', {
+    logger.info('MP config returned', {
       business_name: returnConfig.business_name,
       access_token_prefix: returnConfig.access_token?.substring(0, 12) + '...',
       public_key_prefix: returnConfig.public_key?.substring(0, 12) + '...',
@@ -283,7 +284,7 @@ export const getPartnerMercadoPagoConfig = async (partnerId: string) => {
 
     return returnConfig;
   } catch (error) {
-    console.error('Error getting partner MP config:', error);
+    logger.error('Error getting partner MP config', error as Error, { partnerId });
     throw error;
   }
 };
@@ -321,13 +322,13 @@ export const createOrder = async (
       .single();
 
     if (error || !insertedOrder) {
-      console.error('Error inserting order:', error);
+      logger.error('Error inserting order', error as Error);
       throw error || new Error('Failed to create order');
     }
 
     return { ...orderData, id: insertedOrder.id };
   } catch (error) {
-    console.error('Error creating order:', error);
+    logger.error('Error creating order', error as Error);
     throw error;
   }
 };
@@ -351,7 +352,7 @@ export const createPaymentPreference = async (
     const itemsSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const totalAmount = itemsSubtotal + shippingCost;
     
-    console.log('Creating payment preference with config:', {
+    logger.info('Creating payment preference', {
       partner_user_id: partnerConfig.user_id,
       commission: commissionAmount,
       partner_amount: partnerAmount,
@@ -398,9 +399,9 @@ export const createPaymentPreference = async (
     if (partnerConfig.is_oauth && partnerConfig.user_id && !isNaN(parseInt(partnerConfig.user_id))) {
       preferenceData.marketplace_fee = commissionAmount;
       preferenceData.collector_id = parseInt(partnerConfig.user_id);
-      console.log('Using OAuth marketplace split with collector_id:', partnerConfig.user_id);
+      logger.info('Using OAuth marketplace split', { collectorId: partnerConfig.user_id });
     } else {
-      console.log('Using manual configuration - no marketplace split');
+      logger.info('Using manual configuration - no marketplace split');
     }
 
     const response = await fetch(`${MP_BASE_URL}/checkout/preferences`, {
@@ -414,7 +415,7 @@ export const createPaymentPreference = async (
 
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('Mercado Pago API error:', errorData);
+      logger.error('Mercado Pago API error', new Error(JSON.stringify(errorData)), { errorData });
       throw new Error(`Failed to create payment preference: ${errorData.message || response.statusText}`);
     }
 
@@ -431,7 +432,7 @@ export const createPaymentPreference = async (
 
     return preference;
   } catch (error) {
-    console.error('Error creating payment preference:', error);
+    logger.error('Error creating payment preference', error as Error);
     throw error;
   }
 };
@@ -492,7 +493,7 @@ export const createMultiPartnerOrder = async (
   totalShippingCost: number
 ): Promise<{ orders: any[], paymentPreferences: any[], isTestMode: boolean }> => {
   try {
-    console.log('Creating multi-partner order with marketplace split...');
+    logger.info('Creating multi-partner order with marketplace split');
     console.log('Cart items received:', cartItems.map(item => ({
       id: item.id,
       name: item.name,
@@ -813,7 +814,7 @@ export const createUnifiedPaymentPreference = async (
 
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('Mercado Pago API error:', errorData);
+      logger.error('Mercado Pago API error', new Error(JSON.stringify(errorData)), { errorData });
       throw new Error(`Failed to create payment preference: ${errorData.message || response.statusText}`);
     }
 

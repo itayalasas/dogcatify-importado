@@ -3,6 +3,7 @@ import { Alert, AppState, AppStateStatus } from 'react-native';
 import { router } from 'expo-router';
 import { supabaseClient, getUserProfile, updateUserProfile, signIn as supabaseSignIn, signUp as supabaseSignUp, signOut as supabaseSignOut, setTokenExpirationCallback } from '../lib/supabase';
 import { User } from '../types';
+import { logger } from '@/utils/datadogLogger';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -226,7 +227,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (profile) {
           if (!mounted) return;
-          setCurrentUser({
+          const user = {
             id: userId,
             email: userEmail,
             displayName: profile.display_name || '',
@@ -241,6 +242,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             following: profile.following || [],
             followersCount: (profile.followers || []).length,
             followingCount: (profile.following || []).length,
+          };
+          setCurrentUser(user);
+
+          logger.setUser(userId, {
+            email: userEmail,
+            displayName: profile.display_name || '',
+            isPartner: profile.is_partner || false,
+          });
+          logger.info('User logged in', {
+            userId,
+            isPartner: profile.is_partner || false,
           });
         } else {
           // Create user profile if it doesn't exist
@@ -269,10 +281,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             phone: newUser.phone,
           });
           
-          setCurrentUser({
+          const user = {
             id: userId,
             ...newUser,
+          };
+          setCurrentUser(user);
+
+          logger.setUser(userId, {
+            email: userEmail,
+            displayName: '',
+            isPartner: false,
           });
+          logger.info('New user profile created and logged in', { userId });
         }
       } catch (error) {
         console.error('Error loading user profile:', error);
@@ -753,16 +773,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
-      console.log('AuthContext - Logging out user');
+      logger.info('User logging out', { userId: currentUser?.id });
       const { error } = await supabaseClient.auth.signOut();
       if (error) throw error;
-      
-      // Clear local state
+
+      logger.clearUser();
+
       setCurrentUser(null);
       setSession(null);
       setIsEmailConfirmed(false);
     } catch (error) {
-      console.error('Logout error:', error);
+      logger.error('Logout error', error as Error);
       throw error;
     }
   };
