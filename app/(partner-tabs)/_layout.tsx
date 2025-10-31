@@ -3,7 +3,8 @@ import { ChartBar as BarChart3, ArrowLeft, Building, ShoppingBag, Calendar } fro
 import { MessageCircle } from 'lucide-react-native';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { TouchableOpacity, View, Text, ActivityIndicator } from 'react-native';
+import { TouchableOpacity, View, Text, ActivityIndicator, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { supabaseClient } from '../../lib/supabase';
@@ -13,6 +14,7 @@ export default function PartnerTabLayout() {
   const { t } = useLanguage();
   const { currentUser, authInitialized } = useAuth();
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
+  const insets = useSafeAreaInsets();
   const [partnerProfile, setPartnerProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasActiveSchedule, setHasActiveSchedule] = useState(false);
@@ -130,8 +132,8 @@ export default function PartnerTabLayout() {
           backgroundColor: '#FFFFFF',
           borderTopWidth: 0,
           paddingTop: 5,
-          paddingBottom: 5,
-          height: 60,
+          paddingBottom: Math.max(insets.bottom, 5),
+          height: Platform.OS === 'ios' ? 85 : 60 + Math.max(insets.bottom, 0),
           shadowColor: '#000',
           shadowOffset: {
             width: 0,
