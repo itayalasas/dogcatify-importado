@@ -25,7 +25,8 @@
           "android": { "useNextNotificationsApi": true }
         }
       ],
-      "expo-updates"
+      "expo-updates",
+      "expo-datadog"
     ],
     "experiments": { "typedRoutes": true },
     "extra": {
