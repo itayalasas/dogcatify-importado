@@ -1,5 +1,33 @@
 # Solución: Notificaciones Push no funcionan en Android
 
+## ⚠️ ACCIÓN REQUERIDA: Configurar Credenciales FCM
+
+**El problema actual es que falta configurar las credenciales de Firebase Cloud Messaging (FCM) en Expo.**
+
+```
+Error: "Unable to retrieve the FCM server key for the recipient's app"
+```
+
+### Solución Rápida (5 minutos):
+
+1. Ve a [Firebase Console](https://console.firebase.google.com/) → Proyecto **app-mascota-7db30**
+2. Project Settings → Cloud Messaging → Copia el **Server Key**
+3. En tu terminal:
+   ```bash
+   eas login
+   eas credentials
+   # Selecciona: Android > Preview/Production > Push Notifications > Add FCM server key
+   # Pega el Server Key
+   ```
+4. Prueba inmediatamente (no necesitas rebuild):
+   ```bash
+   node scripts/test-android-notifications.js "ExponentPushToken[tu-token]"
+   ```
+
+**📖 Guía detallada**: Ver archivo `CONFIGURAR_FCM_EXPO.md`
+
+---
+
 ## Problema
 Las notificaciones push funcionan correctamente en iOS pero no llegan a dispositivos Android físicos.
 
