@@ -25,10 +25,16 @@
           "android": { "useNextNotificationsApi": true }
         }
       ],
+      "expo-updates",
       [
-        "expo-updates",
+        "@datadog/mobile-react-native",
         {
-          "username": "pedro86cu"
+          "iosConfiguration": {
+            "datadogClientToken": "068208a98b131a96831ca92a86d4f158",
+            "datadogApplicationId": "dogcatify-app",
+            "datadogSite": "US1",
+            "datadogEnvironment": "production"
+          }
         }
       ]
     ],
