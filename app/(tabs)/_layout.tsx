@@ -2,9 +2,11 @@ import { Tabs } from 'expo-router';
 import { Chrome as Home, Heart, ShoppingBag, Briefcase, MapPin, User } from 'lucide-react-native';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabLayout() {
   const { t } = useLanguage();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
@@ -16,8 +18,8 @@ export default function TabLayout() {
           backgroundColor: '#FFFFFF',
           borderTopWidth: 0,
           paddingTop: 8,
-          paddingBottom: Platform.OS === 'ios' ? 20 : 8,
-          height: Platform.OS === 'ios' ? 85 : 65,
+          paddingBottom: Math.max(insets.bottom, 8),
+          height: Platform.OS === 'ios' ? 85 : 60 + Math.max(insets.bottom, 0),
           shadowColor: '#000',
           shadowOffset: {
             width: 0,

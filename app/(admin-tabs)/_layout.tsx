@@ -1,11 +1,13 @@
 import { Tabs } from 'expo-router';
 import { ChartBar as BarChart3, Users, Volume2, Settings, MapPin, FileText, ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
-import { View, Text } from 'react-native';
+import { View, Text, Platform } from 'react-native';
 import { useEffect } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function AdminTabLayout() {
   const { currentUser } = useAuth();
+  const insets = useSafeAreaInsets();
 
   // Check if user is admin
   const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
@@ -50,9 +52,9 @@ export default function AdminTabLayout() {
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
           borderTopColor: '#E5E7EB',
-          paddingBottom: 5,
+          paddingBottom: Math.max(insets.bottom, 5),
           paddingTop: 5,
-          height: 60,
+          height: Platform.OS === 'ios' ? 85 : 60 + Math.max(insets.bottom, 0),
         },
         tabBarLabelStyle: {
           fontSize: 10,
