@@ -38,7 +38,9 @@
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InprZ2l3YW15Y2JqY29nY2dxaGZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIyMDI2MTIsImV4cCI6MjA2Nzc3ODYxMn0.D-LyMJVBu0vR_iRInOKUkNLQMs5qwj_vUVZsW_JNGWE",
         "SENTRY_ORG": "ayala-it-sas",
         "SENTRY_PROJECT": "react-native",
-        "EXPO_SKIP_MANIFEST_VALIDATION_TOKEN": "true"
+        "EXPO_SKIP_MANIFEST_VALIDATION_TOKEN": "true",
+        "DATADOG_API_KEY": "068208a98b131a96831ca92a86d4f158",
+        "DATADOG_SITE": "datadoghq.com"
       }
     },
     "default": {
