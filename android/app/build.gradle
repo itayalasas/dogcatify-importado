@@ -1,6 +1,7 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+apply plugin: "com.datadoghq.dd-sdk-android-gradle-plugin"
 
 // Copiar google-services.json desde la raíz si existe
 def rootGoogleServices = new File(projectDir.getParentFile().getParentFile(), 'google-services.json')
@@ -165,6 +166,9 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+
+    // DataDog SDK for Android
+    implementation "com.datadoghq:dd-sdk-android-logs:latest.release"
 
     // Firebase dependencies
     implementation platform('com.google.firebase:firebase-bom:32.7.0')
