@@ -437,7 +437,7 @@ export default function BusinessSelector() {
             </Text>
             <Button
               title="Registrar Otro Negocio"
-              onPress={() => router.push('/partner-register')}
+              onPress={() => router.push('/(tabs)/partner-register')}
               variant="outline"
               size="medium"
             />
