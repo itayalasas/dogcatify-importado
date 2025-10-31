@@ -130,8 +130,10 @@ async function processPayment(orderId: string, amount: number) {
 
 ## Plataformas
 
-- **iOS/Android**: DataDog está completamente funcional y envía logs automáticamente
+- **iOS/Android**: DataDog está completamente funcional y envía logs automáticamente al servidor de DataDog
 - **Web**: Los logs se muestran en la consola del navegador solamente (DataDog SDK no es compatible con web)
+
+**Nota Técnica**: El SDK de DataDog se carga dinámicamente usando `require()` solo en plataformas nativas (iOS/Android), evitando errores de importación en web.
 
 ## Contextos con Logging Integrado
 
