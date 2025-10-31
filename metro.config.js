@@ -2,7 +2,15 @@ const path = require('path');
 const { getDefaultConfig } = require('expo/metro-config');
 const { withSentryConfig } = require('@sentry/react-native/metro');
 
-const config = getDefaultConfig(__dirname);
+let config = getDefaultConfig(__dirname);
+
+// Apply DataDog config if available
+try {
+  const { getDefaultConfig: getDatadogConfig } = require('@datadog/mobile-react-native/metro');
+  config = getDatadogConfig(config);
+} catch (error) {
+  console.log('DataDog metro config not applied (optional)');
+}
 
 // Enable web support
 config.resolver.platforms = ['ios', 'android', 'native', 'web'];
