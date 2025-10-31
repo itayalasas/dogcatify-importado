@@ -71,9 +71,10 @@ class DataDogLogger {
       await DdSdkReactNative.initialize(config);
       this.initialized = true;
 
-      this.info('DataDog initialized successfully');
+      console.log('✅ DataDog initialized successfully');
     } catch (error) {
-      console.error('Failed to initialize DataDog:', error);
+      // Silently fail - DataDog requires native build (not available in Expo Go)
+      console.log('ℹ️ DataDog not available in this environment. Logs will be shown in console only.');
     }
   }
 

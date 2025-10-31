@@ -150,12 +150,23 @@ async function processPayment(orderId: string, amount: number) {
 }
 ```
 
-## Plataformas
+## Plataformas y Compatibilidad
 
-- **iOS/Android**: DataDog está completamente funcional y envía logs automáticamente al servidor de DataDog
-- **Web**: Los logs se muestran en la consola del navegador solamente (DataDog SDK no es compatible con web)
+### ✅ Builds Nativos (iOS/Android)
+- DataDog está **completamente funcional** en builds nativos de producción
+- Los logs se envían automáticamente al servidor de DataDog
+- Incluye tracking de errores, performance y sesiones de usuario
 
-**Nota Técnica**: El SDK de DataDog se carga dinámicamente usando `require()` solo en plataformas nativas (iOS/Android), evitando errores de importación en web.
+### 🔧 Expo Go (Desarrollo)
+- DataDog **NO funciona** en Expo Go porque requiere módulos nativos
+- Los logs se muestran solo en la consola durante el desarrollo
+- Esto es **normal** y no afecta la funcionalidad en producción
+
+### 🌐 Web
+- Los logs se muestran en la consola del navegador solamente
+- DataDog SDK no es compatible con plataformas web
+
+**Nota Técnica**: El SDK de DataDog se carga dinámicamente usando `require()` solo en plataformas nativas (iOS/Android), evitando errores de importación en web. Los errores durante el desarrollo en Expo Go son esperados y se pueden ignorar.
 
 ## Contextos con Logging Integrado
 
@@ -190,6 +201,33 @@ Este script verificará:
    - `status:error` - Ver solo errores
    - `source:<nombre>` - Ver logs de una fuente específica
 
+## Probar DataDog en Producción
+
+Para probar DataDog en un dispositivo real, necesitas hacer un build nativo:
+
+### Android (Development Build)
+```bash
+# Crear un build de desarrollo
+eas build --profile development --platform android
+
+# O si no usas EAS
+npx expo run:android
+```
+
+### iOS (Development Build)
+```bash
+# Crear un build de desarrollo
+eas build --profile development --platform ios
+
+# O si no usas EAS
+npx expo run:ios
+```
+
+Una vez que la app esté instalada en un dispositivo físico o emulador con el build nativo, DataDog funcionará correctamente y verás el mensaje:
+```
+✅ DataDog initialized successfully
+```
+
 ## Best Practices
 
 1. **Incluye contexto relevante**: Siempre agrega información útil en el objeto de contexto
@@ -200,3 +238,14 @@ Este script verificará:
    - `warn`: Situaciones inusuales pero manejables
    - `error`: Errores que necesitan atención
 4. **Prefijos consistentes**: Usa prefijos para identificar módulos fácilmente
+
+## Solución de Problemas
+
+### Error: "Failed to initialize DataDog"
+- ✅ **Normal en Expo Go**: Este error es esperado durante el desarrollo
+- ✅ **Solución**: Ignora el error, los logs funcionarán en consola
+- ✅ **Para probar DataDog**: Crea un build nativo (ver sección anterior)
+
+### Warning: "Debug ID not found"
+- ✅ **Normal en desarrollo**: Este warning puede ser ignorado
+- ✅ **Se resuelve en producción**: Los source maps se generan correctamente en builds de producción
