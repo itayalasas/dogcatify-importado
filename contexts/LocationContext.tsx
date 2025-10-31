@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as Location from 'expo-location';
 import { Alert, Platform } from 'react-native';
+import { logger } from '../utils/datadogLogger';
 
 interface LocationContextType {
   location: Location.LocationObject | null;
@@ -29,9 +30,12 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const checkLocationPermission = async () => {
     try {
+      logger.debug('Checking location permission', { platform: Platform.OS });
+
       if (Platform.OS === 'web') {
         // En web, usar la API de geolocalización del navegador
         if ('geolocation' in navigator) {
+          logger.info('Location permission granted (web)');
           setHasLocationPermission(true);
         }
         return;
@@ -39,13 +43,14 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       const { status } = await Location.getForegroundPermissionsAsync();
       setHasLocationPermission(status === 'granted');
-      
+      logger.info('Location permission status checked', { status, platform: Platform.OS });
+
       if (status === 'granted') {
         // Si ya tiene permisos, obtener ubicación actual
         getCurrentLocation();
       }
     } catch (error) {
-      console.error('Error checking location permission:', error);
+      logger.error('Error checking location permission', error as Error, { platform: Platform.OS });
       setHasLocationPermission(false);
     }
   };
@@ -75,7 +80,7 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 resolve(true);
               },
               (error) => {
-                console.error('Error getting web location:', error);
+                logger.error('Error getting web location', new Error(error.message), { code: error.code });
                 setHasLocationPermission(false);
                 resolve(false);
               }
@@ -86,17 +91,20 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         });
       }
 
+      logger.info('Requesting location permission', { platform: Platform.OS });
       const { status } = await Location.requestForegroundPermissionsAsync();
       const granted = status === 'granted';
       setHasLocationPermission(granted);
-      
+
+      logger.info('Location permission request result', { status, granted, platform: Platform.OS });
+
       if (granted) {
         await getCurrentLocation();
       }
-      
+
       return granted;
     } catch (error) {
-      console.error('Error requesting location permission:', error);
+      logger.error('Error requesting location permission', error as Error, { platform: Platform.OS });
       setHasLocationPermission(false);
       return false;
     }
@@ -126,7 +134,7 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 resolve(webLocation);
               },
               (error) => {
-                console.error('Error getting web location:', error);
+                logger.error('Error getting web location', new Error(error.message), { code: error.code });
                 resolve(null);
               }
             );
@@ -137,18 +145,26 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
 
       if (!hasLocationPermission) {
-        console.log('No location permission granted');
+        logger.warn('Cannot get location - permission not granted');
         return null;
       }
 
+      logger.debug('Getting current location', { platform: Platform.OS });
       const currentLocation = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
-      
+
+      logger.info('Location obtained successfully', {
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+        accuracy: currentLocation.coords.accuracy,
+        platform: Platform.OS
+      });
+
       setLocation(currentLocation);
       return currentLocation;
     } catch (error) {
-      console.error('Error getting current location:', error);
+      logger.error('Error getting current location', error as Error, { platform: Platform.OS });
       return null;
     }
   };

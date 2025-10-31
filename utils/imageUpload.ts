@@ -4,6 +4,7 @@
  */
 
 import { supabaseClient } from '../lib/supabase';
+import { logger } from './datadogLogger';
 
 export interface UploadImageOptions {
   bucket?: string;
@@ -25,11 +26,11 @@ export const uploadImage = async (
   options: UploadImageOptions = {}
 ): Promise<string> => {
   try {
-    console.log(`Uploading image to path: ${path}`);
-    console.log(`Image URI: ${imageUri}`);
+    logger.info('Starting image upload', { path, bucket: options.bucket || 'dogcatify' });
 
     // Validate image URI
     if (!imageUri || imageUri.trim() === '') {
+      logger.error('Invalid image URI', new Error('URI de imagen inválida'), { path });
       throw new Error('URI de imagen inválida');
     }
 
@@ -40,14 +41,16 @@ export const uploadImage = async (
     // Fetch the image and convert to blob
     const response = await fetch(imageUri);
     if (!response.ok) {
+      logger.error('Failed to fetch image', new Error(`HTTP ${response.status}`), { path, imageUri });
       throw new Error(`Failed to fetch image: ${response.status}`);
     }
 
     const blob = await response.blob();
-    console.log(`Image blob size: ${blob.size} bytes, type: ${blob.type}`);
+    logger.debug('Image fetched successfully', { path, blobSize: blob.size, blobType: blob.type });
 
     // Verify blob has content
     if (blob.size === 0) {
+      logger.error('Empty image blob', new Error('La imagen está vacía'), { path });
       throw new Error('La imagen está vacía');
     }
 
@@ -65,7 +68,7 @@ export const uploadImage = async (
       reader.readAsArrayBuffer(blob);
     });
 
-    console.log(`ArrayBuffer size: ${arrayBuffer.byteLength} bytes`);
+    logger.debug('ArrayBuffer created', { path, size: arrayBuffer.byteLength });
 
     // Upload ArrayBuffer to Supabase storage
     const { data, error } = await supabaseClient.storage
@@ -77,12 +80,11 @@ export const uploadImage = async (
       });
 
     if (error) {
-      console.error('Supabase storage error:', error);
-      console.error('Error details:', JSON.stringify(error));
+      logger.error('Supabase storage upload error', error as Error, { path, bucket: options.bucket || 'dogcatify' });
       throw error;
     }
 
-    console.log('Upload successful, data:', data);
+    logger.info('Image uploaded successfully', { path, bucket: options.bucket || 'dogcatify' });
 
     // Get public URL
     const { data: urlData } = supabaseClient.storage
@@ -90,17 +92,18 @@ export const uploadImage = async (
       .getPublicUrl(path);
 
     const publicUrl = urlData.publicUrl;
-    console.log(`Generated public URL: ${publicUrl}`);
+    logger.debug('Generated public URL', { path, publicUrl });
 
     // Validate URL
     if (!publicUrl || publicUrl.trim() === '') {
+      logger.error('Failed to generate public URL', new Error('No se pudo generar la URL pública'), { path });
       throw new Error('No se pudo generar la URL pública');
     }
 
+    logger.info('Image upload completed', { path, publicUrl });
     return publicUrl;
   } catch (error) {
-    console.error('Error in uploadImage:', error);
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    logger.error('Error in uploadImage', error as Error, { path, imageUri });
     throw error;
   }
 };

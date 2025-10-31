@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabaseClient } from '../lib/supabase';
 import { useAuth } from './AuthContext';
+import { logger } from '../utils/datadogLogger';
 
 export interface CartItem {
   id: string;
@@ -59,21 +60,24 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadCart = async () => {
     if (!currentUser) return;
-    
+
     try {
+      logger.debug('Loading cart from Supabase', { userId: currentUser.id });
+
       // Check if user has a cart
       const { data, error } = await supabaseClient
         .from('user_carts')
         .select('*')
         .eq('user_id', currentUser.id)
         .single();
-      
+
       if (error && error.code !== 'PGRST116') {
-        console.error('Error loading cart:', error);
+        logger.error('Error loading cart', error as Error, { userId: currentUser.id });
         return;
       }
-      
+
       if (data) {
+        logger.info('Cart loaded successfully', { userId: currentUser.id, itemCount: data.items?.length || 0 });
         setCart(data.items || []);
       } else {
         // Create a new cart for the user
@@ -83,18 +87,21 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             user_id: currentUser.id,
             items: [],
           });
-        
+
+        logger.info('New cart created', { userId: currentUser.id });
         setCart([]);
       }
     } catch (error) {
-      console.error('Error loading cart from Supabase:', error);
+      logger.error('Error loading cart from Supabase', error as Error, { userId: currentUser.id });
     }
   };
 
   const saveCart = async () => {
     if (!currentUser) return;
-    
+
     try {
+      logger.debug('Saving cart to Supabase', { userId: currentUser.id, itemCount: cart.length });
+
       const { error } = await supabaseClient
         .from('user_carts')
         .upsert({
@@ -102,16 +109,24 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           items: cart,
           updated_at: new Date(),
         });
-      
+
       if (error) {
-        console.error('Error saving cart to Supabase:', error);
+        logger.error('Error saving cart to Supabase', error as Error, { userId: currentUser.id });
       }
     } catch (error) {
-      console.error('Error saving cart to Supabase:', error);
+      logger.error('Error saving cart to Supabase', error as Error, { userId: currentUser.id });
     }
   };
 
   const addToCart = (item: CartItem, maxStock?: number) => {
+    logger.info('Adding item to cart', {
+      itemId: item.id,
+      itemName: item.name,
+      quantity: item.quantity,
+      price: item.price,
+      partnerId: item.partnerId
+    });
+
     setCart(prevCart => {
       // Check if item already exists in cart
       const existingItemIndex = prevCart.findIndex(cartItem => cartItem.id === item.id);
@@ -123,27 +138,37 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Si hay un límite de stock, validarlo
         if (maxStock !== undefined && newQuantity > maxStock) {
-          console.warn(`Cannot add more items. Max stock: ${maxStock}, current: ${updatedCart[existingItemIndex].quantity}`);
+          logger.warn('Cannot add item - exceeds stock', {
+            itemId: item.id,
+            maxStock,
+            currentQuantity: updatedCart[existingItemIndex].quantity,
+            requestedQuantity: newQuantity
+          });
           return prevCart; // No agregar si excede el stock
         }
 
+        logger.debug('Updated cart item quantity', { itemId: item.id, newQuantity });
         updatedCart[existingItemIndex].quantity = newQuantity;
         return updatedCart;
       } else {
         // Add new item if it doesn't exist
+        logger.debug('Added new item to cart', { itemId: item.id });
         return [...prevCart, item];
       }
     });
   };
 
   const removeFromCart = (itemId: string) => {
+    logger.info('Removing item from cart', { itemId });
     setCart(prevCart => prevCart.filter(item => item.id !== itemId));
   };
 
   const updateQuantity = (itemId: string, quantity: number, maxStock?: number) => {
+    logger.debug('Updating cart item quantity', { itemId, quantity, maxStock });
+
     // Validar que la cantidad no exceda el stock
     if (maxStock !== undefined && quantity > maxStock) {
-      console.warn(`Cannot update quantity. Max stock: ${maxStock}, requested: ${quantity}`);
+      logger.warn('Cannot update quantity - exceeds stock', { itemId, maxStock, requestedQuantity: quantity });
       return;
     }
 
@@ -155,8 +180,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const clearCart = async () => {
+    logger.info('Clearing cart', { userId: currentUser?.id, previousItemCount: cart.length });
     setCart([]);
-    
+
     if (currentUser) {
       try {
         const { error } = await supabaseClient
@@ -166,12 +192,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             updated_at: new Date(),
           })
           .eq('user_id', currentUser.id);
-        
+
         if (error) {
-          console.error('Error clearing cart in Supabase:', error);
+          logger.error('Error clearing cart in Supabase', error as Error, { userId: currentUser.id });
         }
       } catch (error) {
-        console.error('Error clearing cart in Supabase:', error);
+        logger.error('Error clearing cart in Supabase', error as Error, { userId: currentUser.id });
       }
     }
   };
