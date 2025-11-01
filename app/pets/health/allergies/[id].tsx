@@ -277,12 +277,6 @@ export default function AddAllergy() {
     }
   };
 
-  const handleBackNavigation = () => {
-    router.push({
-      pathname: `/pets/${id}`,
-      params: { activeTab: 'health' }
-    });
-  };
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
