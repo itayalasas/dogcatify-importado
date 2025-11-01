@@ -486,8 +486,10 @@ export default function SharePetScreen() {
             loading={loading}
             style={styles.shareButton}
           >
-            <UserPlus size={20} color="#FFFFFF" />
-            <Text style={styles.shareButtonText}>Enviar invitación</Text>
+            <View style={styles.shareButtonContent}>
+              <UserPlus size={20} color="#FFFFFF" />
+              <Text style={styles.shareButtonText}>Enviar invitación</Text>
+            </View>
           </Button>
         </Card>
 
@@ -820,6 +822,8 @@ const styles = StyleSheet.create({
   },
   shareButton: {
     marginTop: 8,
+  },
+  shareButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

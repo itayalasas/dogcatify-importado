@@ -1,14 +1,15 @@
-import React from 'react';
+import React, { ReactNode } from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle } from 'react-native';
 
 interface ButtonProps {
-  title: string;
+  title?: string;
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'outline';
   size?: 'small' | 'medium' | 'large';
   disabled?: boolean;
   loading?: boolean;
   style?: ViewStyle;
+  children?: ReactNode;
 }
 
 export const Button: React.FC<ButtonProps> = ({
@@ -19,6 +20,7 @@ export const Button: React.FC<ButtonProps> = ({
   disabled = false,
   loading = false,
   style,
+  children,
 }) => {
   const buttonStyle = [
     styles.button,
@@ -43,6 +45,8 @@ export const Button: React.FC<ButtonProps> = ({
     >
       {loading ? (
         <ActivityIndicator color={variant === 'primary' ? '#FFFFFF' : '#3B82F6'} />
+      ) : children ? (
+        children
       ) : (
         <Text style={textStyle}>{title}</Text>
       )}
