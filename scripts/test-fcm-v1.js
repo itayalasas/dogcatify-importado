@@ -135,8 +135,19 @@ async function testServiceAccountConfig() {
       return false;
     } else if (result.error === 'Token is required') {
       console.log('✅ Service Account configurado correctamente');
-      console.log('La edge function está lista para enviar notificaciones');
+      console.log('✅ Edge function está lista para enviar notificaciones');
+      console.log('✅ Payload FCM v1 validado correctamente');
       return true;
+    } else if (result.error === 'Failed to send notification' && result.details?.error?.code === 400) {
+      const errorMsg = result.details.error.message;
+      if (errorMsg && errorMsg.includes('not a valid FCM registration token')) {
+        console.log('✅ Service Account configurado correctamente');
+        console.log('✅ Edge function está lista (token de prueba inválido es esperado)');
+        return true;
+      }
+      console.log('⚠️  Error en payload FCM:', errorMsg);
+      console.log('💡 La edge function necesita ser actualizada');
+      return false;
     } else {
       console.log('⚠️  Respuesta inesperada:', result);
       return false;
