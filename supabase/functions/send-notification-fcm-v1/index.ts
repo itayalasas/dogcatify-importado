@@ -31,7 +31,6 @@ interface FCMMessage {
       notification: {
         sound: string;
         channelId: string;
-        priority: string;
         defaultSound: boolean;
         defaultVibrateTimings: boolean;
       };
@@ -119,7 +118,6 @@ Deno.serve(async (req: Request) => {
           notification: {
             sound: payload.sound || 'default',
             channelId: payload.channelId || 'default',
-            priority: 'high',
             defaultSound: true,
             defaultVibrateTimings: true,
           },
