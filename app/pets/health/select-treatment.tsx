@@ -1,17 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Search, Pill } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { supabaseClient } from '../../../lib/supabase';
 
 export default function SelectTreatment() {
-  const { petId, conditionId, returnPath, currentValue, currentCondition, currentVeterinarian, currentNotes } = useLocalSearchParams<{
+  const { petId, conditionId, species, illnessName, ageInMonths, weight, returnPath, currentValue, currentCondition, currentSelectedCondition, currentVeterinarian, currentNotes } = useLocalSearchParams<{
     petId: string;
     conditionId?: string;
+    species?: string;
+    illnessName?: string;
+    ageInMonths?: string;
+    weight?: string;
     returnPath: string;
     currentValue?: string;
     currentCondition?: string;
+    currentSelectedCondition?: string;
     currentVeterinarian?: string;
     currentNotes?: string;
   }>();
@@ -31,21 +36,93 @@ export default function SelectTreatment() {
 
   const fetchTreatments = async () => {
     try {
-      let query = supabaseClient
-        .from('medical_treatments')
-        .select('*')
-        .eq('is_active', true);
+      const illness = illnessName || currentCondition;
+      const petSpecies = species || 'dog';
+      const petAge = ageInMonths ? parseInt(ageInMonths) : undefined;
+      const petWeight = weight ? parseFloat(weight) : undefined;
 
-      // If conditionId is provided, filter by condition
-      if (conditionId) {
-        query = query.eq('condition_id', conditionId);
+      if (illness && petSpecies && petAge) {
+        const cacheKey = `${petSpecies}_${illness}_${petAge}_${petWeight || 'any'}`;
+        console.log('Checking AI cache for treatments:', cacheKey);
+
+        const { data: cachedData, error: cacheError } = await supabaseClient
+          .from('treatments_ai_cache')
+          .select('*')
+          .eq('species', petSpecies)
+          .eq('illness_name', illness)
+          .eq('age_in_months', petAge)
+          .eq('cache_key', cacheKey)
+          .gt('expires_at', new Date().toISOString())
+          .maybeSingle();
+
+        if (cachedData && cachedData.treatments) {
+          console.log('Using cached treatment data');
+          const cachedTreatments = typeof cachedData.treatments === 'string'
+            ? JSON.parse(cachedData.treatments)
+            : cachedData.treatments;
+          setTreatments(cachedTreatments);
+          setFilteredTreatments(cachedTreatments);
+          setLoading(false);
+          return;
+        }
+
+        console.log('No cache found, generating with AI...');
+        const supabaseUrl = Deno.env ? Deno.env.get('SUPABASE_URL') : process.env.EXPO_PUBLIC_SUPABASE_URL;
+        const supabaseAnonKey = Deno.env ? Deno.env.get('SUPABASE_ANON_KEY') : process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+        const response = await fetch(
+          `${supabaseUrl}/functions/v1/generate-treatment-recommendations`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseAnonKey}`,
+            },
+            body: JSON.stringify({
+              species: petSpecies,
+              illnessName: illness,
+              ageInMonths: petAge,
+              weight: petWeight
+            })
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error('Error generating treatment recommendations');
+        }
+
+        const { treatments: aiTreatments } = await response.json();
+        console.log(`Generated ${aiTreatments.length} treatment recommendations`);
+
+        await supabaseClient
+          .from('treatments_ai_cache')
+          .insert({
+            species: petSpecies,
+            illness_name: illness,
+            age_in_months: petAge,
+            weight: petWeight,
+            treatments: aiTreatments,
+            cache_key: cacheKey
+          });
+
+        setTreatments(aiTreatments);
+        setFilteredTreatments(aiTreatments);
+      } else {
+        let query = supabaseClient
+          .from('medical_treatments')
+          .select('*')
+          .eq('is_active', true);
+
+        if (conditionId) {
+          query = query.eq('condition_id', conditionId);
+        }
+
+        const { data, error } = await query.order('name', { ascending: true });
+
+        if (error) throw error;
+        setTreatments(data || []);
+        setFilteredTreatments(data || []);
       }
-
-      const { data, error } = await query.order('name', { ascending: true });
-
-      if (error) throw error;
-      setTreatments(data || []);
-      setFilteredTreatments(data || []);
     } catch (error) {
       console.error('Error fetching treatments:', error);
     } finally {
@@ -67,48 +144,68 @@ export default function SelectTreatment() {
   };
 
   const handleSelectTreatment = (treatment: any) => {
-    // Navigate back with selected treatment
     console.log('Navigating back with treatment:', treatment.name);
-    router.push({
+    router.replace({
       pathname: returnPath,
       params: {
         selectedTreatment: JSON.stringify(treatment),
-        // Preserve other form values from navigation params
-        ...(currentCondition && { selectedCondition: JSON.stringify({ name: currentCondition }) }),
-        ...(currentVeterinarian && { selectedVeterinarian: JSON.stringify({ name: currentVeterinarian }) }),
-        ...(currentNotes && { currentNotes: currentNotes })
+        ...(currentSelectedCondition && { currentSelectedCondition }),
+        ...(currentCondition && { currentCondition }),
+        ...(currentVeterinarian && { currentVeterinarian }),
+        ...(currentNotes && { currentNotes })
       }
     });
   };
 
   const getTypeIcon = (type: string) => {
+    const normalizedType = type?.toLowerCase() || 'other';
     const icons: Record<string, string> = {
+      medicamento: '💊',
       medication: '💊',
+      suplemento: '🧪',
+      supplement: '🧪',
+      terapia: '🏥',
       therapy: '🏥',
+      procedimiento: '🔬',
+      procedure: '🔬',
+      cirugía: '🔪',
       surgery: '🔪',
+      'cuidado en casa': '🏠',
+      'home care': '🏠',
+      dieta: '🥗',
       diet: '🥗',
       lifestyle: '🏃',
-      supplement: '🧪',
       topical: '🧴',
       injection: '💉',
       other: '📋'
     };
-    return icons[type] || '📋';
+    return icons[normalizedType] || '💊';
   };
 
   const getTypeName = (type: string) => {
+    if (!type) return 'Sin tipo';
+    const normalizedType = type.toLowerCase();
     const names: Record<string, string> = {
+      medicamento: 'Medicamento',
       medication: 'Medicamento',
+      suplemento: 'Suplemento',
+      supplement: 'Suplemento',
+      terapia: 'Terapia',
       therapy: 'Terapia',
+      procedimiento: 'Procedimiento',
+      procedure: 'Procedimiento',
+      cirugía: 'Cirugía',
       surgery: 'Cirugía',
+      'cuidado en casa': 'Cuidado en casa',
+      'home care': 'Cuidado en casa',
+      dieta: 'Dieta',
       diet: 'Dieta',
       lifestyle: 'Estilo de vida',
-      supplement: 'Suplemento',
       topical: 'Tópico',
       injection: 'Inyección',
       other: 'Otro'
     };
-    return names[type] || 'Sin tipo';
+    return names[normalizedType] || type;
   };
 
   return (
@@ -137,7 +234,15 @@ export default function SelectTreatment() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Cargando tratamientos...</Text>
+            <ActivityIndicator size="large" color="#10B981" />
+            <Text style={styles.loadingText}>
+              {illnessName ? 'Generando recomendaciones con IA...' : 'Cargando tratamientos...'}
+            </Text>
+            {illnessName && (
+              <Text style={styles.loadingSubtext}>
+                Analizando tratamientos para {illnessName}
+              </Text>
+            )}
           </View>
         ) : filteredTreatments.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -149,8 +254,8 @@ export default function SelectTreatment() {
           </View>
         ) : (
           <View style={styles.treatmentsList}>
-            {filteredTreatments.map((treatment) => (
-              <Card key={treatment.id} style={styles.treatmentCard}>
+            {filteredTreatments.map((treatment, index) => (
+              <Card key={treatment.id || `treatment-${index}`} style={styles.treatmentCard}>
                 <TouchableOpacity
                   style={styles.treatmentContent}
                   onPress={() => handleSelectTreatment(treatment)}
@@ -174,12 +279,12 @@ export default function SelectTreatment() {
                   )}
 
                   <View style={styles.treatmentDetails}>
-                    {treatment.is_prescription_required && (
+                    {(treatment.is_prescription_required || treatment.requires_prescription) && (
                       <View style={styles.prescriptionBadge}>
                         <Text style={styles.prescriptionText}>📋 Requiere receta</Text>
                       </View>
                     )}
-                    
+
                     {treatment.cost_range && (
                       <View style={styles.costBadge}>
                         <Text style={styles.costText}>💰 {treatment.cost_range}</Text>
@@ -187,10 +292,17 @@ export default function SelectTreatment() {
                     )}
                   </View>
 
-                  {treatment.dosage_info && (
+                  {(treatment.dosage_info || treatment.dosage) && (
                     <View style={styles.dosageContainer}>
                       <Text style={styles.dosageTitle}>Dosificación:</Text>
-                      <Text style={styles.dosageText}>{treatment.dosage_info}</Text>
+                      <Text style={styles.dosageText}>{treatment.dosage_info || treatment.dosage}</Text>
+                    </View>
+                  )}
+
+                  {treatment.duration && (
+                    <View style={styles.durationContainer}>
+                      <Text style={styles.durationTitle}>Duración:</Text>
+                      <Text style={styles.durationText}>{treatment.duration}</Text>
                     </View>
                   )}
 
@@ -276,6 +388,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
+    marginTop: 16,
+  },
+  loadingSubtext: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    marginTop: 8,
+    textAlign: 'center',
   },
   emptyContainer: {
     flex: 1,
@@ -383,6 +503,23 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   dosageText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  durationContainer: {
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  durationTitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  durationText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',

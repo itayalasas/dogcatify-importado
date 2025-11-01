@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Search, Heart } from 'lucide-react-native';
+import { ArrowLeft, Search, Heart, TriangleAlert as AlertTriangle } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { supabaseClient } from '../../../lib/supabase';
 
 export default function SelectCondition() {
-  const { petId, species, returnPath, currentValue, currentTreatment, currentVeterinarian, currentNotes } = useLocalSearchParams<{
+  const { petId, species, breed, ageInMonths, weight, returnPath, currentValue, currentTreatment, currentVeterinarian, currentNotes } = useLocalSearchParams<{
     petId: string;
     species: string;
+    breed?: string;
+    ageInMonths?: string;
+    weight?: string;
     returnPath: string;
     currentValue?: string;
     currentTreatment?: string;
@@ -31,16 +34,88 @@ export default function SelectCondition() {
 
   const fetchConditions = async () => {
     try {
-      const { data, error } = await supabaseClient
-        .from('medical_conditions')
-        .select('*')
-        .eq('is_active', true)
-        .in('species', [species, 'both'])
-        .order('name', { ascending: true });
+      const petBreed = breed || '';
+      const petAge = ageInMonths ? parseInt(ageInMonths) : undefined;
+      const petWeight = weight ? parseFloat(weight) : undefined;
 
-      if (error) throw error;
-      setConditions(data || []);
-      setFilteredConditions(data || []);
+      if (petBreed && petAge) {
+        const cacheKey = `${species}_${petBreed}_${petAge}_${petWeight || 'any'}`;
+        console.log('Checking AI cache for illnesses:', cacheKey);
+
+        const { data: cachedData, error: cacheError } = await supabaseClient
+          .from('illnesses_ai_cache')
+          .select('*')
+          .eq('species', species)
+          .eq('breed', petBreed)
+          .eq('age_in_months', petAge)
+          .eq('cache_key', cacheKey)
+          .gt('expires_at', new Date().toISOString())
+          .maybeSingle();
+
+        if (cachedData && cachedData.illnesses) {
+          console.log('Using cached illness data');
+          const illnesses = typeof cachedData.illnesses === 'string'
+            ? JSON.parse(cachedData.illnesses)
+            : cachedData.illnesses;
+          setConditions(illnesses);
+          setFilteredConditions(illnesses);
+          setLoading(false);
+          return;
+        }
+
+        console.log('No cache found, generating with AI...');
+        const supabaseUrl = Deno.env ? Deno.env.get('SUPABASE_URL') : process.env.EXPO_PUBLIC_SUPABASE_URL;
+        const supabaseAnonKey = Deno.env ? Deno.env.get('SUPABASE_ANON_KEY') : process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+        const response = await fetch(
+          `${supabaseUrl}/functions/v1/generate-illness-recommendations`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseAnonKey}`,
+            },
+            body: JSON.stringify({
+              species,
+              breed: petBreed,
+              ageInMonths: petAge,
+              weight: petWeight
+            })
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error('Error generating illness recommendations');
+        }
+
+        const { illnesses } = await response.json();
+        console.log(`Generated ${illnesses.length} illness recommendations`);
+
+        await supabaseClient
+          .from('illnesses_ai_cache')
+          .insert({
+            species,
+            breed: petBreed,
+            age_in_months: petAge,
+            weight: petWeight,
+            illnesses: illnesses,
+            cache_key: cacheKey
+          });
+
+        setConditions(illnesses);
+        setFilteredConditions(illnesses);
+      } else {
+        const { data, error } = await supabaseClient
+          .from('medical_conditions')
+          .select('*')
+          .eq('is_active', true)
+          .in('species', [species, 'both'])
+          .order('name', { ascending: true });
+
+        if (error) throw error;
+        setConditions(data || []);
+        setFilteredConditions(data || []);
+      }
     } catch (error) {
       console.error('Error fetching conditions:', error);
     } finally {
@@ -62,22 +137,44 @@ export default function SelectCondition() {
   };
 
   const handleSelectCondition = (condition: any) => {
-    // Navigate back with selected condition
     console.log('Navigating back with condition:', condition.name);
-    router.push({
+    router.replace({
       pathname: returnPath,
       params: {
         selectedCondition: JSON.stringify(condition),
-        // Preserve other form values from navigation params
-        ...(currentTreatment && { selectedTreatment: JSON.stringify({ name: currentTreatment }) }),
-        ...(currentVeterinarian && { selectedVeterinarian: JSON.stringify({ name: currentVeterinarian }) }),
-        ...(currentNotes && { currentNotes: currentNotes })
+        ...(currentTreatment && { currentTreatment }),
+        ...(currentVeterinarian && { currentVeterinarian }),
+        ...(currentNotes && { currentNotes })
       }
     });
   };
 
   const getCategoryIcon = (category: string) => {
+    const normalizedCategory = category?.toLowerCase() || 'other';
     const icons: Record<string, string> = {
+      infecciosa: '🦠',
+      parasitaria: '🪱',
+      genética: '🧬',
+      comportamental: '🧠',
+      digestiva: '🍽️',
+      respiratoria: '🫁',
+      dermatológica: '🩹',
+      ortopédica: '🦴',
+      neurológica: '🧠',
+      cardíaca: '❤️',
+      'renal/urinaria': '💧',
+      reproductiva: '🐣',
+      endocrina: '⚖️',
+      oncológica: '🎗️',
+      ocular: '👁️',
+      auditiva: '👂',
+      dental: '🦷',
+      autoinmune: '��️',
+      congénita: '👶',
+      metabólica: '🔄',
+      traumática: '🤕',
+      nutricional: '🥗',
+      tóxica: '☠️',
       infectious: '🦠',
       parasitic: '🪱',
       genetic: '🧬',
@@ -94,11 +191,36 @@ export default function SelectCondition() {
       oncological: '🎗️',
       other: '📋'
     };
-    return icons[category] || '📋';
+    return icons[normalizedCategory] || '📋';
   };
 
   const getCategoryName = (category: string) => {
+    if (!category) return 'Sin categoría';
+    const normalizedCategory = category.toLowerCase();
     const names: Record<string, string> = {
+      infecciosa: 'Infecciosa',
+      parasitaria: 'Parasitaria',
+      genética: 'Genética',
+      comportamental: 'Comportamental',
+      digestiva: 'Digestiva',
+      respiratoria: 'Respiratoria',
+      dermatológica: 'Dermatológica',
+      ortopédica: 'Ortopédica',
+      neurológica: 'Neurológica',
+      cardíaca: 'Cardíaca',
+      'renal/urinaria': 'Renal/Urinaria',
+      reproductiva: 'Reproductiva',
+      endocrina: 'Endocrina',
+      oncológica: 'Oncológica',
+      ocular: 'Ocular',
+      auditiva: 'Auditiva',
+      dental: 'Dental',
+      autoinmune: 'Autoinmune',
+      congénita: 'Congénita',
+      metabólica: 'Metabólica',
+      traumática: 'Traumática',
+      nutricional: 'Nutricional',
+      tóxica: 'Tóxica',
       infectious: 'Infecciosa',
       parasitic: 'Parasitaria',
       genetic: 'Genética',
@@ -115,7 +237,7 @@ export default function SelectCondition() {
       oncological: 'Oncológica',
       other: 'Otra'
     };
-    return names[category] || 'Sin categoría';
+    return names[normalizedCategory] || category;
   };
 
   return (
@@ -146,7 +268,15 @@ export default function SelectCondition() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Cargando enfermedades...</Text>
+            <ActivityIndicator size="large" color="#10B981" />
+            <Text style={styles.loadingText}>
+              {breed ? 'Generando recomendaciones con IA...' : 'Cargando enfermedades...'}
+            </Text>
+            {breed && (
+              <Text style={styles.loadingSubtext}>
+                Analizando predisposiciones para {species === 'dog' ? 'perros' : 'gatos'} {breed}
+              </Text>
+            )}
           </View>
         ) : filteredConditions.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -158,8 +288,8 @@ export default function SelectCondition() {
           </View>
         ) : (
           <View style={styles.conditionsList}>
-            {filteredConditions.map((condition) => (
-              <Card key={condition.id} style={styles.conditionCard}>
+            {filteredConditions.map((condition, index) => (
+              <Card key={condition.id || `illness-${index}`} style={styles.conditionCard}>
                 <TouchableOpacity
                   style={styles.conditionContent}
                   onPress={() => handleSelectCondition(condition)}
@@ -183,12 +313,21 @@ export default function SelectCondition() {
                   )}
 
                   <View style={styles.conditionDetails}>
-                    {condition.is_chronic && (
-                      <View style={styles.chronicBadge}>
-                        <Text style={styles.chronicText}>⏰ Crónica</Text>
+                    {condition.severity && (
+                      <View style={[
+                        styles.severityBadge,
+                        condition.severity === 'high' && styles.severityHigh,
+                        condition.severity === 'medium' && styles.severityMedium,
+                        condition.severity === 'low' && styles.severityLow
+                      ]}>
+                        <Text style={styles.severityText}>
+                          {condition.severity === 'high' && '⚠️ Alta'}
+                          {condition.severity === 'medium' && '⚡ Media'}
+                          {condition.severity === 'low' && '✓ Baja'}
+                        </Text>
                       </View>
                     )}
-                    
+
                     {condition.is_contagious && (
                       <View style={styles.contagiousBadge}>
                         <Text style={styles.contagiousText}>🦠 Contagiosa</Text>
@@ -196,12 +335,12 @@ export default function SelectCondition() {
                     )}
                   </View>
 
-                  {condition.common_symptoms && condition.common_symptoms.length > 0 && (
+                  {(condition.symptoms || condition.common_symptoms) && (
                     <View style={styles.symptomsContainer}>
                       <Text style={styles.symptomsTitle}>Síntomas comunes:</Text>
                       <Text style={styles.symptomsText}>
-                        {condition.common_symptoms.slice(0, 3).join(', ')}
-                        {condition.common_symptoms.length > 3 && '...'}
+                        {(condition.symptoms || condition.common_symptoms).slice(0, 3).join(', ')}
+                        {(condition.symptoms || condition.common_symptoms).length > 3 && '...'}
                       </Text>
                     </View>
                   )}
@@ -278,6 +417,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
+    marginTop: 16,
+  },
+  loadingSubtext: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    marginTop: 8,
+    textAlign: 'center',
   },
   emptyContainer: {
     flex: 1,
@@ -366,6 +513,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
+  },
+  severityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  severityHigh: {
+    backgroundColor: '#FEE2E2',
+  },
+  severityMedium: {
+    backgroundColor: '#FEF3C7',
+  },
+  severityLow: {
+    backgroundColor: '#D1FAE5',
+  },
+  severityText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
   },
   contagiousText: {
     fontSize: 12,

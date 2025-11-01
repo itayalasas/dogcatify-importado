@@ -1,0 +1,151 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+};
+
+interface RequestBody {
+  species: 'dog' | 'cat';
+  breed: string;
+  ageInMonths: number;
+  weight?: number;
+}
+
+interface Illness {
+  name: string;
+  description: string;
+  category: string;
+  symptoms: string[];
+  severity: 'low' | 'medium' | 'high';
+  is_contagious: boolean;
+  affected_systems: string[];
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 200,
+      headers: corsHeaders,
+    });
+  }
+
+  try {
+    const openAIKey = Deno.env.get("OPENAI_API_KEY");
+    if (!openAIKey) {
+      throw new Error("OPENAI_API_KEY no configurada");
+    }
+
+    const body: RequestBody = await req.json();
+    const { species, breed, ageInMonths, weight } = body;
+
+    if (!species || !breed || ageInMonths === undefined) {
+      return new Response(
+        JSON.stringify({ error: "Faltan parámetros requeridos" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    console.log(`Generating illness recommendations for ${species} - ${breed}, age: ${ageInMonths} months, weight: ${weight || 'N/A'}`);
+
+    const speciesName = species === 'dog' ? 'perros' : 'gatos';
+    const ageYears = Math.floor(ageInMonths / 12);
+    const ageMonthsRemainder = ageInMonths % 12;
+    const ageDescription = ageYears > 0
+      ? `${ageYears} año${ageYears > 1 ? 's' : ''}${ageMonthsRemainder > 0 ? ` y ${ageMonthsRemainder} mes${ageMonthsRemainder > 1 ? 'es' : ''}` : ''}`
+      : `${ageInMonths} mes${ageInMonths > 1 ? 'es' : ''}`;
+
+    const weightInfo = weight ? ` y peso de ${weight}kg` : '';
+
+    const prompt = `Eres un veterinario experto. Genera una lista de 12-15 enfermedades comunes y relevantes para ${speciesName} de raza ${breed}, edad ${ageDescription}${weightInfo}.
+
+Para cada enfermedad proporciona:
+- name: nombre claro y profesional de la enfermedad
+- description: descripción breve de qué es la enfermedad (máximo 100 caracteres)
+- category: categoría (Parasitaria, Infecciosa, Dermatológica, Respiratoria, Digestiva, Renal/Urinaria, Cardíaca, Neurológica, Endocrina, Oncológica, Ortopédica, Ocular, Auditiva, Dental, Autoinmune, Congénita, Metabólica, Traumática, Nutricional, Tóxica)
+- symptoms: array de 3-5 síntomas principales
+- severity: gravedad (low, medium, high)
+- is_contagious: si es contagiosa entre animales (true/false)
+- affected_systems: sistemas afectados (array: respiratorio, digestivo, nervioso, cardiovascular, urinario, dermatológico, ocular, auditivo, dental, musculoesquelético, endocrino, inmunológico)
+
+Considera las predisposiciones específicas de la raza ${breed} y la edad ${ageDescription}.
+Incluye tanto enfermedades comunes como enfermedades específicas de la raza.
+
+Responde SOLO con un array JSON válido, sin texto adicional.`;
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${openAIKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "Eres un veterinario experto que genera listas de enfermedades en formato JSON."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 2500,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error("OpenAI API error:", errorData);
+      throw new Error(`OpenAI API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content;
+
+    if (!content) {
+      throw new Error("No se recibió respuesta de OpenAI");
+    }
+
+    let illnesses: Illness[];
+    try {
+      const jsonMatch = content.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) {
+        throw new Error("No se encontró JSON válido en la respuesta");
+      }
+      illnesses = JSON.parse(jsonMatch[0]);
+    } catch (parseError) {
+      console.error("Error parsing JSON:", parseError);
+      console.error("Content received:", content);
+      throw new Error("Error al parsear la respuesta de OpenAI");
+    }
+
+    console.log(`Successfully generated ${illnesses.length} illness recommendations`);
+
+    return new Response(
+      JSON.stringify({ illnesses }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+
+  } catch (error) {
+    console.error("Error:", error);
+    return new Response(
+      JSON.stringify({
+        error: error.message || "Error generando recomendaciones de enfermedades"
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  }
+});

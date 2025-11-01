@@ -16,7 +16,9 @@ export default function SelectVeterinarian() {
     currentVaccine,
     currentSelectedVaccine,
     currentApplicationDate,
-    currentSelectedDewormer
+    currentSelectedDewormer,
+    currentSelectedCondition,
+    currentSelectedTreatment
   } = useLocalSearchParams<{
     petId: string;
     returnPath: string;
@@ -28,6 +30,8 @@ export default function SelectVeterinarian() {
     currentSelectedVaccine?: string;
     currentApplicationDate?: string;
     currentSelectedDewormer?: string;
+    currentSelectedCondition?: string;
+    currentSelectedTreatment?: string;
   }>();
 
   const [veterinarians, setVeterinarians] = useState<any[]>([]);
@@ -80,19 +84,19 @@ export default function SelectVeterinarian() {
   };
 
   const handleSelectVeterinarian = (veterinarian: any) => {
-    // Navigate back with selected veterinarian
     console.log('Navigating back with veterinarian:', veterinarian.business_name);
     router.replace({
       pathname: returnPath,
       params: {
         selectedVeterinarian: JSON.stringify({ name: veterinarian.business_name }),
-        // Preserve other form values from navigation params
-        ...(currentCondition && { selectedCondition: JSON.stringify({ name: currentCondition }) }),
-        ...(currentTreatment && { selectedTreatment: JSON.stringify({ name: currentTreatment }) }),
+        ...(currentCondition && { currentCondition }),
+        ...(currentTreatment && { currentTreatment }),
         ...(currentVaccine && { selectedVaccine: currentSelectedVaccine || JSON.stringify({ name: currentVaccine }) }),
-        ...(currentNotes && { currentNotes: currentNotes }),
+        ...(currentNotes && { currentNotes }),
         ...(currentApplicationDate && { currentApplicationDate }),
-        ...(currentSelectedDewormer && { currentSelectedDewormer })
+        ...(currentSelectedDewormer && { currentSelectedDewormer }),
+        ...(currentSelectedCondition && { currentSelectedCondition }),
+        ...(currentSelectedTreatment && { currentSelectedTreatment })
       }
     });
   };
