@@ -18,7 +18,11 @@ export default function SelectVeterinarian() {
     currentApplicationDate,
     currentSelectedDewormer,
     currentSelectedCondition,
-    currentSelectedTreatment
+    currentSelectedTreatment,
+    currentType,
+    currentSymptoms,
+    currentSeverity,
+    currentDiagnosisDate
   } = useLocalSearchParams<{
     petId: string;
     returnPath: string;
@@ -32,6 +36,10 @@ export default function SelectVeterinarian() {
     currentSelectedDewormer?: string;
     currentSelectedCondition?: string;
     currentSelectedTreatment?: string;
+    currentType?: string;
+    currentSymptoms?: string;
+    currentSeverity?: string;
+    currentDiagnosisDate?: string;
   }>();
 
   const [veterinarians, setVeterinarians] = useState<any[]>([]);
@@ -96,7 +104,12 @@ export default function SelectVeterinarian() {
         ...(currentApplicationDate && { currentApplicationDate }),
         ...(currentSelectedDewormer && { currentSelectedDewormer }),
         ...(currentSelectedCondition && { currentSelectedCondition }),
-        ...(currentSelectedTreatment && { currentSelectedTreatment })
+        ...(currentSelectedTreatment && { currentSelectedTreatment }),
+        // Preserve allergy-specific fields
+        ...(currentType && { currentType }),
+        ...(currentSymptoms && { currentSymptoms }),
+        ...(currentSeverity && { currentSeverity }),
+        ...(currentDiagnosisDate && { currentDiagnosisDate })
       }
     });
   };

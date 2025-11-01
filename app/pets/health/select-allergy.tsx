@@ -206,6 +206,7 @@ export default function SelectAllergy() {
       pathname: returnPath,
       params: {
         selectedAllergy: JSON.stringify(allergy),
+        // Preserve all current values when returning
         ...(currentTreatment && { currentTreatment }),
         ...(currentVeterinarian && { currentVeterinarian }),
         ...(currentNotes && { currentNotes }),
