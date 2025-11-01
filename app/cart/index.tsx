@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Modal, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Modal, ActivityIndicator, Animated } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { ArrowLeft, ShoppingCart, Trash2, Plus, Minus, MapPin, ChevronDown, ChevronUp, CreditCard, X } from 'lucide-react-native';
@@ -22,6 +22,7 @@ export default function Cart() {
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState('Preparando tu pago con Mercado Pago');
+  const progressAnim = useRef(new Animated.Value(0)).current;
   const [partnerInfo, setPartnerInfo] = useState<{
     has_shipping: boolean;
     shipping_cost: number;
@@ -65,6 +66,20 @@ export default function Cart() {
       loadProductStocks();
     }
   }, [cart]);
+
+  // Animar barra de progreso cuando se activa el loading
+  useEffect(() => {
+    if (paymentLoading) {
+      progressAnim.setValue(0);
+      Animated.timing(progressAnim, {
+        toValue: 100,
+        duration: 3000,
+        useNativeDriver: false,
+      }).start();
+    } else {
+      progressAnim.setValue(0);
+    }
+  }, [paymentLoading]);
 
   // Recargar stocks y ocultar loader cada vez que la pantalla se enfoca (al volver desde Mercado Pago)
   useFocusEffect(
@@ -785,7 +800,7 @@ export default function Cart() {
         </View>
       </Modal>
 
-      {/* Payment Loading Overlay */}
+      {/* Payment Loading Overlay con Barra de Progreso */}
       {paymentLoading && (
         <Modal
           visible={paymentLoading}
@@ -794,11 +809,36 @@ export default function Cart() {
         >
           <View style={styles.paymentLoadingOverlay}>
             <View style={styles.paymentLoadingContent}>
-              <ActivityIndicator size="large" color="#00A650" />
+              {/* Logo de Mercado Pago */}
+              <View style={styles.mpLogoContainer}>
+                <Image
+                  source={require('@/assets/images/mercadopago.png')}
+                  style={styles.mpLoadingLogo}
+                  resizeMode="contain"
+                />
+              </View>
+
               <Text style={styles.paymentLoadingTitle}>Procesando pago...</Text>
               <Text style={styles.paymentLoadingSubtitle}>
                 {paymentMessage}
               </Text>
+
+              {/* Barra de progreso animada */}
+              <View style={styles.progressBarContainer}>
+                <Animated.View
+                  style={[
+                    styles.progressBarFill,
+                    {
+                      width: progressAnim.interpolate({
+                        inputRange: [0, 100],
+                        outputRange: ['0%', '100%'],
+                      }),
+                    },
+                  ]}
+                />
+              </View>
+
+              <Text style={styles.loadingHint}>Serás redirigido a Mercado Pago</Text>
             </View>
           </View>
         </Modal>
@@ -1224,30 +1264,62 @@ const styles = StyleSheet.create({
   },
   paymentLoadingContent: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 32,
+    borderRadius: 20,
+    padding: 40,
     alignItems: 'center',
-    maxWidth: 280,
+    width: 320,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  mpLogoContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#009EE3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  mpLoadingLogo: {
+    width: 50,
+    height: 50,
   },
   paymentLoadingTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
     color: '#1F2937',
-    marginTop: 16,
+    marginBottom: 8,
     textAlign: 'center',
   },
   paymentLoadingSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 8,
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#00A650',
+    marginBottom: 24,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 22,
+  },
+  progressBarContainer: {
+    width: '100%',
+    height: 6,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#00A650',
+    borderRadius: 3,
+  },
+  loadingHint: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    textAlign: 'center',
   },
   pickupNotice: {
     backgroundColor: '#DBEAFE',
