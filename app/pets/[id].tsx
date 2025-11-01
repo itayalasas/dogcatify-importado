@@ -10,12 +10,16 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 
 export default function PetDetail() {
-  const { id, refresh, activeTab: initialTab } = useLocalSearchParams<{ 
-    id: string; 
+  const { id, refresh, activeTab: initialTab, permissionLevel } = useLocalSearchParams<{
+    id: string;
     refresh?: string;
     activeTab?: string;
+    permissionLevel?: string;
   }>();
   const { currentUser } = useAuth();
+
+  // Determine if user has edit permissions
+  const canEdit = !permissionLevel || permissionLevel === 'edit' || permissionLevel === 'full';
   const [pet, setPet] = useState<any>(null);
   const [vaccines, setVaccines] = useState<any[]>([]);
   const [illnesses, setIllnesses] = useState<any[]>([]);
@@ -789,9 +793,11 @@ export default function PetDetail() {
             <Syringe size={20} color="#3B82F6" />
             <Text style={styles.healthTitle}>Vacunas</Text>
           </View>
-          <TouchableOpacity style={styles.addButton} onPress={handleAddVaccine}>
-            <Plus size={16} color="#FFFFFF" />
-          </TouchableOpacity>
+          {canEdit && (
+            <TouchableOpacity style={styles.addButton} onPress={handleAddVaccine}>
+              <Plus size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
         </View>
         
         {vaccines.length === 0 ? (
@@ -821,20 +827,22 @@ export default function PetDetail() {
                     </Text>
                   )}
                 </View>
-                <View style={styles.healthCardActions}>
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => handleEditVaccine(vaccine.id)}
-                  >
-                    <Edit size={18} color="#3B82F6" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.deleteButton]}
-                    onPress={() => handleDeleteVaccine(vaccine.id, vaccine.name)}
-                  >
-                    <Trash2 size={18} color="#EF4444" />
-                  </TouchableOpacity>
-                </View>
+                {canEdit && (
+                  <View style={styles.healthCardActions}>
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() => handleEditVaccine(vaccine.id)}
+                    >
+                      <Edit size={18} color="#3B82F6" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.deleteButton]}
+                      onPress={() => handleDeleteVaccine(vaccine.id, vaccine.name)}
+                    >
+                      <Trash2 size={18} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             </Card>
           ))
@@ -847,11 +855,13 @@ export default function PetDetail() {
             <Heart size={20} color="#EF4444" />
             <Text style={styles.healthTitle}>Enfermedades</Text>
           </View>
-          <TouchableOpacity style={styles.addButton} onPress={handleAddIllness}>
-            <Plus size={16} color="#FFFFFF" />
-          </TouchableOpacity>
+          {canEdit && (
+            <TouchableOpacity style={styles.addButton} onPress={handleAddIllness}>
+              <Plus size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
         </View>
-        
+
         {illnesses.length === 0 ? (
           <Text style={styles.emptyText}>No hay enfermedades registradas</Text>
         ) : (
@@ -891,35 +901,39 @@ export default function PetDetail() {
                     </Text>
                   )}
                 </View>
-                <View style={styles.healthCardActions}>
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => handleEditIllness(illness.id)}
-                  >
-                    <Edit size={18} color="#3B82F6" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.deleteButton]}
-                    onPress={() => handleDeleteIllness(illness.id, illness.name)}
-                  >
-                    <Trash2 size={18} color="#EF4444" />
-                  </TouchableOpacity>
-                </View>
+                {canEdit && (
+                  <View style={styles.healthCardActions}>
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() => handleEditIllness(illness.id)}
+                    >
+                      <Edit size={18} color="#3B82F6" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.deleteButton]}
+                      onPress={() => handleDeleteIllness(illness.id, illness.name)}
+                    >
+                      <Trash2 size={18} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             </Card>
           ))
         )}
       </View>
-      
+
       <View style={styles.healthSection}>
         <View style={styles.healthHeader}>
           <View style={styles.healthTitleContainer}>
             <AlertTriangle size={20} color="#F59E0B" />
             <Text style={styles.healthTitle}>Alergias</Text>
           </View>
-          <TouchableOpacity style={styles.addButton} onPress={handleAddAllergy}>
-            <Plus size={16} color="#FFFFFF" />
-          </TouchableOpacity>
+          {canEdit && (
+            <TouchableOpacity style={styles.addButton} onPress={handleAddAllergy}>
+              <Plus size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
         </View>
         
         {allergies.length === 0 ? (
@@ -951,20 +965,22 @@ export default function PetDetail() {
                     </Text>
                   )}
                 </View>
-                <View style={styles.healthCardActions}>
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => handleEditAllergy(allergy.id)}
-                  >
-                    <Edit size={18} color="#3B82F6" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.deleteButton]}
-                    onPress={() => handleDeleteAllergy(allergy.id, allergy.name)}
-                  >
-                    <Trash2 size={18} color="#EF4444" />
-                  </TouchableOpacity>
-                </View>
+                {canEdit && (
+                  <View style={styles.healthCardActions}>
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() => handleEditAllergy(allergy.id)}
+                    >
+                      <Edit size={18} color="#3B82F6" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.deleteButton]}
+                      onPress={() => handleDeleteAllergy(allergy.id, allergy.name)}
+                    >
+                      <Trash2 size={18} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             </Card>
           ))
@@ -977,11 +993,13 @@ export default function PetDetail() {
             <Pill size={20} color="#10B981" />
             <Text style={styles.healthTitle}>Desparasitaciones</Text>
           </View>
-          <TouchableOpacity style={styles.addButton} onPress={handleAddDeworming}>
-            <Plus size={16} color="#FFFFFF" />
-          </TouchableOpacity>
+          {canEdit && (
+            <TouchableOpacity style={styles.addButton} onPress={handleAddDeworming}>
+              <Plus size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
         </View>
-        
+
         {dewormings.length === 0 ? (
           <Text style={styles.emptyText}>No hay desparasitaciones registradas</Text>
         ) : (
@@ -1009,20 +1027,22 @@ export default function PetDetail() {
                     </Text>
                   )}
                 </View>
-                <View style={styles.healthCardActions}>
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => handleEditDeworming(deworming.id)}
-                  >
-                    <Edit size={18} color="#3B82F6" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.deleteButton]}
-                    onPress={() => handleDeleteDeworming(deworming.id, deworming.productName)}
-                  >
-                    <Trash2 size={18} color="#EF4444" />
-                  </TouchableOpacity>
-                </View>
+                {canEdit && (
+                  <View style={styles.healthCardActions}>
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() => handleEditDeworming(deworming.id)}
+                    >
+                      <Edit size={18} color="#3B82F6" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.deleteButton]}
+                      onPress={() => handleDeleteDeworming(deworming.id, deworming.productName)}
+                    >
+                      <Trash2 size={18} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             </Card>
           ))
@@ -1035,11 +1055,13 @@ export default function PetDetail() {
             <Scale size={20} color="#3B82F6" />
             <Text style={styles.healthTitle}>Seguimiento de Peso</Text>
           </View>
-          <TouchableOpacity style={styles.addButton} onPress={handleAddWeight}>
-            <Plus size={16} color="#FFFFFF" />
-          </TouchableOpacity>
+          {canEdit && (
+            <TouchableOpacity style={styles.addButton} onPress={handleAddWeight}>
+              <Plus size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
         </View>
-        
+
         {weightRecords.length === 0 ? (
           <Text style={styles.emptyText}>No hay registros de peso</Text>
         ) : (
@@ -1090,10 +1112,12 @@ export default function PetDetail() {
 
   const renderAlbumsTab = () => (
     <View style={styles.albumsContainer}>
-      <TouchableOpacity style={styles.addAlbumButton} onPress={handleAddPhoto}>
-        <Camera size={24} color="#3B82F6" />
-        <Text style={styles.addAlbumText}>Agregar Fotos</Text>
-      </TouchableOpacity>
+      {canEdit && (
+        <TouchableOpacity style={styles.addAlbumButton} onPress={handleAddPhoto}>
+          <Camera size={24} color="#3B82F6" />
+          <Text style={styles.addAlbumText}>Agregar Fotos</Text>
+        </TouchableOpacity>
+      )}
 
       {albums.length === 0 ? (
         <Text style={styles.emptyAlbumsText}>No hay álbumes creados</Text>

@@ -40,6 +40,9 @@ export interface Pet {
   personality: string[];
   medicalNotes?: string;
   createdAt: Date;
+  isShared?: boolean;
+  permissionLevel?: 'view' | 'edit' | 'full';
+  photo_url?: string;
 }
 
 export interface Post {

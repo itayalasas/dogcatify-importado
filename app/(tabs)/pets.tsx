@@ -86,6 +86,7 @@ export default function Pets() {
           .from('pet_shares')
           .select(`
             pet_id,
+            permission_level,
             pets!inner (
               id,
               name,
@@ -114,7 +115,10 @@ export default function Pets() {
           console.error('Error fetching shared pets:', sharedError);
         }
 
-        const sharedPets = sharedPetsData?.map(share => share.pets).filter(Boolean) || [];
+        const sharedPets = sharedPetsData?.map(share => ({
+          ...share.pets,
+          permissionLevel: share.permission_level
+        })).filter(Boolean) || [];
 
         // Transform data to match the expected format
         const transformedPets = petsData?.map(pet => ({
@@ -161,6 +165,7 @@ export default function Pets() {
           createdAt: new Date(pet.created_at),
           photo_url: pet.photo_url,
           isShared: true,
+          permissionLevel: pet.permissionLevel,
         }));
 
         setPets([...transformedPets, ...transformedSharedPets]);
@@ -207,8 +212,12 @@ export default function Pets() {
     };
   }, [currentUser]);
 
-  const handlePetPress = (petId: string) => {
-    router.push(`/pets/${petId}`);
+  const handlePetPress = (petId: string, permissionLevel?: string) => {
+    if (permissionLevel) {
+      router.push(`/pets/${petId}?permissionLevel=${permissionLevel}`);
+    } else {
+      router.push(`/pets/${petId}`);
+    }
   };
 
   const handleAddPet = () => {
@@ -243,6 +252,7 @@ export default function Pets() {
           .from('pet_shares')
           .select(`
             pet_id,
+            permission_level,
             pets!inner (
               id, name, species, breed, breed_info, age, age_display,
               gender, weight, weight_display, is_neutered, has_chip,
@@ -252,7 +262,10 @@ export default function Pets() {
           .eq('shared_with_user_id', currentUser.id)
           .eq('status', 'accepted');
 
-        const sharedPets = sharedPetsData?.map(share => share.pets).filter(Boolean) || [];
+        const sharedPets = sharedPetsData?.map(share => ({
+          ...share.pets,
+          permissionLevel: share.permission_level
+        })).filter(Boolean) || [];
         const transformedPets = petsData?.map(pet => ({
           id: pet.id, name: pet.name, species: pet.species, breed: pet.breed,
           breedInfo: pet.breed_info, age: pet.age, ageDisplay: pet.age_display,
@@ -270,6 +283,7 @@ export default function Pets() {
           photoURL: pet.photo_url, ownerId: pet.owner_id, personality: pet.personality || [],
           medicalNotes: pet.medical_notes, createdAt: new Date(pet.created_at),
           photo_url: pet.photo_url, isShared: true,
+          permissionLevel: pet.permissionLevel,
         }));
         setPets([...transformedPets, ...transformedSharedPets]);
       }
@@ -655,7 +669,7 @@ export default function Pets() {
                 <PetCard
                   key={pet.id}
                   pet={pet}
-                  onPress={() => handlePetPress(pet.id)}
+                  onPress={() => handlePetPress(pet.id, pet.permissionLevel)}
                   onDelete={pet.ownerId === currentUser?.id ? handleDeletePet : undefined}
                   onShare={pet.ownerId === currentUser?.id ? handleSharePet : undefined}
                   isShared={pet.isShared}
