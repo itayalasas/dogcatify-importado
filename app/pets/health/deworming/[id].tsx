@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Calendar, Pill, ChevronDown } from 'lucide-react-native';
 import { Input } from '../../../../components/ui/Input';
@@ -453,7 +453,12 @@ export default function AddDeworming() {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Card style={styles.formCard}>
           <View style={styles.iconContainer}>
             <Pill size={40} color="#10B981" />
@@ -575,6 +580,7 @@ export default function AddDeworming() {
           />
         </Card>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Add Temporary Veterinarian Modal */}
       <Modal
