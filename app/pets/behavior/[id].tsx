@@ -559,14 +559,21 @@ export default function PetBehaviorAssessment() {
       <Card style={styles.recommendationsCard}>
         <View style={styles.recommendationsHeader}>
           <Text style={styles.recommendationsTitle}>Recomendaciones Personalizadas</Text>
-          <Button
-            title={`Evaluar ${pet.name}`}
-            onPress={generateAIRecommendations}
-            loading={loadingAI}
-            icon={<Sparkles size={16} color="white" />}
-            size="small"
+          <TouchableOpacity
             style={styles.aiButton}
-          />
+            onPress={generateAIRecommendations}
+            disabled={loadingAI}
+            activeOpacity={0.8}
+          >
+            {loadingAI ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Sparkles size={14} color="white" style={styles.aiButtonIcon} />
+                <Text style={styles.aiButtonText}>Evaluar {pet.name}</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
 
         {loadingAI && (
@@ -751,20 +758,30 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
-    gap: 8,
   },
   recommendationsTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
-    flex: 0,
-    flexShrink: 1,
+    marginRight: 12,
+    flex: 1,
   },
   aiButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    minWidth: 0,
-    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2D6A6F',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  aiButtonIcon: {
+    marginRight: 4,
+  },
+  aiButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
   },
   loadingContainer: {
     alignItems: 'center',
