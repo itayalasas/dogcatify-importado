@@ -95,13 +95,14 @@ export default function AddDeworming() {
 
   const calculateNextDueDate = () => {
     if (!selectedDewormer || !applicationDate || !pet) return;
-    
+
     const nextDate = new Date(applicationDate);
-    
-    // Logic based on dewormer frequency and pet age
+    const ageInWeeks = calculateAgeInWeeks(pet);
+    const petBreed = pet.breed?.toLowerCase() || '';
+
     if (selectedDewormer.frequency) {
       const frequency = selectedDewormer.frequency.toLowerCase();
-      
+
       if (frequency.includes('cada 3 meses') || frequency.includes('quarterly')) {
         nextDate.setMonth(nextDate.getMonth() + 3);
       } else if (frequency.includes('cada 2 meses') || frequency.includes('bi-monthly')) {
@@ -113,30 +114,39 @@ export default function AddDeworming() {
       } else if (frequency.includes('semanal') || frequency.includes('weekly')) {
         nextDate.setDate(nextDate.getDate() + 7);
       } else {
-        // Default frequency based on age
-        const ageInWeeks = calculateAgeInWeeks(pet);
-        if (ageInWeeks < 16) {
-          nextDate.setDate(nextDate.getDate() + 14); // Every 2 weeks for puppies
-        } else {
-          nextDate.setMonth(nextDate.getMonth() + 3); // Every 3 months for adults
-        }
+        calculateBreedBasedFrequency(nextDate, ageInWeeks, petBreed);
       }
     } else {
-      // Default frequency based on age
-      const ageInWeeks = calculateAgeInWeeks(pet);
-      if (ageInWeeks < 16) {
-        // Puppies/kittens - every 2 weeks
-        nextDate.setDate(nextDate.getDate() + 14);
-      } else if (ageInWeeks < 52) {
-        // Young adults - every month
-        nextDate.setMonth(nextDate.getMonth() + 1);
+      calculateBreedBasedFrequency(nextDate, ageInWeeks, petBreed);
+    }
+
+    setNextDueDate(nextDate);
+  };
+
+  const calculateBreedBasedFrequency = (nextDate: Date, ageInWeeks: number, breed: string) => {
+    const isLargeBreed = breed.includes('pastor') || breed.includes('labrador') || breed.includes('golden') ||
+                          breed.includes('rottweiler') || breed.includes('doberman') || breed.includes('gran danes');
+
+    const isSmallBreed = breed.includes('chihuahua') || breed.includes('yorkie') || breed.includes('poodle') ||
+                          breed.includes('maltés') || breed.includes('shih tzu') || breed.includes('pomerania');
+
+    if (ageInWeeks < 16) {
+      nextDate.setDate(nextDate.getDate() + 14);
+    } else if (ageInWeeks < 52) {
+      if (isLargeBreed) {
+        nextDate.setMonth(nextDate.getMonth() + 2);
       } else {
-        // Adults - every 3 months
+        nextDate.setMonth(nextDate.getMonth() + 1);
+      }
+    } else {
+      if (isLargeBreed) {
+        nextDate.setMonth(nextDate.getMonth() + 2);
+      } else if (isSmallBreed) {
+        nextDate.setMonth(nextDate.getMonth() + 4);
+      } else {
         nextDate.setMonth(nextDate.getMonth() + 3);
       }
     }
-    
-    setNextDueDate(nextDate);
   };
 
   const calculateAgeInWeeks = (petData: any) => {
@@ -191,18 +201,46 @@ export default function AddDeworming() {
   const handleSelectDewormer = () => {
     router.push({
       pathname: '/pets/health/select-dewormer',
-      params: { 
+      params: {
         petId: id,
         species: pet?.species || 'dog',
+        breed: pet?.breed || '',
+        ageInMonths: pet?.age ? Math.floor(pet.age * 12).toString() : calculateAgeInMonths(pet).toString(),
+        weight: pet?.weight?.toString() || '',
         returnPath: `/pets/health/deworming/${id}`,
         currentValue: productName,
-        // Preserve current form values
         currentVeterinarian: veterinarian,
         currentNotes: notes,
         currentNextDueDate: nextDueDate?.toISOString(),
         currentApplicationDate: applicationDate.toISOString()
       }
     });
+  };
+
+  const calculateAgeInMonths = (petData: any) => {
+    if (!petData) return 12;
+
+    if (petData.age) {
+      return Math.floor(petData.age * 12);
+    }
+
+    if (!petData.age_display) return 12;
+
+    const { value, unit } = petData.age_display;
+
+    if (!value || !unit) {
+      return petData.age ? Math.floor(petData.age * 12) : 12;
+    }
+
+    switch (unit) {
+      case 'days':
+        return Math.floor(value / 30);
+      case 'months':
+        return value;
+      case 'years':
+      default:
+        return value * 12;
+    }
   };
 
   const handleSelectVeterinarian = () => {

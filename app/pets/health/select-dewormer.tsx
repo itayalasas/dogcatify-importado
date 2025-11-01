@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Search, Pill, Clock, Shield, TriangleAlert as AlertTriangle } from 'lucide-react-native';
+import { ArrowLeft, Search, Pill, Clock, Shield, TriangleAlert as AlertTriangle, Sparkles } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { supabaseClient } from '../../../lib/supabase';
 
 export default function SelectDewormer() {
-  const { petId, species, returnPath, currentValue, currentVeterinarian, currentNotes, currentNextDueDate } = useLocalSearchParams<{
+  const { petId, species, breed, ageInMonths, weight, returnPath, currentValue, currentVeterinarian, currentNotes, currentNextDueDate } = useLocalSearchParams<{
     petId: string;
     species: string;
+    breed?: string;
+    ageInMonths?: string;
+    weight?: string;
     returnPath: string;
     currentValue?: string;
     currentVeterinarian?: string;
@@ -20,6 +23,7 @@ export default function SelectDewormer() {
   const [filteredDewormers, setFilteredDewormers] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [usingAI, setUsingAI] = useState(false);
 
   useEffect(() => {
     fetchDewormers();
@@ -31,6 +35,128 @@ export default function SelectDewormer() {
 
   const fetchDewormers = async () => {
     try {
+      const petBreed = breed || '';
+      const petAge = ageInMonths ? parseInt(ageInMonths) : undefined;
+      const petWeight = weight ? parseFloat(weight) : undefined;
+
+      if (petBreed && petAge) {
+        const cacheKey = `${species}_${petBreed}_${petAge}_${petWeight || 'any'}`;
+        console.log('Checking AI cache for:', cacheKey);
+
+        const { data: cachedData, error: cacheError } = await supabaseClient
+          .from('dewormers_ai_cache')
+          .select('*')
+          .eq('species', species)
+          .eq('breed', petBreed)
+          .eq('age_in_months', petAge)
+          .gte('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (cachedData && !cacheError) {
+          console.log('Using cached AI recommendations');
+          const recommendations = cachedData.recommendations;
+          setDewormers(recommendations.dewormers || []);
+          setFilteredDewormers(recommendations.dewormers || []);
+          setUsingAI(true);
+          setLoading(false);
+          return;
+        }
+
+        console.log('No cache found, fetching from AI...');
+        await fetchFromAI(petBreed, petAge, petWeight);
+      } else {
+        console.log('Missing breed or age, using fallback catalog');
+        await fetchFromCatalog();
+      }
+    } catch (error) {
+      console.error('Error fetching dewormers:', error);
+      await fetchFromCatalog();
+    }
+  };
+
+  const fetchFromAI = async (petBreed: string, petAge: number, petWeight?: number) => {
+    try {
+      setUsingAI(true);
+
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/generate-dewormer-recommendations`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token || anonKey}`,
+          },
+          body: JSON.stringify({
+            species,
+            breed: petBreed,
+            ageInMonths: petAge,
+            weight: petWeight,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch AI recommendations');
+      }
+
+      const result = await response.json();
+
+      const aiDewormers = result.dewormers.map((d: any) => ({
+        id: `ai_${d.name.toLowerCase().replace(/\s+/g, '_')}`,
+        name: d.name,
+        brand: d.brand,
+        active_ingredient: d.activeIngredient,
+        administration_method: d.administrationMethod,
+        parasite_types: d.parasiteTypes,
+        frequency: d.frequency,
+        age_recommendation: d.ageRecommendation,
+        weight_range: d.weightRange,
+        prescription_required: d.prescriptionRequired,
+        common_side_effects: d.commonSideEffects,
+        notes: d.notes,
+        is_recommended: d.isRecommended,
+        priority: d.priority,
+        species: [species],
+        is_active: true
+      }));
+
+      setDewormers(aiDewormers);
+      setFilteredDewormers(aiDewormers);
+
+      const { error: cacheError } = await supabaseClient
+        .from('dewormers_ai_cache')
+        .insert({
+          species,
+          breed: petBreed,
+          age_in_months: petAge,
+          weight: petWeight,
+          recommendations: result,
+          expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
+        });
+
+      if (cacheError) {
+        console.warn('Could not cache AI recommendations:', cacheError);
+      } else {
+        console.log('AI recommendations cached successfully');
+      }
+
+    } catch (error) {
+      console.error('Error fetching from AI:', error);
+      await fetchFromCatalog();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchFromCatalog = async () => {
+    try {
+      setUsingAI(false);
       const { data, error } = await supabaseClient
         .from('dewormers_catalog')
         .select('*')
@@ -42,7 +168,9 @@ export default function SelectDewormer() {
       setDewormers(data || []);
       setFilteredDewormers(data || []);
     } catch (error) {
-      console.error('Error fetching dewormers:', error);
+      console.error('Error fetching dewormers catalog:', error);
+      setDewormers([]);
+      setFilteredDewormers([]);
     } finally {
       setLoading(false);
     }
@@ -111,9 +239,17 @@ export default function SelectDewormer() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.title}>
-          Seleccionar Desparasitante {species === 'dog' ? '🐕' : '🐱'}
-        </Text>
+        <View style={styles.titleContainer}>
+          <Text style={styles.title}>
+            Seleccionar Desparasitante {species === 'dog' ? '🐕' : '🐱'}
+          </Text>
+          {usingAI && (
+            <View style={styles.aiBadge}>
+              <Sparkles size={12} color="#8B5CF6" />
+              <Text style={styles.aiBadgeText}>IA</Text>
+            </View>
+          )}
+        </View>
         <View style={styles.placeholder} />
       </View>
 
@@ -133,7 +269,10 @@ export default function SelectDewormer() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Cargando desparasitantes...</Text>
+            <ActivityIndicator size="large" color="#10B981" />
+            <Text style={styles.loadingText}>
+              {usingAI ? 'Generando recomendaciones con IA...' : 'Cargando desparasitantes...'}
+            </Text>
           </View>
         ) : filteredDewormers.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -245,10 +384,29 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   title: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
+  },
+  aiBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3E8FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  aiBadgeText: {
+    fontSize: 10,
+    fontFamily: 'Inter-SemiBold',
+    color: '#8B5CF6',
   },
   placeholder: {
     width: 32,
