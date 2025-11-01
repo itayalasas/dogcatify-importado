@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Search, Syringe, Shield, Clock, TriangleAlert as AlertTriangle } from 'lucide-react-native';
+import { ArrowLeft, Search, Syringe, Shield, Clock, TriangleAlert as AlertTriangle, Calendar } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { supabaseClient } from '../../../lib/supabase';
 
@@ -20,6 +20,7 @@ export default function SelectVaccine() {
   const [filteredVaccines, setFilteredVaccines] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [petData, setPetData] = useState<any>(null);
 
   useEffect(() => {
     fetchVaccines();
@@ -31,19 +32,60 @@ export default function SelectVaccine() {
 
   const fetchVaccines = async () => {
     try {
-      const { data, error } = await supabaseClient
-        .from('vaccines_catalog')
+      // Primero obtener datos de la mascota
+      const { data: pet, error: petError } = await supabaseClient
+        .from('pets')
         .select('*')
-        .eq('is_active', true)
-        .in('species', [species, 'both'])
-        .order('is_required', { ascending: false }) // Required vaccines first
-        .order('name', { ascending: true });
+        .eq('id', petId)
+        .single();
 
-      if (error) throw error;
-      setVaccines(data || []);
-      setFilteredVaccines(data || []);
+      if (petError) throw petError;
+      setPetData(pet);
+
+      // Calcular edad en meses
+      let ageInMonths = undefined;
+      if (pet.birth_date) {
+        const birthDate = new Date(pet.birth_date);
+        const today = new Date();
+        const monthsDiff = (today.getFullYear() - birthDate.getFullYear()) * 12 +
+                          (today.getMonth() - birthDate.getMonth());
+        ageInMonths = Math.max(0, monthsDiff);
+      }
+
+      // Llamar a la Edge Function para obtener vacunas con IA
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session) {
+        throw new Error('No hay sesión activa');
+      }
+
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/generate-vaccine-recommendations`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            species: species,
+            ageInMonths: ageInMonths,
+            breed: pet.breed,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Error al obtener vacunas');
+      }
+
+      const data = await response.json();
+      setVaccines(data.vaccines || []);
+      setFilteredVaccines(data.vaccines || []);
     } catch (error) {
       console.error('Error fetching vaccines:', error);
+      // Fallback a lista básica si falla
+      setVaccines([]);
+      setFilteredVaccines([]);
     } finally {
       setLoading(false);
     }
@@ -143,71 +185,71 @@ export default function SelectVaccine() {
           </View>
         ) : (
           <View style={styles.vaccinesList}>
-            {filteredVaccines.map((vaccine) => (
-              <Card key={vaccine.id} style={styles.vaccineCard}>
+            {filteredVaccines.map((vaccine, index) => (
+              <Card key={index} style={styles.vaccineCard}>
                 <TouchableOpacity
                   style={styles.vaccineContent}
                   onPress={() => handleSelectVaccine(vaccine)}
                 >
                   <View style={styles.vaccineHeader}>
-                    <Text style={styles.vaccineName}>{vaccine.name}</Text>
-                    <View style={[styles.typeBadge, { backgroundColor: getTypeColor(vaccine.type) + '20' }]}>
-                      <Text style={styles.typeIcon}>
-                        {getTypeIcon(vaccine.type)}
-                      </Text>
-                      <Text style={[styles.typeText, { color: getTypeColor(vaccine.type) }]}>
-                        {getTypeName(vaccine.type)}
-                      </Text>
+                    <View style={styles.vaccineTitleContainer}>
+                      <Text style={styles.vaccineName}>{vaccine.name}</Text>
+                      {vaccine.fullName && vaccine.fullName !== vaccine.name && (
+                        <Text style={styles.vaccineFullName}>{vaccine.fullName}</Text>
+                      )}
                     </View>
+                    {vaccine.isEssential && (
+                      <View style={styles.essentialBadge}>
+                        <Shield size={14} color="#DC2626" />
+                        <Text style={styles.essentialText}>Esencial</Text>
+                      </View>
+                    )}
                   </View>
 
                   {vaccine.description && (
-                    <Text style={styles.vaccineDescription} numberOfLines={2}>
+                    <Text style={styles.vaccineDescription}>
                       {vaccine.description}
                     </Text>
                   )}
 
                   <View style={styles.vaccineDetails}>
-                    {vaccine.is_required && (
-                      <View style={styles.requiredBadge}>
-                        <Shield size={12} color="#DC2626" />
-                        <Text style={styles.requiredText}>Obligatoria</Text>
-                      </View>
-                    )}
-                    
-                    {vaccine.frequency && (
-                      <View style={styles.frequencyBadge}>
-                        <Clock size={12} color="#3B82F6" />
-                        <Text style={styles.frequencyText}>{vaccine.frequency}</Text>
+                    <View style={styles.detailRow}>
+                      <Clock size={14} color="#3B82F6" />
+                      <Text style={styles.detailLabel}>Frecuencia:</Text>
+                      <Text style={styles.detailValue}>{vaccine.frequency}</Text>
+                    </View>
+
+                    {vaccine.recommendedAgeWeeks && vaccine.recommendedAgeWeeks.length > 0 && (
+                      <View style={styles.detailRow}>
+                        <Calendar size={14} color="#10B981" />
+                        <Text style={styles.detailLabel}>Edad recomendada:</Text>
+                        <Text style={styles.detailValue}>
+                          {vaccine.recommendedAgeWeeks[0]}-{vaccine.recommendedAgeWeeks[vaccine.recommendedAgeWeeks.length - 1]} semanas
+                        </Text>
                       </View>
                     )}
                   </View>
 
-                  {vaccine.age_recommendation && (
-                    <View style={styles.ageContainer}>
-                      <Text style={styles.ageTitle}>Edad recomendada:</Text>
-                      <Text style={styles.ageText}>{vaccine.age_recommendation}</Text>
-                    </View>
-                  )}
-
-                  {vaccine.common_brands && vaccine.common_brands.length > 0 && (
+                  {vaccine.commonBrands && vaccine.commonBrands.length > 0 && (
                     <View style={styles.brandsContainer}>
-                      <Text style={styles.brandsTitle}>Marcas comunes:</Text>
+                      <Text style={styles.brandsLabel}>Marcas comunes:</Text>
                       <Text style={styles.brandsText}>
-                        {vaccine.common_brands.slice(0, 3).join(', ')}
-                        {vaccine.common_brands.length > 3 && '...'}
+                        {vaccine.commonBrands.join(', ')}
                       </Text>
                     </View>
                   )}
 
-                  {vaccine.side_effects && vaccine.side_effects.length > 0 && (
+                  {vaccine.sideEffects && (
                     <View style={styles.sideEffectsContainer}>
                       <AlertTriangle size={12} color="#F59E0B" />
-                      <Text style={styles.sideEffectsTitle}>Posibles efectos:</Text>
-                      <Text style={styles.sideEffectsText}>
-                        {vaccine.side_effects.slice(0, 2).join(', ')}
-                        {vaccine.side_effects.length > 2 && '...'}
-                      </Text>
+                      <Text style={styles.sideEffectsLabel}>Posibles efectos:</Text>
+                      <Text style={styles.sideEffectsText}>{vaccine.sideEffects}</Text>
+                    </View>
+                  )}
+
+                  {vaccine.notes && (
+                    <View style={styles.notesContainer}>
+                      <Text style={styles.notesText}>💡 {vaccine.notes}</Text>
                     </View>
                   )}
                 </TouchableOpacity>
@@ -224,14 +266,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
-    paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
@@ -245,33 +286,30 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   placeholder: {
-    width: 32,
+    width: 40,
   },
   searchContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F3F4F6',
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#111827',
   },
   content: {
     flex: 1,
-    padding: 16,
   },
   loadingContainer: {
     flex: 1,
@@ -288,26 +326,27 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 60,
+    paddingVertical: 40,
+    paddingHorizontal: 20,
   },
   emptyTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
     marginTop: 16,
-    marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     textAlign: 'center',
+    marginTop: 8,
   },
   vaccinesList: {
-    gap: 12,
+    padding: 16,
   },
   vaccineCard: {
-    marginBottom: 8,
+    marginBottom: 12,
   },
   vaccineContent: {
     padding: 16,
@@ -316,125 +355,110 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  vaccineName: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+  vaccineTitleContainer: {
     flex: 1,
     marginRight: 12,
   },
-  typeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+  vaccineName: {
+    fontSize: 17,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    marginBottom: 4,
   },
-  typeIcon: {
-    fontSize: 12,
-    marginRight: 4,
-  },
-  typeText: {
-    fontSize: 12,
+  vaccineFullName: {
+    fontSize: 13,
     fontFamily: 'Inter-Medium',
-  },
-  vaccineDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
     color: '#6B7280',
-    lineHeight: 20,
-    marginBottom: 12,
   },
-  vaccineDetails: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
-  },
-  requiredBadge: {
+  essentialBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
     backgroundColor: '#FEE2E2',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  requiredText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#991B1B',
-    marginLeft: 4,
+  essentialText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    color: '#DC2626',
   },
-  frequencyBadge: {
+  vaccineDescription: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  vaccineDetails: {
+    gap: 8,
+    marginBottom: 12,
+  },
+  detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EBF8FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    gap: 6,
   },
-  frequencyText: {
-    fontSize: 12,
+  detailLabel: {
+    fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#1E40AF',
-    marginLeft: 4,
-  },
-  ageContainer: {
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  ageTitle: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
-    marginBottom: 4,
-  },
-  ageText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
     color: '#6B7280',
   },
+  detailValue: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    flex: 1,
+  },
   brandsContainer: {
-    backgroundColor: '#F0FDF4',
-    padding: 12,
+    backgroundColor: '#ECFDF5',
+    padding: 10,
     borderRadius: 8,
     marginBottom: 8,
   },
-  brandsTitle: {
-    fontSize: 13,
+  brandsLabel: {
+    fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#166534',
+    color: '#059669',
     marginBottom: 4,
   },
   brandsText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#166534',
+    color: '#047857',
   },
   sideEffectsContainer: {
+    backgroundColor: '#FEF3C7',
+    padding: 10,
+    borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#FEF3C7',
-    padding: 12,
-    borderRadius: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#F59E0B',
+    gap: 6,
+    marginBottom: 8,
   },
-  sideEffectsTitle: {
-    fontSize: 13,
+  sideEffectsLabel: {
+    fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#92400E',
-    marginLeft: 6,
-    marginRight: 6,
+    color: '#D97706',
   },
   sideEffectsText: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#92400E',
+    color: '#B45309',
     flex: 1,
+  },
+  notesContainer: {
+    backgroundColor: '#EFF6FF',
+    padding: 10,
+    borderRadius: 8,
+  },
+  notesText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#1E40AF',
+    lineHeight: 16,
   },
 });
