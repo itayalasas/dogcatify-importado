@@ -109,7 +109,36 @@ export default function SelectAllergy() {
         setAllergies(aiAllergies);
         setFilteredAllergies(aiAllergies);
       } else {
-        console.log('Missing breed or age, using generic allergies with AI...');
+        console.log('Missing breed or age, using generic allergies...');
+
+        const genericBreed = 'Común/ Doméstico/ Mestizo';
+        const genericAge = 24;
+        const cacheKey = `${species}_${genericBreed}_${genericAge}_any`;
+
+        console.log('Checking AI cache for generic allergies:', cacheKey);
+
+        const { data: cachedData, error: cacheError } = await supabaseClient
+          .from('allergies_ai_cache')
+          .select('*')
+          .eq('species', species)
+          .eq('breed', genericBreed)
+          .eq('age_in_months', genericAge)
+          .eq('cache_key', cacheKey)
+          .gt('expires_at', new Date().toISOString())
+          .maybeSingle();
+
+        if (cachedData && cachedData.allergies) {
+          console.log('Using cached generic allergy data');
+          const cachedAllergies = typeof cachedData.allergies === 'string'
+            ? JSON.parse(cachedData.allergies)
+            : cachedData.allergies;
+          setAllergies(cachedAllergies);
+          setFilteredAllergies(cachedAllergies);
+          setLoading(false);
+          return;
+        }
+
+        console.log('No cache found, generating generic allergies with AI...');
         const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
         const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -123,8 +152,8 @@ export default function SelectAllergy() {
             },
             body: JSON.stringify({
               species,
-              breed: 'Común/ Doméstico/ Mestizo',
-              ageInMonths: 24,
+              breed: genericBreed,
+              ageInMonths: genericAge,
               weight: undefined
             })
           }
@@ -136,6 +165,17 @@ export default function SelectAllergy() {
 
         const { allergies: aiAllergies } = await response.json();
         console.log(`Generated ${aiAllergies.length} generic allergy recommendations`);
+
+        await supabaseClient
+          .from('allergies_ai_cache')
+          .insert({
+            species,
+            breed: genericBreed,
+            age_in_months: genericAge,
+            weight: null,
+            allergies: aiAllergies,
+            cache_key: cacheKey
+          });
 
         setAllergies(aiAllergies);
         setFilteredAllergies(aiAllergies);
