@@ -21,6 +21,40 @@ export default function Pets() {
       try {
         const petsData = await getPets(currentUser.id);
 
+        const { data: sharedPetsData, error: sharedError } = await supabaseClient
+          .from('pet_shares')
+          .select(`
+            pet_id,
+            pets!inner (
+              id,
+              name,
+              species,
+              breed,
+              breed_info,
+              age,
+              age_display,
+              gender,
+              weight,
+              weight_display,
+              is_neutered,
+              has_chip,
+              chip_number,
+              photo_url,
+              owner_id,
+              personality,
+              medical_notes,
+              created_at
+            )
+          `)
+          .eq('shared_with_user_id', currentUser.id)
+          .eq('status', 'accepted');
+
+        if (sharedError) {
+          console.error('Error fetching shared pets:', sharedError);
+        }
+
+        const sharedPets = sharedPetsData?.map(share => share.pets).filter(Boolean) || [];
+
         // Transform data to match the expected format
         const transformedPets = petsData?.map(pet => ({
           id: pet.id,
@@ -41,10 +75,34 @@ export default function Pets() {
           personality: pet.personality || [],
           medicalNotes: pet.medical_notes,
           createdAt: new Date(pet.created_at),
-          photo_url: pet.photo_url, // Añadir el campo photo_url directamente
+          photo_url: pet.photo_url,
+          isShared: false,
+        })) || [];
+
+        const transformedSharedPets = sharedPets.map(pet => ({
+          id: pet.id,
+          name: pet.name,
+          species: pet.species,
+          breed: pet.breed,
+          breedInfo: pet.breed_info,
+          age: pet.age,
+          ageDisplay: pet.age_display,
+          gender: pet.gender,
+          weight: pet.weight,
+          weightDisplay: pet.weight_display,
+          isNeutered: pet.is_neutered,
+          hasChip: pet.has_chip,
+          chipNumber: pet.chip_number,
+          photoURL: pet.photo_url,
+          ownerId: pet.owner_id,
+          personality: pet.personality || [],
+          medicalNotes: pet.medical_notes,
+          createdAt: new Date(pet.created_at),
+          photo_url: pet.photo_url,
+          isShared: true,
         }));
 
-        setPets(transformedPets || []);
+        setPets([...transformedPets, ...transformedSharedPets]);
         setLoading(false);
       } catch (error) {
         console.error('Error fetching pets:', error);
@@ -83,6 +141,10 @@ export default function Pets() {
 
   const handleAddPet = () => {
     router.push('/pets/add');
+  };
+
+  const handleSharePet = (petId: string) => {
+    router.push(`/pets/share-pet?petId=${petId}`);
   };
 
   const handleDeletePet = async (petId: string) => {
@@ -366,7 +428,9 @@ export default function Pets() {
                   key={pet.id}
                   pet={pet}
                   onPress={() => handlePetPress(pet.id)}
-                  onDelete={handleDeletePet}
+                  onDelete={pet.ownerId === currentUser?.id ? handleDeletePet : undefined}
+                  onShare={pet.ownerId === currentUser?.id ? handleSharePet : undefined}
+                  isShared={pet.isShared}
                 />
               ))}
             </>
