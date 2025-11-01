@@ -377,6 +377,156 @@ export default function PetDetail() {
     router.push(`/pets/albums/add/${id}`);
   };
 
+  // Edit handlers
+  const handleEditVaccine = (vaccineId: string) => {
+    router.push({
+      pathname: `/pets/health/vaccines/${id}`,
+      params: { recordId: vaccineId }
+    });
+  };
+
+  const handleEditIllness = (illnessId: string) => {
+    router.push({
+      pathname: `/pets/health/illness/${id}`,
+      params: { recordId: illnessId }
+    });
+  };
+
+  const handleEditAllergy = (allergyId: string) => {
+    router.push({
+      pathname: `/pets/health/allergies/${id}`,
+      params: { recordId: allergyId }
+    });
+  };
+
+  const handleEditDeworming = (dewormingId: string) => {
+    router.push({
+      pathname: `/pets/health/deworming/${id}`,
+      params: { recordId: dewormingId }
+    });
+  };
+
+  // Delete handlers
+  const handleDeleteVaccine = (vaccineId: string, vaccineName: string) => {
+    Alert.alert(
+      'Eliminar Vacuna',
+      `¿Estás seguro de eliminar "${vaccineName}"?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabaseClient
+                .from('pet_vaccines')
+                .delete()
+                .eq('id', vaccineId);
+
+              if (error) throw error;
+
+              await fetchHealthData();
+              Alert.alert('Éxito', 'Vacuna eliminada correctamente');
+            } catch (error) {
+              console.error('Error deleting vaccine:', error);
+              Alert.alert('Error', 'No se pudo eliminar la vacuna');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleDeleteIllness = (illnessId: string, illnessName: string) => {
+    Alert.alert(
+      'Eliminar Enfermedad',
+      `¿Estás seguro de eliminar "${illnessName}"?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabaseClient
+                .from('pet_illnesses')
+                .delete()
+                .eq('id', illnessId);
+
+              if (error) throw error;
+
+              await fetchHealthData();
+              Alert.alert('Éxito', 'Enfermedad eliminada correctamente');
+            } catch (error) {
+              console.error('Error deleting illness:', error);
+              Alert.alert('Error', 'No se pudo eliminar la enfermedad');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleDeleteAllergy = (allergyId: string, allergyName: string) => {
+    Alert.alert(
+      'Eliminar Alergia',
+      `¿Estás seguro de eliminar "${allergyName}"?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabaseClient
+                .from('pet_allergies')
+                .delete()
+                .eq('id', allergyId);
+
+              if (error) throw error;
+
+              await fetchHealthData();
+              Alert.alert('Éxito', 'Alergia eliminada correctamente');
+            } catch (error) {
+              console.error('Error deleting allergy:', error);
+              Alert.alert('Error', 'No se pudo eliminar la alergia');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleDeleteDeworming = (dewormingId: string, productName: string) => {
+    Alert.alert(
+      'Eliminar Desparasitación',
+      `¿Estás seguro de eliminar "${productName}"?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabaseClient
+                .from('pet_deworming')
+                .delete()
+                .eq('id', dewormingId);
+
+              if (error) throw error;
+
+              await fetchHealthData();
+              Alert.alert('Éxito', 'Desparasitación eliminada correctamente');
+            } catch (error) {
+              console.error('Error deleting deworming:', error);
+              Alert.alert('Error', 'No se pudo eliminar la desparasitación');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const fetchBehaviorHistory = async () => {
     try {
       const { data, error } = await supabaseClient
@@ -649,25 +799,43 @@ export default function PetDetail() {
         ) : (
           vaccines.map((vaccine) => (
             <Card key={vaccine.id} style={styles.healthCard}>
-              <Text style={styles.healthItemTitle}>{vaccine.name}</Text>
-              <Text style={styles.healthItemDate}>
-                Aplicada: {vaccine.applicationDate}
-              </Text>
-              {vaccine.nextDueDate && (
-                <Text style={styles.healthItemNextDate}>
-                  Próxima: {vaccine.nextDueDate}
-                </Text>
-              )}
-              {vaccine.veterinarian && (
-                <Text style={styles.healthItemVet}>
-                  Veterinario: {vaccine.veterinarian}
-                </Text>
-              )}
-              {vaccine.notes && (
-                <Text style={styles.healthItemNotes}>
-                  {vaccine.notes}
-                </Text>
-              )}
+              <View style={styles.healthCardContent}>
+                <View style={styles.healthCardInfo}>
+                  <Text style={styles.healthItemTitle}>{vaccine.name}</Text>
+                  <Text style={styles.healthItemDate}>
+                    Aplicada: {vaccine.applicationDate}
+                  </Text>
+                  {vaccine.nextDueDate && (
+                    <Text style={styles.healthItemNextDate}>
+                      Próxima: {vaccine.nextDueDate}
+                    </Text>
+                  )}
+                  {vaccine.veterinarian && (
+                    <Text style={styles.healthItemVet}>
+                      Veterinario: {vaccine.veterinarian}
+                    </Text>
+                  )}
+                  {vaccine.notes && (
+                    <Text style={styles.healthItemNotes}>
+                      {vaccine.notes}
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.healthCardActions}>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => handleEditVaccine(vaccine.id)}
+                  >
+                    <Edit size={18} color="#3B82F6" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.deleteButton]}
+                    onPress={() => handleDeleteVaccine(vaccine.id, vaccine.name)}
+                  >
+                    <Trash2 size={18} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              </View>
             </Card>
           ))
         )}
@@ -689,37 +857,55 @@ export default function PetDetail() {
         ) : (
           illnesses.map((illness) => (
             <Card key={illness.id} style={styles.healthCard}>
-              <Text style={styles.healthItemTitle}>{illness.name}</Text>
-              <Text style={styles.healthItemDate}>
-                Diagnóstico: {illness.diagnosisDate}
-              </Text>
-              {illness.treatment && (
-                <Text style={styles.healthItemTreatment}>
-                  Tratamiento: {illness.treatment}
-                </Text>
-              )}
-              {illness.veterinarian && (
-                <Text style={styles.healthItemVet}>
-                  Veterinario: {illness.veterinarian}
-                </Text>
-              )}
-              {illness.status && (
-                <View style={styles.statusContainer}>
-                  <Text style={[
-                    styles.statusText,
-                    illness.status === 'active' && styles.activeStatus,
-                    illness.status === 'recovered' && styles.recoveredStatus
-                  ]}>
-                    Estado: {illness.status === 'active' ? 'Activa' : 
-                            illness.status === 'recovered' ? 'Recuperada' : illness.status}
+              <View style={styles.healthCardContent}>
+                <View style={styles.healthCardInfo}>
+                  <Text style={styles.healthItemTitle}>{illness.name}</Text>
+                  <Text style={styles.healthItemDate}>
+                    Diagnóstico: {illness.diagnosisDate}
                   </Text>
+                  {illness.treatment && (
+                    <Text style={styles.healthItemTreatment}>
+                      Tratamiento: {illness.treatment}
+                    </Text>
+                  )}
+                  {illness.veterinarian && (
+                    <Text style={styles.healthItemVet}>
+                      Veterinario: {illness.veterinarian}
+                    </Text>
+                  )}
+                  {illness.status && (
+                    <View style={styles.statusContainer}>
+                      <Text style={[
+                        styles.statusText,
+                        illness.status === 'active' && styles.activeStatus,
+                        illness.status === 'recovered' && styles.recoveredStatus
+                      ]}>
+                        Estado: {illness.status === 'active' ? 'Activa' :
+                                illness.status === 'recovered' ? 'Recuperada' : illness.status}
+                      </Text>
+                    </View>
+                  )}
+                  {illness.notes && (
+                    <Text style={styles.healthItemNotes}>
+                      {illness.notes}
+                    </Text>
+                  )}
                 </View>
-              )}
-              {illness.notes && (
-                <Text style={styles.healthItemNotes}>
-                  {illness.notes}
-                </Text>
-              )}
+                <View style={styles.healthCardActions}>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => handleEditIllness(illness.id)}
+                  >
+                    <Edit size={18} color="#3B82F6" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.deleteButton]}
+                    onPress={() => handleDeleteIllness(illness.id, illness.name)}
+                  >
+                    <Trash2 size={18} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              </View>
             </Card>
           ))
         )}
@@ -741,27 +927,45 @@ export default function PetDetail() {
         ) : (
           allergies.map((allergy) => (
             <Card key={allergy.id} style={styles.healthCard}>
-              <Text style={styles.healthItemTitle}>{allergy.name}</Text>
-              {allergy.symptoms && (
-                <Text style={styles.healthItemSymptoms}>
-                  Síntomas: {allergy.symptoms}
-                </Text>
-              )}
-              {allergy.severity && (
-                <Text style={styles.healthItemSeverity}>
-                  Severidad: {allergy.severity}
-                </Text>
-              )}
-              {allergy.treatment && (
-                <Text style={styles.healthItemTreatment}>
-                  Tratamiento: {allergy.treatment}
-                </Text>
-              )}
-              {allergy.notes && (
-                <Text style={styles.healthItemNotes}>
-                  {allergy.notes}
-                </Text>
-              )}
+              <View style={styles.healthCardContent}>
+                <View style={styles.healthCardInfo}>
+                  <Text style={styles.healthItemTitle}>{allergy.name}</Text>
+                  {allergy.symptoms && (
+                    <Text style={styles.healthItemSymptoms}>
+                      Síntomas: {allergy.symptoms}
+                    </Text>
+                  )}
+                  {allergy.severity && (
+                    <Text style={styles.healthItemSeverity}>
+                      Severidad: {allergy.severity}
+                    </Text>
+                  )}
+                  {allergy.treatment && (
+                    <Text style={styles.healthItemTreatment}>
+                      Tratamiento: {allergy.treatment}
+                    </Text>
+                  )}
+                  {allergy.notes && (
+                    <Text style={styles.healthItemNotes}>
+                      {allergy.notes}
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.healthCardActions}>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => handleEditAllergy(allergy.id)}
+                  >
+                    <Edit size={18} color="#3B82F6" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.deleteButton]}
+                    onPress={() => handleDeleteAllergy(allergy.id, allergy.name)}
+                  >
+                    <Trash2 size={18} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              </View>
             </Card>
           ))
         )}
@@ -783,25 +987,43 @@ export default function PetDetail() {
         ) : (
           dewormings.map((deworming) => (
             <Card key={deworming.id} style={styles.healthCard}>
-              <Text style={styles.healthItemTitle}>{deworming.productName}</Text>
-              <Text style={styles.healthItemDate}>
-                Aplicada: {deworming.applicationDate}
-              </Text>
-              {deworming.nextDueDate && (
-                <Text style={styles.healthItemNextDate}>
-                  Próxima: {deworming.nextDueDate}
-                </Text>
-              )}
-              {deworming.veterinarian && (
-                <Text style={styles.healthItemVet}>
-                  Veterinario: {deworming.veterinarian}
-                </Text>
-              )}
-              {deworming.notes && (
-                <Text style={styles.healthItemNotes}>
-                  {deworming.notes}
-                </Text>
-              )}
+              <View style={styles.healthCardContent}>
+                <View style={styles.healthCardInfo}>
+                  <Text style={styles.healthItemTitle}>{deworming.productName}</Text>
+                  <Text style={styles.healthItemDate}>
+                    Aplicada: {deworming.applicationDate}
+                  </Text>
+                  {deworming.nextDueDate && (
+                    <Text style={styles.healthItemNextDate}>
+                      Próxima: {deworming.nextDueDate}
+                    </Text>
+                  )}
+                  {deworming.veterinarian && (
+                    <Text style={styles.healthItemVet}>
+                      Veterinario: {deworming.veterinarian}
+                    </Text>
+                  )}
+                  {deworming.notes && (
+                    <Text style={styles.healthItemNotes}>
+                      {deworming.notes}
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.healthCardActions}>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => handleEditDeworming(deworming.id)}
+                  >
+                    <Edit size={18} color="#3B82F6" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.deleteButton]}
+                    onPress={() => handleDeleteDeworming(deworming.id, deworming.productName)}
+                  >
+                    <Trash2 size={18} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              </View>
             </Card>
           ))
         )}
@@ -1544,6 +1766,30 @@ const styles = StyleSheet.create({
   healthCard: {
     marginBottom: 8,
     padding: 12,
+  },
+  healthCardContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  healthCardInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  healthCardActions: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  actionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteButton: {
+    backgroundColor: '#FEE2E2',
   },
   healthItemTitle: {
     fontSize: 16,
