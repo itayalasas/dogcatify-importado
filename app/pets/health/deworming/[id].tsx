@@ -424,7 +424,7 @@ export default function AddDeworming() {
       }
 
       Alert.alert('Éxito', 'Desparasitación guardada correctamente', [
-        { text: 'OK', onPress: () => router.push({
+        { text: 'OK', onPress: () => router.replace({
           pathname: `/pets/${id}`,
           params: { activeTab: 'health' }
         }) }
@@ -438,7 +438,7 @@ export default function AddDeworming() {
   };
 
   const handleBackNavigation = () => {
-    router.push({
+    router.replace({
       pathname: `/pets/${id}`,
       params: { activeTab: 'health' }
     });
