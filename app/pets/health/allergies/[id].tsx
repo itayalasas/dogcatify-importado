@@ -69,6 +69,17 @@ export default function AddAllergy() {
         console.error('Error parsing selected allergy:', error);
       }
     } else {
+      // Restore complete allergy object when coming back from veterinarian selection
+      if (params.selectedAllergyData && typeof params.selectedAllergyData === 'string') {
+        try {
+          const allergy = JSON.parse(params.selectedAllergyData);
+          setSelectedAllergy(allergy);
+          console.log('Restored complete allergy object:', allergy.name);
+        } catch (error) {
+          console.error('Error parsing selected allergy data:', error);
+        }
+      }
+
       // Restore allergy name when coming back from veterinarian selection
       if (params.currentCondition && typeof params.currentCondition === 'string') {
         setAllergyName(params.currentCondition);
@@ -113,7 +124,7 @@ export default function AddAllergy() {
     if (params.currentNotes && typeof params.currentNotes === 'string') {
       setNotes(params.currentNotes);
     }
-  }, [params.selectedAllergy, params.selectedVeterinarian, params.currentCondition, params.currentType, params.currentSymptoms, params.currentSeverity, params.currentTreatment, params.currentVeterinarian, params.currentNotes, params.currentDiagnosisDate]);
+  }, [params.selectedAllergy, params.selectedAllergyData, params.selectedVeterinarian, params.currentCondition, params.currentType, params.currentSymptoms, params.currentSeverity, params.currentTreatment, params.currentVeterinarian, params.currentNotes, params.currentDiagnosisDate]);
 
   useEffect(() => {
     fetchPetData();
@@ -173,7 +184,9 @@ export default function AddAllergy() {
         currentType: allergyType,
         currentSymptoms: symptoms,
         currentSeverity: severity,
-        currentDiagnosisDate: diagnosisDate.toISOString()
+        currentDiagnosisDate: diagnosisDate.toISOString(),
+        // Preserve the complete selected allergy object
+        ...(selectedAllergy && { selectedAllergyData: JSON.stringify(selectedAllergy) })
       }
     });
   };
