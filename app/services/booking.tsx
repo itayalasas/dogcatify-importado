@@ -76,6 +76,13 @@ export default function ServiceBooking() {
       if (serviceError) throw serviceError;
       
       if (serviceData) {
+        console.log('Service data loaded:', {
+          id: serviceData.id,
+          name: serviceData.name,
+          has_cost: serviceData.has_cost,
+          price: serviceData.price
+        });
+
         setService({
           id: serviceData.id,
           name: serviceData.name,
@@ -84,7 +91,7 @@ export default function ServiceBooking() {
           duration: serviceData.duration,
           category: serviceData.category,
           partnerId: serviceData.partner_id,
-          hasCost: serviceData.has_cost !== false, // Default to true if undefined
+          hasCost: serviceData.has_cost === true || serviceData.has_cost === null, // Only false if explicitly false
         });
       }
       
@@ -671,11 +678,16 @@ export default function ServiceBooking() {
           <Button
             title={bookingLoading ? 'Procesando...' : (service?.hasCost === false ? 'Confirmar Reserva' : 'Pagar')}
             onPress={() => {
+              console.log('Button pressed - Service hasCost:', service?.hasCost);
+              console.log('Service full object:', service);
+
               if (service?.hasCost === false) {
                 // Service is free, confirm directly
+                console.log('Service is free, confirming directly');
                 handleBookService();
               } else {
                 // Service has cost, show payment modal
+                console.log('Service has cost, showing payment modal');
                 setShowPaymentMethodModal(true);
               }
             }}
@@ -687,7 +699,7 @@ export default function ServiceBooking() {
       </ScrollView>
 
       {/* Modal de Métodos de Pago - Solo se muestra si el servicio tiene costo */}
-      {service?.hasCost !== false && (
+      {service?.hasCost === true && (
         <Modal
           visible={showPaymentMethodModal}
           transparent
