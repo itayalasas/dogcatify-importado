@@ -21,7 +21,6 @@ if (Platform.OS !== 'web') {
     console.error('Failed to initialize DataDog:', error);
   });
 }
-//sdsdsds
 // Global error handler
 if (typeof ErrorUtils !== 'undefined') {
   const originalHandler = ErrorUtils.getGlobalHandler();
