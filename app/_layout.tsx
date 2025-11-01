@@ -14,7 +14,7 @@ import { Platform, Alert, View } from 'react-native';
 import { supabaseClient } from '@/lib/supabase';
 import { SafeAppWrapper } from '../components/SafeAppWrapper';
 import { logger } from '@/utils/datadogLogger';
-//Temps
+
 // Initialize DataDog
 if (Platform.OS !== 'web') {
   logger.initialize().catch((error) => {
