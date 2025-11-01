@@ -124,16 +124,31 @@ export default function SharePetScreen() {
       setSearchingUsers(true);
       const searchTerm = query.trim().toLowerCase();
 
-      const { data, error } = await supabaseClient
+      // Buscar usuarios
+      const { data: users, error: usersError } = await supabaseClient
         .from('profiles')
         .select('id, display_name, email')
         .neq('id', currentUser?.id)
         .or(`display_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
-        .limit(5);
+        .limit(10);
 
-      if (error) throw error;
+      if (usersError) throw usersError;
 
-      setUserSuggestions(data || []);
+      // Obtener usuarios que ya tienen acceso (pending o accepted)
+      const { data: existingShares, error: sharesError } = await supabaseClient
+        .from('pet_shares')
+        .select('shared_with_user_id')
+        .eq('pet_id', petId)
+        .neq('status', 'rejected');
+
+      if (sharesError) throw sharesError;
+
+      const sharedUserIds = new Set(existingShares?.map(s => s.shared_with_user_id) || []);
+
+      // Filtrar usuarios que ya tienen acceso
+      const availableUsers = users?.filter(user => !sharedUserIds.has(user.id)) || [];
+
+      setUserSuggestions(availableUsers);
       setShowSuggestions(true);
     } catch (error) {
       console.error('Error searching users:', error);
@@ -204,6 +219,36 @@ export default function SharePetScreen() {
     try {
       setLoading(true);
 
+      // Verificar si ya existe una invitación o acceso activo
+      const { data: existingShare, error: checkError } = await supabaseClient
+        .from('pet_shares')
+        .select('id, status')
+        .eq('pet_id', petId)
+        .eq('shared_with_user_id', selectedUser.id)
+        .neq('status', 'rejected')
+        .maybeSingle();
+
+      if (checkError) {
+        console.error('Error checking existing share:', checkError);
+        throw checkError;
+      }
+
+      if (existingShare) {
+        if (existingShare.status === 'pending') {
+          Alert.alert(
+            'Invitación pendiente',
+            `Ya existe una invitación pendiente para ${selectedUser.display_name}. Espera a que la acepte o rechace.`
+          );
+        } else if (existingShare.status === 'accepted') {
+          Alert.alert(
+            'Ya compartido',
+            `${selectedUser.display_name} ya tiene acceso a esta mascota.`
+          );
+        }
+        return;
+      }
+
+      // Insertar nueva invitación
       const { error: shareError } = await supabaseClient
         .from('pet_shares')
         .insert({
@@ -363,7 +408,10 @@ export default function SharePetScreen() {
                 userSuggestions.length === 0 && (
                   <View style={styles.noResultsContainer}>
                     <Text style={styles.noResultsText}>
-                      No se encontraron usuarios con "{searchQuery}"
+                      No se encontraron usuarios disponibles con "{searchQuery}"
+                    </Text>
+                    <Text style={styles.noResultsSubtext}>
+                      Es posible que ya tengan acceso a esta mascota
                     </Text>
                   </View>
                 )}
@@ -692,6 +740,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
+  },
+  noResultsSubtext: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    marginTop: 4,
+    textAlign: 'center',
   },
   selectedUserContainer: {
     marginTop: 12,
