@@ -145,6 +145,52 @@ export default function SelectVaccine() {
 
   const handleSelectVaccine = (vaccine: any) => {
     console.log('Navigating back with vaccine:', vaccine.name);
+
+    // Calcular próxima dosis automáticamente basada en la frecuencia
+    let calculatedNextDueDate = null;
+    if (vaccine.frequency) {
+      const today = new Date();
+      const frequency = vaccine.frequency.toLowerCase();
+
+      if (frequency.includes('anual') || frequency.includes('yearly')) {
+        const nextDate = new Date(today);
+        nextDate.setFullYear(nextDate.getFullYear() + 1);
+        calculatedNextDueDate = nextDate.toISOString();
+      } else if (frequency.includes('cada 3 años') || frequency.includes('every 3 years')) {
+        const nextDate = new Date(today);
+        nextDate.setFullYear(nextDate.getFullYear() + 3);
+        calculatedNextDueDate = nextDate.toISOString();
+      } else if (frequency.includes('6 meses') || frequency.includes('6 months')) {
+        const nextDate = new Date(today);
+        nextDate.setMonth(nextDate.getMonth() + 6);
+        calculatedNextDueDate = nextDate.toISOString();
+      } else if (frequency.includes('3-4 semanas') || frequency.includes('3-4 weeks') || frequency.includes('serie')) {
+        // Para series de vacunación, la próxima dosis es en 3-4 semanas
+        const nextDate = new Date(today);
+        nextDate.setDate(nextDate.getDate() + 28); // 4 semanas
+        calculatedNextDueDate = nextDate.toISOString();
+      } else if (frequency.includes('refuerzo') && petData) {
+        // Calcular basado en edad de la mascota
+        let ageInMonths = undefined;
+        if (petData.birth_date) {
+          const birthDate = new Date(petData.birth_date);
+          const monthsDiff = (today.getFullYear() - birthDate.getFullYear()) * 12 +
+                            (today.getMonth() - birthDate.getMonth());
+          ageInMonths = Math.max(0, monthsDiff);
+        }
+
+        const nextDate = new Date(today);
+        if (ageInMonths !== undefined && ageInMonths < 4) {
+          // Cachorro/gatito - siguiente dosis en 3-4 semanas
+          nextDate.setDate(nextDate.getDate() + 28);
+        } else {
+          // Adulto - refuerzo anual
+          nextDate.setFullYear(nextDate.getFullYear() + 1);
+        }
+        calculatedNextDueDate = nextDate.toISOString();
+      }
+    }
+
     router.push({
       pathname: returnPath,
       params: {
@@ -152,7 +198,8 @@ export default function SelectVaccine() {
         // Preserve other form values
         ...(currentVeterinarian && { currentVeterinarian }),
         ...(currentNotes && { currentNotes }),
-        ...(currentNextDueDate && { currentNextDueDate })
+        // Usar la fecha calculada o la existente
+        currentNextDueDate: calculatedNextDueDate || currentNextDueDate
       }
     });
   };
@@ -312,7 +359,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingTop: 50,
+    paddingBottom: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
