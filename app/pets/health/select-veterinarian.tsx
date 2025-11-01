@@ -22,7 +22,8 @@ export default function SelectVeterinarian() {
     currentType,
     currentSymptoms,
     currentSeverity,
-    currentDiagnosisDate
+    currentDiagnosisDate,
+    selectedAllergyData
   } = useLocalSearchParams<{
     petId: string;
     returnPath: string;
@@ -40,6 +41,7 @@ export default function SelectVeterinarian() {
     currentSymptoms?: string;
     currentSeverity?: string;
     currentDiagnosisDate?: string;
+    selectedAllergyData?: string;
   }>();
 
   const [veterinarians, setVeterinarians] = useState<any[]>([]);
@@ -109,7 +111,9 @@ export default function SelectVeterinarian() {
         ...(currentType && { currentType }),
         ...(currentSymptoms && { currentSymptoms }),
         ...(currentSeverity && { currentSeverity }),
-        ...(currentDiagnosisDate && { currentDiagnosisDate })
+        ...(currentDiagnosisDate && { currentDiagnosisDate }),
+        // Preserve complete allergy object for AI info card
+        ...(selectedAllergyData && { selectedAllergyData })
       }
     });
   };
