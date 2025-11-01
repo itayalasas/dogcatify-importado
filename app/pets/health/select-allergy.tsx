@@ -1,20 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Search, TriangleAlert as AlertTriangle, Utensils, Leaf, Hand, Pill } from 'lucide-react-native';
+import { ArrowLeft, Search, AlertCircle } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { supabaseClient } from '../../../lib/supabase';
 
 export default function SelectAllergy() {
-  const { petId, species, returnPath, currentValue, currentSymptoms, currentSeverity, currentTreatment, currentNotes } = useLocalSearchParams<{
+  const { petId, species, breed, ageInMonths, weight, returnPath, currentValue, currentType, currentSymptoms, currentSeverity, currentTreatment, currentVeterinarian, currentNotes, currentDiagnosisDate } = useLocalSearchParams<{
     petId: string;
     species: string;
+    breed?: string;
+    ageInMonths?: string;
+    weight?: string;
     returnPath: string;
     currentValue?: string;
+    currentType?: string;
     currentSymptoms?: string;
     currentSeverity?: string;
     currentTreatment?: string;
+    currentVeterinarian?: string;
     currentNotes?: string;
+    currentDiagnosisDate?: string;
   }>();
 
   const [allergies, setAllergies] = useState<any[]>([]);
@@ -32,17 +38,89 @@ export default function SelectAllergy() {
 
   const fetchAllergies = async () => {
     try {
-      const { data, error } = await supabaseClient
-        .from('allergies_catalog')
-        .select('*')
-        .eq('is_active', true)
-        .in('species', [species, 'both'])
-        .order('is_common', { ascending: false }) // Common allergies first
-        .order('name', { ascending: true });
+      const petBreed = breed || '';
+      const petAge = ageInMonths ? parseInt(ageInMonths) : undefined;
+      const petWeight = weight ? parseFloat(weight) : undefined;
 
-      if (error) throw error;
-      setAllergies(data || []);
-      setFilteredAllergies(data || []);
+      if (petBreed && petAge) {
+        const cacheKey = `${species}_${petBreed}_${petAge}_${petWeight || 'any'}`;
+        console.log('Checking AI cache for allergies:', cacheKey);
+
+        const { data: cachedData, error: cacheError } = await supabaseClient
+          .from('allergies_ai_cache')
+          .select('*')
+          .eq('species', species)
+          .eq('breed', petBreed)
+          .eq('age_in_months', petAge)
+          .eq('cache_key', cacheKey)
+          .gt('expires_at', new Date().toISOString())
+          .maybeSingle();
+
+        if (cachedData && cachedData.allergies) {
+          console.log('Using cached allergy data');
+          const cachedAllergies = typeof cachedData.allergies === 'string'
+            ? JSON.parse(cachedData.allergies)
+            : cachedData.allergies;
+          setAllergies(cachedAllergies);
+          setFilteredAllergies(cachedAllergies);
+          setLoading(false);
+          return;
+        }
+
+        console.log('No cache found, generating with AI...');
+        const supabaseUrl = Deno.env ? Deno.env.get('SUPABASE_URL') : process.env.EXPO_PUBLIC_SUPABASE_URL;
+        const supabaseAnonKey = Deno.env ? Deno.env.get('SUPABASE_ANON_KEY') : process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+        const response = await fetch(
+          `${supabaseUrl}/functions/v1/generate-allergy-recommendations`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseAnonKey}`,
+            },
+            body: JSON.stringify({
+              species,
+              breed: petBreed,
+              ageInMonths: petAge,
+              weight: petWeight
+            })
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error('Error generating allergy recommendations');
+        }
+
+        const { allergies: aiAllergies } = await response.json();
+        console.log(`Generated ${aiAllergies.length} allergy recommendations`);
+
+        await supabaseClient
+          .from('allergies_ai_cache')
+          .insert({
+            species,
+            breed: petBreed,
+            age_in_months: petAge,
+            weight: petWeight,
+            allergies: aiAllergies,
+            cache_key: cacheKey
+          });
+
+        setAllergies(aiAllergies);
+        setFilteredAllergies(aiAllergies);
+      } else {
+        const { data, error } = await supabaseClient
+          .from('allergies_catalog')
+          .select('*')
+          .eq('is_active', true)
+          .in('species', [species, 'both'])
+          .order('is_common', { ascending: false })
+          .order('name', { ascending: true });
+
+        if (error) throw error;
+        setAllergies(data || []);
+        setFilteredAllergies(data || []);
+      }
     } catch (error) {
       console.error('Error fetching allergies:', error);
     } finally {
@@ -55,7 +133,7 @@ export default function SelectAllergy() {
       const filtered = allergies.filter(allergy =>
         allergy.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         allergy.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        allergy.category?.toLowerCase().includes(searchQuery.toLowerCase())
+        allergy.allergy_type?.toLowerCase().includes(searchQuery.toLowerCase())
       );
       setFilteredAllergies(filtered);
     } else {
@@ -65,53 +143,87 @@ export default function SelectAllergy() {
 
   const handleSelectAllergy = (allergy: any) => {
     console.log('Navigating back with allergy:', allergy.name);
-    router.push({
+    router.replace({
       pathname: returnPath,
       params: {
         selectedAllergy: JSON.stringify(allergy),
-        // Preserve other form values
-        ...(currentSymptoms && { currentSymptoms }),
-        ...(currentSeverity && { currentSeverity }),
         ...(currentTreatment && { currentTreatment }),
-        ...(currentNotes && { currentNotes })
+        ...(currentVeterinarian && { currentVeterinarian }),
+        ...(currentNotes && { currentNotes }),
+        ...(currentDiagnosisDate && { currentDiagnosisDate })
       }
     });
   };
 
-  const getCategoryIcon = (category: string) => {
-    const icons: Record<string, JSX.Element> = {
-      food: <Utensils size={16} color="#F59E0B" />,
-      environmental: <Leaf size={16} color="#10B981" />,
-      contact: <Hand size={16} color="#3B82F6" />,
-      medication: <Pill size={16} color="#EF4444" />,
-      flea: <AlertTriangle size={16} color="#F59E0B" />,
-      other: <AlertTriangle size={16} color="#6B7280" />
+  const getTypeIcon = (type: string) => {
+    const normalizedType = type?.toLowerCase() || 'other';
+    const icons: Record<string, string> = {
+      alimentaria: '🍽️',
+      ambiental: '🌿',
+      medicamento: '💊',
+      picaduras: '🦟',
+      contacto: '🤚',
+      estacional: '🌸',
+      pulgas: '🪲',
+      food: '🍽️',
+      environmental: '🌿',
+      medication: '💊',
+      insect: '🦟',
+      contact: '🤚',
+      seasonal: '🌸',
+      flea: '🪲',
+      other: '⚠️'
     };
-    return icons[category] || icons.other;
+    return icons[normalizedType] || '⚠️';
   };
 
-  const getCategoryName = (category: string) => {
+  const getTypeName = (type: string) => {
+    if (!type) return 'Sin tipo';
+    const normalizedType = type.toLowerCase();
     const names: Record<string, string> = {
+      alimentaria: 'Alimentaria',
+      ambiental: 'Ambiental',
+      medicamento: 'Medicamento',
+      picaduras: 'Picaduras',
+      contacto: 'Contacto',
+      estacional: 'Estacional',
+      pulgas: 'Pulgas',
       food: 'Alimentaria',
       environmental: 'Ambiental',
-      contact: 'Contacto',
       medication: 'Medicamento',
+      insect: 'Picaduras',
+      contact: 'Contacto',
+      seasonal: 'Estacional',
       flea: 'Pulgas',
       other: 'Otra'
     };
-    return names[category] || 'Sin categoría';
+    return names[normalizedType] || type;
   };
 
-  const getCategoryColor = (category: string) => {
+  const getSeverityColor = (severity: string) => {
+    const normalizedSeverity = severity?.toLowerCase() || 'moderate';
     const colors: Record<string, string> = {
-      food: '#F59E0B',
-      environmental: '#10B981',
-      contact: '#3B82F6',
-      medication: '#EF4444',
-      flea: '#F59E0B',
-      other: '#6B7280'
+      mild: '#10B981',
+      leve: '#10B981',
+      moderate: '#F59E0B',
+      moderada: '#F59E0B',
+      severe: '#EF4444',
+      severa: '#EF4444'
     };
-    return colors[category] || '#6B7280';
+    return colors[normalizedSeverity] || '#F59E0B';
+  };
+
+  const getSeverityLabel = (severity: string) => {
+    const normalizedSeverity = severity?.toLowerCase() || 'moderate';
+    const labels: Record<string, string> = {
+      mild: 'Leve',
+      leve: 'Leve',
+      moderate: 'Moderada',
+      moderada: 'Moderada',
+      severe: 'Severa',
+      severa: 'Severa'
+    };
+    return labels[normalizedSeverity] || 'Moderada';
   };
 
   return (
@@ -142,11 +254,19 @@ export default function SelectAllergy() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Cargando alergias...</Text>
+            <ActivityIndicator size="large" color="#10B981" />
+            <Text style={styles.loadingText}>
+              {breed ? 'Generando recomendaciones con IA...' : 'Cargando alergias...'}
+            </Text>
+            {breed && (
+              <Text style={styles.loadingSubtext}>
+                Analizando predisposiciones para {species === 'dog' ? 'perros' : 'gatos'} {breed}
+              </Text>
+            )}
           </View>
         ) : filteredAllergies.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <AlertTriangle size={48} color="#9CA3AF" />
+            <AlertCircle size={48} color="#9CA3AF" />
             <Text style={styles.emptyTitle}>No se encontraron alergias</Text>
             <Text style={styles.emptySubtitle}>
               Intenta con otros términos de búsqueda
@@ -154,18 +274,20 @@ export default function SelectAllergy() {
           </View>
         ) : (
           <View style={styles.allergiesList}>
-            {filteredAllergies.map((allergy) => (
-              <Card key={allergy.id} style={styles.allergyCard}>
+            {filteredAllergies.map((allergy, index) => (
+              <Card key={allergy.id || `allergy-${index}`} style={styles.allergyCard}>
                 <TouchableOpacity
                   style={styles.allergyContent}
                   onPress={() => handleSelectAllergy(allergy)}
                 >
                   <View style={styles.allergyHeader}>
                     <Text style={styles.allergyName}>{allergy.name}</Text>
-                    <View style={[styles.categoryBadge, { backgroundColor: getCategoryColor(allergy.category) + '20' }]}>
-                      {getCategoryIcon(allergy.category)}
-                      <Text style={[styles.categoryText, { color: getCategoryColor(allergy.category) }]}>
-                        {getCategoryName(allergy.category)}
+                    <View style={styles.typeBadge}>
+                      <Text style={styles.typeIcon}>
+                        {getTypeIcon(allergy.allergy_type)}
+                      </Text>
+                      <Text style={styles.typeText}>
+                        {getTypeName(allergy.allergy_type)}
                       </Text>
                     </View>
                   </View>
@@ -177,38 +299,46 @@ export default function SelectAllergy() {
                   )}
 
                   <View style={styles.allergyDetails}>
-                    {allergy.is_common && (
-                      <View style={styles.commonBadge}>
-                        <Text style={styles.commonText}>⭐ Común</Text>
+                    {allergy.severity && (
+                      <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(allergy.severity) + '20' }]}>
+                        <Text style={[styles.severityText, { color: getSeverityColor(allergy.severity) }]}>
+                          {getSeverityLabel(allergy.severity)}
+                        </Text>
+                      </View>
+                    )}
+
+                    {allergy.frequency && (
+                      <View style={styles.frequencyBadge}>
+                        <Text style={styles.frequencyText}>⭐ {allergy.frequency}</Text>
                       </View>
                     )}
                   </View>
 
-                  {allergy.common_symptoms && allergy.common_symptoms.length > 0 && (
+                  {(allergy.symptoms || allergy.common_symptoms) && (
                     <View style={styles.symptomsContainer}>
                       <Text style={styles.symptomsTitle}>Síntomas típicos:</Text>
                       <Text style={styles.symptomsText}>
-                        {allergy.common_symptoms.slice(0, 3).join(', ')}
-                        {allergy.common_symptoms.length > 3 && '...'}
+                        {(allergy.symptoms || allergy.common_symptoms).slice(0, 3).join(', ')}
+                        {(allergy.symptoms || allergy.common_symptoms).length > 3 && '...'}
                       </Text>
                     </View>
                   )}
 
-                  {allergy.common_triggers && allergy.common_triggers.length > 0 && (
+                  {allergy.triggers && allergy.triggers.length > 0 && (
                     <View style={styles.triggersContainer}>
                       <Text style={styles.triggersTitle}>Desencadenantes:</Text>
                       <Text style={styles.triggersText}>
-                        {allergy.common_triggers.slice(0, 2).join(', ')}
-                        {allergy.common_triggers.length > 2 && '...'}
+                        {allergy.triggers.slice(0, 2).join(', ')}
+                        {allergy.triggers.length > 2 && '...'}
                       </Text>
                     </View>
                   )}
 
-                  {allergy.avoidance_tips && allergy.avoidance_tips.length > 0 && (
+                  {allergy.prevention_tips && allergy.prevention_tips.length > 0 && (
                     <View style={styles.tipsContainer}>
                       <Text style={styles.tipsTitle}>💡 Consejos:</Text>
-                      <Text style={styles.tipsText}>
-                        {allergy.avoidance_tips[0]}
+                      <Text style={styles.tipsText} numberOfLines={1}>
+                        {allergy.prevention_tips[0]}
                       </Text>
                     </View>
                   )}
@@ -285,6 +415,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
+    marginTop: 16,
+  },
+  loadingSubtext: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    marginTop: 8,
+    textAlign: 'center',
   },
   emptyContainer: {
     flex: 1,
@@ -327,17 +465,22 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 12,
   },
-  categoryBadge: {
+  typeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#EBF8FF',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  categoryText: {
+  typeIcon: {
+    fontSize: 14,
+    marginRight: 4,
+  },
+  typeText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    marginLeft: 4,
+    color: '#1E40AF',
   },
   allergyDescription: {
     fontSize: 14,
@@ -352,13 +495,22 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 12,
   },
-  commonBadge: {
+  severityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  severityText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  frequencyBadge: {
     backgroundColor: '#FEF3C7',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  commonText: {
+  frequencyText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
     color: '#92400E',
@@ -368,8 +520,6 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     marginBottom: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#EF4444',
   },
   symptomsTitle: {
     fontSize: 13,
@@ -383,7 +533,7 @@ const styles = StyleSheet.create({
     color: '#991B1B',
   },
   triggersContainer: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FEF3C7',
     padding: 12,
     borderRadius: 8,
     marginBottom: 8,
@@ -391,30 +541,28 @@ const styles = StyleSheet.create({
   triggersTitle: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#374151',
+    color: '#92400E',
     marginBottom: 4,
   },
   triggersText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: '#92400E',
   },
   tipsContainer: {
-    backgroundColor: '#F0FDF4',
+    backgroundColor: '#D1FAE5',
     padding: 12,
     borderRadius: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#10B981',
   },
   tipsTitle: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#166534',
+    color: '#065F46',
     marginBottom: 4,
   },
   tipsText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#166534',
+    color: '#065F46',
   },
 });
