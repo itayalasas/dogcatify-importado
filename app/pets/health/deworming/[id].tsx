@@ -76,7 +76,19 @@ export default function AddDeworming() {
     if (params.currentNotes && typeof params.currentNotes === 'string') {
       setNotes(params.currentNotes);
     }
-  }, [params.selectedDewormer, params.currentVeterinarian, params.currentNotes]);
+
+    // Restore selected dewormer when coming back from veterinarian selection
+    if (params.currentSelectedDewormer && typeof params.currentSelectedDewormer === 'string') {
+      try {
+        const dewormer = JSON.parse(params.currentSelectedDewormer);
+        setSelectedDewormer(dewormer);
+        setProductName(dewormer.name);
+        console.log('Restored selected dewormer:', dewormer.name);
+      } catch (error) {
+        console.error('Error parsing currentSelectedDewormer:', error);
+      }
+    }
+  }, [params.selectedDewormer, params.currentVeterinarian, params.currentNotes, params.currentSelectedDewormer]);
 
   // Calculate next due date when dewormer or application date changes
   useEffect(() => {
@@ -246,7 +258,8 @@ export default function AddDeworming() {
         currentValue: veterinarian,
         currentCondition: productName,
         currentNotes: notes,
-        currentApplicationDate: applicationDate.toISOString()
+        currentApplicationDate: applicationDate.toISOString(),
+        currentSelectedDewormer: selectedDewormer ? JSON.stringify(selectedDewormer) : undefined
       }
     });
   };
