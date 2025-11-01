@@ -6,13 +6,14 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { supabaseClient } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
-import { ArrowLeft, Save } from 'lucide-react-native';
+import { ArrowLeft, Save, Sparkles } from 'lucide-react-native';
 
 interface Pet {
   id: string;
@@ -53,6 +54,9 @@ export default function PetBehaviorAssessment() {
   const [traits, setTraits] = useState<BehaviorTrait[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [aiRecommendations, setAiRecommendations] = useState<string[]>([]);
+  const [loadingAI, setLoadingAI] = useState(false);
+  const [useAI, setUseAI] = useState(false);
 
   useEffect(() => {
     fetchPetData();
@@ -203,9 +207,64 @@ export default function PetBehaviorAssessment() {
   };
 
   const updateTraitScore = (traitName: string, score: number) => {
-    setTraits(prev => prev.map(trait => 
+    setTraits(prev => prev.map(trait =>
       trait.name === traitName ? { ...trait, score } : trait
     ));
+    // Reset AI recommendations when traits change
+    if (useAI && aiRecommendations.length > 0) {
+      setAiRecommendations([]);
+    }
+  };
+
+  const generateAIRecommendations = async () => {
+    if (!pet) return;
+
+    setLoadingAI(true);
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session) {
+        Alert.alert('Error', 'Debes estar autenticado');
+        return;
+      }
+
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/generate-behavior-recommendations`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            petName: pet.name,
+            species: pet.species,
+            breed: pet.breed,
+            age: pet.age,
+            weight: pet.weight,
+            traits: traits,
+            breedInfo: pet.breed_info,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Error al generar recomendaciones');
+      }
+
+      const data = await response.json();
+      setAiRecommendations(data.recommendations);
+      setUseAI(true);
+    } catch (error) {
+      console.error('Error generating AI recommendations:', error);
+      Alert.alert(
+        'Error',
+        'No se pudieron generar recomendaciones con IA. Usando recomendaciones predeterminadas.'
+      );
+      setUseAI(false);
+    } finally {
+      setLoadingAI(false);
+    }
   };
 
   const getRecommendations = () => {
@@ -498,13 +557,38 @@ export default function PetBehaviorAssessment() {
       </View>
 
       <Card style={styles.recommendationsCard}>
-        <Text style={styles.recommendationsTitle}>Recomendaciones Personalizadas</Text>
-        {getRecommendations().map((recommendation, index) => (
+        <View style={styles.recommendationsHeader}>
+          <Text style={styles.recommendationsTitle}>Recomendaciones Personalizadas</Text>
+          <Button
+            title={useAI ? "Regenerar con IA" : "Generar con IA"}
+            onPress={generateAIRecommendations}
+            loading={loadingAI}
+            icon={<Sparkles size={18} color="white" />}
+            size="small"
+            style={styles.aiButton}
+          />
+        </View>
+
+        {loadingAI && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#10B981" />
+            <Text style={styles.loadingText}>Generando recomendaciones personalizadas con IA...</Text>
+          </View>
+        )}
+
+        {!loadingAI && (useAI && aiRecommendations.length > 0 ? aiRecommendations : getRecommendations()).map((recommendation, index) => (
           <View key={index} style={styles.recommendationItem}>
             <Text style={styles.recommendationBullet}>•</Text>
             <Text style={styles.recommendationText}>{recommendation}</Text>
           </View>
         ))}
+
+        {useAI && aiRecommendations.length > 0 && (
+          <View style={styles.aiLabel}>
+            <Sparkles size={14} color="#10B981" />
+            <Text style={styles.aiLabelText}>Generado con IA</Text>
+          </View>
+        )}
       </Card>
 
       <View style={styles.saveContainer}>
@@ -662,11 +746,49 @@ const styles = StyleSheet.create({
     margin: 16,
     marginTop: 8,
   },
+  recommendationsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
   recommendationsTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
-    marginBottom: 12,
+    flex: 1,
+  },
+  aiButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  aiLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    gap: 6,
+  },
+  aiLabelText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#10B981',
   },
   recommendationItem: {
     flexDirection: 'row',
