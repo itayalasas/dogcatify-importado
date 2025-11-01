@@ -560,10 +560,10 @@ export default function PetBehaviorAssessment() {
         <View style={styles.recommendationsHeader}>
           <Text style={styles.recommendationsTitle}>Recomendaciones Personalizadas</Text>
           <Button
-            title={useAI ? "Regenerar con IA" : "Generar con IA"}
+            title={`Evaluar ${pet.name}`}
             onPress={generateAIRecommendations}
             loading={loadingAI}
-            icon={<Sparkles size={18} color="white" />}
+            icon={<Sparkles size={16} color="white" />}
             size="small"
             style={styles.aiButton}
           />
@@ -750,8 +750,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    gap: 8,
+    marginBottom: 16,
+    gap: 12,
   },
   recommendationsTitle: {
     fontSize: 16,
@@ -760,8 +760,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   aiButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minWidth: 0,
   },
   loadingContainer: {
     alignItems: 'center',
