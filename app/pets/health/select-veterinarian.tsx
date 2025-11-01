@@ -16,7 +16,7 @@ export default function SelectVeterinarian() {
     currentVaccine,
     currentSelectedVaccine,
     currentApplicationDate,
-    currentNextDueDate
+    currentSelectedDewormer
   } = useLocalSearchParams<{
     petId: string;
     returnPath: string;
@@ -27,7 +27,7 @@ export default function SelectVeterinarian() {
     currentVaccine?: string;
     currentSelectedVaccine?: string;
     currentApplicationDate?: string;
-    currentNextDueDate?: string;
+    currentSelectedDewormer?: string;
   }>();
 
   const [veterinarians, setVeterinarians] = useState<any[]>([]);
@@ -82,7 +82,7 @@ export default function SelectVeterinarian() {
   const handleSelectVeterinarian = (veterinarian: any) => {
     // Navigate back with selected veterinarian
     console.log('Navigating back with veterinarian:', veterinarian.business_name);
-    router.push({
+    router.replace({
       pathname: returnPath,
       params: {
         selectedVeterinarian: JSON.stringify({ name: veterinarian.business_name }),
@@ -92,7 +92,7 @@ export default function SelectVeterinarian() {
         ...(currentVaccine && { selectedVaccine: currentSelectedVaccine || JSON.stringify({ name: currentVaccine }) }),
         ...(currentNotes && { currentNotes: currentNotes }),
         ...(currentApplicationDate && { currentApplicationDate }),
-        ...(currentNextDueDate && { currentNextDueDate })
+        ...(currentSelectedDewormer && { currentSelectedDewormer })
       }
     });
   };
