@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Calendar, TriangleAlert as AlertTriangle, ChevronDown } from 'lucide-react-native';
 import { Input } from '../../../../components/ui/Input';
@@ -7,7 +7,7 @@ import { Button } from '../../../../components/ui/Button';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Card } from '../../../../components/ui/Card';
 import { supabaseClient } from '../../../../lib/supabase';
-import { useAuth } from '../../../../contexts/AuthContext';
+import { useAuth} from '../../../../contexts/AuthContext';
 
 export default function AddAllergy() {
   const { id, recordId, refresh } = useLocalSearchParams<{ id: string; recordId?: string; refresh?: string }>();
@@ -24,64 +24,89 @@ export default function AddAllergy() {
   const [severity, setSeverity] = useState('');
   const [treatment, setTreatment] = useState('');
   const [selectedVeterinarian, setSelectedVeterinarian] = useState<any>(null);
+  const [selectedAllergy, setSelectedAllergy] = useState<any>(null);
   const [notes, setNotes] = useState('');
+  const [diagnosisDate, setDiagnosisDate] = useState(new Date());
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [showAddVetModal, setShowAddVetModal] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [tempVetName, setTempVetName] = useState('');
 
   // Handle return parameters from selection screens
   useEffect(() => {
-    // Handle preserved allergy type
-    if (params.currentAllergyType && typeof params.currentAllergyType === 'string') {
-      setAllergyType(params.currentAllergyType);
+    // Handle preserved diagnosis date
+    if (params.currentDiagnosisDate && typeof params.currentDiagnosisDate === 'string') {
+      try {
+        setDiagnosisDate(new Date(params.currentDiagnosisDate));
+      } catch (error) {
+        console.error('Error parsing diagnosis date:', error);
+      }
     }
-    
+
     // Handle selected allergy
     if (params.selectedAllergy) {
       try {
         const allergy = JSON.parse(params.selectedAllergy as string);
+        setSelectedAllergy(allergy);
         setAllergyName(allergy.name);
-        setAllergyType(allergy.category);
+        setAllergyType(allergy.allergy_type || allergy.category || '');
+
         // Pre-fill symptoms if available
-        if (allergy.common_symptoms && allergy.common_symptoms.length > 0) {
+        if (allergy.symptoms && Array.isArray(allergy.symptoms)) {
+          setSymptoms(allergy.symptoms.join(', '));
+        } else if (allergy.common_symptoms && Array.isArray(allergy.common_symptoms)) {
           setSymptoms(allergy.common_symptoms.join(', '));
         }
+
+        // Pre-fill severity if available
+        if (allergy.severity) {
+          setSeverity(allergy.severity);
+        }
+
         console.log('Selected allergy:', allergy.name);
       } catch (error) {
         console.error('Error parsing selected allergy:', error);
       }
     }
-    
+
     // Handle selected veterinarian
     if (params.selectedVeterinarian) {
       try {
         const vet = JSON.parse(params.selectedVeterinarian as string);
-        setTreatment(vet.name); // For allergies, veterinarian info goes in treatment
+        setTreatment(vet.name);
         setSelectedVeterinarian(vet);
         console.log('Selected veterinarian:', vet.name);
       } catch (error) {
         console.error('Error parsing selected veterinarian:', error);
       }
     }
-    
+
     // Handle preserved values
+    if (params.currentType && typeof params.currentType === 'string') {
+      setAllergyType(params.currentType);
+    }
+
     if (params.currentSymptoms && typeof params.currentSymptoms === 'string') {
       setSymptoms(params.currentSymptoms);
     }
-    
+
     if (params.currentSeverity && typeof params.currentSeverity === 'string') {
       setSeverity(params.currentSeverity);
     }
-    
+
     if (params.currentTreatment && typeof params.currentTreatment === 'string') {
       setTreatment(params.currentTreatment);
     }
-    
+
+    if (params.currentVeterinarian && typeof params.currentVeterinarian === 'string') {
+      setTreatment(params.currentVeterinarian);
+    }
+
     if (params.currentNotes && typeof params.currentNotes === 'string') {
       setNotes(params.currentNotes);
     }
-  }, [params.selectedAllergy, params.currentSymptoms, params.currentSeverity, params.currentTreatment, params.currentNotes]);
+  }, [params.selectedAllergy, params.selectedVeterinarian, params.currentType, params.currentSymptoms, params.currentSeverity, params.currentTreatment, params.currentVeterinarian, params.currentNotes, params.currentDiagnosisDate]);
 
   useEffect(() => {
     fetchPetData();
@@ -110,17 +135,21 @@ export default function AddAllergy() {
   const handleSelectAllergy = () => {
     router.push({
       pathname: '/pets/health/select-allergy',
-      params: { 
+      params: {
         petId: id,
         species: pet?.species || 'dog',
+        breed: pet?.breed || '',
+        ageInMonths: pet?.age_in_months?.toString() || '',
+        weight: pet?.weight?.toString() || '',
         returnPath: `/pets/health/allergies/${id}`,
         currentValue: allergyName,
-        // Preserve current form values
+        currentType: allergyType,
         currentSymptoms: symptoms,
         currentSeverity: severity,
         currentTreatment: treatment,
+        currentVeterinarian: selectedVeterinarian?.name || '',
         currentNotes: notes,
-        currentAllergyType: allergyType
+        currentDiagnosisDate: diagnosisDate.toISOString()
       }
     });
   };
@@ -128,17 +157,24 @@ export default function AddAllergy() {
   const handleSelectVeterinarian = () => {
     router.push({
       pathname: '/pets/health/select-veterinarian',
-      params: { 
+      params: {
         petId: id,
         returnPath: `/pets/health/allergies/${id}`,
         currentValue: treatment,
-        // Preserve current form values
         currentCondition: allergyName,
         currentNotes: notes,
+        currentType: allergyType,
         currentSymptoms: symptoms,
         currentSeverity: severity,
-        currentAllergyType: allergyType
+        currentDiagnosisDate: diagnosisDate.toISOString()
       }
+    });
+  };
+
+  const handleBackNavigation = () => {
+    router.replace({
+      pathname: `/pets/${id}`,
+      params: { activeTab: 'health' }
     });
   };
 
@@ -257,7 +293,12 @@ export default function AddAllergy() {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Card style={styles.formCard}>
           <View style={styles.iconContainer}>
             <AlertTriangle size={40} color="#F59E0B" />
@@ -366,6 +407,7 @@ export default function AddAllergy() {
           />
         </Card>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Add Temporary Veterinarian Modal */}
       <Modal
