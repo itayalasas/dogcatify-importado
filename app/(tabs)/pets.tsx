@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Dimensions, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Dimensions, Alert, Image } from 'react-native';
 import { router } from 'expo-router';
 import { Plus, Bell, Check, X, User } from 'lucide-react-native';
 import { PetCard } from '../../components/PetCard';
@@ -588,11 +588,11 @@ export default function Pets() {
                 <View style={styles.invitationInfo}>
                   <View style={styles.invitationPetInfo}>
                     {invitation.pet.photo_url ? (
-                      <View style={styles.invitationPetImage}>
-                        <Text style={styles.invitationPetEmoji}>
-                          {invitation.pet.species === 'dog' ? '🐕' : '🐈'}
-                        </Text>
-                      </View>
+                      <Image
+                        source={{ uri: invitation.pet.photo_url }}
+                        style={styles.invitationPetImage}
+                        resizeMode="cover"
+                      />
                     ) : (
                       <View style={styles.invitationPetImage}>
                         <Text style={styles.invitationPetEmoji}>
@@ -802,6 +802,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    overflow: 'hidden',
   },
   invitationPetEmoji: {
     fontSize: 32,
