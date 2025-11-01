@@ -18,8 +18,8 @@
         "SENTRY_PROJECT": "react-native",
         "DD_API_KEY": "068208a98b131a96831ca92a86d4f158",
         "DATADOG_API_KEY": "068208a98b131a96831ca92a86d4f158",
-        "DD_SITE": "datadoghq.com",
-        "DATADOG_SITE": "datadoghq.com"
+        "DD_SITE": "us5.datadoghq.com",
+        "DATADOG_SITE": "us5.datadoghq.com"
       }
     },
     "preview": {
@@ -45,8 +45,8 @@
         "EXPO_SKIP_MANIFEST_VALIDATION_TOKEN": "true",
         "DD_API_KEY": "068208a98b131a96831ca92a86d4f158",
         "DATADOG_API_KEY": "068208a98b131a96831ca92a86d4f158",
-        "DD_SITE": "datadoghq.com",
-        "DATADOG_SITE": "datadoghq.com"
+        "DD_SITE": "us5.datadoghq.com",
+        "DATADOG_SITE": "us5.datadoghq.com"
       }
     },
     "default": {

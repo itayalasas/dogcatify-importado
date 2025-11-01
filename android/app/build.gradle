@@ -209,8 +209,8 @@ tasks.configureEach { task ->
             // Obtener las variables de gradle.properties o del sistema
             def ddApiKey = project.findProperty('DD_API_KEY') ?: System.getenv('DD_API_KEY') ?: '068208a98b131a96831ca92a86d4f158'
             def datadogApiKey = project.findProperty('DATADOG_API_KEY') ?: System.getenv('DATADOG_API_KEY') ?: '068208a98b131a96831ca92a86d4f158'
-            def ddSite = project.findProperty('DD_SITE') ?: System.getenv('DD_SITE') ?: 'datadoghq.com'
-            def datadogSite = project.findProperty('DATADOG_SITE') ?: System.getenv('DATADOG_SITE') ?: 'datadoghq.com'
+            def ddSite = project.findProperty('DD_SITE') ?: System.getenv('DD_SITE') ?: 'us5.datadoghq.com'
+            def datadogSite = project.findProperty('DATADOG_SITE') ?: System.getenv('DATADOG_SITE') ?: 'us5.datadoghq.com'
 
             // Exportar para que el comando datadog-ci las pueda leer
             task.environment('DD_API_KEY', ddApiKey)
