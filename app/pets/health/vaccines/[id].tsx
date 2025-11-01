@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Calendar, Syringe, ChevronDown } from 'lucide-react-native';
 import { Input } from '../../../../components/ui/Input';
@@ -412,8 +412,17 @@ export default function AddVaccine() {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Card style={styles.formCard}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Card style={styles.formCard}>
           <View style={styles.iconContainer}>
             <Syringe size={40} color="#3B82F6" />
           </View>
@@ -532,7 +541,8 @@ export default function AddVaccine() {
             size="large"
           />
         </Card>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Add Temporary Veterinarian Modal */}
       <Modal
@@ -606,6 +616,9 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     width: 40,
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   content: {
     flex: 1,
