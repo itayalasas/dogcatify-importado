@@ -31,6 +31,7 @@ interface NotificationContextType {
   disableNotifications: () => Promise<void>;
   sendNotificationToUser: (userId: string, title: string, body: string, data?: any) => Promise<void>;
   sendNotificationToAdmin: (title: string, body: string, data?: any) => Promise<void>;
+  validateAndUpdateTokens: () => Promise<void>;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -49,16 +50,16 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const { currentUser } = useAuth();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
-  // Check if notifications are enabled on mount
+  // Check and validate tokens when user logs in
   useEffect(() => {
     if (isExpoGo || Platform.OS === 'web' || !Notifications) {
       console.log('Notifications not available in this environment');
       return;
     }
 
-    // Check stored notification preference
     if (currentUser) {
-      checkNotificationStatus();
+      console.log('Usuario logueado, validando tokens...');
+      validateAndUpdateTokens();
     }
   }, [currentUser]);
 
@@ -392,6 +393,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           .from('profiles')
           .update({
             push_token: null,
+            fcm_token: null,
             notification_preferences: {
               push: false,
               email: true
@@ -410,6 +412,147 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   };
 
+  const validateAndUpdateTokens = async (): Promise<void> => {
+    if (isExpoGo || Platform.OS === 'web' || !Notifications || !Device) {
+      return;
+    }
+
+    if (!currentUser) {
+      console.log('No current user, skipping token validation');
+      return;
+    }
+
+    try {
+      console.log('=== VALIDANDO TOKENS AL INICIAR SESIÓN ===');
+
+      const { data: profile, error: profileError } = await supabaseClient
+        .from('profiles')
+        .select('push_token, fcm_token, notification_preferences')
+        .eq('id', currentUser.id)
+        .single();
+
+      if (profileError) {
+        console.warn('Error obteniendo perfil:', profileError);
+        return;
+      }
+
+      const storedPushToken = profile?.push_token;
+      const storedFcmToken = profile?.fcm_token;
+
+      console.log('Tokens almacenados:');
+      console.log('- Expo Token:', storedPushToken ? storedPushToken.substring(0, 30) + '...' : 'null');
+      console.log('- FCM Token:', storedFcmToken ? storedFcmToken.substring(0, 30) + '...' : 'null');
+
+      let needsUpdate = false;
+      let currentExpoToken: string | null = null;
+      let currentFcmToken: string | null = null;
+
+      if (!Device.isDevice) {
+        console.log('⚠️ Ejecutando en simulador, tokens no disponibles');
+        return;
+      }
+
+      const { status } = await Notifications.getPermissionsAsync();
+
+      if (status !== 'granted') {
+        console.log('⚠️ Permisos de notificación no otorgados');
+        if (storedPushToken || storedFcmToken) {
+          console.log('Limpiando tokens almacenados (permisos revocados)');
+          await supabaseClient
+            .from('profiles')
+            .update({
+              push_token: null,
+              fcm_token: null,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', currentUser.id);
+
+          setExpoPushToken(null);
+          setNotificationsEnabled(false);
+        }
+        return;
+      }
+
+      try {
+        const projectId = '0618d9ae-6714-46bb-adce-f4ee57fff324';
+        let tokenData;
+
+        try {
+          tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+        } catch {
+          tokenData = await Notifications.getExpoPushTokenAsync();
+        }
+
+        currentExpoToken = tokenData.data;
+        console.log('✅ Expo token actual:', currentExpoToken.substring(0, 30) + '...');
+
+        if (currentExpoToken !== storedPushToken) {
+          console.log('🔄 Expo token cambió, necesita actualización');
+          needsUpdate = true;
+        }
+      } catch (tokenError) {
+        console.warn('⚠️ No se pudo obtener Expo token:', tokenError);
+      }
+
+      if (Platform.OS === 'android') {
+        try {
+          const devicePushToken = await Notifications.getDevicePushTokenAsync();
+          currentFcmToken = devicePushToken.data;
+          console.log('✅ FCM token actual:', currentFcmToken.substring(0, 30) + '...');
+
+          if (currentFcmToken !== storedFcmToken) {
+            console.log('🔄 FCM token cambió, necesita actualización');
+            needsUpdate = true;
+          }
+        } catch (fcmError) {
+          console.warn('⚠️ No se pudo obtener FCM token:', fcmError);
+        }
+      }
+
+      if (!storedPushToken && !storedFcmToken && (currentExpoToken || currentFcmToken)) {
+        console.log('📝 Usuario no tiene tokens registrados, actualizando...');
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+        console.log('💾 Actualizando tokens en base de datos...');
+
+        const { error: updateError } = await supabaseClient
+          .from('profiles')
+          .update({
+            push_token: currentExpoToken,
+            fcm_token: currentFcmToken,
+            notification_preferences: {
+              push: true,
+              email: true
+            },
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', currentUser.id);
+
+        if (updateError) {
+          console.error('❌ Error actualizando tokens:', updateError);
+        } else {
+          console.log('✅ Tokens actualizados exitosamente');
+          setExpoPushToken(currentExpoToken);
+          setNotificationsEnabled(true);
+
+          if (currentFcmToken) {
+            console.log('✅ FCM v1 API listo para Android');
+          }
+        }
+      } else {
+        console.log('✅ Tokens válidos, no se requiere actualización');
+        setExpoPushToken(storedPushToken);
+        setNotificationsEnabled(true);
+      }
+
+      console.log('=== VALIDACIÓN DE TOKENS COMPLETADA ===');
+    } catch (error) {
+      console.error('❌ Error en validación de tokens:', error);
+    }
+  };
+
   return (
     <NotificationContext.Provider
       value={{
@@ -420,6 +563,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         disableNotifications,
         sendNotificationToUser,
         sendNotificationToAdmin,
+        validateAndUpdateTokens,
       }}
     >
       {children}
