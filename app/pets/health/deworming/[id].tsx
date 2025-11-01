@@ -55,7 +55,7 @@ export default function AddDeworming() {
         console.error('Error parsing selected dewormer:', error);
       }
     }
-    
+
     // Handle selected veterinarian
     if (params.selectedVeterinarian) {
       try {
@@ -67,34 +67,28 @@ export default function AddDeworming() {
         console.error('Error parsing selected veterinarian:', error);
       }
     }
-    
-    // Handle preserved values
+
+    // Handle preserved values (but NOT next due date, as it will be calculated automatically)
     if (params.currentVeterinarian && typeof params.currentVeterinarian === 'string') {
       setVeterinarian(params.currentVeterinarian);
     }
-    
+
     if (params.currentNotes && typeof params.currentNotes === 'string') {
       setNotes(params.currentNotes);
     }
-    
-    if (params.currentNextDueDate && typeof params.currentNextDueDate === 'string') {
-      try {
-        setNextDueDate(new Date(params.currentNextDueDate));
-      } catch (error) {
-        console.error('Error parsing next due date:', error);
-      }
-    }
-  }, [params.selectedDewormer, params.currentVeterinarian, params.currentNotes, params.currentNextDueDate]);
+  }, [params.selectedDewormer, params.currentVeterinarian, params.currentNotes]);
 
   // Calculate next due date when dewormer or application date changes
   useEffect(() => {
-    if (selectedDewormer && applicationDate) {
+    if (selectedDewormer && applicationDate && pet) {
       calculateNextDueDate();
     }
-  }, [selectedDewormer, applicationDate]);
+  }, [selectedDewormer, applicationDate, pet]);
 
   const calculateNextDueDate = () => {
     if (!selectedDewormer || !applicationDate || !pet) return;
+
+    console.log('Calculating next due date for dewormer:', selectedDewormer.name);
 
     const nextDate = new Date(applicationDate);
     const ageInWeeks = calculateAgeInWeeks(pet);
@@ -120,6 +114,7 @@ export default function AddDeworming() {
       calculateBreedBasedFrequency(nextDate, ageInWeeks, petBreed);
     }
 
+    console.log('Next due date calculated:', nextDate.toLocaleDateString('es-ES'));
     setNextDueDate(nextDate);
   };
 
@@ -211,7 +206,6 @@ export default function AddDeworming() {
         currentValue: productName,
         currentVeterinarian: veterinarian,
         currentNotes: notes,
-        currentNextDueDate: nextDueDate?.toISOString(),
         currentApplicationDate: applicationDate.toISOString()
       }
     });
@@ -246,15 +240,13 @@ export default function AddDeworming() {
   const handleSelectVeterinarian = () => {
     router.push({
       pathname: '/pets/health/select-veterinarian',
-      params: { 
+      params: {
         petId: id,
         returnPath: `/pets/health/deworming/${id}`,
         currentValue: veterinarian,
-        // Preserve current form values
         currentCondition: productName,
         currentNotes: notes,
-        currentApplicationDate: applicationDate.toISOString(),
-        currentNextDueDate: nextDueDate?.toISOString()
+        currentApplicationDate: applicationDate.toISOString()
       }
     });
   };
