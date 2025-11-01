@@ -425,7 +425,7 @@ export default function PetDetail() {
 
               if (error) throw error;
 
-              await fetchHealthData();
+              await fetchHealthRecords();
               Alert.alert('Éxito', 'Vacuna eliminada correctamente');
             } catch (error) {
               console.error('Error deleting vaccine:', error);
@@ -455,7 +455,7 @@ export default function PetDetail() {
 
               if (error) throw error;
 
-              await fetchHealthData();
+              await fetchHealthRecords();
               Alert.alert('Éxito', 'Enfermedad eliminada correctamente');
             } catch (error) {
               console.error('Error deleting illness:', error);
@@ -485,7 +485,7 @@ export default function PetDetail() {
 
               if (error) throw error;
 
-              await fetchHealthData();
+              await fetchHealthRecords();
               Alert.alert('Éxito', 'Alergia eliminada correctamente');
             } catch (error) {
               console.error('Error deleting allergy:', error);
@@ -515,7 +515,7 @@ export default function PetDetail() {
 
               if (error) throw error;
 
-              await fetchHealthData();
+              await fetchHealthRecords();
               Alert.alert('Éxito', 'Desparasitación eliminada correctamente');
             } catch (error) {
               console.error('Error deleting deworming:', error);
