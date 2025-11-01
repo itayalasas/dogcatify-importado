@@ -177,14 +177,13 @@ export default function PartnerProducts() {
   };
 
   const handleEditProduct = (productId: string) => {
-    Alert.alert('Editar producto', 'Esta funcionalidad estará disponible próximamente');
-    // router.push({
-    //   pathname: '/partner/edit-product',
-    //   params: {
-    //     partnerId: businessId,
-    //     productId: productId
-    //   }
-    // });
+    router.push({
+      pathname: '/partner/edit-product',
+      params: {
+        partnerId: businessId,
+        productId: productId
+      }
+    });
   };
 
   const handleToggleProduct = async (productId: string, isActive: boolean) => {
@@ -349,7 +348,7 @@ export default function PartnerProducts() {
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
-                ${products.reduce((sum, p) => sum + (p.price || 0), 0).toFixed(0)}
+                ${products.reduce((sum, p) => sum + ((p.price || 0) * (p.stock || 0)), 0).toFixed(0)}
               </Text>
               <Text style={styles.statLabel}>Valor Inventario</Text>
             </View>
