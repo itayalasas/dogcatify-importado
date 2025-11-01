@@ -588,52 +588,64 @@ export default function AddPet() {
               )}
 
               <View style={styles.breedStatsGrid}>
-                {(breedInfo.min_weight_male || (breedInfo as any).min_weight) &&
-                 (breedInfo.max_weight_male || (breedInfo as any).max_weight) && (
+                {/* Para gatos: solo un rango de peso sin distinción de género */}
+                {species === 'cat' && (breedInfo as any).min_weight && (breedInfo as any).max_weight && (
+                  <View style={styles.breedStat}>
+                    <Text style={styles.breedStatLabel}>Peso</Text>
+                    <Text style={styles.breedStatValue}>
+                      {(breedInfo as any).min_weight} - {(breedInfo as any).max_weight} kg
+                    </Text>
+                  </View>
+                )}
+
+                {/* Para perros: peso separado por género */}
+                {species === 'dog' && breedInfo.min_weight_male && breedInfo.max_weight_male && (
                   <View style={styles.breedStat}>
                     <Text style={styles.breedStatLabel}>Peso (Macho)</Text>
                     <Text style={styles.breedStatValue}>
-                      {breedInfo.min_weight_male || (breedInfo as any).min_weight} - {breedInfo.max_weight_male || (breedInfo as any).max_weight} kg
+                      {breedInfo.min_weight_male} - {breedInfo.max_weight_male} kg
                     </Text>
                   </View>
                 )}
 
-                {(breedInfo.min_weight_female || (breedInfo as any).min_weight) &&
-                 (breedInfo.max_weight_female || (breedInfo as any).max_weight) && (
+                {species === 'dog' && breedInfo.min_weight_female && breedInfo.max_weight_female && (
                   <View style={styles.breedStat}>
                     <Text style={styles.breedStatLabel}>Peso (Hembra)</Text>
                     <Text style={styles.breedStatValue}>
-                      {breedInfo.min_weight_female || (breedInfo as any).min_weight} - {breedInfo.max_weight_female || (breedInfo as any).max_weight} kg
+                      {breedInfo.min_weight_female} - {breedInfo.max_weight_female} kg
                     </Text>
                   </View>
                 )}
 
-                {(breedInfo.min_life_expectancy || (breedInfo as any).min_life_span) &&
-                 (breedInfo.max_life_expectancy || (breedInfo as any).max_life_span) && (
+                {breedInfo.min_life_expectancy && breedInfo.max_life_expectancy && (
                   <View style={styles.breedStat}>
                     <Text style={styles.breedStatLabel}>Esperanza de vida</Text>
                     <Text style={styles.breedStatValue}>
-                      {breedInfo.min_life_expectancy || (breedInfo as any).min_life_span} - {breedInfo.max_life_expectancy || (breedInfo as any).max_life_span} años
+                      {breedInfo.min_life_expectancy} - {breedInfo.max_life_expectancy} años
                     </Text>
                   </View>
                 )}
 
+                {/* Energía / Juguetón */}
                 {(breedInfo.energy !== undefined || (breedInfo as any).playfulness !== undefined) && (
                   <View style={styles.breedStat}>
-                    <Text style={styles.breedStatLabel}>Energía</Text>
+                    <Text style={styles.breedStatLabel}>
+                      {species === 'dog' ? 'Energía' : 'Juguetón'}
+                    </Text>
                     <View style={styles.breedStatRating}>
                       <Text style={styles.breedStatValue}>
-                        {breedInfo.energy !== undefined ? breedInfo.energy : (breedInfo as any).playfulness}/5
+                        {species === 'dog' ? breedInfo.energy : (breedInfo as any).playfulness}/5
                       </Text>
                       <View style={styles.ratingBar}>
                         <View style={[styles.ratingFill, {
-                          width: `${((breedInfo.energy !== undefined ? breedInfo.energy : (breedInfo as any).playfulness) / 5) * 100}%`
+                          width: `${((species === 'dog' ? breedInfo.energy : (breedInfo as any).playfulness) / 5) * 100}%`
                         }]} />
                       </View>
                     </View>
                   </View>
                 )}
 
+                {/* Entrenabilidad / Inteligencia */}
                 {(breedInfo.trainability !== undefined || (breedInfo as any).intelligence !== undefined) && (
                   <View style={styles.breedStat}>
                     <Text style={styles.breedStatLabel}>
@@ -641,36 +653,45 @@ export default function AddPet() {
                     </Text>
                     <View style={styles.breedStatRating}>
                       <Text style={styles.breedStatValue}>
-                        {breedInfo.trainability !== undefined ? breedInfo.trainability : (breedInfo as any).intelligence}/5
+                        {species === 'dog' ? breedInfo.trainability : (breedInfo as any).intelligence}/5
                       </Text>
                       <View style={styles.ratingBar}>
                         <View style={[styles.ratingFill, {
-                          width: `${((breedInfo.trainability !== undefined ? breedInfo.trainability : (breedInfo as any).intelligence) / 5) * 100}%`
+                          width: `${((species === 'dog' ? breedInfo.trainability : (breedInfo as any).intelligence) / 5) * 100}%`
                         }]} />
                       </View>
                     </View>
                   </View>
                 )}
 
-                {((breedInfo as any).shedding !== undefined || (breedInfo as any).grooming !== undefined) && (
+                {/* Muda de pelo */}
+                {(breedInfo as any).shedding !== undefined && (
                   <View style={styles.breedStat}>
-                    <Text style={styles.breedStatLabel}>
-                      {species === 'dog' ? 'Muda de pelo' : 'Cuidado del pelaje'}
-                    </Text>
+                    <Text style={styles.breedStatLabel}>Muda de pelo</Text>
                     <View style={styles.breedStatRating}>
-                      <Text style={styles.breedStatValue}>
-                        {(breedInfo as any).shedding !== undefined ? (breedInfo as any).shedding : (breedInfo as any).grooming}/5
-                      </Text>
+                      <Text style={styles.breedStatValue}>{(breedInfo as any).shedding}/5</Text>
                       <View style={styles.ratingBar}>
-                        <View style={[styles.ratingFill, {
-                          width: `${(((breedInfo as any).shedding !== undefined ? (breedInfo as any).shedding : (breedInfo as any).grooming) / 5) * 100}%`
-                        }]} />
+                        <View style={[styles.ratingFill, { width: `${((breedInfo as any).shedding / 5) * 100}%` }]} />
                       </View>
                     </View>
                   </View>
                 )}
 
-                {(breedInfo as any).protectiveness !== undefined && species === 'dog' && (
+                {/* Cuidado del pelaje (solo gatos) */}
+                {species === 'cat' && (breedInfo as any).grooming !== undefined && (
+                  <View style={styles.breedStat}>
+                    <Text style={styles.breedStatLabel}>Cuidado del pelaje</Text>
+                    <View style={styles.breedStatRating}>
+                      <Text style={styles.breedStatValue}>{(breedInfo as any).grooming}/5</Text>
+                      <View style={styles.ratingBar}>
+                        <View style={[styles.ratingFill, { width: `${((breedInfo as any).grooming / 5) * 100}%` }]} />
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                {/* Protección (solo perros) */}
+                {species === 'dog' && (breedInfo as any).protectiveness !== undefined && (
                   <View style={styles.breedStat}>
                     <Text style={styles.breedStatLabel}>Protección</Text>
                     <View style={styles.breedStatRating}>
@@ -682,6 +703,33 @@ export default function AddPet() {
                   </View>
                 )}
 
+                {/* Salud general (solo gatos) */}
+                {species === 'cat' && (breedInfo as any).general_health !== undefined && (
+                  <View style={styles.breedStat}>
+                    <Text style={styles.breedStatLabel}>Salud general</Text>
+                    <View style={styles.breedStatRating}>
+                      <Text style={styles.breedStatValue}>{(breedInfo as any).general_health}/5</Text>
+                      <View style={styles.ratingBar}>
+                        <View style={[styles.ratingFill, { width: `${((breedInfo as any).general_health / 5) * 100}%` }]} />
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                {/* Vocalización (solo gatos) */}
+                {species === 'cat' && (breedInfo as any).meowing !== undefined && (
+                  <View style={styles.breedStat}>
+                    <Text style={styles.breedStatLabel}>Vocalización</Text>
+                    <View style={styles.breedStatRating}>
+                      <Text style={styles.breedStatValue}>{(breedInfo as any).meowing}/5</Text>
+                      <View style={styles.ratingBar}>
+                        <View style={[styles.ratingFill, { width: `${((breedInfo as any).meowing / 5) * 100}%` }]} />
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                {/* Amigable con familia */}
                 {(breedInfo as any).family_friendly !== undefined && (
                   <View style={styles.breedStat}>
                     <Text style={styles.breedStatLabel}>Amigable con familia</Text>
@@ -694,6 +742,7 @@ export default function AddPet() {
                   </View>
                 )}
 
+                {/* Amigable con niños */}
                 {(breedInfo as any).children_friendly !== undefined && (
                   <View style={styles.breedStat}>
                     <Text style={styles.breedStatLabel}>Amigable con niños</Text>
@@ -706,6 +755,7 @@ export default function AddPet() {
                   </View>
                 )}
 
+                {/* Amigable con otras mascotas */}
                 {(breedInfo as any).other_pets_friendly !== undefined && (
                   <View style={styles.breedStat}>
                     <Text style={styles.breedStatLabel}>Amigable con otras mascotas</Text>
@@ -713,6 +763,19 @@ export default function AddPet() {
                       <Text style={styles.breedStatValue}>{(breedInfo as any).other_pets_friendly}/5</Text>
                       <View style={styles.ratingBar}>
                         <View style={[styles.ratingFill, { width: `${((breedInfo as any).other_pets_friendly / 5) * 100}%` }]} />
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                {/* Amigable con extraños (solo gatos) */}
+                {species === 'cat' && (breedInfo as any).stranger_friendly !== undefined && (
+                  <View style={styles.breedStat}>
+                    <Text style={styles.breedStatLabel}>Amigable con extraños</Text>
+                    <View style={styles.breedStatRating}>
+                      <Text style={styles.breedStatValue}>{(breedInfo as any).stranger_friendly}/5</Text>
+                      <View style={styles.ratingBar}>
+                        <View style={[styles.ratingFill, { width: `${((breedInfo as any).stranger_friendly / 5) * 100}%` }]} />
                       </View>
                     </View>
                   </View>
