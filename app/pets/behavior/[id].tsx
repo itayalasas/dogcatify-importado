@@ -89,11 +89,11 @@ export default function PetBehaviorAssessment() {
       // Initialize traits with breed info if available
       const initialTraits = allTraits.map(trait => {
         let score = 3; // Default score
-        
+
         // Pre-fill based on breed info if available
         if (petData.breed_info) {
           const breedInfo = petData.breed_info;
-          
+
           // Normalize breed info values to 1-5 scale
           const normalizeValue = (value: any) => {
             if (typeof value === 'number') {
@@ -106,31 +106,73 @@ export default function PetBehaviorAssessment() {
             return 3;
           };
 
+          const isCat = petData.species === 'cat';
+          const isDog = petData.species === 'dog';
+
           switch (trait.name) {
             case 'Energía':
-              if (breedInfo.energy_level) score = normalizeValue(breedInfo.energy_level);
+              if (isDog && breedInfo.energy) {
+                score = normalizeValue(breedInfo.energy);
+              } else if (isCat && breedInfo.playfulness) {
+                score = normalizeValue(breedInfo.playfulness);
+              }
+              break;
+            case 'Sociabilidad':
+              if (breedInfo.family_friendly) {
+                score = normalizeValue(breedInfo.family_friendly);
+              }
               break;
             case 'Entrenabilidad':
-              if (breedInfo.trainability) score = normalizeValue(breedInfo.trainability);
+              if (isDog && breedInfo.trainability) {
+                score = normalizeValue(breedInfo.trainability);
+              } else if (isCat && breedInfo.intelligence) {
+                score = normalizeValue(breedInfo.intelligence);
+              }
+              break;
+            case 'Agresividad':
+              // Inversa de "family_friendly" y "children_friendly"
+              if (breedInfo.family_friendly && breedInfo.children_friendly) {
+                const avg = (breedInfo.family_friendly + breedInfo.children_friendly) / 2;
+                score = Math.max(1, 6 - normalizeValue(avg)); // Invertir escala
+              }
+              break;
+            case 'Ansiedad':
+              // Para gatos, usar independencia como inversa
+              if (isCat && breedInfo.other_pets_friendly) {
+                score = normalizeValue(breedInfo.other_pets_friendly);
+              } else {
+                score = 3; // Default moderate
+              }
               break;
             case 'Protección':
-              if (breedInfo.protectiveness) score = normalizeValue(breedInfo.protectiveness);
+              if (isDog && breedInfo.protectiveness) {
+                score = normalizeValue(breedInfo.protectiveness);
+              } else if (isCat && breedInfo.stranger_friendly) {
+                // Para gatos, usar como inversa de protección
+                score = Math.max(1, 6 - normalizeValue(breedInfo.stranger_friendly));
+              }
+              break;
+            case 'Independencia':
+              if (isCat && breedInfo.stranger_friendly) {
+                score = normalizeValue(breedInfo.stranger_friendly);
+              } else {
+                score = 3; // Default moderate
+              }
               break;
             case 'Ladrido':
-              if (petData.species === 'dog' && breedInfo.barking_level) {
+              if (isDog && breedInfo.barking_level) {
                 score = normalizeValue(breedInfo.barking_level);
               }
               break;
             case 'Maullido':
-              // For cats, use a moderate default since breed info usually doesn't include meowing
-              if (petData.species === 'cat') {
-                score = 3; // Default moderate level for cats
+              if (isCat && breedInfo.meowing) {
+                score = normalizeValue(breedInfo.meowing);
               }
               break;
             case 'Arañado':
-              // For cats, use breed-specific scratching tendency if available
-              if (petData.species === 'cat') {
-                score = 3; // Default moderate level for cats
+              if (isCat && breedInfo.grooming) {
+                // Usar grooming como proxy para arañado
+                score = normalizeValue(breedInfo.grooming);
               }
               break;
           }
@@ -167,89 +209,153 @@ export default function PetBehaviorAssessment() {
   };
 
   const getRecommendations = () => {
-    const recommendations = [];
+    const recommendations: string[] = [];
     const breedInfo = pet?.breed_info;
-    const iscat = pet?.species === 'cat';
+    const isCat = pet?.species === 'cat';
     const isDog = pet?.species === 'dog';
 
     // Energy level recommendations
     const energyTrait = traits.find(t => t.name === 'Energía');
-    if (energyTrait && energyTrait.score >= 4) {
-      recommendations.push(
-        iscat 
-          ? 'Necesita juegos interactivos diarios y actividades estimulantes'
-          : 'Necesita ejercicio diario intenso y actividades estimulantes'
-      );
-    } else if (energyTrait && energyTrait.score <= 2) {
-      recommendations.push(
-        iscat
-          ? 'Prefiere actividades tranquilas y sesiones de juego cortas'
-          : 'Prefiere actividades tranquilas y paseos cortos'
-      );
+    if (energyTrait) {
+      if (energyTrait.score >= 4) {
+        recommendations.push(
+          isCat
+            ? '🎯 Necesita sesiones de juego interactivo 2-3 veces al día (15-20 min cada una)'
+            : '🎯 Requiere ejercicio intenso diario: caminatas largas, correr o deportes caninos'
+        );
+        recommendations.push(
+          isCat
+            ? '🧩 Proporciona juguetes tipo puzzle y rompecabezas para estimulación mental'
+            : '🧩 Considera actividades como agility, frisbee o natación'
+        );
+      } else if (energyTrait.score <= 2) {
+        recommendations.push(
+          isCat
+            ? '😴 Prefiere sesiones de juego cortas (5-10 min) y espacios tranquilos para descansar'
+            : '😴 Paseos cortos y tranquilos son suficientes (15-20 min, 2-3 veces al día)'
+        );
+      } else {
+        recommendations.push(
+          isCat
+            ? '⚖️ Nivel de energía moderado: juegos regulares y tiempo de descanso equilibrado'
+            : '⚖️ Nivel de energía moderado: paseos diarios de 30-45 minutos'
+        );
+      }
     }
 
     // Sociability recommendations
     const socialTrait = traits.find(t => t.name === 'Sociabilidad');
-    if (socialTrait && socialTrait.score >= 4) {
-      recommendations.push(
-        iscat
-          ? 'Excelente para familias y socialización con otros gatos'
-          : 'Excelente para familias y socialización con otros animales'
-      );
-    } else if (socialTrait && socialTrait.score <= 2) {
-      recommendations.push('Requiere socialización gradual y supervisada');
+    if (socialTrait) {
+      if (socialTrait.score >= 4) {
+        recommendations.push(
+          isCat
+            ? '👨‍👩‍👧 Excelente para familias: disfruta la compañía y puede convivir con otros gatos'
+            : '👨‍👩‍👧 Ideal para familias activas y socialización frecuente con personas y otros perros'
+        );
+        recommendations.push('🎉 Puede participar en eventos sociales y disfrutar visitas de invitados');
+      } else if (socialTrait.score <= 2) {
+        recommendations.push('⚠️ Requiere socialización gradual y supervisada en ambientes nuevos');
+        recommendations.push('🏠 Mejor en hogares tranquilos con pocas visitas o sin otras mascotas');
+      } else {
+        recommendations.push('👥 Sociabilidad moderada: presenta nuevas personas/mascotas gradualmente');
+      }
     }
 
     // Training recommendations
     const trainTrait = traits.find(t => t.name === 'Entrenabilidad');
-    if (trainTrait && trainTrait.score >= 4) {
-      recommendations.push(
-        iscat
-          ? 'Ideal para entrenamientos con clicker y trucos simples'
-          : 'Ideal para entrenamientos avanzados y trucos complejos'
-      );
-    } else if (trainTrait && trainTrait.score <= 2) {
-      recommendations.push(
-        iscat
-          ? 'Requiere paciencia y refuerzo positivo con premios'
-          : 'Requiere paciencia y métodos de entrenamiento positivos'
-      );
+    if (trainTrait) {
+      if (trainTrait.score >= 4) {
+        recommendations.push(
+          isCat
+            ? '🎓 Alta capacidad de aprendizaje: ideal para entrenamiento con clicker y trucos'
+            : '🎓 Excelente para entrenamiento avanzado: obediencia, trucos complejos y tareas'
+        );
+      } else if (trainTrait.score <= 2) {
+        recommendations.push(
+          isCat
+            ? '💝 Requiere paciencia: usa refuerzo positivo constante con premios de alto valor'
+            : '💝 Necesita métodos de refuerzo positivo muy consistentes y sesiones cortas'
+        );
+      }
     }
 
-    // Species-specific recommendations
-    if (iscat) {
+    // Aggression management
+    const aggressionTrait = traits.find(t => t.name === 'Agresividad');
+    if (aggressionTrait && aggressionTrait.score >= 4) {
+      recommendations.push('⚠️ IMPORTANTE: Consulta con un etólogo o entrenador profesional certificado');
+      recommendations.push('🚫 Manejo cuidadoso: evita situaciones estresantes y mantén rutinas predecibles');
+    }
+
+    // Anxiety management
+    const anxietyTrait = traits.find(t => t.name === 'Ansiedad');
+    if (anxietyTrait) {
+      if (anxietyTrait.score >= 4) {
+        recommendations.push(
+          isCat
+            ? '😰 Alta ansiedad: proporciona escondites seguros y feromonas calmantes (Feliway)'
+            : '😰 Considera técnicas de desensibilización y consulta con veterinario sobre ansiedad'
+        );
+        recommendations.push('🎵 Música relajante y rutinas consistentes pueden ayudar a reducir el estrés');
+      } else if (anxietyTrait.score <= 2) {
+        recommendations.push('😌 Buen manejo del estrés: mascota equilibrada emocionalmente');
+      }
+    }
+
+    // Independence recommendations
+    const independenceTrait = traits.find(t => t.name === 'Independencia');
+    if (independenceTrait) {
+      if (independenceTrait.score >= 4) {
+        recommendations.push(
+          isCat
+            ? '🗝️ Muy independiente: tolera bien estar solo, proporciona enriquecimiento ambiental'
+            : '🗝️ Puede estar solo por períodos moderados sin desarrollar ansiedad por separación'
+        );
+      } else if (independenceTrait.score <= 2) {
+        recommendations.push('❤️ Necesita compañía constante: considera otra mascota o cuidador diurno');
+      }
+    }
+
+    // Species-specific behavioral recommendations
+    if (isCat) {
       const meowTrait = traits.find(t => t.name === 'Maullido');
       if (meowTrait && meowTrait.score >= 4) {
-        recommendations.push('Muy vocal - puede necesitar más atención e interacción');
+        recommendations.push('🗣️ Muy vocal: establece rutinas claras para evitar maullidos excesivos por demanda');
       }
 
       const scratchTrait = traits.find(t => t.name === 'Arañado');
       if (scratchTrait && scratchTrait.score >= 4) {
-        recommendations.push('Necesita múltiples rascadores y superficies apropiadas para arañar');
+        recommendations.push('🪵 Necesita múltiples rascadores en áreas estratégicas y protección de muebles');
+        recommendations.push('💅 Corta uñas regularmente y considera protectores de uñas si es necesario');
       }
     } else if (isDog) {
       const barkTrait = traits.find(t => t.name === 'Ladrido');
       if (barkTrait && barkTrait.score >= 4) {
-        recommendations.push('Puede necesitar entrenamiento para controlar ladridos excesivos');
+        recommendations.push('🔊 Ladrido frecuente: entrena comando "Silencio" y aborda causas subyacentes');
+        recommendations.push('🏘️ Considera el impacto en vecinos y trabaja con entrenador si es necesario');
       }
     }
 
-    // Breed-specific recommendations
+    // Grooming recommendations based on breed
     if (breedInfo) {
-      if (breedInfo.shedding_level && breedInfo.shedding_level >= 4) {
+      if (breedInfo.shedding && breedInfo.shedding >= 4) {
         recommendations.push(
-          iscat
-            ? 'Requiere cepillado diario debido a alta muda de pelo'
-            : 'Requiere cepillado frecuente debido a alta muda'
+          isCat
+            ? '🧹 Alta muda: cepillado diario obligatorio y considera dieta para salud del pelaje'
+            : '🧹 Muda abundante: cepillado diario necesario y aspirado frecuente del hogar'
         );
       }
-      if (breedInfo.grooming_frequency && breedInfo.grooming_frequency >= 4) {
+      if (breedInfo.grooming && breedInfo.grooming >= 4) {
         recommendations.push(
-          iscat
-            ? 'Necesita cuidado regular del pelaje y posible grooming profesional'
-            : 'Necesita cuidado profesional regular del pelaje'
+          isCat
+            ? '✂️ Pelaje demandante: grooming profesional cada 6-8 semanas recomendado'
+            : '✂️ Necesita grooming profesional cada 4-6 semanas para mantener pelaje saludable'
         );
       }
+    }
+
+    // Overall wellness recommendations
+    if (recommendations.length < 3) {
+      recommendations.push('✅ Comportamiento equilibrado: mantén rutinas consistentes y chequeos veterinarios regulares');
     }
 
     return recommendations;
@@ -314,17 +420,30 @@ export default function PetBehaviorAssessment() {
         {pet.breed_info && (
           <View style={styles.breedInfo}>
             <Text style={styles.breedInfoTitle}>Información de la Raza:</Text>
-            {pet.breed_info.energy_level && (
+            {/* Para perros */}
+            {pet.species === 'dog' && pet.breed_info.energy && (
               <Text style={styles.breedInfoItem}>
-                Energía: {pet.breed_info.energy_level}/5
+                Energía: {pet.breed_info.energy}/5
               </Text>
             )}
-            {pet.breed_info.trainability && (
+            {pet.species === 'dog' && pet.breed_info.trainability && (
               <Text style={styles.breedInfoItem}>
                 Entrenabilidad: {pet.breed_info.trainability}/5
               </Text>
             )}
-            {pet.breed_info.shedding_level && pet.breed_info.shedding_level >= 4 && (
+            {/* Para gatos */}
+            {pet.species === 'cat' && pet.breed_info.playfulness && (
+              <Text style={styles.breedInfoItem}>
+                Juguetón: {pet.breed_info.playfulness}/5
+              </Text>
+            )}
+            {pet.species === 'cat' && pet.breed_info.intelligence && (
+              <Text style={styles.breedInfoItem}>
+                Inteligencia: {pet.breed_info.intelligence}/5
+              </Text>
+            )}
+            {/* Común para ambos */}
+            {pet.breed_info.shedding && pet.breed_info.shedding >= 4 && (
               <Text style={[styles.breedInfoItem, styles.highlight]}>
                 ⚠️ Alta muda - Requiere cepillado frecuente
               </Text>
