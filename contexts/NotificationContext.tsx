@@ -53,12 +53,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Check and validate tokens when user logs in
   useEffect(() => {
     if (isExpoGo || Platform.OS === 'web' || !Notifications) {
-      console.log('Notifications not available in this environment');
+      if (isExpoGo) {
+        console.log('⚠️ Running in Expo Go - Notifications require native build');
+        console.log('💡 Run: eas build --platform android --profile preview');
+      } else if (Platform.OS === 'web') {
+        console.log('⚠️ Running on web - Notifications not available');
+      } else {
+        console.log('⚠️ Notifications module not loaded');
+      }
       return;
     }
 
     if (currentUser) {
-      console.log('Usuario logueado, validando tokens...');
+      console.log('✅ Usuario logueado, validando tokens...');
       validateAndUpdateTokens();
     }
   }, [currentUser]);

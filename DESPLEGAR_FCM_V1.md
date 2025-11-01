@@ -71,17 +71,39 @@ Esto es **normal** si aún no has rebuildeado la app. Continuemos.
 
 ### Paso 3: Rebuild de la App Móvil
 
-Los cambios en `NotificationContext.tsx` requieren un rebuild de la app.
+⚠️ **IMPORTANTE**: La validación automática de tokens **NO funciona en Expo Go**.
+
+Necesitas hacer un **build nativo** porque:
+- FCM tokens solo están disponibles en builds nativas
+- Expo Go no tiene acceso a notificaciones push nativas
+- El sistema detecta Expo Go y se salta automáticamente
+
+**Opciones de Build:**
 
 ```bash
-# Para Android (desarrollo)
-npm run android
+# Opción A: Build con EAS (Preview) - RECOMENDADO
+eas build --platform android --profile preview
 
-# O para build de producción con EAS
+# Opción B: Build de Producción
 eas build --platform android --profile production
 
-# O para preview
-eas build --platform android --profile preview
+# Opción C: Build de desarrollo local (requiere Android Studio)
+npm run android
+```
+
+**Logs esperados:**
+
+En **Expo Go** verás:
+```
+⚠️ Running in Expo Go - Notifications require native build
+💡 Run: eas build --platform android --profile preview
+```
+
+En **Build Nativa** verás:
+```
+✅ Usuario logueado, validando tokens...
+=== VALIDANDO TOKENS AL INICIAR SESIÓN ===
+✅ Tokens actualizados exitosamente
 ```
 
 ### Paso 4: Registrar Notificaciones en Dispositivo
