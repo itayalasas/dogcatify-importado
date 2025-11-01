@@ -1,8 +1,8 @@
-{
+{ 
   "expo": {
     "name": "DogCatiFy",
     "slug": "dogcatify",
-    "version": "9.0.0",
+    "version": "9.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "dogcatify",
