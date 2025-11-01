@@ -66,7 +66,8 @@ export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete, onShar
               onShare(pet.id);
             }}
           >
-            <UserPlus size={16} color="#FFFFFF" />
+            <UserPlus size={14} color="#FFFFFF" />
+            <Text style={styles.shareButtonText}>Compartir</Text>
           </TouchableOpacity>
         )}
         {isShared && (
@@ -201,13 +202,25 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 48,
-    backgroundColor: 'rgba(59, 130, 246, 0.9)',
-    borderRadius: 16,
-    width: 32,
-    height: 32,
+    backgroundColor: 'rgba(59, 130, 246, 0.95)',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
     zIndex: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  shareButtonText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
   sharedBadge: {
     position: 'absolute',
