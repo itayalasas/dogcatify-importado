@@ -101,6 +101,16 @@ Deno.serve(async (req: Request) => {
           try {
             console.log(`Attempting FCM v1 for notification ${notification.id}...`);
 
+            // Convertir todos los valores de data a strings (requerido por FCM v1)
+            const notificationData = notification.data || {};
+            const serializedData: Record<string, string> = {};
+
+            for (const [key, value] of Object.entries(notificationData)) {
+              if (value !== null && value !== undefined) {
+                serializedData[key] = typeof value === 'string' ? value : JSON.stringify(value);
+              }
+            }
+
             const fcmResponse = await fetch(
               `${supabaseUrl}/functions/v1/send-notification-fcm-v1`,
               {
@@ -113,7 +123,7 @@ Deno.serve(async (req: Request) => {
                   token: profile.fcm_token,
                   title: notification.title,
                   body: notification.body,
-                  data: notification.data || {},
+                  data: serializedData,
                   channelId: 'default',
                 }),
               }
