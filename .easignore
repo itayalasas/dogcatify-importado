@@ -1,0 +1,107 @@
+# Documentation and markdown files
+*.md
+!README.md
+!node_modules/**/*.md
+
+# Scripts de prueba y diagnóstico
+scripts/test-*.js
+scripts/check-*.js
+scripts/diagnose-*.js
+scripts/simulate-*.js
+scripts/webhook-server-*.js
+
+# SQL scripts (ya aplicados en BD)
+*.sql
+!node_modules/**/*.sql
+
+# Node modules cache y archivos innecesarios
+node_modules/.cache/
+node_modules/**/.cache/
+node_modules/**/test/
+node_modules/**/tests/
+node_modules/**/__tests__/
+node_modules/**/example/
+node_modules/**/examples/
+node_modules/**/docs/
+node_modules/**/documentation/
+node_modules/**/*.map
+node_modules/**/*.ts.map
+node_modules/**/CHANGELOG.md
+node_modules/**/LICENSE.md
+node_modules/**/CONTRIBUTING.md
+node_modules/**/.github/
+node_modules/**/.vscode/
+node_modules/**/coverage/
+
+# Archivos de configuración local
+.env.local
+.env.*.local
+
+# Cache y logs
+.expo/
+.expo-shared/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor y IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Tests
+__tests__/
+*.test.js
+*.test.ts
+*.test.tsx
+*.spec.js
+*.spec.ts
+*.spec.tsx
+
+# Coverage reports
+coverage/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Build artifacts locales (se regeneran)
+android/build/
+android/app/build/
+android/.gradle/
+
+# Node modules específicos que se reinstalan
+node_modules/.cache/
+
+# Archivos de desarrollo
+.prettierrc
+.eslintrc*
+.editorconfig
+
+# Imágenes de documentación y screenshots
+*.png.backup
+*screenshot*.png
+docs/
+documentation/
+
+# Scripts de Windows
+*.bat
+*.ps1
+
+# Scripts de shell de desarrollo
+fix-*.sh
+restore-*.sh
+*.bak
+*.backup
