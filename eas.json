@@ -30,8 +30,7 @@
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleRelease",
-        "withoutCredentials": false,
-        "prebuildCommand": "npx expo prebuild --clean --platform android"
+        "withoutCredentials": false
       },
       "channel": "production",
       "env": {
