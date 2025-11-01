@@ -23,6 +23,7 @@ export default function Cart() {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState('Preparando tu pago con Mercado Pago');
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const isProcessingPayment = useRef(false); // Flag para saber si estamos procesando pago
   const [partnerInfo, setPartnerInfo] = useState<{
     has_shipping: boolean;
     shipping_cost: number;
@@ -84,10 +85,18 @@ export default function Cart() {
   // Recargar stocks y ocultar loader cada vez que la pantalla se enfoca (al volver desde Mercado Pago)
   useFocusEffect(
     React.useCallback(() => {
+      console.log('📱 useFocusEffect triggered - isProcessingPayment:', isProcessingPayment.current);
+
+      // CRÍTICO: NO ocultar el loader si estamos procesando pago
+      if (isProcessingPayment.current) {
+        console.log('⚠️  Estamos procesando pago, NO ocultar loader');
+        return;
+      }
+
       // CRÍTICO: Esperar 500ms antes de ocultar el loader para evitar que se oculte durante la apertura de MP
       // Esto permite que Mercado Pago se abra completamente antes de ocultar el loader
       const timer = setTimeout(() => {
-        if (paymentLoading) {
+        if (paymentLoading && !isProcessingPayment.current) {
           console.log('🔄 Usuario regresó a la pantalla del carrito, ocultando loader');
           setPaymentLoading(false);
           setPaymentMessage('Preparando tu pago con Mercado Pago');
@@ -277,6 +286,11 @@ export default function Cart() {
 
   const handlePayWithMercadoPago = async () => {
     console.log('💳 ========== INICIO handlePayWithMercadoPago ==========');
+
+    // CRÍTICO: Activar flag de procesamiento para evitar que useFocusEffect oculte el loader
+    isProcessingPayment.current = true;
+    console.log('🚩 isProcessingPayment = true');
+
     // Cerrar el modal de pago para mostrar el loader en pantalla completa
     setShowPaymentMethodModal(false);
     console.log('✅ Modal de métodos de pago cerrado');
@@ -377,6 +391,11 @@ export default function Cart() {
 
         if (!openResult.success) {
           console.error('❌ Error abriendo Mercado Pago');
+
+          // CRÍTICO: Desactivar flag de procesamiento si falla
+          isProcessingPayment.current = false;
+          console.log('🚩 isProcessingPayment = false (error al abrir MP)');
+
           Alert.alert(
             'Error',
             openResult.error || 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.'
@@ -387,6 +406,12 @@ export default function Cart() {
         } else {
           console.log('✅ Mercado Pago abierto exitosamente');
           console.log('⏳ Loader DEBE permanecer visible hasta que el usuario regrese');
+
+          // CRÍTICO: Desactivar flag de procesamiento DESPUÉS de abrir MP exitosamente
+          // Esto permite que useFocusEffect oculte el loader cuando el usuario regrese
+          isProcessingPayment.current = false;
+          console.log('🚩 isProcessingPayment = false (MP abierto, esperando retorno del usuario)');
+
           // IMPORTANTE: NO ocultar el loader aquí, se ocultará automáticamente cuando el usuario vuelva a la app
           // El useFocusEffect se encarga de ocultar el loader cuando regresa
           // El loader DEBE quedar visible para mostrar que la transacción está en proceso
@@ -396,6 +421,10 @@ export default function Cart() {
       }
     } catch (error: any) {
       console.error('❌ Error with cart checkout:', error);
+
+      // CRÍTICO: Desactivar flag de procesamiento si hay error
+      isProcessingPayment.current = false;
+      console.log('🚩 isProcessingPayment = false (error en checkout)');
 
       // CRÍTICO: Ocultar loader inmediatamente
       setPaymentLoading(false);

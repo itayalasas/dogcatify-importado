@@ -62,6 +62,7 @@ export default function ServiceBooking() {
   const [paymentMessage, setPaymentMessage] = useState('Preparando tu pago con Mercado Pago');
   const [paymentStep, setPaymentStep] = useState<'methods' | 'card' | 'processing'>('methods');
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const isProcessingPayment = useRef(false); // Flag para saber si estamos procesando pago
   
   // Card form data
   const [fullName, setFullName] = useState('');
@@ -106,10 +107,18 @@ export default function ServiceBooking() {
   // Ocultar loader cuando el usuario regresa a la pantalla (al volver de MercadoPago)
   useFocusEffect(
     React.useCallback(() => {
+      console.log('📱 useFocusEffect triggered - isProcessingPayment:', isProcessingPayment.current);
+
+      // CRÍTICO: NO ocultar el loader si estamos procesando pago
+      if (isProcessingPayment.current) {
+        console.log('⚠️  Estamos procesando pago, NO ocultar loader');
+        return;
+      }
+
       // CRÍTICO: Esperar 500ms antes de ocultar el loader para evitar que se oculte durante la apertura de MP
       // Esto permite que Mercado Pago se abra completamente antes de ocultar el loader
       const timer = setTimeout(() => {
-        if (paymentLoading) {
+        if (paymentLoading && !isProcessingPayment.current) {
           console.log('🔄 Usuario regresó a la pantalla de reserva, ocultando loader');
           setPaymentLoading(false);
           setPaymentMessage('Preparando tu pago con Mercado Pago');
@@ -439,16 +448,25 @@ export default function ServiceBooking() {
       return;
     }
 
+    console.log('💳 ========== INICIO handleMercadoPagoPayment (BOOKING) ==========');
+
+    // CRÍTICO: Activar flag de procesamiento para evitar que useFocusEffect oculte el loader
+    isProcessingPayment.current = true;
+    console.log('🚩 isProcessingPayment = true');
+
     setPaymentLoading(true);
     setPaymentStep('processing');
     setPaymentMessage('Preparando tu reserva...');
+    console.log('✅ paymentLoading = true, loader DEBE estar visible');
 
     // Cerrar el modal de pago para mostrar el loader en pantalla completa
     setShowPaymentModal(false);
+    console.log('✅ Modal de pago cerrado');
 
     // Guardar el tiempo de inicio para garantizar 5 segundos mínimos
     const startTime = Date.now();
     const MIN_LOADING_TIME = 5000; // 5 segundos
+    console.log(`⏱️  Tiempo mínimo de loading: ${MIN_LOADING_TIME}ms`);
 
     try {
       // Esperar 800ms para que el loader sea visible
@@ -565,9 +583,17 @@ export default function ServiceBooking() {
           }
 
           // Open Mercado Pago in browser
+          console.log('🚀 Abriendo Mercado Pago...');
           const openResult = await openMercadoPagoPayment(result.paymentUrl!, isTestMode);
+          console.log('📱 openMercadoPagoPayment completado:', openResult);
 
           if (!openResult.success) {
+            console.error('❌ Error abriendo Mercado Pago');
+
+            // CRÍTICO: Desactivar flag de procesamiento si falla
+            isProcessingPayment.current = false;
+            console.log('🚩 isProcessingPayment = false (error al abrir MP)');
+
             Alert.alert(
               'Error',
               openResult.error || 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.'
@@ -576,10 +602,16 @@ export default function ServiceBooking() {
             setPaymentLoading(false);
             setPaymentMessage('Preparando tu pago con Mercado Pago');
           } else {
-            console.log('✅ Opened Mercado Pago successfully');
+            console.log('✅ Mercado Pago abierto exitosamente');
+            console.log('⏳ Loader DEBE permanecer visible hasta que el usuario regrese');
+
+            // CRÍTICO: Desactivar flag de procesamiento DESPUÉS de abrir MP exitosamente
+            // Esto permite que useFocusEffect oculte el loader cuando el usuario regrese
+            isProcessingPayment.current = false;
+            console.log('🚩 isProcessingPayment = false (MP abierto, esperando retorno del usuario)');
+
             // IMPORTANTE: NO ocultar el loader aquí, se ocultará automáticamente cuando el usuario vuelva a la app
             // El useFocusEffect se encarga de ocultar el loader cuando regresa
-            console.log('⏳ Loader permanece visible mientras el usuario está en MercadoPago');
           }
         } catch (linkError) {
           console.error('Error abriendo URL de Mercado Pago:', linkError);
@@ -591,6 +623,10 @@ export default function ServiceBooking() {
       }
     } catch (error: any) {
       console.error('❌ Error with Mercado Pago payment:', error);
+
+      // CRÍTICO: Desactivar flag de procesamiento si hay error
+      isProcessingPayment.current = false;
+      console.log('🚩 isProcessingPayment = false (error en pago)');
 
       // CRÍTICO: Ocultar loader inmediatamente
       setPaymentLoading(false);
