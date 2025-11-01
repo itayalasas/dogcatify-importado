@@ -276,6 +276,10 @@ export default function Cart() {
     setPaymentLoading(true);
     setPaymentMessage('Preparando tu pago...');
 
+    // Guardar el tiempo de inicio para garantizar 5 segundos mínimos
+    const startTime = Date.now();
+    const MIN_LOADING_TIME = 5000; // 5 segundos
+
     try {
       console.log('=== Iniciando proceso de checkout ===');
       console.log('Cart items:', cart);
@@ -304,8 +308,8 @@ export default function Cart() {
 
       const totalShippingCost = partnerInfo?.has_shipping ? (partnerInfo.shipping_cost || 0) : 0;
 
-      // Esperar 1 segundo para que el loader sea visible
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Esperar 800ms para que el loader sea visible
+      await new Promise(resolve => setTimeout(resolve, 800));
 
       setPaymentMessage('Creando orden de compra...');
       const { orders, paymentPreferences, isTestMode } = await createMultiPartnerOrder(
@@ -318,9 +322,6 @@ export default function Cart() {
       console.log('Orders created:', orders.length);
       console.log('Payment preferences created:', paymentPreferences.length);
       console.log('Environment detected:', isTestMode ? 'TEST' : 'PRODUCTION');
-
-      // Esperar 1.5 segundos para que el usuario vea el progreso
-      await new Promise(resolve => setTimeout(resolve, 1500));
 
       if (paymentPreferences.length > 0) {
         const preference = paymentPreferences[0];
@@ -346,9 +347,16 @@ export default function Cart() {
         // Detect environment from payment URL (same as services)
         const isTestModeByUrl = paymentUrl.includes('sandbox');
 
-        // Esperar 1.5 segundos más antes de abrir
         setPaymentMessage('Abriendo Mercado Pago...');
-        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        // Calcular tiempo restante para completar 5 segundos
+        const elapsedTime = Date.now() - startTime;
+        const remainingTime = Math.max(0, MIN_LOADING_TIME - elapsedTime);
+
+        if (remainingTime > 0) {
+          console.log(`⏳ Esperando ${remainingTime}ms para completar tiempo mínimo de loading`);
+          await new Promise(resolve => setTimeout(resolve, remainingTime));
+        }
 
         // Open Mercado Pago directly (same as services)
         const openResult = await openMercadoPagoPayment(paymentUrl, isTestModeByUrl);
