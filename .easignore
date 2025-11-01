@@ -78,9 +78,9 @@ temp/
 *.tmp
 
 # Build artifacts locales (se regeneran)
-android/build/
-android/app/build/
-android/.gradle/
+# IMPORTANT: Exclude entire android directory to force EAS to regenerate it with expo prebuild
+# This fixes "No matching variant" errors in Gradle
+android/
 
 # Node modules específicos que se reinstalan
 node_modules/.cache/
