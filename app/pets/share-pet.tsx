@@ -380,7 +380,7 @@ export default function SharePetScreen() {
                 )}
               </View>
 
-              {showSuggestions && userSuggestions.length > 0 && (
+              {showSuggestions && userSuggestions.length > 0 && !selectedUser && (
                 <View style={styles.suggestionsContainer}>
                   {userSuggestions.map((user) => (
                     <TouchableOpacity
@@ -405,7 +405,8 @@ export default function SharePetScreen() {
               {showSuggestions &&
                 !searchingUsers &&
                 searchQuery.trim().length >= 2 &&
-                userSuggestions.length === 0 && (
+                userSuggestions.length === 0 &&
+                !selectedUser && (
                   <View style={styles.noResultsContainer}>
                     <Text style={styles.noResultsText}>
                       No se encontraron usuarios disponibles con "{searchQuery}"
