@@ -19,8 +19,8 @@ if [[ "${EAS_BUILD_PLATFORM:-}" == "android" ]]; then
   # Exportar variables de entorno para Datadog
   export DD_API_KEY="${DD_API_KEY:-068208a98b131a96831ca92a86d4f158}"
   export DATADOG_API_KEY="${DATADOG_API_KEY:-068208a98b131a96831ca92a86d4f158}"
-  export DD_SITE="${DD_SITE:-datadoghq.com}"
-  export DATADOG_SITE="${DATADOG_SITE:-datadoghq.com}"
+  export DD_SITE="${DD_SITE:-us5.datadoghq.com}"
+  export DATADOG_SITE="${DATADOG_SITE:-us5.datadoghq.com}"
 
   echo "   DD_API_KEY: ${DD_API_KEY:0:10}..."
   echo "   DD_SITE: ${DD_SITE}"
