@@ -1706,11 +1706,42 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
       console.log('⚠️  This will ensure the app opens correctly');
     }
 
-    // ESTRATEGIA: Abrir URL web directamente
-    // El sistema operativo decidirá automáticamente si abre en la app de Mercado Pago
-    // o en el navegador, basado en si la app está instalada y puede manejar la URL
+    // ESTRATEGIA MEJORADA: Intentar abrir en la app de Mercado Pago primero
+    // Si falla, hacer fallback al navegador
     console.log('');
-    console.log('🌐 Opening payment URL (OS will decide app vs browser)');
+    console.log('🎯 Intentando abrir en app de Mercado Pago primero...');
+
+    // Deep link de Mercado Pago (esquema de URI para Android/iOS)
+    // Formato: mercadopago://checkout/{preference_id}
+    const preferenceId = paymentUrl.split('pref_id=')[1]?.split('&')[0];
+
+    if (preferenceId && Platform.OS === 'android') {
+      // Intentar abrir con deep link de Mercado Pago
+      const mpDeepLink = `mercadopago://checkout/${preferenceId}`;
+      console.log('🔗 Trying deep link:', mpDeepLink);
+
+      try {
+        const canOpenDeepLink = await Linking.canOpenURL(mpDeepLink);
+        if (canOpenDeepLink) {
+          console.log('✅ App de Mercado Pago disponible, abriendo directamente...');
+          await Linking.openURL(mpDeepLink);
+          console.log('✅ SUCCESS: Opened directly in Mercado Pago app');
+          console.log('═══════════════════════════════════════\n');
+          return {
+            success: true,
+            openedInApp: true
+          };
+        } else {
+          console.log('⚠️  App de Mercado Pago no disponible o no puede manejar deep link');
+        }
+      } catch (deepLinkError) {
+        console.log('⚠️  Deep link falló, usando fallback a navegador');
+        console.log('Error:', deepLinkError);
+      }
+    }
+
+    // FALLBACK: Abrir URL web en navegador
+    console.log('🌐 Opening payment URL in browser (OS will decide app vs browser)');
     console.log('Checking if URL can be opened...');
 
     const canOpen = await Linking.canOpenURL(paymentUrl);
