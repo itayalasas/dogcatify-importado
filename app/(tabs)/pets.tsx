@@ -1,15 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Dimensions, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { Plus } from 'lucide-react-native';
+import { Plus, Bell, Check, X, User } from 'lucide-react-native';
 import { PetCard } from '../../components/PetCard';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { getPets, supabaseClient, deletePet } from '../../lib/supabase';
 
+interface PetShareInvitation {
+  id: string;
+  pet_id: string;
+  owner_id: string;
+  relationship_type: string;
+  permission_level: string;
+  created_at: string;
+  pet: {
+    id: string;
+    name: string;
+    species: string;
+    photo_url: string | null;
+  };
+  owner: {
+    id: string;
+    display_name: string;
+  };
+}
+
 export default function Pets() {
   const [pets, setPets] = useState<Pet[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<PetShareInvitation[]>([]);
   const [loading, setLoading] = useState(true);
   const { t } = useLanguage();
   const { currentUser } = useAuth();
@@ -20,6 +40,47 @@ export default function Pets() {
     const fetchPets = async () => {
       try {
         const petsData = await getPets(currentUser.id);
+
+        // Fetch pending invitations
+        const { data: pendingData, error: pendingError } = await supabaseClient
+          .from('pet_shares')
+          .select(`
+            id,
+            pet_id,
+            owner_id,
+            relationship_type,
+            permission_level,
+            created_at,
+            pets!inner (
+              id,
+              name,
+              species,
+              photo_url
+            ),
+            profiles!pet_shares_owner_id_fkey (
+              id,
+              display_name
+            )
+          `)
+          .eq('shared_with_user_id', currentUser.id)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false });
+
+        if (pendingError) {
+          console.error('Error fetching pending invitations:', pendingError);
+        } else {
+          const formattedInvitations = pendingData?.map(inv => ({
+            id: inv.id,
+            pet_id: inv.pet_id,
+            owner_id: inv.owner_id,
+            relationship_type: inv.relationship_type,
+            permission_level: inv.permission_level,
+            created_at: inv.created_at,
+            pet: inv.pets,
+            owner: inv.profiles
+          })) || [];
+          setPendingInvitations(formattedInvitations);
+        }
 
         const { data: sharedPetsData, error: sharedError } = await supabaseClient
           .from('pet_shares')
@@ -112,16 +173,27 @@ export default function Pets() {
 
     fetchPets();
 
-    // Set up real-time subscription for pets
+    // Set up real-time subscription for pets and pet_shares
     const subscription = supabaseClient
       .channel('pets-changes')
-      .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
+      .on('postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
           table: 'pets',
           filter: `owner_id=eq.${currentUser.id}`
-        }, 
+        },
+        () => {
+          fetchPets();
+        }
+      )
+      .on('postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'pet_shares',
+          filter: `shared_with_user_id=eq.${currentUser.id}`
+        },
         () => {
           fetchPets();
         }
@@ -145,6 +217,100 @@ export default function Pets() {
 
   const handleSharePet = (petId: string) => {
     router.push(`/pets/share-pet?petId=${petId}`);
+  };
+
+  const handleAcceptInvitation = async (invitationId: string) => {
+    try {
+      const { error } = await supabaseClient
+        .from('pet_shares')
+        .update({ status: 'accepted' })
+        .eq('id', invitationId);
+
+      if (error) {
+        console.error('Error accepting invitation:', error);
+        Alert.alert('Error', 'No se pudo aceptar la invitación');
+        return;
+      }
+
+      Alert.alert('Éxito', '¡Invitación aceptada!');
+      // Refresh pets list
+      setPendingInvitations(prev => prev.filter(inv => inv.id !== invitationId));
+
+      // Reload pets to show the newly shared pet
+      if (currentUser) {
+        const petsData = await getPets(currentUser.id);
+        const { data: sharedPetsData } = await supabaseClient
+          .from('pet_shares')
+          .select(`
+            pet_id,
+            pets!inner (
+              id, name, species, breed, breed_info, age, age_display,
+              gender, weight, weight_display, is_neutered, has_chip,
+              chip_number, photo_url, owner_id, personality, medical_notes, created_at
+            )
+          `)
+          .eq('shared_with_user_id', currentUser.id)
+          .eq('status', 'accepted');
+
+        const sharedPets = sharedPetsData?.map(share => share.pets).filter(Boolean) || [];
+        const transformedPets = petsData?.map(pet => ({
+          id: pet.id, name: pet.name, species: pet.species, breed: pet.breed,
+          breedInfo: pet.breed_info, age: pet.age, ageDisplay: pet.age_display,
+          gender: pet.gender, weight: pet.weight, weightDisplay: pet.weight_display,
+          isNeutered: pet.is_neutered, hasChip: pet.has_chip, chipNumber: pet.chip_number,
+          photoURL: pet.photo_url, ownerId: pet.owner_id, personality: pet.personality || [],
+          medicalNotes: pet.medical_notes, createdAt: new Date(pet.created_at),
+          photo_url: pet.photo_url, isShared: false,
+        })) || [];
+        const transformedSharedPets = sharedPets.map(pet => ({
+          id: pet.id, name: pet.name, species: pet.species, breed: pet.breed,
+          breedInfo: pet.breed_info, age: pet.age, ageDisplay: pet.age_display,
+          gender: pet.gender, weight: pet.weight, weightDisplay: pet.weight_display,
+          isNeutered: pet.is_neutered, hasChip: pet.has_chip, chipNumber: pet.chip_number,
+          photoURL: pet.photo_url, ownerId: pet.owner_id, personality: pet.personality || [],
+          medicalNotes: pet.medical_notes, createdAt: new Date(pet.created_at),
+          photo_url: pet.photo_url, isShared: true,
+        }));
+        setPets([...transformedPets, ...transformedSharedPets]);
+      }
+    } catch (error) {
+      console.error('Error accepting invitation:', error);
+      Alert.alert('Error', 'Ocurrió un error al aceptar la invitación');
+    }
+  };
+
+  const handleRejectInvitation = async (invitationId: string) => {
+    Alert.alert(
+      'Rechazar Invitación',
+      '¿Estás seguro de que quieres rechazar esta invitación?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Rechazar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabaseClient
+                .from('pet_shares')
+                .update({ status: 'rejected' })
+                .eq('id', invitationId);
+
+              if (error) {
+                console.error('Error rejecting invitation:', error);
+                Alert.alert('Error', 'No se pudo rechazar la invitación');
+                return;
+              }
+
+              setPendingInvitations(prev => prev.filter(inv => inv.id !== invitationId));
+              Alert.alert('Rechazada', 'Invitación rechazada');
+            } catch (error) {
+              console.error('Error rejecting invitation:', error);
+              Alert.alert('Error', 'Ocurrió un error al rechazar la invitación');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleDeletePet = async (petId: string) => {
@@ -409,6 +575,68 @@ export default function Pets() {
         </TouchableOpacity>
       </View>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {pendingInvitations.length > 0 && (
+          <View style={styles.invitationsSection}>
+            <View style={styles.invitationsHeader}>
+              <Bell size={20} color="#10B981" />
+              <Text style={styles.invitationsTitle}>
+                Invitaciones Pendientes ({pendingInvitations.length})
+              </Text>
+            </View>
+            {pendingInvitations.map((invitation) => (
+              <View key={invitation.id} style={styles.invitationCard}>
+                <View style={styles.invitationInfo}>
+                  <View style={styles.invitationPetInfo}>
+                    {invitation.pet.photo_url ? (
+                      <View style={styles.invitationPetImage}>
+                        <Text style={styles.invitationPetEmoji}>
+                          {invitation.pet.species === 'dog' ? '🐕' : '🐈'}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.invitationPetImage}>
+                        <Text style={styles.invitationPetEmoji}>
+                          {invitation.pet.species === 'dog' ? '🐕' : '🐈'}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={styles.invitationTextInfo}>
+                      <Text style={styles.invitationPetName}>{invitation.pet.name}</Text>
+                      <View style={styles.invitationOwnerInfo}>
+                        <User size={14} color="#6B7280" />
+                        <Text style={styles.invitationOwnerName}>
+                          {invitation.owner.display_name || 'Usuario'}
+                        </Text>
+                      </View>
+                      <Text style={styles.invitationRelationship}>
+                        Como: {invitation.relationship_type === 'veterinarian' ? 'Veterinario' :
+                              invitation.relationship_type === 'family' ? 'Familiar' :
+                              invitation.relationship_type === 'friend' ? 'Amigo' :
+                              invitation.relationship_type === 'caretaker' ? 'Cuidador' : 'Otro'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <View style={styles.invitationActions}>
+                  <TouchableOpacity
+                    style={styles.acceptButton}
+                    onPress={() => handleAcceptInvitation(invitation.id)}
+                  >
+                    <Check size={18} color="#FFFFFF" />
+                    <Text style={styles.acceptButtonText}>Aceptar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.rejectButton}
+                    onPress={() => handleRejectInvitation(invitation.id)}
+                  >
+                    <X size={18} color="#EF4444" />
+                    <Text style={styles.rejectButtonText}>Rechazar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
         <View style={styles.petsContainer}>
           {pets.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -531,5 +759,112 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
     marginLeft: 6,
+  },
+  invitationsSection: {
+    backgroundColor: '#F9FAFB',
+    padding: 16,
+    marginBottom: 16,
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginTop: 16,
+  },
+  invitationsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  invitationsTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#2D6A6F',
+    marginLeft: 8,
+  },
+  invitationCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  invitationInfo: {
+    marginBottom: 12,
+  },
+  invitationPetInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  invitationPetImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  invitationPetEmoji: {
+    fontSize: 32,
+  },
+  invitationTextInfo: {
+    flex: 1,
+  },
+  invitationPetName: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  invitationOwnerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  invitationOwnerName: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginLeft: 4,
+  },
+  invitationRelationship: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#10B981',
+  },
+  invitationActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  acceptButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10B981',
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  acceptButtonText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  rejectButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#EF4444',
+    gap: 6,
+  },
+  rejectButtonText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#EF4444',
   },
 });
