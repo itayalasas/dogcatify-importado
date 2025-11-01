@@ -66,7 +66,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       const { data } = await supabaseClient
         .from('profiles')
-        .select('push_token, notification_preferences')
+        .select('push_token, fcm_token, notification_preferences')
         .eq('id', currentUser!.id)
         .single();
 
@@ -246,14 +246,32 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           }
         }
 
-        // Store token in user profile if user is logged in
+        // Get FCM token for Android (native token for FCM v1 API)
+        let fcmToken: string | null = null;
+        if (Platform.OS === 'android') {
+          try {
+            console.log('Getting native FCM token for Android...');
+            const devicePushToken = await Notifications.getDevicePushTokenAsync();
+            fcmToken = devicePushToken.data;
+            console.log('✅ FCM token obtained:', fcmToken ? fcmToken.substring(0, 30) + '...' : 'null');
+          } catch (fcmError) {
+            console.warn('⚠️ Could not get FCM token:', fcmError);
+          }
+        }
+
+        // Store tokens in user profile if user is logged in
         if (currentUser && tokenData.data) {
-          console.log('Storing push token in user profile...');
+          console.log('Storing push tokens in user profile...');
+          console.log('- Expo Push Token:', tokenData.data.substring(0, 30) + '...');
+          if (fcmToken) {
+            console.log('- FCM Token:', fcmToken.substring(0, 30) + '...');
+          }
 
           const { error: updateError } = await supabaseClient
             .from('profiles')
             .update({
               push_token: tokenData.data,
+              fcm_token: fcmToken,
               notification_preferences: {
                 push: true,
                 email: true
@@ -263,11 +281,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             .eq('id', currentUser.id);
 
           if (updateError) {
-            console.error('Error updating push token:', updateError);
+            console.error('Error updating push tokens:', updateError);
             throw new Error('No se pudo guardar el token de notificación.');
           }
 
-          console.log('✅ Push token saved successfully');
+          console.log('✅ Push tokens saved successfully');
+          if (fcmToken) {
+            console.log('✅ FCM v1 API ready for Android');
+          }
         }
 
         setExpoPushToken(tokenData.data);
