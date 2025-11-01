@@ -14,17 +14,7 @@
         "buildConfiguration": "Debug",
         "simulator": false
       },
-      "channel": "development",
-      "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://zkgiwamycbjcogcgqhff.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InprZ2l3YW15Y2JqY29nY2dxaGZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIyMDI2MTIsImV4cCI6MjA2Nzc3ODYxMn0.D-LyMJVBu0vR_iRInOKUkNLQMs5qwj_vUVZsW_JNGWE",
-        "SENTRY_ORG": "ayala-it-sas",
-        "SENTRY_PROJECT": "react-native",
-        "DD_API_KEY": "068208a98b131a96831ca92a86d4f158",
-        "DATADOG_API_KEY": "068208a98b131a96831ca92a86d4f158",
-        "DD_SITE": "us5.datadoghq.com",
-        "DATADOG_SITE": "us5.datadoghq.com"
-      }
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
@@ -34,43 +24,30 @@
       "ios": {
         "buildConfiguration": "Release",
         "simulator": false
-      }
+      },
+      "channel": "preview"
     },
     "production": {
-      "autoIncrement": true,
-      "distribution": "internal",
+      "distribution": "store",          // ✅ App Store / Play Store
+      "autoIncrement": "buildNumber",   // ✅ iOS incrementa solo
       "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease",
+        "buildType": "app-bundle",      // ✅ .aab para Play Store
         "withoutCredentials": false
       },
       "ios": {
         "buildConfiguration": "Release",
-        "simulator": false
+        "simulator": false              // ✅ Necesario para dispositivos reales
       },
-      "channel": "production",
-      "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://zkgiwamycbjcogcgqhff.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InprZ2l3YW15Y2JqY29nY2dxaGZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIyMDI2MTIsImV4cCI6MjA2Nzc3ODYxMn0.D-LyMJVBu0vR_iRInOKUkNLQMs5qwj_vUVZsW_JNGWE",
-        "SENTRY_ORG": "ayala-it-sas",
-        "SENTRY_PROJECT": "react-native",
-        "EXPO_SKIP_MANIFEST_VALIDATION_TOKEN": "true",
-        "DD_API_KEY": "068208a98b131a96831ca92a86d4f158",
-        "DATADOG_API_KEY": "068208a98b131a96831ca92a86d4f158",
-        "DD_SITE": "us5.datadoghq.com",
-        "DATADOG_SITE": "us5.datadoghq.com"
-      }
-    },
-    "default": {
-      "android": {
-        "buildType": "apk"
-      },
-      "ios": {
-        "buildConfiguration": "Release"
-      }
+      "channel": "production"
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "pedro.ayala@ayalait.com.uy",
+        "ascAppId": "6749812685",        // Opcional: si querés evitar login
+        "submitAutomatically": false
+      }
+    }
   }
 }
