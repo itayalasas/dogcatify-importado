@@ -188,6 +188,13 @@ export default function PartnerProducts() {
 
   const handleToggleProduct = async (productId: string, isActive: boolean) => {
     try {
+      // Update local state immediately for instant UI feedback
+      setProducts(prevProducts =>
+        prevProducts.map(p =>
+          p.id === productId ? { ...p, isActive: !isActive } : p
+        )
+      );
+
       const { error } = await supabaseClient
         .from('partner_products')
         .update({
@@ -195,8 +202,16 @@ export default function PartnerProducts() {
           updated_at: new Date().toISOString()
         })
         .eq('id', productId);
-      
-      if (error) throw error;
+
+      if (error) {
+        // Revert local state if database update failed
+        setProducts(prevProducts =>
+          prevProducts.map(p =>
+            p.id === productId ? { ...p, isActive: isActive } : p
+          )
+        );
+        throw error;
+      }
     } catch (error) {
       console.error('Error toggling product:', error);
       Alert.alert('Error', 'No se pudo actualizar el producto');
@@ -210,23 +225,33 @@ export default function PartnerProducts() {
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Eliminar', 
+          text: 'Eliminar',
           style: 'destructive',
           onPress: async () => {
             try {
+              // Remove from local state immediately
+              const productToDelete = products.find(p => p.id === productId);
+              setProducts(prevProducts => prevProducts.filter(p => p.id !== productId));
+
               const { error } = await supabaseClient
                 .from('partner_products')
                 .delete()
                 .eq('id', productId);
-              
-              if (error) throw error;
-              
+
+              if (error) {
+                // Restore product if deletion failed
+                if (productToDelete) {
+                  setProducts(prevProducts => [...prevProducts, productToDelete]);
+                }
+                throw error;
+              }
+
               Alert.alert('Éxito', 'Producto eliminado correctamente');
             } catch (error) {
               console.error('Error deleting product:', error);
               Alert.alert('Error', 'No se pudo eliminar el producto');
             }
-          } 
+          }
         }
       ]
     );
