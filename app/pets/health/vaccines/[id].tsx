@@ -84,7 +84,7 @@ export default function AddVaccine() {
         console.error('Error parsing next due date:', error);
       }
     }
-  }, [params.selectedVaccine, params.currentVeterinarian, params.currentNotes, params.currentNextDueDate]);
+  }, [params.selectedVaccine, params.selectedVeterinarian, params.currentVeterinarian, params.currentNotes, params.currentNextDueDate, params.currentApplicationDate]);
 
   // Calculate next due date when vaccine date or selected vaccine changes
   useEffect(() => {
@@ -208,12 +208,13 @@ export default function AddVaccine() {
   const handleSelectVeterinarian = () => {
     router.push({
       pathname: '/pets/health/select-veterinarian',
-      params: { 
+      params: {
         petId: id,
         returnPath: `/pets/health/vaccines/${id}`,
         currentValue: veterinarian,
         // Preserve current form values
-        currentCondition: vaccineName,
+        currentVaccine: vaccineName,
+        currentSelectedVaccine: selectedVaccine ? JSON.stringify(selectedVaccine) : undefined,
         currentNotes: notes,
         currentApplicationDate: vaccineDate.toISOString(),
         currentNextDueDate: nextDueDate?.toISOString()
