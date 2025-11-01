@@ -4,6 +4,27 @@
 
 Validar y actualizar automáticamente los tokens de notificación (Expo Push + FCM) cuando el usuario inicia sesión, sin necesidad de intervención manual.
 
+## ⚠️ Requisitos Previos
+
+**IMPORTANTE**: Este sistema requiere una **build nativa** de la app.
+
+### NO Funciona En:
+- ❌ **Expo Go** - Los tokens FCM no están disponibles
+- ❌ **Web** - No hay soporte para push notifications nativas
+- ❌ **Simuladores/Emuladores** - Los tokens no están disponibles
+
+### Funciona En:
+- ✅ **Builds nativas en dispositivos físicos Android**
+- ✅ **Builds nativas en dispositivos físicos iOS**
+- ✅ **Builds de desarrollo** (`npm run android`)
+- ✅ **Builds EAS** (`eas build --platform android`)
+
+**Logs en Expo Go:**
+```
+⚠️ Running in Expo Go - Notifications require native build
+💡 Run: eas build --platform android --profile preview
+```
+
 ## ✨ Funcionalidad Implementada
 
 ### Cuándo se Ejecuta
@@ -13,6 +34,11 @@ La validación se ejecuta **automáticamente** en estos momentos:
 1. **Al iniciar sesión** - Cuando `currentUser` cambia en el `AuthContext`
 2. **Al abrir la app** - Si el usuario ya está logueado
 3. **Después de reinstalar la app** - Los tokens se actualizan automáticamente
+
+**Solo si:**
+- ✅ La app es un build nativo (no Expo Go)
+- ✅ El usuario ha iniciado sesión
+- ✅ El dispositivo es físico (no simulador)
 
 ### Qué Hace
 
