@@ -64,16 +64,16 @@ Deno.serve(async (req: Request) => {
 
     for (const notification of pendingNotifications) {
       try {
-        // Obtener el push token del usuario
+        // Obtener los tokens del usuario (FCM v1 y Expo legacy)
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('push_token')
+          .select('push_token, fcm_token')
           .eq('id', notification.user_id)
           .single();
 
-        if (profileError || !profile?.push_token) {
-          console.log(`No push token for user ${notification.user_id}`);
-          
+        if (profileError || (!profile?.push_token && !profile?.fcm_token)) {
+          console.log(`No push tokens for user ${notification.user_id}`);
+
           // Marcar como fallida
           await supabase
             .from('scheduled_notifications')
@@ -92,41 +92,92 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // Preparar mensaje de notificación
-        const message = {
-          to: profile.push_token,
-          sound: 'default',
-          title: notification.title,
-          body: notification.body,
-          data: notification.data || {},
-          priority: 'high',
-          channelId: 'default',
-        };
+        let notificationSent = false;
+        let sendMethod = 'none';
+        let ticket: PushTicket = { status: 'error', message: 'No method available' };
 
-        // Enviar notificación a Expo Push Service
-        const expoPushUrl = 'https://exp.host/--/api/v2/push/send';
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        };
+        // Intentar con FCM v1 primero (si hay token)
+        if (profile.fcm_token) {
+          try {
+            console.log(`Attempting FCM v1 for notification ${notification.id}...`);
 
-        if (expoAccessToken) {
-          headers['Authorization'] = `Bearer ${expoAccessToken}`;
+            const fcmResponse = await fetch(
+              `${supabaseUrl}/functions/v1/send-notification-fcm-v1`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${supabaseServiceKey}`,
+                },
+                body: JSON.stringify({
+                  token: profile.fcm_token,
+                  title: notification.title,
+                  body: notification.body,
+                  data: notification.data || {},
+                  channelId: 'default',
+                }),
+              }
+            );
+
+            if (fcmResponse.ok) {
+              const fcmResult = await fcmResponse.json();
+              console.log('FCM v1 success:', fcmResult.messageId);
+              notificationSent = true;
+              sendMethod = 'fcm-v1';
+              ticket = { status: 'ok', id: fcmResult.messageId };
+            } else {
+              const errorData = await fcmResponse.json();
+              console.warn('FCM v1 failed, will try fallback:', errorData);
+            }
+          } catch (fcmError) {
+            console.warn('FCM v1 error, will try fallback:', fcmError.message);
+          }
         }
 
-        const pushResponse = await fetch(expoPushUrl, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(message),
-        });
+        // Fallback a Expo Push Service (API heredada) si FCM v1 falló
+        if (!notificationSent && profile.push_token) {
+          console.log(`Attempting Expo Push Service for notification ${notification.id}...`);
 
-        const pushResult = await pushResponse.json();
-        console.log('Push result:', JSON.stringify(pushResult));
+          const message = {
+            to: profile.push_token,
+            sound: 'default',
+            title: notification.title,
+            body: notification.body,
+            data: notification.data || {},
+            priority: 'high',
+            channelId: 'default',
+          };
 
-        // Verificar resultado
-        const ticket: PushTicket = pushResult.data?.[0] || pushResult;
+          const expoPushUrl = 'https://exp.host/--/api/v2/push/send';
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          };
 
-        if (ticket.status === 'ok') {
+          if (expoAccessToken) {
+            headers['Authorization'] = `Bearer ${expoAccessToken}`;
+          }
+
+          const pushResponse = await fetch(expoPushUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(message),
+          });
+
+          const pushResult = await pushResponse.json();
+          console.log('Expo Push result:', JSON.stringify(pushResult));
+
+          ticket = pushResult.data?.[0] || pushResult;
+
+          if (ticket.status === 'ok') {
+            notificationSent = true;
+            sendMethod = 'expo-legacy';
+          }
+        }
+
+        // Evaluar resultado final
+        if (ticket.status === 'ok' && notificationSent) {
+          console.log(`✅ Notification ${notification.id} sent via ${sendMethod}`);
           // Marcar como enviada exitosamente
           await supabase
             .from('scheduled_notifications')
@@ -141,6 +192,7 @@ Deno.serve(async (req: Request) => {
             notification_id: notification.id,
             status: 'sent',
             ticket_id: ticket.id,
+            method: sendMethod,
           });
         } else {
           // Error al enviar
