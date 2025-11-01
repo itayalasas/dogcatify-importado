@@ -34,7 +34,8 @@
       "eas": { "projectId": "0618d9ae-6714-46bb-adce-f4ee57fff324" },
       "DATADOG_CLIENT_TOKEN": "068208a98b131a96831ca92a86d4f158",
       "DATADOG_APPLICATION_ID": "dogcatify-app",
-      "DATADOG_ENV": "production"
+      "DATADOG_ENV": "production",
+      "DATADOG_SITE": "US5"
     },
     "ios": {
       "supportsTablet": true,

@@ -7,6 +7,8 @@ const DATADOG_APPLICATION_ID = Constants.expoConfig?.extra?.DATADOG_APPLICATION_
   process.env.EXPO_PUBLIC_DATADOG_APPLICATION_ID;
 const DATADOG_ENV = Constants.expoConfig?.extra?.DATADOG_ENV ||
   process.env.EXPO_PUBLIC_DATADOG_ENV || 'production';
+const DATADOG_SITE = Constants.expoConfig?.extra?.DATADOG_SITE ||
+  process.env.EXPO_PUBLIC_DATADOG_SITE || 'US5';
 
 // Dynamic import for DataDog SDK (only on native platforms)
 let DdSdkReactNative: any;
@@ -61,12 +63,14 @@ class DataDogLogger {
         true
       );
 
-      config.site = 'US1';
+      config.site = DATADOG_SITE;
       config.uploadFrequency = UploadFrequency.FREQUENT;
       config.batchSize = 'SMALL';
       config.trackInteractions = true;
       config.trackResources = true;
       config.trackErrors = true;
+      config.trackFrustrations = true;
+      config.trackBackgroundEvents = true;
 
       await DdSdkReactNative.initialize(config);
       this.initialized = true;
