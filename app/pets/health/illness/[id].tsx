@@ -22,6 +22,8 @@ export default function AddIllness() {
   const [diagnosisDate, setDiagnosisDate] = useState(new Date());
   const [treatment, setTreatment] = useState('');
   const [veterinarian, setVeterinarian] = useState('');
+  const [selectedCondition, setSelectedCondition] = useState<any>(null);
+  const [selectedTreatment, setSelectedTreatment] = useState<any>(null);
   const [status, setStatus] = useState('active');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,7 +33,7 @@ export default function AddIllness() {
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   const handleBackNavigation = () => {
-    router.push({
+    router.replace({
       pathname: `/pets/${id}`,
       params: { activeTab: 'health' }
     });
@@ -51,17 +53,31 @@ export default function AddIllness() {
     if (params.selectedCondition) {
       try {
         const condition = JSON.parse(params.selectedCondition as string);
+        setSelectedCondition(condition);
         setIllnessName(condition.name);
         console.log('Selected condition:', condition.name);
       } catch (error) {
         console.error('Error parsing selected condition:', error);
       }
     }
-    
+
+    // Restore selected condition when coming back from another screen
+    if (params.currentSelectedCondition && typeof params.currentSelectedCondition === 'string') {
+      try {
+        const condition = JSON.parse(params.currentSelectedCondition);
+        setSelectedCondition(condition);
+        setIllnessName(condition.name);
+        console.log('Restored selected condition:', condition.name);
+      } catch (error) {
+        console.error('Error parsing currentSelectedCondition:', error);
+      }
+    }
+
     // Handle selected treatment
     if (params.selectedTreatment) {
       try {
         const treatmentData = JSON.parse(params.selectedTreatment as string);
+        setSelectedTreatment(treatmentData);
         setTreatment(treatmentData.name);
         console.log('Selected treatment:', treatmentData.name);
       } catch (error) {
@@ -80,12 +96,42 @@ export default function AddIllness() {
       }
     }
     
+    // Restore selected treatment when coming back from another screen
+    if (params.currentSelectedTreatment && typeof params.currentSelectedTreatment === 'string') {
+      try {
+        const treatmentData = JSON.parse(params.currentSelectedTreatment);
+        setSelectedTreatment(treatmentData);
+        setTreatment(treatmentData.name);
+        console.log('Restored selected treatment:', treatmentData.name);
+      } catch (error) {
+        console.error('Error parsing currentSelectedTreatment:', error);
+      }
+    }
+
     // Handle preserved notes
     if (params.currentNotes && typeof params.currentNotes === 'string') {
       setNotes(params.currentNotes);
       console.log('Restored notes:', params.currentNotes);
     }
-  }, [params.selectedCondition, params.selectedTreatment, params.selectedVeterinarian]);
+
+    // Handle preserved treatment
+    if (params.currentTreatment && typeof params.currentTreatment === 'string') {
+      setTreatment(params.currentTreatment);
+      console.log('Restored treatment:', params.currentTreatment);
+    }
+
+    // Handle preserved condition
+    if (params.currentCondition && typeof params.currentCondition === 'string') {
+      setIllnessName(params.currentCondition);
+      console.log('Restored condition:', params.currentCondition);
+    }
+
+    // Handle preserved veterinarian
+    if (params.currentVeterinarian && typeof params.currentVeterinarian === 'string') {
+      setVeterinarian(params.currentVeterinarian);
+      console.log('Restored veterinarian:', params.currentVeterinarian);
+    }
+  }, [params.selectedCondition, params.selectedTreatment, params.selectedVeterinarian, params.currentSelectedCondition, params.currentSelectedTreatment, params.currentTreatment, params.currentCondition, params.currentVeterinarian, params.currentNotes]);
   useEffect(() => {
     fetchPetData();
     
@@ -145,12 +191,14 @@ export default function AddIllness() {
   const handleSelectCondition = () => {
     router.push({
       pathname: '/pets/health/select-condition',
-      params: { 
+      params: {
         petId: id,
         species: pet?.species || 'dog',
+        breed: pet?.breed || '',
+        ageInMonths: pet?.age_in_months?.toString() || '',
+        weight: pet?.weight?.toString() || '',
         returnPath: `/pets/health/illness/${id}`,
         currentValue: illnessName,
-        // Preserve current form values
         currentTreatment: treatment,
         currentVeterinarian: veterinarian,
         currentNotes: notes,
@@ -162,12 +210,16 @@ export default function AddIllness() {
   const handleSelectTreatment = () => {
     router.push({
       pathname: '/pets/health/select-treatment',
-      params: { 
+      params: {
         petId: id,
+        species: pet?.species || 'dog',
+        illnessName: illnessName,
+        ageInMonths: pet?.age_in_months?.toString() || '',
+        weight: pet?.weight?.toString() || '',
         returnPath: `/pets/health/illness/${id}`,
         currentValue: treatment,
-        // Preserve current form values
         currentCondition: illnessName,
+        currentSelectedCondition: selectedCondition ? JSON.stringify(selectedCondition) : undefined,
         currentVeterinarian: veterinarian,
         currentNotes: notes,
         currentDiagnosisDate: diagnosisDate.toISOString()
@@ -178,13 +230,14 @@ export default function AddIllness() {
   const handleSelectVeterinarian = () => {
     router.push({
       pathname: '/pets/health/select-veterinarian',
-      params: { 
+      params: {
         petId: id,
         returnPath: `/pets/health/illness/${id}`,
         currentValue: veterinarian,
-        // Preserve current form values
         currentCondition: illnessName,
         currentTreatment: treatment,
+        currentSelectedCondition: selectedCondition ? JSON.stringify(selectedCondition) : undefined,
+        currentSelectedTreatment: selectedTreatment ? JSON.stringify(selectedTreatment) : undefined,
         currentNotes: notes,
         currentDiagnosisDate: diagnosisDate.toISOString()
       }
