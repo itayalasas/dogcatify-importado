@@ -178,6 +178,68 @@ export default function AddAllergy() {
     });
   };
 
+  const getTypeName = (type: string) => {
+    if (!type) return 'Sin tipo';
+    const normalizedType = type.toLowerCase();
+    const names: Record<string, string> = {
+      alimentaria: 'Alimentaria',
+      ambiental: 'Ambiental',
+      medicamento: 'Medicamento',
+      picaduras: 'Picaduras',
+      contacto: 'Contacto',
+      estacional: 'Estacional',
+      pulgas: 'Pulgas',
+      food: 'Alimentaria',
+      environmental: 'Ambiental',
+      medication: 'Medicamento',
+      insect: 'Picaduras',
+      contact: 'Contacto',
+      seasonal: 'Estacional',
+      flea: 'Pulgas',
+      other: 'Otra'
+    };
+    return names[normalizedType] || type;
+  };
+
+  const getSeverityLabel = (severity: string) => {
+    const normalizedSeverity = severity?.toLowerCase() || 'moderate';
+    const labels: Record<string, string> = {
+      mild: 'Leve',
+      leve: 'Leve',
+      moderate: 'Moderada',
+      moderada: 'Moderada',
+      severe: 'Severa',
+      severa: 'Severa'
+    };
+    return labels[normalizedSeverity] || severity;
+  };
+
+  const getSeverityColor = (severity: string) => {
+    const normalizedSeverity = severity?.toLowerCase() || 'moderate';
+    const colors: Record<string, string> = {
+      mild: '#10B981',
+      leve: '#10B981',
+      moderate: '#F59E0B',
+      moderada: '#F59E0B',
+      severe: '#EF4444',
+      severa: '#EF4444'
+    };
+    return colors[normalizedSeverity] || '#F59E0B';
+  };
+
+  const getSeverityBgColor = (severity: string) => {
+    const normalizedSeverity = severity?.toLowerCase() || 'moderate';
+    const colors: Record<string, string> = {
+      mild: '#D1FAE5',
+      leve: '#D1FAE5',
+      moderate: '#FEF3C7',
+      moderada: '#FEF3C7',
+      severe: '#FEE2E2',
+      severa: '#FEE2E2'
+    };
+    return colors[normalizedSeverity] || '#FEF3C7';
+  };
+
   const handleAddTemporaryVet = async () => {
     if (!tempVetName.trim()) {
       Alert.alert('Error', 'Por favor ingresa el nombre del veterinario');
@@ -329,12 +391,49 @@ export default function AddAllergy() {
             </TouchableOpacity>
           </View>
 
-          <Input
-            label="Tipo de alergia"
-            placeholder="Ej: Alimentaria, Ambiental, Medicamento..."
-            value={allergyType}
-            onChangeText={setAllergyType}
-          />
+          {/* Show additional info if AI-generated allergy was selected */}
+          {selectedAllergy && (
+            <View style={styles.aiInfoCard}>
+              <View style={styles.aiInfoHeader}>
+                <Text style={styles.aiInfoIcon}>🤖</Text>
+                <Text style={styles.aiInfoTitle}>Información de IA</Text>
+              </View>
+              {selectedAllergy.description && (
+                <Text style={styles.aiInfoDescription}>{selectedAllergy.description}</Text>
+              )}
+              {selectedAllergy.triggers && selectedAllergy.triggers.length > 0 && (
+                <View style={styles.aiInfoSection}>
+                  <Text style={styles.aiInfoLabel}>Desencadenantes:</Text>
+                  <Text style={styles.aiInfoText}>{selectedAllergy.triggers.join(', ')}</Text>
+                </View>
+              )}
+              {selectedAllergy.prevention_tips && selectedAllergy.prevention_tips.length > 0 && (
+                <View style={styles.aiInfoSection}>
+                  <Text style={styles.aiInfoLabel}>💡 Consejos de prevención:</Text>
+                  {selectedAllergy.prevention_tips.map((tip: string, index: number) => (
+                    <Text key={index} style={styles.aiInfoTip}>• {tip}</Text>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Tipo de alergia</Text>
+            {selectedAllergy ? (
+              <View style={styles.readOnlyInput}>
+                <Text style={styles.readOnlyInputText}>
+                  {allergyType ? getTypeName(allergyType) : 'No especificado'}
+                </Text>
+              </View>
+            ) : (
+              <Input
+                placeholder="Ej: Alimentaria, Ambiental, Medicamento..."
+                value={allergyType}
+                onChangeText={setAllergyType}
+              />
+            )}
+          </View>
 
           <Input
             label="Síntomas *"
@@ -342,15 +441,25 @@ export default function AddAllergy() {
             value={symptoms}
             onChangeText={setSymptoms}
             multiline
-            numberOfLines={2}
+            numberOfLines={3}
           />
 
-          <Input
-            label="Severidad"
-            placeholder="Ej: Leve, Moderada, Severa"
-            value={severity}
-            onChangeText={setSeverity}
-          />
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Severidad</Text>
+            {selectedAllergy && severity ? (
+              <View style={[styles.readOnlyInput, { backgroundColor: getSeverityBgColor(severity) }]}>
+                <Text style={[styles.readOnlyInputText, { color: getSeverityColor(severity) }]}>
+                  {getSeverityLabel(severity)}
+                </Text>
+              </View>
+            ) : (
+              <Input
+                placeholder="Ej: Leve, Moderada, Severa"
+                value={severity}
+                onChangeText={setSeverity}
+              />
+            )}
+          </View>
 
           {/* Treatment/Veterinarian - Navigable */}
           <View style={styles.inputGroup}>
@@ -582,5 +691,71 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     width: '100%',
+  },
+  aiInfoCard: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+  aiInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  aiInfoIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  aiInfoTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#065F46',
+  },
+  aiInfoDescription: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#047857',
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  aiInfoSection: {
+    marginTop: 8,
+  },
+  aiInfoLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#065F46',
+    marginBottom: 4,
+  },
+  aiInfoText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#047857',
+    lineHeight: 18,
+  },
+  aiInfoTip: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#047857',
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  readOnlyInput: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 50,
+    justifyContent: 'center',
+  },
+  readOnlyInputText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
   },
 });

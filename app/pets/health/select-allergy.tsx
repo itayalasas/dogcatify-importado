@@ -109,17 +109,36 @@ export default function SelectAllergy() {
         setAllergies(aiAllergies);
         setFilteredAllergies(aiAllergies);
       } else {
-        const { data, error } = await supabaseClient
-          .from('allergies_catalog')
-          .select('*')
-          .eq('is_active', true)
-          .in('species', [species, 'both'])
-          .order('is_common', { ascending: false })
-          .order('name', { ascending: true });
+        console.log('Missing breed or age, using generic allergies with AI...');
+        const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+        const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-        if (error) throw error;
-        setAllergies(data || []);
-        setFilteredAllergies(data || []);
+        const response = await fetch(
+          `${supabaseUrl}/functions/v1/generate-allergy-recommendations`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseAnonKey}`,
+            },
+            body: JSON.stringify({
+              species,
+              breed: 'Común/ Doméstico/ Mestizo',
+              ageInMonths: 24,
+              weight: undefined
+            })
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error('Error generating allergy recommendations');
+        }
+
+        const { allergies: aiAllergies } = await response.json();
+        console.log(`Generated ${aiAllergies.length} generic allergy recommendations`);
+
+        setAllergies(aiAllergies);
+        setFilteredAllergies(aiAllergies);
       }
     } catch (error) {
       console.error('Error fetching allergies:', error);
