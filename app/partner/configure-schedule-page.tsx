@@ -131,14 +131,16 @@ export default function ConfigureSchedulePage() {
   const handleAddSchedule = async () => {
     // Validar campos según el tipo de negocio
     const isBoarding = partnerProfile?.businessType === 'boarding';
+    const isShop = partnerProfile?.businessType === 'shop';
+    const requiresAppointmentFields = !isBoarding && !isShop;
 
     if (!startTime || !endTime || selectedDays.length === 0) {
       Alert.alert('Error', 'Por favor completa todos los campos y selecciona al menos un día');
       return;
     }
 
-    // Solo validar estos campos si NO es boarding
-    if (!isBoarding && (!maxSlots || !slotDuration)) {
+    // Solo validar estos campos si el negocio maneja citas (NO boarding ni shop)
+    if (requiresAppointmentFields && (!maxSlots || !slotDuration)) {
       Alert.alert('Error', 'Por favor completa todos los campos');
       return;
     }
@@ -182,8 +184,10 @@ export default function ConfigureSchedulePage() {
   const createSchedules = async (days: number[]) => {
     setLoading(true);
     try {
-      // Determinar si es un negocio de pensión
+      // Determinar el tipo de negocio
       const isBoarding = partnerProfile?.businessType === 'boarding';
+      const isShop = partnerProfile?.businessType === 'shop';
+      const requiresAppointmentFields = !isBoarding && !isShop;
 
       // Crear un horario para cada día seleccionado
       const promises = days.map(async (day) => {
@@ -192,16 +196,17 @@ export default function ConfigureSchedulePage() {
           day_of_week: day,
           start_time: startTime,
           end_time: endTime,
-          max_slots: isBoarding ? 0 : parseInt(maxSlots),
-          slot_duration: isBoarding ? 0 : parseInt(slotDuration),
+          // Para boarding y shop, usar 0 ya que no manejan citas
+          max_slots: requiresAppointmentFields ? parseInt(maxSlots) : 0,
+          slot_duration: requiresAppointmentFields ? parseInt(slotDuration) : 0,
           is_active: true,
           created_at: new Date().toISOString(),
         };
-        
+
         const { error } = await supabaseClient
           .from('business_schedule')
           .insert(scheduleData);
-        
+
         if (error) throw error;
       });
       
@@ -380,8 +385,8 @@ export default function ConfigureSchedulePage() {
             </View>
           </View>
 
-          {/* Solo mostrar estos campos si NO es negocio de pensión */}
-          {partnerProfile?.businessType !== 'boarding' && (
+          {/* Solo mostrar estos campos si es un negocio que maneja citas (NO pensión ni tienda) */}
+          {partnerProfile?.businessType !== 'boarding' && partnerProfile?.businessType !== 'shop' && (
             <>
               <Input
                 label="Máximo de citas por día"
@@ -447,7 +452,7 @@ export default function ConfigureSchedulePage() {
                     </View>
                   </View>
 
-                  {partnerProfile?.businessType !== 'boarding' && (
+                  {partnerProfile?.businessType !== 'boarding' && partnerProfile?.businessType !== 'shop' && (
                     <View style={styles.scheduleDetails}>
                       <Text style={styles.scheduleDetail}>
                         Máximo {item.maxSlots} citas por día
