@@ -1706,42 +1706,22 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
       console.log('⚠️  This will ensure the app opens correctly');
     }
 
-    // ESTRATEGIA MEJORADA: Intentar abrir en la app de Mercado Pago primero
-    // Si falla, hacer fallback al navegador
+    // ESTRATEGIA: Abrir URL web directamente (método recomendado por Mercado Pago)
+    //
+    // ¿Por qué se ve el "flash" del navegador?
+    // 1. Android abre la URL https:// en el navegador predeterminado
+    // 2. El navegador detecta que es una URL de Mercado Pago (via App Links)
+    // 3. El navegador redirige automáticamente a la app de Mercado Pago si está instalada
+    //
+    // Este "flash" es normal y es cómo funciona el sistema de App Links de Android.
+    // No se puede evitar sin perder funcionalidad (la información de pago se pasa por la URL web).
+    //
+    // Alternativas probadas que NO funcionan:
+    // - Deep link directo (mercadopago://checkout/{id}) → Abre app vacía sin info de pago
+    // - Intent directo a la app → No tiene la información de la preferencia de pago
+    //
     console.log('');
-    console.log('🎯 Intentando abrir en app de Mercado Pago primero...');
-
-    // Deep link de Mercado Pago (esquema de URI para Android/iOS)
-    // Formato: mercadopago://checkout/{preference_id}
-    const preferenceId = paymentUrl.split('pref_id=')[1]?.split('&')[0];
-
-    if (preferenceId && Platform.OS === 'android') {
-      // Intentar abrir con deep link de Mercado Pago
-      const mpDeepLink = `mercadopago://checkout/${preferenceId}`;
-      console.log('🔗 Trying deep link:', mpDeepLink);
-
-      try {
-        const canOpenDeepLink = await Linking.canOpenURL(mpDeepLink);
-        if (canOpenDeepLink) {
-          console.log('✅ App de Mercado Pago disponible, abriendo directamente...');
-          await Linking.openURL(mpDeepLink);
-          console.log('✅ SUCCESS: Opened directly in Mercado Pago app');
-          console.log('═══════════════════════════════════════\n');
-          return {
-            success: true,
-            openedInApp: true
-          };
-        } else {
-          console.log('⚠️  App de Mercado Pago no disponible o no puede manejar deep link');
-        }
-      } catch (deepLinkError) {
-        console.log('⚠️  Deep link falló, usando fallback a navegador');
-        console.log('Error:', deepLinkError);
-      }
-    }
-
-    // FALLBACK: Abrir URL web en navegador
-    console.log('🌐 Opening payment URL in browser (OS will decide app vs browser)');
+    console.log('🌐 Opening payment URL (OS will redirect to app if installed)');
     console.log('Checking if URL can be opened...');
 
     const canOpen = await Linking.canOpenURL(paymentUrl);
@@ -1751,16 +1731,17 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
       throw new Error('No se puede abrir la URL de pago');
     }
 
-    console.log('✅ URL can be opened, proceeding...');
+    console.log('✅ URL can be opened, opening now...');
     await Linking.openURL(paymentUrl);
 
     console.log('✅ SUCCESS: Payment URL opened');
-    console.log('   OS will open in Mercado Pago app if installed, browser otherwise');
+    console.log('   Android will open browser briefly, then redirect to Mercado Pago app');
+    console.log('   This "flash" is normal and expected behavior (App Links redirection)');
     console.log('═══════════════════════════════════════\n');
 
     return {
       success: true,
-      openedInApp: false // El OS decide, no controlamos si fue app o browser
+      openedInApp: false // El OS decide mediante App Links
     };
 
   } catch (error) {
