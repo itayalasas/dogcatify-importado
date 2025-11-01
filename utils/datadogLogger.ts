@@ -8,7 +8,7 @@ const DATADOG_APPLICATION_ID = Constants.expoConfig?.extra?.DATADOG_APPLICATION_
 const DATADOG_ENV = Constants.expoConfig?.extra?.DATADOG_ENV ||
   process.env.EXPO_PUBLIC_DATADOG_ENV || 'production';
 const DATADOG_SITE = Constants.expoConfig?.extra?.DATADOG_SITE ||
-  process.env.EXPO_PUBLIC_DATADOG_SITE || 'US5';
+  process.env.EXPO_PUBLIC_DATADOG_SITE || 'us5.datadoghq.com';
 
 // Dynamic import for DataDog SDK (only on native platforms)
 let DdSdkReactNative: any;

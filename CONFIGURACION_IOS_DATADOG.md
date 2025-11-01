@@ -286,3 +286,71 @@ eas build --platform all --profile production
 ```
 
 Los sourcemaps se subirán automáticamente a tu instancia de Datadog en US5.
+
+
+## ⚠️ IMPORTANTE: Configuración del SITE
+
+### Error Común
+
+Si ves este error durante el build de iOS:
+
+```
+Error: Neither DATADOG_API_KEY nor DD_API_KEY contains a valid 
+API key for Datadog site datadoghq.com.
+```
+
+**Causa**: El formato del DATADOG_SITE es incorrecto.
+
+### Formato CORRECTO del Site
+
+❌ **INCORRECTO:**
+- `"US5"`
+- `"us5"`
+- `"datadoghq.com"`
+- `"US5.datadoghq.com"`
+
+✅ **CORRECTO:**
+- `"us5.datadoghq.com"`
+
+### Archivos que Deben Usar el Formato Correcto
+
+1. **app.json** (línea 38):
+```json
+"extra": {
+  "DATADOG_SITE": "us5.datadoghq.com"
+}
+```
+
+2. **utils/datadogLogger.ts** (línea 11):
+```typescript
+const DATADOG_SITE = Constants.expoConfig?.extra?.DATADOG_SITE ||
+  process.env.EXPO_PUBLIC_DATADOG_SITE || 'us5.datadoghq.com';
+```
+
+3. **eas.json** (variables de entorno):
+```json
+"env": {
+  "DD_SITE": "us5.datadoghq.com",
+  "DATADOG_SITE": "us5.datadoghq.com"
+}
+```
+
+4. **.datadogrc**:
+```json
+{
+  "datadogSite": "us5.datadoghq.com"
+}
+```
+
+### Verificación Rápida
+
+```bash
+# Verificar que todos los archivos tengan el formato correcto
+grep -r "us5.datadoghq.com" . --include="*.json" --include="*.ts"
+
+# Buscar formatos incorrectos
+grep -r '"US5"' . --include="*.json"
+```
+
+Si encuentras `"US5"` en algún archivo, cámbialo a `"us5.datadoghq.com"`.
+
