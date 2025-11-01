@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Search, Syringe, Shield, Clock, TriangleAlert as AlertTriangle, Calendar } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Card } from '../../../components/ui/Card';
 import { supabaseClient } from '../../../lib/supabase';
 
@@ -52,7 +53,31 @@ export default function SelectVaccine() {
         ageInMonths = Math.max(0, monthsDiff);
       }
 
-      // Llamar a la Edge Function para obtener vacunas con IA
+      // Generar clave de caché basada en especie y edad
+      const cacheKey = `vaccines_${species}_${ageInMonths || 'all'}_${pet.breed || 'general'}`;
+
+      // Intentar cargar desde caché
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) {
+          const cachedData = JSON.parse(cached);
+          const cacheAge = Date.now() - cachedData.timestamp;
+
+          // Caché válido por 7 días (604800000 ms)
+          if (cacheAge < 604800000) {
+            console.log('Cargando vacunas desde caché');
+            setVaccines(cachedData.vaccines || []);
+            setFilteredVaccines(cachedData.vaccines || []);
+            setLoading(false);
+            return;
+          }
+        }
+      } catch (cacheError) {
+        console.log('No se pudo cargar caché:', cacheError);
+      }
+
+      // Si no hay caché válido, consultar la API
+      console.log('Consultando vacunas con IA...');
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (!session) {
         throw new Error('No hay sesión activa');
@@ -79,8 +104,22 @@ export default function SelectVaccine() {
       }
 
       const data = await response.json();
-      setVaccines(data.vaccines || []);
-      setFilteredVaccines(data.vaccines || []);
+      const vaccines = data.vaccines || [];
+
+      setVaccines(vaccines);
+      setFilteredVaccines(vaccines);
+
+      // Guardar en caché
+      try {
+        const cacheData = {
+          vaccines,
+          timestamp: Date.now(),
+        };
+        await AsyncStorage.setItem(cacheKey, JSON.stringify(cacheData));
+        console.log('Vacunas guardadas en caché');
+      } catch (cacheError) {
+        console.error('Error al guardar en caché:', cacheError);
+      }
     } catch (error) {
       console.error('Error fetching vaccines:', error);
       // Fallback a lista básica si falla
@@ -266,6 +305,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+    paddingTop: 0,
   },
   header: {
     flexDirection: 'row',
@@ -290,7 +330,8 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
     backgroundColor: '#FFFFFF',
   },
   searchBar: {
@@ -343,10 +384,12 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   vaccinesList: {
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
   },
   vaccineCard: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
   vaccineContent: {
     padding: 16,
