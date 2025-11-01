@@ -95,7 +95,7 @@ export default function ServiceBooking() {
       progressAnim.setValue(0);
       Animated.timing(progressAnim, {
         toValue: 100,
-        duration: 3000,
+        duration: 4500,
         useNativeDriver: false,
       }).start();
     } else {
@@ -436,11 +436,15 @@ export default function ServiceBooking() {
 
     setPaymentLoading(true);
     setPaymentStep('processing');
+    setPaymentMessage('Preparando tu reserva...');
 
     // Cerrar el modal de pago para mostrar el loader en pantalla completa
     setShowPaymentModal(false);
 
     try {
+      // Esperar 1 segundo para que el loader sea visible
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       console.log('=== Iniciando flujo de Mercado Pago ===');
       console.log('Datos de la reserva:', {
         serviceId: service.id,
@@ -524,9 +528,13 @@ export default function ServiceBooking() {
         originalPrice: originalPrice
       };
 
+      setPaymentMessage('Creando orden de reserva...');
       console.log('Llamando a createServiceBookingOrder...');
       const result = await createServiceBookingOrder(bookingData);
       console.log('Resultado de createServiceBookingOrder:', result);
+
+      // Esperar 1.5 segundos para que el usuario vea el progreso
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
       if (result.success && result.paymentUrl) {
         console.log('✅ Orden creada exitosamente');
@@ -540,6 +548,9 @@ export default function ServiceBooking() {
         try {
           // Update message while opening
           setPaymentMessage('Abriendo Mercado Pago...');
+
+          // Esperar 1.5 segundos más antes de abrir
+          await new Promise(resolve => setTimeout(resolve, 1500));
 
           // Open Mercado Pago in browser
           const openResult = await openMercadoPagoPayment(result.paymentUrl!, isTestMode);
