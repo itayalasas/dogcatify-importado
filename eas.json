@@ -28,15 +28,15 @@
       "channel": "preview"
     },
     "production": {
-      "distribution": "store",          // ✅ App Store / Play Store
-      "autoIncrement": "buildNumber",   // ✅ iOS incrementa solo
+      "distribution": "store",          
+      "autoIncrement": true,   
       "android": {
-        "buildType": "app-bundle",      // ✅ .aab para Play Store
+        "buildType": "app-bundle",      
         "withoutCredentials": false
       },
       "ios": {
         "buildConfiguration": "Release",
-        "simulator": false              // ✅ Necesario para dispositivos reales
+        "simulator": false              
       },
       "channel": "production"
     }
