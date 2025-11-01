@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Image, Alert, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Calendar, DollarSign, Users, Package, TrendingUp, Clock, MessageCircle, ChartBar as BarChart3, Settings } from 'lucide-react-native';
+import { Calendar, DollarSign, Users, Package, TrendingUp, Clock, MessageCircle, ChartBar as BarChart3, Settings, Filter } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
-import { useAuth } from '../../contexts/AuthContext'; 
+import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { Button } from '../../components/ui/Button';
+
+type DateFilter = 'today' | 'week' | 'month' | 'all';
 
 interface DashboardStats {
-  todayBookings: number;
-  todayRevenue: number;
+  bookings: number;
+  revenue: number;
   totalCustomers: number;
   activeProducts: number;
   pendingBookings: number;
@@ -16,7 +19,6 @@ interface DashboardStats {
   processingOrders: number;
   completedBookings: number;
   completedOrders: number;
-  monthlyRevenue: number;
   averageRating: number;
 }
 
@@ -24,8 +26,8 @@ export default function PartnerDashboard() {
   const { businessId } = useLocalSearchParams<{ businessId?: string }>();
   const { currentUser } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
-    todayBookings: 0,
-    todayRevenue: 0,
+    bookings: 0,
+    revenue: 0,
     totalCustomers: 0,
     activeProducts: 0,
     pendingBookings: 0,
@@ -33,12 +35,13 @@ export default function PartnerDashboard() {
     processingOrders: 0,
     completedBookings: 0,
     completedOrders: 0,
-    monthlyRevenue: 0,
     averageRating: 0,
   });
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
   const [recentBookings, setRecentBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dateFilter, setDateFilter] = useState<DateFilter>('today');
+  const [showFilterModal, setShowFilterModal] = useState(false);
 
   useEffect(() => {
     if (!currentUser?.id || !businessId) {
@@ -138,38 +141,66 @@ export default function PartnerDashboard() {
     };
   }, [currentUser, businessId]);
 
+  // Refetch data when date filter changes
+  useEffect(() => {
+    if (partnerProfile?.id) {
+      fetchDashboardData(partnerProfile.id);
+    }
+  }, [dateFilter]);
+
+  const getDateRange = () => {
+    const now = new Date();
+    let startDate: Date;
+    let endDate: Date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    switch (dateFilter) {
+      case 'today':
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        break;
+      case 'week':
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 7);
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case 'month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        break;
+      case 'all':
+      default:
+        startDate = new Date(2020, 0, 1); // Fecha muy antigua para incluir todo
+        endDate = new Date(now.getFullYear() + 1, 11, 31); // Fecha muy futura
+        break;
+    }
+
+    return { startDate, endDate };
+  };
+
   const fetchDashboardData = async (partnerId: string) => {
     try {
-      console.log('Fetching dashboard data for partner ID:', partnerId);
+      console.log('Fetching dashboard data for partner ID:', partnerId, 'with filter:', dateFilter);
+
+      const { startDate, endDate } = getDateRange();
       
-      // Get today's date range for filtering
-      const today = new Date();
-      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-      
-      // Fetch bookings
+      // Fetch bookings with date filter
       const { data: bookingsData, error: bookingsError } = await supabaseClient
         .from('bookings')
         .select('*')
         .eq('partner_id', partnerId)
+        .gte('date', startDate.toISOString())
+        .lte('date', endDate.toISOString())
         .order('created_at', { ascending: false });
-      
+
       if (bookingsError) throw bookingsError;
-      
+
       const bookings = bookingsData || [];
-      console.log(`Found ${bookings.length} total bookings for partner`);
-      
+      console.log(`Found ${bookings.length} bookings for partner in date range`);
+
       // Calculate stats
-      const todayBookings = bookings.filter(booking => {
-        const bookingDate = new Date(booking.date);
-        return bookingDate >= startOfDay && bookingDate < endOfDay;
-      });
-      
       const pendingBookings = bookings.filter(booking => booking.status === 'pending');
       const completedBookings = bookings.filter(booking => booking.status === 'completed');
-      
-      const todayRevenue = todayBookings.reduce((sum, booking) => sum + (booking.total_amount || 0), 0);
-      console.log(`Today's stats: ${todayBookings.length} bookings, $${todayRevenue} revenue`);
+
+      const bookingsRevenue = bookings.reduce((sum, booking) => sum + (booking.total_amount || 0), 0);
+      console.log(`Bookings stats: ${bookings.length} bookings, $${bookingsRevenue} revenue`);
       
       // Get recent bookings
       const recent = bookings
@@ -178,45 +209,40 @@ export default function PartnerDashboard() {
       
       setRecentBookings(recent);
       
-      // Fetch orders data
+      // Fetch orders data with date filter
       const { data: ordersData, error: ordersError } = await supabaseClient
         .from('orders')
         .select('*')
         .eq('partner_id', partnerId)
+        .gte('created_at', startDate.toISOString())
+        .lte('created_at', endDate.toISOString())
         .order('created_at', { ascending: false });
-      
+
       if (ordersError) {
         console.error('Error fetching orders:', ordersError);
       }
-      
+
       const orders = ordersData || [];
-      console.log(`Found ${orders.length} total orders for partner`);
-      
+      console.log(`Found ${orders.length} orders for partner in date range`);
+
       // Calculate order stats
-      const todayOrders = orders.filter(order => {
-        const orderDate = new Date(order.created_at);
-        return orderDate >= startOfDay && orderDate < endOfDay;
-      });
-      
       const pendingOrders = orders.filter(order => order.status === 'pending');
       const completedOrders = orders.filter(order => order.status === 'delivered');
       const processingOrders = orders.filter(order => ['confirmed', 'processing', 'shipped'].includes(order.status));
-      
-      const todayOrdersRevenue = todayOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
-      const totalOrdersRevenue = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
-      
-      console.log(`Orders stats: ${pendingOrders.length} pending, ${completedOrders.length} completed`);
-      
+
+      const ordersRevenue = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+
+      console.log(`Orders stats: ${pendingOrders.length} pending, ${completedOrders.length} completed, ${processingOrders.length} processing`);
+
       setStats(prev => ({
         ...prev,
-        todayBookings: todayBookings.length,
-        todayRevenue: todayRevenue + todayOrdersRevenue,
+        bookings: bookings.length,
+        revenue: bookingsRevenue + ordersRevenue,
         pendingBookings: pendingBookings.length,
         completedBookings: completedBookings.length,
         pendingOrders: pendingOrders.length,
         completedOrders: completedOrders.length,
         processingOrders: processingOrders.length,
-        monthlyRevenue: calculateMonthlyRevenue(bookings) + calculateMonthlyOrdersRevenue(orders),
       }));
       
       // Get customer count
@@ -267,30 +293,19 @@ export default function PartnerDashboard() {
     }
   };
 
-  const calculateMonthlyOrdersRevenue = (orders: any[]) => {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    
-    const monthlyOrders = orders.filter((order: any) => {
-      const orderDate = new Date(order.created_at);
-      return orderDate >= startOfMonth && orderDate <= endOfMonth;
-    });
-    
-    return monthlyOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
-  };
-
-  const calculateMonthlyRevenue = (bookings: any[]) => {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    
-    const monthlyBookings = bookings.filter((booking: any) => {
-      const bookingDate = new Date(booking.date);
-      return bookingDate >= startOfMonth && bookingDate <= endOfMonth;
-    });
-    
-    return monthlyBookings.reduce((sum, booking) => sum + (booking.total_amount || 0), 0);
+  const getFilterLabel = () => {
+    switch (dateFilter) {
+      case 'today':
+        return 'Hoy';
+      case 'week':
+        return 'Última Semana';
+      case 'month':
+        return 'Este Mes';
+      case 'all':
+        return 'Todo el Tiempo';
+      default:
+        return 'Hoy';
+    }
   };
 
   const getGreeting = () => {
@@ -454,24 +469,35 @@ export default function PartnerDashboard() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Today's Overview */ }
+        {/* Date Filter */}
+        <View style={styles.filterSection}>
+          <Text style={styles.sectionTitle}>Resumen de {getFilterLabel()}</Text>
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setShowFilterModal(true)}
+          >
+            <Filter size={18} color="#3B82F6" />
+            <Text style={styles.filterButtonText}>Filtrar</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Stats Overview */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Resumen de Hoy</Text>
           <View style={styles.statsGrid}>
             <Card style={styles.statCard}>
               <View style={styles.statHeader}>
                 <Calendar size={20} color="#3B82F6" />
-                <Text style={styles.statValue}>{stats.todayBookings}</Text>
+                <Text style={styles.statValue}>{stats.bookings}</Text>
               </View>
-              <Text style={styles.statLabel}>Citas de Hoy</Text>
+              <Text style={styles.statLabel}>Citas/Reservas</Text>
             </Card>
 
             <Card style={styles.statCard}>
               <View style={styles.statHeader}>
                 <DollarSign size={20} color="#10B981" />
-                <Text style={styles.statValue}>{formatCurrency(stats.todayRevenue)}</Text>
+                <Text style={styles.statValue}>{formatCurrency(stats.revenue)}</Text>
               </View>
-              <Text style={styles.statLabel}>Ingresos de Hoy</Text>
+              <Text style={styles.statLabel}>Ingresos</Text>
             </Card>
 
             <Card style={styles.statCard}>
@@ -588,6 +614,107 @@ export default function PartnerDashboard() {
           </Card>
         </View>
       </ScrollView>
+
+      {/* Filter Modal */}
+      <Modal
+        visible={showFilterModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowFilterModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filtrar por Fecha</Text>
+              <TouchableOpacity onPress={() => setShowFilterModal(false)}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.filterOptions}>
+              <TouchableOpacity
+                style={[
+                  styles.filterOption,
+                  dateFilter === 'today' && styles.filterOptionActive,
+                ]}
+                onPress={() => {
+                  setDateFilter('today');
+                  setShowFilterModal(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.filterOptionText,
+                    dateFilter === 'today' && styles.filterOptionTextActive,
+                  ]}
+                >
+                  Hoy
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.filterOption,
+                  dateFilter === 'week' && styles.filterOptionActive,
+                ]}
+                onPress={() => {
+                  setDateFilter('week');
+                  setShowFilterModal(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.filterOptionText,
+                    dateFilter === 'week' && styles.filterOptionTextActive,
+                  ]}
+                >
+                  Última Semana
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.filterOption,
+                  dateFilter === 'month' && styles.filterOptionActive,
+                ]}
+                onPress={() => {
+                  setDateFilter('month');
+                  setShowFilterModal(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.filterOptionText,
+                    dateFilter === 'month' && styles.filterOptionTextActive,
+                  ]}
+                >
+                  Este Mes
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.filterOption,
+                  dateFilter === 'all' && styles.filterOptionActive,
+                ]}
+                onPress={() => {
+                  setDateFilter('all');
+                  setShowFilterModal(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.filterOptionText,
+                    dateFilter === 'all' && styles.filterOptionTextActive,
+                  ]}
+                >
+                  Todo el Tiempo
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -803,5 +930,81 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
     paddingVertical: 20,
+  },
+  filterSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  filterButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#3B82F6',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    width: '85%',
+    maxWidth: 400,
+    padding: 24,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+  },
+  modalClose: {
+    fontSize: 24,
+    color: '#6B7280',
+    fontWeight: 'bold',
+  },
+  filterOptions: {
+    gap: 12,
+  },
+  filterOption: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  filterOptionActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#3B82F6',
+  },
+  filterOptionText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    textAlign: 'center',
+  },
+  filterOptionTextActive: {
+    color: '#3B82F6',
+    fontFamily: 'Inter-Bold',
   },
 });
