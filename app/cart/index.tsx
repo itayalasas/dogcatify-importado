@@ -73,7 +73,7 @@ export default function Cart() {
       progressAnim.setValue(0);
       Animated.timing(progressAnim, {
         toValue: 100,
-        duration: 3000,
+        duration: 4500,
         useNativeDriver: false,
       }).start();
     } else {
@@ -274,6 +274,7 @@ export default function Cart() {
     // Cerrar el modal de pago para mostrar el loader en pantalla completa
     setShowPaymentMethodModal(false);
     setPaymentLoading(true);
+    setPaymentMessage('Preparando tu pago...');
 
     try {
       console.log('=== Iniciando proceso de checkout ===');
@@ -303,6 +304,9 @@ export default function Cart() {
 
       const totalShippingCost = partnerInfo?.has_shipping ? (partnerInfo.shipping_cost || 0) : 0;
 
+      // Esperar 1 segundo para que el loader sea visible
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       setPaymentMessage('Creando orden de compra...');
       const { orders, paymentPreferences, isTestMode } = await createMultiPartnerOrder(
         cart,
@@ -314,6 +318,9 @@ export default function Cart() {
       console.log('Orders created:', orders.length);
       console.log('Payment preferences created:', paymentPreferences.length);
       console.log('Environment detected:', isTestMode ? 'TEST' : 'PRODUCTION');
+
+      // Esperar 1.5 segundos para que el usuario vea el progreso
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
       if (paymentPreferences.length > 0) {
         const preference = paymentPreferences[0];
@@ -339,8 +346,11 @@ export default function Cart() {
         // Detect environment from payment URL (same as services)
         const isTestModeByUrl = paymentUrl.includes('sandbox');
 
-        // Open Mercado Pago directly (same as services)
+        // Esperar 1.5 segundos más antes de abrir
         setPaymentMessage('Abriendo Mercado Pago...');
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        // Open Mercado Pago directly (same as services)
         const openResult = await openMercadoPagoPayment(paymentUrl, isTestModeByUrl);
 
         if (!openResult.success) {
