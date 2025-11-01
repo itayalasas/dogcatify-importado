@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { X, UserPlus, Mail, Check, Clock, UserX, Search } from 'lucide-react-native';
+import { X, UserPlus, Mail, Check, Clock, UserX, Search, Eye, Edit3, Shield } from 'lucide-react-native';
 import { supabaseClient } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';
@@ -63,9 +63,33 @@ export default function SharePetScreen() {
   ];
 
   const permissionLevels = [
-    { value: 'view', label: 'Ver', description: 'Solo puede ver información' },
-    { value: 'edit', label: 'Editar', description: 'Puede ver y editar información' },
-    { value: 'admin', label: 'Administrador', description: 'Control total (compartir, eliminar)' },
+    {
+      value: 'view',
+      label: 'Ver',
+      description: 'Solo puede ver información',
+      icon: Eye,
+      color: '#10B981',
+      bgColor: '#D1FAE5',
+      borderColor: '#10B981'
+    },
+    {
+      value: 'edit',
+      label: 'Editar',
+      description: 'Puede ver y editar información',
+      icon: Edit3,
+      color: '#3B82F6',
+      bgColor: '#DBEAFE',
+      borderColor: '#3B82F6'
+    },
+    {
+      value: 'admin',
+      label: 'Administrador',
+      description: 'Control total (compartir, eliminar)',
+      icon: Shield,
+      color: '#8B5CF6',
+      bgColor: '#EDE9FE',
+      borderColor: '#8B5CF6'
+    },
   ];
 
   useEffect(() => {
@@ -401,36 +425,60 @@ export default function SharePetScreen() {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Nivel de permisos</Text>
-            {permissionLevels.map((level) => (
-              <TouchableOpacity
-                key={level.value}
-                style={[
-                  styles.permissionOption,
-                  permissionLevel === level.value && styles.permissionOptionActive,
-                ]}
-                onPress={() => setPermissionLevel(level.value)}
-              >
-                <View style={styles.permissionInfo}>
-                  <Text
+            {permissionLevels.map((level) => {
+              const Icon = level.icon;
+              const isSelected = permissionLevel === level.value;
+
+              return (
+                <TouchableOpacity
+                  key={level.value}
+                  style={[
+                    styles.permissionOption,
+                    isSelected && {
+                      backgroundColor: level.bgColor,
+                      borderColor: level.borderColor,
+                      borderWidth: 2,
+                    },
+                  ]}
+                  onPress={() => setPermissionLevel(level.value)}
+                >
+                  <View
                     style={[
-                      styles.permissionLabel,
-                      permissionLevel === level.value && styles.permissionLabelActive,
+                      styles.permissionIconContainer,
+                      { backgroundColor: isSelected ? level.color : '#F3F4F6' },
                     ]}
                   >
-                    {level.label}
-                  </Text>
-                  <Text style={styles.permissionDescription}>{level.description}</Text>
-                </View>
-                <View
-                  style={[
-                    styles.radio,
-                    permissionLevel === level.value && styles.radioActive,
-                  ]}
-                >
-                  {permissionLevel === level.value && <View style={styles.radioDot} />}
-                </View>
-              </TouchableOpacity>
-            ))}
+                    <Icon
+                      size={20}
+                      color={isSelected ? '#FFFFFF' : '#9CA3AF'}
+                    />
+                  </View>
+                  <View style={styles.permissionInfo}>
+                    <Text
+                      style={[
+                        styles.permissionLabel,
+                        isSelected && { color: level.color },
+                      ]}
+                    >
+                      {level.label}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.permissionDescription,
+                        isSelected && { color: level.color, opacity: 0.8 },
+                      ]}
+                    >
+                      {level.description}
+                    </Text>
+                  </View>
+                  {isSelected && (
+                    <View style={[styles.checkMark, { backgroundColor: level.color }]}>
+                      <Check size={16} color="#FFFFFF" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
           <Button
@@ -727,52 +775,48 @@ const styles = StyleSheet.create({
   permissionOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F3F4F6',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 8,
+    backgroundColor: '#F9FAFB',
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 10,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  permissionOptionActive: {
-    backgroundColor: '#EBF8FF',
-    borderColor: '#3B82F6',
+  permissionIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
   permissionInfo: {
     flex: 1,
   },
   permissionLabel: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
-    marginBottom: 2,
-  },
-  permissionLabelActive: {
-    color: '#3B82F6',
+    fontSize: 17,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    marginBottom: 3,
   },
   permissionDescription: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
+    lineHeight: 18,
   },
-  radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#D1D5DB',
+  checkMark: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  radioActive: {
-    borderColor: '#3B82F6',
-  },
-  radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#3B82F6',
+    marginLeft: 8,
   },
   shareButton: {
     marginTop: 8,
