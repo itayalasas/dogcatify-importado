@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
-import { Calendar, Scale, Trash2 } from 'lucide-react-native';
+import { Calendar, Scale, Trash2, UserPlus } from 'lucide-react-native';
 import { Card } from './ui/Card';
 import { Pet } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -9,9 +9,11 @@ interface PetCardProps {
   pet: Pet;
   onPress: () => void;
   onDelete?: (petId: string) => void;
+  onShare?: (petId: string) => void;
+  isShared?: boolean;
 }
 
-export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete }) => {
+export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete, onShare, isShared }) => {
   const { t } = useLanguage();
 
   const formatAge = () => {
@@ -46,7 +48,7 @@ export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete }) => {
           onError={(e) => console.log('Error loading pet image:', pet.photoURL || pet.photo_url, e.nativeEvent.error)}
         />
         {onDelete && (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.deleteButton}
             onPress={(e) => {
               e.stopPropagation();
@@ -55,6 +57,22 @@ export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete }) => {
           >
             <Trash2 size={16} color="#FFFFFF" />
           </TouchableOpacity>
+        )}
+        {onShare && (
+          <TouchableOpacity
+            style={styles.shareButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              onShare(pet.id);
+            }}
+          >
+            <UserPlus size={16} color="#FFFFFF" />
+          </TouchableOpacity>
+        )}
+        {isShared && (
+          <View style={styles.sharedBadge}>
+            <Text style={styles.sharedBadgeText}>Compartida</Text>
+          </View>
         )}
         <View style={styles.content}>
           <View style={styles.header}>
@@ -178,5 +196,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,
+  },
+  shareButton: {
+    position: 'absolute',
+    top: 8,
+    right: 48,
+    backgroundColor: 'rgba(59, 130, 246, 0.9)',
+    borderRadius: 16,
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  sharedBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.9)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    zIndex: 1,
+  },
+  sharedBadgeText: {
+    fontSize: 11,
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
   },
 });
