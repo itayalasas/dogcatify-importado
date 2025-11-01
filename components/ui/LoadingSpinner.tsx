@@ -85,19 +85,23 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FFFFFF',
   },
   loaderContainer: {
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
+    backgroundColor: '#FFFFFF',
   },
   logoContainer: {
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 20,
   },
   logo: {
-    opacity: 0.9,
+    opacity: 1,
+    backgroundColor: 'transparent',
   },
   message: {
     fontSize: 14,

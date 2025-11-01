@@ -76,12 +76,15 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 20,
   },
   logo: {
     width: width * 0.4,
     height: width * 0.4,
     maxWidth: 200,
     maxHeight: 200,
+    backgroundColor: 'transparent',
   },
   message: {
     marginTop: 24,
