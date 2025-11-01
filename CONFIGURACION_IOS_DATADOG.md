@@ -1,285 +1,288 @@
-# 🍎 Configuración Nativa de DataDog para iOS
+# Configuración Completa de Datadog para iOS
 
-## Estado Actual
+Esta guía cubre la configuración completa de Datadog para builds de iOS en Expo con EAS Build.
 
-Como este es un proyecto **Expo Managed**, no tenemos carpeta `ios/` nativa. La carpeta iOS se genera automáticamente durante el build con EAS o al ejecutar `npx expo prebuild`.
+## ✅ Estado de Configuración
 
-## 📋 Pasos para Implementar DataDog Nativo en iOS
+### Completado
 
-### Opción 1: Usando Expo Config Plugin (Recomendado)
+- ✅ Plugin `@datadog/mobile-react-native` instalado
+- ✅ Variables de entorno en `eas.json`
+- ✅ Pre-install hook configurado
+- ✅ `.datadogrc` con site correcto (us5.datadoghq.com)
+- ✅ Perfiles iOS agregados en `eas.json`
 
-La forma más fácil es usar el config plugin de DataDog en `app.json`:
+### Automático (manejado por el plugin)
+
+- ✅ Configuración de Xcode
+- ✅ Script de upload de sourcemaps
+- ✅ Integración con el build system de iOS
+
+## 📱 Diferencias: Android vs iOS
+
+### Android
+
+```
+gradle.properties → Variables DD_API_KEY, DD_SITE
+app/build.gradle  → Task interceptor personalizado
+Build Process     → Gradle tasks
+Sourcemap Upload  → datadog-ci vía task interceptor
+```
+
+### iOS
+
+```
+eas.json          → Variables DD_API_KEY, DD_SITE
+Plugin Expo       → Configuración automática de Xcode
+Build Process     → Xcode build phases
+Sourcemap Upload  → datadog-ci vía build phase script
+```
+
+## 🔧 Configuración en eas.json
+
+Todos los perfiles ya incluyen configuración iOS:
+
+### Development Profile
 
 ```json
-{
-  "expo": {
-    "plugins": [
-      [
-        "@datadog/mobile-react-native",
-        {
-          "ios": {
-            "datadogClientToken": "068208a98b131a96831ca92a86d4f158",
-            "datadogApplicationId": "dogcatify-app",
-            "datadogSite": "US1",
-            "datadogEnvironment": "production"
-          }
-        }
-      ]
-    ]
+"development": {
+  "distribution": "internal",
+  "ios": {
+    "buildConfiguration": "Debug",
+    "simulator": false
+  },
+  "env": {
+    "DD_API_KEY": "068208a98b131a96831ca92a86d4f158",
+    "DATADOG_API_KEY": "068208a98b131a96831ca92a86d4f158",
+    "DD_SITE": "us5.datadoghq.com",
+    "DATADOG_SITE": "us5.datadoghq.com"
   }
 }
 ```
 
-Luego ejecutar:
-```bash
-npx expo prebuild --clean
-```
-
-### Opción 2: Configuración Manual (Después de Prebuild)
-
-Si prefieres configurar manualmente, después de ejecutar `npx expo prebuild`, tendrás una carpeta `ios/` donde puedes agregar:
-
-#### 1. Podfile
-
-Agregar al final del archivo `ios/Podfile`:
-
-```ruby
-# DataDog SDK
-pod 'DatadogCore', '~> 2.0'
-pod 'DatadogLogs', '~> 2.0'
-pod 'DatadogCrashReporting', '~> 2.0'
-```
-
-Luego ejecutar:
-```bash
-cd ios && pod install && cd ..
-```
-
-#### 2. AppDelegate.mm o AppDelegate.swift
-
-Buscar el archivo `ios/DogCatiFy/AppDelegate.mm` (o `.swift` si es Swift) y agregar:
-
-**Para Objective-C (AppDelegate.mm):**
-
-```objc
-#import <DatadogCore/DatadogCore-Swift.h>
-#import <DatadogLogs/DatadogLogs-Swift.h>
-
-- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
-{
-  // Initialize DataDog
-  DDConfiguration *configuration = [[DDConfiguration alloc] initWithClientToken:@"068208a98b131a96831ca92a86d4f158"
-                                                                             env:@"production"];
-  configuration.site = DDSiteUS1;
-  
-  [DDDatadog initializeWithConfiguration:configuration
-                         trackingConsent:DDTrackingConsentGranted];
-  
-  // Enable Logs
-  [DDLogs enableWith:[[DDLogsConfiguration alloc] init]];
-  
-  // ... resto del código existente
-  return YES;
-}
-```
-
-**Para Swift (AppDelegate.swift):**
-
-```swift
-import DatadogCore
-import DatadogLogs
-
-func application(_ application: UIApplication, 
-                 didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-    
-    // Initialize DataDog
-    Datadog.initialize(
-        with: Datadog.Configuration(
-            clientToken: "068208a98b131a96831ca92a86d4f158",
-            env: "production",
-            site: .us1
-        ),
-        trackingConsent: .granted
-    )
-    
-    // Enable Logs
-    Logs.enable(with: Logs.Configuration())
-    
-    // ... resto del código existente
-    return true
-}
-```
-
-## 🔧 Configuración con EAS Build
-
-Si usas EAS Build, puedes crear un hook personalizado:
-
-### 1. Crear archivo `eas-hooks/eas-build-on-success.sh`
-
-```bash
-#!/bin/bash
-
-# Este script se ejecuta después del build exitoso
-echo "✅ Build completado - DataDog configurado"
-```
-
-### 2. Actualizar `eas.json`
+### Production Profile
 
 ```json
-{
-  "build": {
-    "development": {
-      "ios": {
-        "simulator": false,
-        "buildConfiguration": "Debug",
-        "resourceClass": "m-medium"
-      }
-    },
-    "preview": {
-      "ios": {
-        "simulator": false,
-        "buildConfiguration": "Release",
-        "resourceClass": "m-medium"
-      }
-    },
-    "production": {
-      "ios": {
-        "simulator": false,
-        "buildConfiguration": "Release",
-        "resourceClass": "m-medium"
-      }
-    }
+"production": {
+  "autoIncrement": true,
+  "distribution": "internal",
+  "ios": {
+    "buildConfiguration": "Release",
+    "simulator": false
+  },
+  "env": {
+    "DD_API_KEY": "068208a98b131a96831ca92a86d4f158",
+    "DATADOG_API_KEY": "068208a98b131a96831ca92a86d4f158",
+    "DD_SITE": "us5.datadoghq.com",
+    "DATADOG_SITE": "us5.datadoghq.com"
   }
 }
 ```
 
-## 📱 Info.plist (Opcional)
+## 🚀 Cómo Hacer un Build de iOS
 
-Si quieres usar variables de entorno en Info.plist:
+### 1. Build de Desarrollo
 
-```xml
-<!-- ios/DogCatiFy/Info.plist -->
-<dict>
-  <!-- ... otras configuraciones ... -->
-  
-  <key>DatadogClientToken</key>
-  <string>068208a98b131a96831ca92a86d4f158</string>
-  
-  <key>DatadogApplicationId</key>
-  <string>dogcatify-app</string>
-  
-  <key>DatadogEnvironment</key>
-  <string>production</string>
-</dict>
-```
-
-Y en el código leer:
-
-```swift
-if let clientToken = Bundle.main.object(forInfoDictionaryKey: "DatadogClientToken") as? String {
-    // Usar clientToken
-}
-```
-
-## 🚀 Probar la Configuración
-
-### Generar proyecto iOS nativo:
 ```bash
-npx expo prebuild --platform ios --clean
+eas build --platform ios --profile development
 ```
 
-### Build local:
+### 2. Build de Producción
+
 ```bash
-npx expo run:ios
+eas build --platform ios --profile production
 ```
 
-### Build con EAS:
+### 3. Build para Ambas Plataformas
+
 ```bash
-eas build --profile development --platform ios
+eas build --platform all --profile production
 ```
 
-## ✅ Verificar que Funciona
+## 📊 Verificación del Upload de Sourcemaps
 
-En Xcode o en los logs del build, deberías ver:
+Durante el build de iOS, deberías ver estos logs:
 
 ```
-✅ DataDog SDK initialized successfully
-🔧 DataDog Logs feature enabled
+📊 Uploading sourcemaps to Datadog...
+   Service: com.dogcatify.app
+   Version: [version]
+   Site: us5.datadoghq.com
+
+Starting upload with Datadog CI
+Uploading sourcemap for bundle: main.jsbundle
+✅ Sourcemap uploaded successfully
 ```
 
-En el dashboard de DataDog:
-1. Ve a https://app.datadoghq.com/logs
-2. Filtra por: `source:ios`
-3. Deberías ver logs nativos de iOS
+## 🔍 Qué Hace el Plugin Automáticamente
 
-## 🎯 Logs que se Capturarán
+El plugin `@datadog/mobile-react-native` se encarga de:
 
-Con la configuración nativa de iOS:
+1. **Durante la configuración del proyecto:**
+   - Modifica el `Podfile` para incluir Datadog SDK
+   - Agrega las dependencias necesarias
+   - Configura el framework de Datadog
 
-- ✅ Crashes nativos de iOS
-- ✅ Errores del runtime Objective-C/Swift
-- ✅ Errores del puente React Native
-- ✅ Logs desde JavaScript (via React Native SDK)
-- ✅ Network requests (si habilitas tracing)
-- ✅ App lifecycle events
+2. **Durante el build:**
+   - Lee las variables `DD_API_KEY` y `DD_SITE`
+   - Agrega un build phase script a Xcode
+   - Ejecuta `datadog-ci` para subir sourcemaps
+   - Vincula los sourcemaps con la versión del build
 
-## 📊 Comparación de Configuraciones
+3. **En runtime:**
+   - Inicializa el SDK de Datadog
+   - Captura crashes y errores
+   - Envía logs y métricas
 
-| Característica | Solo JS | JS + Nativo iOS |
-|---------------|---------|----------------|
-| Logs desde React Native | ✅ | ✅ |
-| Crashes nativos | ❌ | ✅ |
-| Performance monitoring | Limitado | Completo |
-| Source mapping | Básico | Avanzado |
-| Inicialización | Tardía | Temprana |
-| Overhead | Medio | Bajo |
+## 🎯 Variables de Entorno Requeridas
 
-## 🔐 Seguridad en Producción
+### Para el Build (en eas.json)
 
-**Recomendaciones:**
+```bash
+DD_API_KEY=068208a98b131a96831ca92a86d4f158
+DATADOG_API_KEY=068208a98b131a96831ca92a86d4f158
+DD_SITE=us5.datadoghq.com
+DATADOG_SITE=us5.datadoghq.com
+```
 
-1. **Usar variables de entorno en build time:**
+### Para el Pre-Install Hook
+
+El archivo `eas-hooks/pre-install.sh` ya exporta estas variables:
+
+```bash
+export DD_API_KEY="${DD_API_KEY:-068208a98b131a96831ca92a86d4f158}"
+export DATADOG_API_KEY="${DATADOG_API_KEY:-068208a98b131a96831ca92a86d4f158}"
+export DD_SITE="${DD_SITE:-us5.datadoghq.com}"
+export DATADOG_SITE="${DATADOG_SITE:-us5.datadoghq.com}"
+```
+
+## 📝 Archivos Clave
+
+```
+eas.json                    → Configuración de builds iOS
+eas-hooks/pre-install.sh    → Exporta variables antes del build
+.datadogrc                  → Configuración del CLI de Datadog
+package.json                → Plugin @datadog/mobile-react-native
+app.json                    → Config app (el plugin lo modifica)
+```
+
+## ⚠️ Notas Importantes
+
+### 1. Simulator vs Device
+
 ```json
-{
-  "expo": {
-    "extra": {
-      "datadogClientToken": "$DATADOG_CLIENT_TOKEN",
-      "datadogApplicationId": "$DATADOG_APP_ID"
-    }
-  }
-}
+"simulator": false  // Build para dispositivos reales
+"simulator": true   // Build para simulador (más rápido para testing)
 ```
 
-2. **No commitear credenciales en código:**
-   - Usar secrets de EAS Build
-   - Usar variables de entorno locales
+### 2. Build Configuration
 
-3. **Diferentes tokens por ambiente:**
-   - Token para development
-   - Token para production
+```json
+"buildConfiguration": "Debug"    // Para development
+"buildConfiguration": "Release"  // Para production/preview
+```
 
-## 📚 Referencias Oficiales
+### 3. Distribution
 
-- [DataDog iOS SDK](https://docs.datadoghq.com/logs/log_collection/ios/)
-- [DataDog React Native](https://github.com/DataDog/dd-sdk-reactnative)
-- [Expo Config Plugins](https://docs.expo.dev/config-plugins/introduction/)
-- [EAS Build Hooks](https://docs.expo.dev/build/building-on-ci/)
+```json
+"distribution": "internal"  // Para testing interno
+"distribution": "store"     // Para App Store
+```
 
-## 🎯 Próximos Pasos
+## 🔄 Flujo Completo del Build iOS
 
-1. **Inmediato**: DataDog funciona con configuración JS actual
-2. **Cuando hagas prebuild**: Agregar configuración nativa
-3. **En producción**: Configuración dual (JS + Nativo)
+```
+1. EAS Build inicia
+   ↓
+2. Pre-install hook ejecuta
+   → Exporta DD_API_KEY, DD_SITE
+   ↓
+3. npm install ejecuta
+   → Instala @datadog/mobile-react-native
+   → El plugin configura el proyecto
+   ↓
+4. Prebuild ejecuta (si managed workflow)
+   → Genera carpeta ios/
+   → Modifica Podfile
+   → Agrega build phase script
+   ↓
+5. Pod install ejecuta
+   → Instala Datadog SDK
+   ↓
+6. Xcode build ejecuta
+   → Compila la app
+   → Build phase script se ejecuta
+   → datadog-ci sube sourcemaps a us5.datadoghq.com
+   ↓
+7. Build completo
+   → IPA generado
+   → Sourcemaps vinculados en Datadog
+```
 
-La configuración nativa es **opcional pero muy recomendada** para mejor captura de errores y performance.
+## ✅ Checklist Pre-Build
 
----
+Antes de hacer el build de iOS, verifica:
 
-## ⚠️ Nota Importante
+- [ ] `eas.json` tiene configuración iOS
+- [ ] Variables DD_API_KEY y DD_SITE están en env
+- [ ] Site es `us5.datadoghq.com` (no datadoghq.com)
+- [ ] `.datadogrc` existe con configuración correcta
+- [ ] Pre-install hook exporta las variables
+- [ ] Plugin instalado en package.json
+- [ ] Tienes credenciales iOS configuradas en EAS
 
-**Expo Managed vs Bare:**
-- Este proyecto usa **Expo Managed**, así que la carpeta `ios/` no existe por defecto
-- La configuración nativa se aplica automáticamente durante el build con EAS
-- Si haces `eject` o `prebuild`, entonces tendrás acceso directo a los archivos nativos
+## 🆘 Troubleshooting
 
-**Recomendación**: Mantener el proyecto como Managed y usar el config plugin de DataDog en `app.json`.
+### Sourcemaps no se suben
+
+```bash
+# Verificar que las variables están disponibles
+eas build --platform ios --profile production --non-interactive
+
+# Revisar logs del build phase
+# Buscar: "Uploading sourcemaps to Datadog"
+```
+
+### Error de API Key
+
+```bash
+# Verificar el site correcto
+cat .datadogrc
+# Debe mostrar: "datadogSite": "us5.datadoghq.com"
+
+# Verificar variables en eas.json
+grep -A 2 "DD_API_KEY" eas.json
+```
+
+### Build falla en Pod Install
+
+```bash
+# El plugin debería manejar esto automáticamente
+# Si falla, verifica que @datadog/mobile-react-native esté instalado
+npm list @datadog/mobile-react-native
+```
+
+## 📚 Referencias
+
+- [Datadog React Native SDK](https://docs.datadoghq.com/real_user_monitoring/reactnative/)
+- [EAS Build - iOS](https://docs.expo.dev/build/setup/)
+- [Datadog US5 Site](https://us5.datadoghq.com/)
+
+## 🎉 ¡Listo!
+
+La configuración está completa. Ahora puedes hacer builds de iOS con Datadog totalmente integrado.
+
+Para verificar que todo funciona:
+
+```bash
+# Build de prueba
+eas build --platform ios --profile development
+
+# Build de producción
+eas build --platform ios --profile production
+
+# Build para ambas plataformas
+eas build --platform all --profile production
+```
+
+Los sourcemaps se subirán automáticamente a tu instancia de Datadog en US5.
