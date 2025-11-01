@@ -686,13 +686,14 @@ export default function ServiceBooking() {
         </View>
       </ScrollView>
 
-      {/* Modal de Métodos de Pago - Actualizado */}
-      <Modal
-        visible={showPaymentMethodModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPaymentMethodModal(false)}
-      >
+      {/* Modal de Métodos de Pago - Solo se muestra si el servicio tiene costo */}
+      {service?.hasCost !== false && (
+        <Modal
+          visible={showPaymentMethodModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowPaymentMethodModal(false)}
+        >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -751,7 +752,8 @@ export default function ServiceBooking() {
             </View>
           </View>
         </View>
-      </Modal>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
