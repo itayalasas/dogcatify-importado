@@ -588,52 +588,131 @@ export default function AddPet() {
               )}
 
               <View style={styles.breedStatsGrid}>
-                {breedInfo.min_weight_male && breedInfo.max_weight_male && (
+                {(breedInfo.min_weight_male || (breedInfo as any).min_weight) &&
+                 (breedInfo.max_weight_male || (breedInfo as any).max_weight) && (
                   <View style={styles.breedStat}>
                     <Text style={styles.breedStatLabel}>Peso (Macho)</Text>
                     <Text style={styles.breedStatValue}>
-                      {breedInfo.min_weight_male} - {breedInfo.max_weight_male} kg
+                      {breedInfo.min_weight_male || (breedInfo as any).min_weight} - {breedInfo.max_weight_male || (breedInfo as any).max_weight} kg
                     </Text>
                   </View>
                 )}
 
-                {breedInfo.min_weight_female && breedInfo.max_weight_female && (
+                {(breedInfo.min_weight_female || (breedInfo as any).min_weight) &&
+                 (breedInfo.max_weight_female || (breedInfo as any).max_weight) && (
                   <View style={styles.breedStat}>
                     <Text style={styles.breedStatLabel}>Peso (Hembra)</Text>
                     <Text style={styles.breedStatValue}>
-                      {breedInfo.min_weight_female} - {breedInfo.max_weight_female} kg
+                      {breedInfo.min_weight_female || (breedInfo as any).min_weight} - {breedInfo.max_weight_female || (breedInfo as any).max_weight} kg
                     </Text>
                   </View>
                 )}
 
-                {breedInfo.min_life_expectancy && breedInfo.max_life_expectancy && (
+                {(breedInfo.min_life_expectancy || (breedInfo as any).min_life_span) &&
+                 (breedInfo.max_life_expectancy || (breedInfo as any).max_life_span) && (
                   <View style={styles.breedStat}>
                     <Text style={styles.breedStatLabel}>Esperanza de vida</Text>
                     <Text style={styles.breedStatValue}>
-                      {breedInfo.min_life_expectancy} - {breedInfo.max_life_expectancy} años
+                      {breedInfo.min_life_expectancy || (breedInfo as any).min_life_span} - {breedInfo.max_life_expectancy || (breedInfo as any).max_life_span} años
                     </Text>
                   </View>
                 )}
 
-                {breedInfo.energy !== undefined && (
+                {(breedInfo.energy !== undefined || (breedInfo as any).playfulness !== undefined) && (
                   <View style={styles.breedStat}>
                     <Text style={styles.breedStatLabel}>Energía</Text>
                     <View style={styles.breedStatRating}>
-                      <Text style={styles.breedStatValue}>{breedInfo.energy}/5</Text>
+                      <Text style={styles.breedStatValue}>
+                        {breedInfo.energy !== undefined ? breedInfo.energy : (breedInfo as any).playfulness}/5
+                      </Text>
                       <View style={styles.ratingBar}>
-                        <View style={[styles.ratingFill, { width: `${(breedInfo.energy / 5) * 100}%` }]} />
+                        <View style={[styles.ratingFill, {
+                          width: `${((breedInfo.energy !== undefined ? breedInfo.energy : (breedInfo as any).playfulness) / 5) * 100}%`
+                        }]} />
                       </View>
                     </View>
                   </View>
                 )}
 
-                {breedInfo.trainability !== undefined && (
+                {(breedInfo.trainability !== undefined || (breedInfo as any).intelligence !== undefined) && (
                   <View style={styles.breedStat}>
-                    <Text style={styles.breedStatLabel}>Entrenabilidad</Text>
+                    <Text style={styles.breedStatLabel}>
+                      {species === 'dog' ? 'Entrenabilidad' : 'Inteligencia'}
+                    </Text>
                     <View style={styles.breedStatRating}>
-                      <Text style={styles.breedStatValue}>{breedInfo.trainability}/5</Text>
+                      <Text style={styles.breedStatValue}>
+                        {breedInfo.trainability !== undefined ? breedInfo.trainability : (breedInfo as any).intelligence}/5
+                      </Text>
                       <View style={styles.ratingBar}>
-                        <View style={[styles.ratingFill, { width: `${(breedInfo.trainability / 5) * 100}%` }]} />
+                        <View style={[styles.ratingFill, {
+                          width: `${((breedInfo.trainability !== undefined ? breedInfo.trainability : (breedInfo as any).intelligence) / 5) * 100}%`
+                        }]} />
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                {((breedInfo as any).shedding !== undefined || (breedInfo as any).grooming !== undefined) && (
+                  <View style={styles.breedStat}>
+                    <Text style={styles.breedStatLabel}>
+                      {species === 'dog' ? 'Muda de pelo' : 'Cuidado del pelaje'}
+                    </Text>
+                    <View style={styles.breedStatRating}>
+                      <Text style={styles.breedStatValue}>
+                        {(breedInfo as any).shedding !== undefined ? (breedInfo as any).shedding : (breedInfo as any).grooming}/5
+                      </Text>
+                      <View style={styles.ratingBar}>
+                        <View style={[styles.ratingFill, {
+                          width: `${(((breedInfo as any).shedding !== undefined ? (breedInfo as any).shedding : (breedInfo as any).grooming) / 5) * 100}%`
+                        }]} />
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                {(breedInfo as any).protectiveness !== undefined && species === 'dog' && (
+                  <View style={styles.breedStat}>
+                    <Text style={styles.breedStatLabel}>Protección</Text>
+                    <View style={styles.breedStatRating}>
+                      <Text style={styles.breedStatValue}>{(breedInfo as any).protectiveness}/5</Text>
+                      <View style={styles.ratingBar}>
+                        <View style={[styles.ratingFill, { width: `${((breedInfo as any).protectiveness / 5) * 100}%` }]} />
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                {(breedInfo as any).family_friendly !== undefined && (
+                  <View style={styles.breedStat}>
+                    <Text style={styles.breedStatLabel}>Amigable con familia</Text>
+                    <View style={styles.breedStatRating}>
+                      <Text style={styles.breedStatValue}>{(breedInfo as any).family_friendly}/5</Text>
+                      <View style={styles.ratingBar}>
+                        <View style={[styles.ratingFill, { width: `${((breedInfo as any).family_friendly / 5) * 100}%` }]} />
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                {(breedInfo as any).children_friendly !== undefined && (
+                  <View style={styles.breedStat}>
+                    <Text style={styles.breedStatLabel}>Amigable con niños</Text>
+                    <View style={styles.breedStatRating}>
+                      <Text style={styles.breedStatValue}>{(breedInfo as any).children_friendly}/5</Text>
+                      <View style={styles.ratingBar}>
+                        <View style={[styles.ratingFill, { width: `${((breedInfo as any).children_friendly / 5) * 100}%` }]} />
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                {(breedInfo as any).other_pets_friendly !== undefined && (
+                  <View style={styles.breedStat}>
+                    <Text style={styles.breedStatLabel}>Amigable con otras mascotas</Text>
+                    <View style={styles.breedStatRating}>
+                      <Text style={styles.breedStatValue}>{(breedInfo as any).other_pets_friendly}/5</Text>
+                      <View style={styles.ratingBar}>
+                        <View style={[styles.ratingFill, { width: `${((breedInfo as any).other_pets_friendly / 5) * 100}%` }]} />
                       </View>
                     </View>
                   </View>
