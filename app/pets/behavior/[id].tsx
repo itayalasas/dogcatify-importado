@@ -439,7 +439,10 @@ export default function PetBehaviorAssessment() {
       if (error) throw error;
 
       Alert.alert('Éxito', 'Evaluación de comportamiento guardada correctamente');
-      router.back();
+      router.push({
+        pathname: `/pets/${pet.id}`,
+        params: { refresh: 'true', activeTab: 'behavior' }
+      });
     } catch (error) {
       console.error('Error saving assessment:', error);
       Alert.alert('Error', 'No se pudo guardar la evaluación');
