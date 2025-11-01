@@ -441,9 +441,13 @@ export default function ServiceBooking() {
     // Cerrar el modal de pago para mostrar el loader en pantalla completa
     setShowPaymentModal(false);
 
+    // Guardar el tiempo de inicio para garantizar 5 segundos mínimos
+    const startTime = Date.now();
+    const MIN_LOADING_TIME = 5000; // 5 segundos
+
     try {
-      // Esperar 1 segundo para que el loader sea visible
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Esperar 800ms para que el loader sea visible
+      await new Promise(resolve => setTimeout(resolve, 800));
 
       console.log('=== Iniciando flujo de Mercado Pago ===');
       console.log('Datos de la reserva:', {
@@ -533,9 +537,6 @@ export default function ServiceBooking() {
       const result = await createServiceBookingOrder(bookingData);
       console.log('Resultado de createServiceBookingOrder:', result);
 
-      // Esperar 1.5 segundos para que el usuario vea el progreso
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
       if (result.success && result.paymentUrl) {
         console.log('✅ Orden creada exitosamente');
         console.log('URL de pago:', result.paymentUrl);
@@ -549,8 +550,14 @@ export default function ServiceBooking() {
           // Update message while opening
           setPaymentMessage('Abriendo Mercado Pago...');
 
-          // Esperar 1.5 segundos más antes de abrir
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          // Calcular tiempo restante para completar 5 segundos
+          const elapsedTime = Date.now() - startTime;
+          const remainingTime = Math.max(0, MIN_LOADING_TIME - elapsedTime);
+
+          if (remainingTime > 0) {
+            console.log(`⏳ Esperando ${remainingTime}ms para completar tiempo mínimo de loading`);
+            await new Promise(resolve => setTimeout(resolve, remainingTime));
+          }
 
           // Open Mercado Pago in browser
           const openResult = await openMercadoPagoPayment(result.paymentUrl!, isTestMode);
@@ -565,14 +572,9 @@ export default function ServiceBooking() {
             setPaymentMessage('Preparando tu pago con Mercado Pago');
           } else {
             console.log('✅ Opened Mercado Pago successfully');
-            // CRÍTICO: Ocultar loader inmediatamente después de abrir MercadoPago
-            setPaymentLoading(false);
-            setPaymentMessage('Preparando tu pago con Mercado Pago');
-            console.log('✅ Loader ocultado después de abrir MercadoPago');
-
-            // Modal already closed when paymentLoading started
-            // DO NOT redirect here - let the user complete payment
-            // MP will redirect back to the app via dogcatify://payment/success
+            // IMPORTANTE: NO ocultar el loader aquí, se ocultará automáticamente cuando el usuario vuelva a la app
+            // El useFocusEffect se encarga de ocultar el loader cuando regresa
+            console.log('⏳ Loader permanece visible mientras el usuario está en MercadoPago');
           }
         } catch (linkError) {
           console.error('Error abriendo URL de Mercado Pago:', linkError);
