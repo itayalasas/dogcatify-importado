@@ -27,6 +27,8 @@ export default function PetDetail() {
   const [initialWeightCreated, setInitialWeightCreated] = useState(false);
   const [isCreatingInitialWeight, setIsCreatingInitialWeight] = useState(false);
   const [medicalAlerts, setMedicalAlerts] = useState<any[]>([]);
+  const [behaviorHistory, setBehaviorHistory] = useState<any[]>([]);
+  const [selectedTrait, setSelectedTrait] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'basics' | 'health' | 'albums' | 'behavior' | 'appointments'>(
     initialTab as any || 'basics'
   );
@@ -36,6 +38,7 @@ export default function PetDetail() {
     fetchHealthRecords();
     fetchAlbums();
     fetchMedicalAlerts();
+    fetchBehaviorHistory();
   }, [id]);
 
   // Add effect to refetch health records when returning from health forms
@@ -43,6 +46,10 @@ export default function PetDetail() {
     if (refresh === 'true' && activeTab === 'health') {
       console.log('Refreshing health records due to refresh param');
       fetchHealthRecords();
+    }
+    if (refresh === 'true' && activeTab === 'behavior') {
+      console.log('Refreshing behavior history due to refresh param');
+      fetchBehaviorHistory();
     }
   }, [refresh, activeTab]);
 
@@ -370,8 +377,27 @@ export default function PetDetail() {
     router.push(`/pets/albums/add/${id}`);
   };
 
+  const fetchBehaviorHistory = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('pet_behavior')
+        .select('*')
+        .eq('pet_id', id)
+        .order('assessment_date', { ascending: false });
+
+      if (data && !error) {
+        setBehaviorHistory(data);
+      }
+    } catch (error) {
+      console.error('Error fetching behavior history:', error);
+    }
+  };
+
   const handleBehaviorAssessment = () => {
-    router.push(`/pets/behavior/${id}`);
+    router.push({
+      pathname: `/pets/behavior/${id}`,
+      params: { returnTo: 'behavior' }
+    });
   };
 
   const handleViewAppointments = () => {
@@ -901,20 +927,118 @@ export default function PetDetail() {
     </View>
   );
 
+  const behaviorTraits = [
+    { name: 'Energía' },
+    { name: 'Sociabilidad' },
+    { name: 'Entrenabilidad' },
+    { name: 'Agresividad' },
+    { name: 'Ansiedad' },
+    { name: 'Protección' },
+    { name: 'Independencia' },
+  ];
+
   const renderBehaviorTab = () => (
-    <View style={styles.behaviorContainer}>
+    <ScrollView style={styles.behaviorContainer}>
       <Card style={styles.behaviorCard}>
         <Text style={styles.behaviorTitle}>Evaluación de Comportamiento</Text>
         <Text style={styles.behaviorDescription}>
           Evalúa el comportamiento de tu mascota para entender mejor sus necesidades y personalidad.
         </Text>
         <Button
-          title="Realizar Evaluación"
+          title="Realizar Nueva Evaluación"
           onPress={handleBehaviorAssessment}
           size="medium"
         />
       </Card>
-    </View>
+
+      {behaviorHistory.length > 0 && (
+        <Card style={styles.historyCard}>
+          <Text style={styles.historyTitle}>
+            Historial de Evaluaciones ({behaviorHistory.length})
+          </Text>
+          <Text style={styles.historySubtitle}>
+            Selecciona un trait para ver su evolución:
+          </Text>
+
+          <View style={styles.traitSelector}>
+            {behaviorTraits.map((trait) => (
+              <TouchableOpacity
+                key={trait.name}
+                style={[
+                  styles.traitSelectorButton,
+                  selectedTrait === trait.name && styles.traitSelectorButtonActive,
+                ]}
+                onPress={() => setSelectedTrait(trait.name)}
+              >
+                <Text
+                  style={[
+                    styles.traitSelectorText,
+                    selectedTrait === trait.name && styles.traitSelectorTextActive,
+                  ]}
+                >
+                  {trait.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {selectedTrait && (
+            <View style={styles.chartContainer}>
+              <Text style={styles.chartTitle}>Evolución de {selectedTrait}</Text>
+
+              <View style={styles.chart}>
+                {behaviorHistory.slice(0, 10).reverse().map((assessment, index) => {
+                  const trait = assessment.traits.find((t: any) => t.name === selectedTrait);
+                  const score = trait?.score || 0;
+                  const date = new Date(assessment.assessment_date);
+                  const dateStr = `${date.getDate()}/${date.getMonth() + 1}`;
+
+                  return (
+                    <View key={assessment.id} style={styles.chartBar}>
+                      <View style={styles.chartBarContainer}>
+                        <View
+                          style={[
+                            styles.chartBarFill,
+                            { height: `${(score / 5) * 100}%` },
+                          ]}
+                        />
+                      </View>
+                      <Text style={styles.chartLabel}>{dateStr}</Text>
+                      <Text style={styles.chartScore}>{score}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+
+              <View style={styles.chartLegend}>
+                <Text style={styles.chartLegendText}>Últimas 10 evaluaciones</Text>
+              </View>
+            </View>
+          )}
+
+          <View style={styles.historySummary}>
+            <Text style={styles.historySummaryTitle}>Resumen del Historial</Text>
+            {behaviorHistory.slice(0, 5).map((assessment, index) => {
+              const date = new Date(assessment.assessment_date);
+              const avgScore = assessment.traits.reduce((sum: number, t: any) => sum + t.score, 0) / assessment.traits.length;
+
+              return (
+                <View key={assessment.id} style={styles.historyItem}>
+                  <View style={styles.historyItemHeader}>
+                    <Text style={styles.historyItemDate}>
+                      {date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </Text>
+                    <Text style={styles.historyItemAvg}>
+                      Promedio: {avgScore.toFixed(1)}/5
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </Card>
+      )}
+    </ScrollView>
   );
 
   const renderAppointmentsTab = () => (
@@ -1607,6 +1731,142 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 16,
     paddingHorizontal: 16,
+  },
+  historyCard: {
+    marginTop: 16,
+    padding: 16,
+  },
+  historyTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  historySubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  traitSelector: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 20,
+  },
+  traitSelectorButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  traitSelectorButtonActive: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+  },
+  traitSelectorText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+  },
+  traitSelectorTextActive: {
+    color: '#FFFFFF',
+  },
+  chartContainer: {
+    marginTop: 12,
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+  },
+  chartTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  chart: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'flex-end',
+    height: 180,
+    paddingHorizontal: 4,
+    marginBottom: 12,
+  },
+  chartBar: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 2,
+  },
+  chartBarContainer: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'flex-end',
+    marginBottom: 4,
+  },
+  chartBarFill: {
+    width: '100%',
+    backgroundColor: '#10B981',
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
+    minHeight: 20,
+  },
+  chartLabel: {
+    fontSize: 10,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  chartScore: {
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    marginTop: 2,
+  },
+  chartLegend: {
+    alignItems: 'center',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  chartLegendText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  historySummary: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+  },
+  historySummaryTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  historyItem: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  historyItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  historyItemDate: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+  },
+  historyItemAvg: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#10B981',
   },
   appointmentsContainer: {
     paddingVertical: 20,
