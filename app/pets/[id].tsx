@@ -419,7 +419,7 @@ export default function PetDetail() {
           onPress: async () => {
             try {
               const { error } = await supabaseClient
-                .from('pet_vaccines')
+                .from('pet_health')
                 .delete()
                 .eq('id', vaccineId);
 
@@ -449,7 +449,7 @@ export default function PetDetail() {
           onPress: async () => {
             try {
               const { error } = await supabaseClient
-                .from('pet_illnesses')
+                .from('pet_health')
                 .delete()
                 .eq('id', illnessId);
 
@@ -479,7 +479,7 @@ export default function PetDetail() {
           onPress: async () => {
             try {
               const { error } = await supabaseClient
-                .from('pet_allergies')
+                .from('pet_health')
                 .delete()
                 .eq('id', allergyId);
 
@@ -509,7 +509,7 @@ export default function PetDetail() {
           onPress: async () => {
             try {
               const { error } = await supabaseClient
-                .from('pet_deworming')
+                .from('pet_health')
                 .delete()
                 .eq('id', dewormingId);
 
