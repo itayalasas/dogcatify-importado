@@ -44,7 +44,7 @@ export default function AddAllergy() {
       }
     }
 
-    // Handle selected allergy
+    // Handle selected allergy (only when coming from allergy selection)
     if (params.selectedAllergy) {
       try {
         const allergy = JSON.parse(params.selectedAllergy as string);
@@ -68,6 +68,11 @@ export default function AddAllergy() {
       } catch (error) {
         console.error('Error parsing selected allergy:', error);
       }
+    } else {
+      // Restore allergy name when coming back from veterinarian selection
+      if (params.currentCondition && typeof params.currentCondition === 'string') {
+        setAllergyName(params.currentCondition);
+      }
     }
 
     // Handle selected veterinarian
@@ -82,17 +87,19 @@ export default function AddAllergy() {
       }
     }
 
-    // Handle preserved values
-    if (params.currentType && typeof params.currentType === 'string') {
-      setAllergyType(params.currentType);
-    }
+    // Handle preserved values (only when not coming from allergy selection)
+    if (!params.selectedAllergy) {
+      if (params.currentType && typeof params.currentType === 'string') {
+        setAllergyType(params.currentType);
+      }
 
-    if (params.currentSymptoms && typeof params.currentSymptoms === 'string') {
-      setSymptoms(params.currentSymptoms);
-    }
+      if (params.currentSymptoms && typeof params.currentSymptoms === 'string') {
+        setSymptoms(params.currentSymptoms);
+      }
 
-    if (params.currentSeverity && typeof params.currentSeverity === 'string') {
-      setSeverity(params.currentSeverity);
+      if (params.currentSeverity && typeof params.currentSeverity === 'string') {
+        setSeverity(params.currentSeverity);
+      }
     }
 
     if (params.currentTreatment && typeof params.currentTreatment === 'string') {
@@ -106,7 +113,7 @@ export default function AddAllergy() {
     if (params.currentNotes && typeof params.currentNotes === 'string') {
       setNotes(params.currentNotes);
     }
-  }, [params.selectedAllergy, params.selectedVeterinarian, params.currentType, params.currentSymptoms, params.currentSeverity, params.currentTreatment, params.currentVeterinarian, params.currentNotes, params.currentDiagnosisDate]);
+  }, [params.selectedAllergy, params.selectedVeterinarian, params.currentCondition, params.currentType, params.currentSymptoms, params.currentSeverity, params.currentTreatment, params.currentVeterinarian, params.currentNotes, params.currentDiagnosisDate]);
 
   useEffect(() => {
     fetchPetData();
