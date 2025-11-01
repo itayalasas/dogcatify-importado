@@ -106,12 +106,17 @@ export default function ServiceBooking() {
   // Ocultar loader cuando el usuario regresa a la pantalla (al volver de MercadoPago)
   useFocusEffect(
     React.useCallback(() => {
-      // CRÍTICO: Ocultar el loader si está visible cuando volvemos a la pantalla
-      if (paymentLoading) {
-        console.log('🔄 Usuario regresó a la pantalla de reserva, ocultando loader');
-        setPaymentLoading(false);
-        setPaymentMessage('Preparando tu pago con Mercado Pago');
-      }
+      // CRÍTICO: Esperar 500ms antes de ocultar el loader para evitar que se oculte durante la apertura de MP
+      // Esto permite que Mercado Pago se abra completamente antes de ocultar el loader
+      const timer = setTimeout(() => {
+        if (paymentLoading) {
+          console.log('🔄 Usuario regresó a la pantalla de reserva, ocultando loader');
+          setPaymentLoading(false);
+          setPaymentMessage('Preparando tu pago con Mercado Pago');
+        }
+      }, 500);
+
+      return () => clearTimeout(timer);
     }, [paymentLoading])
   );
 
@@ -1116,6 +1121,7 @@ export default function ServiceBooking() {
           visible={paymentLoading}
           transparent
           animationType="fade"
+          statusBarTranslucent
         >
           <View style={styles.paymentLoadingOverlay}>
             <View style={styles.paymentLoadingContent}>

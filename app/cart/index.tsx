@@ -84,16 +84,21 @@ export default function Cart() {
   // Recargar stocks y ocultar loader cada vez que la pantalla se enfoca (al volver desde Mercado Pago)
   useFocusEffect(
     React.useCallback(() => {
-      // CRÍTICO: Ocultar el loader si está visible cuando volvemos a la pantalla
-      if (paymentLoading) {
-        console.log('🔄 Usuario regresó a la pantalla del carrito, ocultando loader');
-        setPaymentLoading(false);
-        setPaymentMessage('Preparando tu pago con Mercado Pago');
-      }
+      // CRÍTICO: Esperar 500ms antes de ocultar el loader para evitar que se oculte durante la apertura de MP
+      // Esto permite que Mercado Pago se abra completamente antes de ocultar el loader
+      const timer = setTimeout(() => {
+        if (paymentLoading) {
+          console.log('🔄 Usuario regresó a la pantalla del carrito, ocultando loader');
+          setPaymentLoading(false);
+          setPaymentMessage('Preparando tu pago con Mercado Pago');
+        }
+      }, 500);
 
       if (cart && cart.length > 0) {
         loadProductStocks();
       }
+
+      return () => clearTimeout(timer);
     }, [cart, paymentLoading])
   );
 
@@ -271,14 +276,21 @@ export default function Cart() {
   };
 
   const handlePayWithMercadoPago = async () => {
+    console.log('💳 ========== INICIO handlePayWithMercadoPago ==========');
     // Cerrar el modal de pago para mostrar el loader en pantalla completa
     setShowPaymentMethodModal(false);
+    console.log('✅ Modal de métodos de pago cerrado');
+
     setPaymentLoading(true);
+    console.log('✅ paymentLoading = true, loader DEBE estar visible');
+
     setPaymentMessage('Preparando tu pago...');
+    console.log('✅ Mensaje inicial establecido');
 
     // Guardar el tiempo de inicio para garantizar 5 segundos mínimos
     const startTime = Date.now();
     const MIN_LOADING_TIME = 5000; // 5 segundos
+    console.log(`⏱️  Tiempo mínimo de loading: ${MIN_LOADING_TIME}ms`);
 
     try {
       console.log('=== Iniciando proceso de checkout ===');
@@ -359,9 +371,12 @@ export default function Cart() {
         }
 
         // Open Mercado Pago directly (same as services)
+        console.log('🚀 Abriendo Mercado Pago...');
         const openResult = await openMercadoPagoPayment(paymentUrl, isTestModeByUrl);
+        console.log('📱 openMercadoPagoPayment completado:', openResult);
 
         if (!openResult.success) {
+          console.error('❌ Error abriendo Mercado Pago');
           Alert.alert(
             'Error',
             openResult.error || 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.'
@@ -370,10 +385,11 @@ export default function Cart() {
           setPaymentLoading(false);
           setPaymentMessage('Preparando tu pago con Mercado Pago');
         } else {
-          console.log('✅ Opened Mercado Pago successfully');
+          console.log('✅ Mercado Pago abierto exitosamente');
+          console.log('⏳ Loader DEBE permanecer visible hasta que el usuario regrese');
           // IMPORTANTE: NO ocultar el loader aquí, se ocultará automáticamente cuando el usuario vuelva a la app
-          // El useFocusEffect (líneas 56-69) se encarga de ocultar el loader cuando regresa
-          console.log('⏳ Loader permanece visible mientras el usuario está en MercadoPago');
+          // El useFocusEffect se encarga de ocultar el loader cuando regresa
+          // El loader DEBE quedar visible para mostrar que la transacción está en proceso
         }
       } else {
         throw new Error('No se pudo crear la preferencia de pago');
@@ -824,6 +840,7 @@ export default function Cart() {
           visible={paymentLoading}
           transparent
           animationType="fade"
+          statusBarTranslucent
         >
           <View style={styles.paymentLoadingOverlay}>
             <View style={styles.paymentLoadingContent}>
