@@ -84,6 +84,7 @@ export default function ServiceBooking() {
           duration: serviceData.duration,
           category: serviceData.category,
           partnerId: serviceData.partner_id,
+          hasCost: serviceData.has_cost !== false, // Default to true if undefined
         });
       }
       
@@ -339,7 +340,63 @@ export default function ServiceBooking() {
       const [hours, minutes] = selectedTime.split(':').map(Number);
       bookingDate.setHours(hours, minutes, 0, 0);
 
-      // Create the booking order with Mercado Pago
+      // Check if service has cost
+      const serviceHasCost = service.hasCost !== false; // Default to true if undefined
+
+      if (!serviceHasCost) {
+        // Service is FREE - Create booking directly without payment
+        console.log('Service is free, creating booking directly...');
+
+        const { data: bookingData, error: bookingError } = await supabaseClient
+          .from('bookings')
+          .insert({
+            service_id: serviceId,
+            partner_id: partnerId,
+            customer_id: currentUser.id,
+            pet_id: petId,
+            booking_date: bookingDate.toISOString(),
+            booking_time: selectedTime,
+            status: 'confirmed',
+            notes: notes.trim() || null,
+            created_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        if (bookingError) throw bookingError;
+
+        // Send notification to partner
+        try {
+          await NotificationService.sendNotification(
+            partnerId,
+            '🎉 Nueva Reserva',
+            `${currentUser.displayName || 'Un cliente'} ha reservado ${service.name} para el ${bookingDate.toLocaleDateString()}`,
+            {
+              type: 'booking',
+              bookingId: bookingData.id,
+              serviceId: serviceId
+            }
+          );
+        } catch (notifError) {
+          console.error('Error sending notification:', notifError);
+        }
+
+        Alert.alert(
+          '¡Reserva Confirmada!',
+          `Tu reserva para ${service.name} el ${bookingDate.toLocaleDateString()} a las ${selectedTime} ha sido confirmada.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                router.replace('/(tabs)/');
+              }
+            }
+          ]
+        );
+        return;
+      }
+
+      // Service has cost - Process payment with Mercado Pago
       const result = await createServiceBookingOrder({
         serviceId: serviceId,
         partnerId: partnerId,
@@ -484,8 +541,8 @@ export default function ServiceBooking() {
             <View style={styles.summaryInfo}>
               <Text style={styles.businessName}>{partnerInfo?.businessName || 'Negocio'}</Text>
               <Text style={styles.serviceName}>{service?.name || 'Servicio'}</Text>
-              <Text style={styles.servicePrice}>
-                {service?.price ? formatPrice(service.price) : '$0.00'}
+              <Text style={[styles.servicePrice, !service?.hasCost && styles.servicePriceFree]}>
+                {service?.hasCost === false ? 'GRATIS' : (service?.price ? formatPrice(service.price) : '$0.00')}
               </Text>
             </View>
           </View>
@@ -612,8 +669,16 @@ export default function ServiceBooking() {
         
         <View style={styles.bookingButtonContainer}>
           <Button
-            title={bookingLoading ? 'Procesando...' : 'Pagar'}
-            onPress={() => setShowPaymentMethodModal(true)}
+            title={bookingLoading ? 'Procesando...' : (service?.hasCost === false ? 'Confirmar Reserva' : 'Pagar')}
+            onPress={() => {
+              if (service?.hasCost === false) {
+                // Service is free, confirm directly
+                handleBookService();
+              } else {
+                // Service has cost, show payment modal
+                setShowPaymentMethodModal(true);
+              }
+            }}
             loading={bookingLoading}
             size="large"
             disabled={!selectedDate || !selectedTime}
@@ -776,6 +841,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Inter-Bold',
     color: '#10B981',
+  },
+  servicePriceFree: {
+    color: '#3B82F6',
   },
   petInfo: {
     borderTopWidth: 1,

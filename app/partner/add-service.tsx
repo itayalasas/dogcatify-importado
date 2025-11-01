@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Switch } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, DollarSign, Clock, Camera, Package, Upload, X, ShoppingBag, Tag, Users } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
@@ -44,6 +44,7 @@ export default function AddService() {
   const [images, setImages] = useState<ImagePickerAsset[]>([]);
   const [loading, setLoading] = useState(false);
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
+  const [hasCost, setHasCost] = useState(true);
 
   useEffect(() => {
     if (partnerId) {
@@ -248,9 +249,11 @@ export default function AddService() {
 
     // Validación específica para Pensión
     if (businessType === 'boarding') {
-      if (!priceDaily && !priceOvernight && !priceWeekend && !priceWeekly) {
-        Alert.alert('Error', 'Por favor especifica al menos un precio para una categoría');
-        return;
+      if (hasCost) {
+        if (!priceDaily && !priceOvernight && !priceWeekend && !priceWeekly) {
+          Alert.alert('Error', 'Por favor especifica al menos un precio para una categoría');
+          return;
+        }
       }
       if (!capacityDaily && !capacityOvernight && !capacityWeekend && !capacityWeekly) {
         Alert.alert('Error', 'Por favor especifica al menos una capacidad para una categoría');
@@ -258,8 +261,12 @@ export default function AddService() {
       }
     } else {
       // Validación para otros servicios
-      if (!category || !price) {
-        Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
+      if (!category) {
+        Alert.alert('Error', 'Por favor selecciona una categoría');
+        return;
+      }
+      if (hasCost && !price) {
+        Alert.alert('Error', 'Por favor especifica el precio del servicio');
         return;
       }
     }
@@ -342,16 +349,17 @@ export default function AddService() {
           capacity_overnight: capacityOvernight ? parseInt(capacityOvernight) : null,
           capacity_weekend: capacityWeekend ? parseInt(capacityWeekend) : null,
           capacity_weekly: capacityWeekly ? parseInt(capacityWeekly) : null,
-          price_daily: priceDaily ? parseFloat(priceDaily) : null,
-          price_overnight: priceOvernight ? parseFloat(priceOvernight) : null,
-          price_weekend: priceWeekend ? parseFloat(priceWeekend) : null,
-          price_weekly: priceWeekly ? parseFloat(priceWeekly) : null,
-          iva_rate: ivaRate ? parseFloat(ivaRate) : 0,
+          price_daily: hasCost && priceDaily ? parseFloat(priceDaily) : null,
+          price_overnight: hasCost && priceOvernight ? parseFloat(priceOvernight) : null,
+          price_weekend: hasCost && priceWeekend ? parseFloat(priceWeekend) : null,
+          price_weekly: hasCost && priceWeekly ? parseFloat(priceWeekly) : null,
+          iva_rate: hasCost && ivaRate ? parseFloat(ivaRate) : 0,
           price: 0, // Legacy field
           duration: 0, // No aplica para pensión
           images: imageUrls,
           currency: currency,
           currency_code_dgi: currencyCodeDgi,
+          has_cost: hasCost,
           is_active: true,
           created_at: new Date().toISOString()
         };
@@ -369,12 +377,13 @@ export default function AddService() {
           name: serviceName.trim(),
           description: description.trim() || '',
           category: category.trim(),
-          price: parseFloat(price),
-          iva_rate: ivaRate ? parseFloat(ivaRate) : 0,
+          price: hasCost ? parseFloat(price) : 0,
+          iva_rate: hasCost && ivaRate ? parseFloat(ivaRate) : 0,
           duration: parseInt(duration) || 60,
           images: imageUrls,
           currency: currency,
           currency_code_dgi: currencyCodeDgi,
+          has_cost: hasCost,
           is_active: true,
           created_at: new Date().toISOString()
         };
@@ -468,10 +477,26 @@ export default function AddService() {
           </View>
         </View>
 
+        {/* Switch para indicar si el servicio tiene costo */}
+        <View style={styles.switchContainer}>
+          <View style={styles.switchLabelContainer}>
+            <Text style={styles.switchLabel}>¿El servicio tiene costo?</Text>
+            <Text style={styles.switchHint}>
+              Desactiva esta opción si el servicio es gratuito
+            </Text>
+          </View>
+          <Switch
+            value={hasCost}
+            onValueChange={setHasCost}
+            trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
+            thumbColor={hasCost ? '#FFFFFF' : '#F3F4F6'}
+          />
+        </View>
+
         <View style={styles.capacityPriceSection}>
           <Text style={styles.sectionTitle}>Categorías de Hospedaje</Text>
           <Text style={styles.sectionSubtitle}>
-            Configura la capacidad y precio para cada categoría que ofreces
+            Configura la capacidad{hasCost ? ' y precio' : ''} para cada categoría que ofreces
           </Text>
 
           {/* Diario */}
@@ -479,7 +504,7 @@ export default function AddService() {
             <Text style={styles.categoryConfigTitle}>☀️ Hospedaje Diario</Text>
             <Text style={styles.categoryConfigDesc}>Cuidado durante el día (sin pernoctar)</Text>
             <View style={styles.row}>
-              <View style={styles.halfWidth}>
+              <View style={hasCost ? styles.halfWidth : { flex: 1 }}>
                 <Input
                   label="Capacidad"
                   placeholder="Ej: 10"
@@ -489,16 +514,18 @@ export default function AddService() {
                   leftIcon={<Users size={20} color="#6B7280" />}
                 />
               </View>
-              <View style={styles.halfWidth}>
-                <Input
-                  label="Precio"
-                  placeholder="0.00"
-                  value={priceDaily}
-                  onChangeText={setPriceDaily}
-                  keyboardType="numeric"
-                  leftIcon={<DollarSign size={20} color="#6B7280" />}
-                />
-              </View>
+              {hasCost && (
+                <View style={styles.halfWidth}>
+                  <Input
+                    label="Precio"
+                    placeholder="0.00"
+                    value={priceDaily}
+                    onChangeText={setPriceDaily}
+                    keyboardType="numeric"
+                    leftIcon={<DollarSign size={20} color="#6B7280" />}
+                  />
+                </View>
+              )}
             </View>
           </View>
 
@@ -507,7 +534,7 @@ export default function AddService() {
             <Text style={styles.categoryConfigTitle}>🌙 Hospedaje Nocturno</Text>
             <Text style={styles.categoryConfigDesc}>Pernocta (incluye noche)</Text>
             <View style={styles.row}>
-              <View style={styles.halfWidth}>
+              <View style={hasCost ? styles.halfWidth : { flex: 1 }}>
                 <Input
                   label="Capacidad"
                   placeholder="Ej: 8"
@@ -517,16 +544,18 @@ export default function AddService() {
                   leftIcon={<Users size={20} color="#6B7280" />}
                 />
               </View>
-              <View style={styles.halfWidth}>
-                <Input
-                  label="Precio"
-                  placeholder="0.00"
-                  value={priceOvernight}
-                  onChangeText={setPriceOvernight}
-                  keyboardType="numeric"
-                  leftIcon={<DollarSign size={20} color="#6B7280" />}
-                />
-              </View>
+              {hasCost && (
+                <View style={styles.halfWidth}>
+                  <Input
+                    label="Precio"
+                    placeholder="0.00"
+                    value={priceOvernight}
+                    onChangeText={setPriceOvernight}
+                    keyboardType="numeric"
+                    leftIcon={<DollarSign size={20} color="#6B7280" />}
+                  />
+                </View>
+              )}
             </View>
           </View>
 
@@ -535,7 +564,7 @@ export default function AddService() {
             <Text style={styles.categoryConfigTitle}>🎉 Fin de Semana</Text>
             <Text style={styles.categoryConfigDesc}>Viernes a domingo (2-3 días)</Text>
             <View style={styles.row}>
-              <View style={styles.halfWidth}>
+              <View style={hasCost ? styles.halfWidth : { flex: 1 }}>
                 <Input
                   label="Capacidad"
                   placeholder="Ej: 6"
@@ -545,16 +574,18 @@ export default function AddService() {
                   leftIcon={<Users size={20} color="#6B7280" />}
                 />
               </View>
-              <View style={styles.halfWidth}>
-                <Input
-                  label="Precio"
-                  placeholder="0.00"
-                  value={priceWeekend}
-                  onChangeText={setPriceWeekend}
-                  keyboardType="numeric"
-                  leftIcon={<DollarSign size={20} color="#6B7280" />}
-                />
-              </View>
+              {hasCost && (
+                <View style={styles.halfWidth}>
+                  <Input
+                    label="Precio"
+                    placeholder="0.00"
+                    value={priceWeekend}
+                    onChangeText={setPriceWeekend}
+                    keyboardType="numeric"
+                    leftIcon={<DollarSign size={20} color="#6B7280" />}
+                  />
+                </View>
+              )}
             </View>
           </View>
 
@@ -563,7 +594,7 @@ export default function AddService() {
             <Text style={styles.categoryConfigTitle}>📅 Semanal</Text>
             <Text style={styles.categoryConfigDesc}>7 días completos</Text>
             <View style={styles.row}>
-              <View style={styles.halfWidth}>
+              <View style={hasCost ? styles.halfWidth : { flex: 1 }}>
                 <Input
                   label="Capacidad"
                   placeholder="Ej: 5"
@@ -573,16 +604,18 @@ export default function AddService() {
                   leftIcon={<Users size={20} color="#6B7280" />}
                 />
               </View>
-              <View style={styles.halfWidth}>
-                <Input
-                  label="Precio"
-                  placeholder="0.00"
-                  value={priceWeekly}
-                  onChangeText={setPriceWeekly}
-                  keyboardType="numeric"
-                  leftIcon={<DollarSign size={20} color="#6B7280" />}
-                />
-              </View>
+              {hasCost && (
+                <View style={styles.halfWidth}>
+                  <Input
+                    label="Precio"
+                    placeholder="0.00"
+                    value={priceWeekly}
+                    onChangeText={setPriceWeekly}
+                    keyboardType="numeric"
+                    leftIcon={<DollarSign size={20} color="#6B7280" />}
+                  />
+                </View>
+              )}
             </View>
           </View>
         </View>
@@ -658,54 +691,74 @@ export default function AddService() {
                 </View>
               </View>
 
-              <Input
-                label={config.priceLabel + ' *'}
-                placeholder="0.00"
-                value={price}
-                onChangeText={setPrice}
-                keyboardType="numeric"
-                leftIcon={<DollarSign size={20} color="#6B7280" />}
-              />
-
-              <Input
-                label="IVA % (opcional)"
-                placeholder="22"
-                value={ivaRate}
-                onChangeText={setIvaRate}
-                keyboardType="numeric"
-                leftIcon={<Tag size={20} color="#6B7280" />}
-              />
-
-              {/* Selector de Moneda */}
-              <View style={styles.categorySection}>
-                <Text style={styles.categoryLabel}>Moneda 💰</Text>
-                <Text style={styles.categoryHint}>Selecciona la moneda en la que se vende este {businessType === 'shop' ? 'producto' : 'servicio'}</Text>
-                <View style={styles.categories}>
-                  {CURRENCY_OPTIONS.map((curr) => (
-                    <TouchableOpacity
-                      key={curr.code}
-                      style={[
-                        styles.currencyButton,
-                        currency === curr.code && styles.selectedCurrency
-                      ]}
-                      onPress={() => handleCurrencyChange(curr.code)}
-                    >
-                      <Text style={[
-                        styles.currencyText,
-                        currency === curr.code && styles.selectedCurrencyText
-                      ]}>
-                        {curr.symbol} {curr.code}
-                      </Text>
-                      <Text style={[
-                        styles.currencyName,
-                        currency === curr.code && styles.selectedCurrencyName
-                      ]}>
-                        {curr.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+              {/* Switch para indicar si el servicio tiene costo */}
+              <View style={styles.switchContainer}>
+                <View style={styles.switchLabelContainer}>
+                  <Text style={styles.switchLabel}>¿El servicio tiene costo?</Text>
+                  <Text style={styles.switchHint}>
+                    Desactiva esta opción si el servicio es gratuito
+                  </Text>
                 </View>
+                <Switch
+                  value={hasCost}
+                  onValueChange={setHasCost}
+                  trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
+                  thumbColor={hasCost ? '#FFFFFF' : '#F3F4F6'}
+                />
               </View>
+
+              {hasCost && (
+                <>
+                  <Input
+                    label={config.priceLabel + ' *'}
+                    placeholder="0.00"
+                    value={price}
+                    onChangeText={setPrice}
+                    keyboardType="numeric"
+                    leftIcon={<DollarSign size={20} color="#6B7280" />}
+                  />
+
+                  <Input
+                    label="IVA % (opcional)"
+                    placeholder="22"
+                    value={ivaRate}
+                    onChangeText={setIvaRate}
+                    keyboardType="numeric"
+                    leftIcon={<Tag size={20} color="#6B7280" />}
+                  />
+
+                  {/* Selector de Moneda */}
+                  <View style={styles.categorySection}>
+                    <Text style={styles.categoryLabel}>Moneda 💰</Text>
+                    <Text style={styles.categoryHint}>Selecciona la moneda en la que se vende este {businessType === 'shop' ? 'producto' : 'servicio'}</Text>
+                    <View style={styles.categories}>
+                      {CURRENCY_OPTIONS.map((curr) => (
+                        <TouchableOpacity
+                          key={curr.code}
+                          style={[
+                            styles.currencyButton,
+                            currency === curr.code && styles.selectedCurrency
+                          ]}
+                          onPress={() => handleCurrencyChange(curr.code)}
+                        >
+                          <Text style={[
+                            styles.currencyText,
+                            currency === curr.code && styles.selectedCurrencyText
+                          ]}>
+                            {curr.symbol} {curr.code}
+                          </Text>
+                          <Text style={[
+                            styles.currencyName,
+                            currency === curr.code && styles.selectedCurrencyName
+                          ]}>
+                            {curr.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </>
+              )}
             </>
           )}
 
@@ -944,6 +997,31 @@ const styles = StyleSheet.create({
   },
   selectedCategoryText: {
     color: '#FFFFFF',
+  },
+  switchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F3F4F6',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  switchLabelContainer: {
+    flex: 1,
+    marginRight: 16,
+  },
+  switchLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  switchHint: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 18,
   },
   boardingSection: {
     marginBottom: 20,
