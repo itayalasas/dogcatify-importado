@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,11 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Keyboard,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { X, UserPlus, Mail, Check, Clock, UserX } from 'lucide-react-native';
+import { X, UserPlus, Mail, Check, Clock, UserX, Search } from 'lucide-react-native';
 import { supabaseClient } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';
@@ -31,16 +32,27 @@ interface PetShare {
   };
 }
 
+interface UserSuggestion {
+  id: string;
+  display_name: string;
+  email: string;
+}
+
 export default function SharePetScreen() {
   const { petId } = useLocalSearchParams();
   const { currentUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [petName, setPetName] = useState('');
-  const [email, setEmail] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedUser, setSelectedUser] = useState<UserSuggestion | null>(null);
+  const [userSuggestions, setUserSuggestions] = useState<UserSuggestion[]>([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [relationshipType, setRelationshipType] = useState<string>('friend');
   const [permissionLevel, setPermissionLevel] = useState<string>('view');
   const [shares, setShares] = useState<PetShare[]>([]);
   const [loadingShares, setLoadingShares] = useState(true);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const relationshipTypes = [
     { value: 'veterinarian', label: 'Veterinario/a', icon: '🩺' },
@@ -60,6 +72,64 @@ export default function SharePetScreen() {
     loadPetInfo();
     loadShares();
   }, []);
+
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (searchQuery.trim().length < 2) {
+      setUserSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    searchTimeoutRef.current = setTimeout(() => {
+      searchUsers(searchQuery);
+    }, 300);
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchQuery]);
+
+  const searchUsers = async (query: string) => {
+    try {
+      setSearchingUsers(true);
+      const searchTerm = query.trim().toLowerCase();
+
+      const { data, error } = await supabaseClient
+        .from('profiles')
+        .select('id, display_name, email')
+        .neq('id', currentUser?.id)
+        .or(`display_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
+        .limit(5);
+
+      if (error) throw error;
+
+      setUserSuggestions(data || []);
+      setShowSuggestions(true);
+    } catch (error) {
+      console.error('Error searching users:', error);
+      setUserSuggestions([]);
+    } finally {
+      setSearchingUsers(false);
+    }
+  };
+
+  const handleSelectUser = (user: UserSuggestion) => {
+    setSelectedUser(user);
+    setSearchQuery(user.display_name);
+    setShowSuggestions(false);
+    Keyboard.dismiss();
+  };
+
+  const handleSearchQueryChange = (text: string) => {
+    setSearchQuery(text);
+    setSelectedUser(null);
+  };
 
   const loadPetInfo = async () => {
     try {
@@ -102,36 +172,20 @@ export default function SharePetScreen() {
   };
 
   const handleShare = async () => {
-    if (!email.trim()) {
-      Alert.alert('Error', 'Por favor ingresa un email');
+    if (!selectedUser) {
+      Alert.alert('Error', 'Por favor selecciona un usuario');
       return;
     }
 
     try {
       setLoading(true);
 
-      const { data: targetUser, error: userError } = await supabaseClient
-        .from('profiles')
-        .select('id')
-        .eq('email', email.toLowerCase().trim())
-        .single();
-
-      if (userError || !targetUser) {
-        Alert.alert('Error', 'No se encontró un usuario con ese email');
-        return;
-      }
-
-      if (targetUser.id === currentUser?.id) {
-        Alert.alert('Error', 'No puedes compartir una mascota contigo mismo');
-        return;
-      }
-
       const { error: shareError } = await supabaseClient
         .from('pet_shares')
         .insert({
           pet_id: petId,
           owner_id: currentUser?.id,
-          shared_with_user_id: targetUser.id,
+          shared_with_user_id: selectedUser.id,
           relationship_type: relationshipType,
           permission_level: permissionLevel,
           status: 'pending',
@@ -148,12 +202,14 @@ export default function SharePetScreen() {
 
       Alert.alert(
         'Invitación enviada',
-        `Se ha enviado una invitación a ${email}`,
+        `Se ha enviado una invitación a ${selectedUser.display_name}`,
         [
           {
             text: 'OK',
             onPress: () => {
-              setEmail('');
+              setSearchQuery('');
+              setSelectedUser(null);
+              setUserSuggestions([]);
               loadShares();
             },
           },
@@ -229,18 +285,91 @@ export default function SharePetScreen() {
           </Text>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email del usuario</Text>
-            <View style={styles.inputContainer}>
-              <Mail size={20} color="#6B7280" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="usuario@ejemplo.com"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
+            <Text style={styles.label}>Buscar usuario</Text>
+            <View style={styles.autocompleteContainer}>
+              <View style={styles.inputContainer}>
+                <Search size={20} color="#6B7280" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Buscar por nombre o email..."
+                  value={searchQuery}
+                  onChangeText={handleSearchQueryChange}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onFocus={() => {
+                    if (userSuggestions.length > 0) {
+                      setShowSuggestions(true);
+                    }
+                  }}
+                />
+                {searchingUsers && (
+                  <ActivityIndicator
+                    size="small"
+                    color="#3B82F6"
+                    style={styles.searchLoader}
+                  />
+                )}
+              </View>
+
+              {showSuggestions && userSuggestions.length > 0 && (
+                <View style={styles.suggestionsContainer}>
+                  {userSuggestions.map((user) => (
+                    <TouchableOpacity
+                      key={user.id}
+                      style={styles.suggestionItem}
+                      onPress={() => handleSelectUser(user)}
+                    >
+                      <View style={styles.suggestionAvatar}>
+                        <Text style={styles.suggestionAvatarText}>
+                          {user.display_name?.charAt(0).toUpperCase() || '?'}
+                        </Text>
+                      </View>
+                      <View style={styles.suggestionInfo}>
+                        <Text style={styles.suggestionName}>{user.display_name}</Text>
+                        <Text style={styles.suggestionEmail}>{user.email}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {showSuggestions &&
+                !searchingUsers &&
+                searchQuery.trim().length >= 2 &&
+                userSuggestions.length === 0 && (
+                  <View style={styles.noResultsContainer}>
+                    <Text style={styles.noResultsText}>
+                      No se encontraron usuarios con "{searchQuery}"
+                    </Text>
+                  </View>
+                )}
+
+              {selectedUser && (
+                <View style={styles.selectedUserContainer}>
+                  <View style={styles.selectedUserBadge}>
+                    <View style={styles.selectedUserAvatar}>
+                      <Text style={styles.selectedUserAvatarText}>
+                        {selectedUser.display_name?.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.selectedUserInfo}>
+                      <Text style={styles.selectedUserName}>
+                        {selectedUser.display_name}
+                      </Text>
+                      <Text style={styles.selectedUserEmail}>{selectedUser.email}</Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setSelectedUser(null);
+                        setSearchQuery('');
+                      }}
+                      style={styles.removeSelectedButton}
+                    >
+                      <X size={16} color="#6B7280" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </View>
           </View>
 
@@ -451,6 +580,111 @@ const styles = StyleSheet.create({
   },
   inputIcon: {
     marginRight: 8,
+  },
+  searchLoader: {
+    marginLeft: 8,
+  },
+  autocompleteContainer: {
+    position: 'relative',
+  },
+  suggestionsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    maxHeight: 250,
+    overflow: 'hidden',
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  suggestionAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#3B82F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  suggestionAvatarText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  suggestionInfo: {
+    flex: 1,
+  },
+  suggestionName: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  suggestionEmail: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  noResultsContainer: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  noResultsText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  selectedUserContainer: {
+    marginTop: 12,
+  },
+  selectedUserBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EBF8FF',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#3B82F6',
+  },
+  selectedUserAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#3B82F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  selectedUserAvatarText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  selectedUserInfo: {
+    flex: 1,
+  },
+  selectedUserName: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E40AF',
+    marginBottom: 2,
+  },
+  selectedUserEmail: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#3B82F6',
+  },
+  removeSelectedButton: {
+    padding: 4,
   },
   input: {
     flex: 1,
