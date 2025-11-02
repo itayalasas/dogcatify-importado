@@ -134,9 +134,9 @@ export default function AddPlace() {
       if (error) throw error;
 
       Alert.alert(
-        '¡Gracias por tu contribución!', 
+        '¡Gracias por tu contribución!',
         'Tu lugar ha sido enviado para revisión. Una vez aprobado, aparecerá en la lista de lugares pet-friendly.',
-        [{ text: 'OK', onPress: () => router.back() }]
+        [{ text: 'OK', onPress: () => router.push('/(tabs)/places') }]
       );
     } catch (error) {
       console.error('Error saving place:', error);
@@ -162,7 +162,7 @@ export default function AddPlace() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.push('/(tabs)/places')} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>Agregar Lugar Pet-Friendly</Text>
