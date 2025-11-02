@@ -505,6 +505,13 @@ export default function ServiceBooking() {
         console.log('✅ Horario disponible, continuando con la reserva gratuita...');
       }
 
+      // Crear fecha para appointment_date (solo la fecha, a medianoche UTC)
+      const appointmentDate = new Date(selectedDate);
+      appointmentDate.setUTCHours(0, 0, 0, 0);
+
+      console.log('📅 Appointment date (UTC midnight):', appointmentDate.toISOString());
+      console.log('⏰ Appointment time:', selectedTime);
+
       // PASO 1: Crear la reserva (booking)
       const { data: bookingData, error: bookingError } = await supabaseClient
         .from('bookings')
@@ -573,7 +580,7 @@ export default function ServiceBooking() {
           service_name: service.name,
           pet_id: petId,
           pet_name: pet.name,
-          appointment_date: bookingDate.toISOString(),
+          appointment_date: appointmentDate.toISOString(), // ✅ Fecha a medianoche UTC
           appointment_time: selectedTime || null,
           booking_notes: notes.trim() || null,
           items: [serviceItem],
