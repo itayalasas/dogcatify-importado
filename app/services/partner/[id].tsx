@@ -949,7 +949,7 @@ export default function PartnerServices() {
                     </View>
 
                     <View style={styles.modernServiceCenter}>
-                      <Text style={styles.modernServiceName} numberOfLines={1}>
+                      <Text style={styles.modernServiceName}>
                         {service.name}
                       </Text>
                       {service.description && (
@@ -1511,15 +1511,17 @@ const styles = StyleSheet.create({
   modernServiceContent: {
     flexDirection: 'row',
     padding: 16,
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    minHeight: 90,
   },
   modernServiceLeft: {
     marginRight: 12,
+    paddingTop: 4,
   },
   serviceIconContainer: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#ECFDF5',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1530,12 +1532,14 @@ const styles = StyleSheet.create({
   modernServiceCenter: {
     flex: 1,
     marginRight: 12,
+    justifyContent: 'center',
   },
   modernServiceName: {
-    fontSize: 17,
+    fontSize: 16,
     fontFamily: 'Inter-Bold',
     color: '#111827',
-    marginBottom: 4,
+    marginBottom: 6,
+    lineHeight: 22,
   },
   modernServiceDescription: {
     fontSize: 13,
@@ -1578,22 +1582,27 @@ const styles = StyleSheet.create({
   },
   modernServiceRight: {
     justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 4,
   },
   reserveButton: {
     backgroundColor: '#10B981',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 12,
     shadowColor: '#10B981',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 4,
+    minWidth: 90,
+    alignItems: 'center',
   },
   reserveButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-Bold',
     color: '#FFFFFF',
+    textAlign: 'center',
   },
   serviceContent: {
     padding: 12,
