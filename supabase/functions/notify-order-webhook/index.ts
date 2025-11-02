@@ -77,36 +77,19 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
     let ivaAmount = 0;
 
     if (partnerBreakdown[partnerId]) {
+      // IMPORTANTE: Los valores del breakdown YA VIENEN CORRECTOS desde mercadoPago.ts
+      // - subtotal: ya está sin IVA
+      // - items: ya tienen subtotal sin IVA y iva_amount calculado
+      // NO necesitamos recalcular nada, solo usar los valores tal cual
+
       subtotal = partnerBreakdown[partnerId].subtotal || 0;
 
-      if (ivaIncludedInPrice && ivaRate > 0) {
-        const subtotalSinIva = subtotal / (1 + ivaRate / 100);
-        ivaAmount = subtotal - subtotalSinIva;
-        subtotal = subtotalSinIva;
+      // Calcular IVA sumando los iva_amount de los items
+      ivaAmount = partnerItems.reduce((sum: number, item: any) => sum + (item.iva_amount || 0), 0);
 
-        console.log(`📊 IVA incluido - Ajustando subtotal: ${partnerBreakdown[partnerId].subtotal} -> ${subtotal.toFixed(2)} (IVA: ${ivaAmount.toFixed(2)})`);
-      } else {
-        ivaAmount = partnerItems.reduce((sum: number, item: any) => sum + (item.iva_amount || 0), 0);
-      }
+      console.log(`📊 Partner subtotal=${subtotal.toFixed(2)}, iva=${ivaAmount.toFixed(2)}`);
 
-      if (ivaIncludedInPrice && ivaRate > 0) {
-        partnerItems = partnerItems.map((item: any) => {
-          const itemPrice = item.price || 0;
-          const itemSubtotal = item.subtotal || (itemPrice * item.quantity);
-
-          const priceWithoutIva = itemPrice / (1 + ivaRate / 100);
-          const subtotalWithoutIva = itemSubtotal / (1 + ivaRate / 100);
-          const itemIvaAmount = itemSubtotal - subtotalWithoutIva;
-
-          return {
-            ...item,
-            price: Number(priceWithoutIva.toFixed(2)),
-            subtotal: Number(subtotalWithoutIva.toFixed(2)),
-            iva_amount: Number(itemIvaAmount.toFixed(2)),
-            original_price: itemPrice
-          };
-        });
-      }
+      // Los items ya vienen correctos, no necesitamos ajustarlos
     } else {
       if (partnerItems.length > 0) {
         const totalConIva = partnerItems.reduce((sum: number, item: any) => {
@@ -211,16 +194,15 @@ async function sendWebhookNotification(
     const partnersArray = await buildPartnersArray(orderData, supabase);
     const totalPartners = partnersArray.length;
 
-    const ivaIncludedInPrice = orderData.iva_included_in_price === true;
-    const ivaRate = orderData.iva_rate || 0;
-    let subtotalSinIva = orderData.subtotal || 0;
-    let ivaAmountCalculado = orderData.iva_amount || 0;
+    // IMPORTANTE: Los valores de la orden YA VIENEN CORRECTOS desde mercadoPago.ts
+    // - subtotal: ya está sin IVA
+    // - iva_amount: ya está calculado correctamente
+    // NO necesitamos recalcular, solo usar los valores tal cual
 
-    if (ivaIncludedInPrice && ivaRate > 0) {
-      subtotalSinIva = (orderData.subtotal || 0) / (1 + ivaRate / 100);
-      ivaAmountCalculado = (orderData.subtotal || 0) - subtotalSinIva;
-      console.log(`📊 Totales - IVA incluido ajustado: Subtotal ${orderData.subtotal} -> ${subtotalSinIva.toFixed(2)} (IVA: ${ivaAmountCalculado.toFixed(2)})`);
-    }
+    const subtotalSinIva = orderData.subtotal || 0;
+    const ivaAmountCalculado = orderData.iva_amount || 0;
+
+    console.log(`📊 Totales de orden: Subtotal=${subtotalSinIva.toFixed(2)}, IVA=${ivaAmountCalculado.toFixed(2)}, Total=${orderData.total_amount}`);
 
     const payload = {
       data: {
@@ -234,7 +216,7 @@ async function sendWebhookNotification(
           subtotal: Number(subtotalSinIva.toFixed(2)),
           iva_amount: Number(ivaAmountCalculado.toFixed(2)),
           iva_rate: orderData.iva_rate,
-          iva_included_in_price: ivaIncludedInPrice,
+          iva_included_in_price: orderData.iva_included_in_price === true,
           shipping_cost: shippingCost,
           shipping_iva_amount: shippingIvaAmount,
           total_commission: orderData.commission_amount,
@@ -611,7 +593,7 @@ Deno.serve(async (req: Request) => {
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+      }
     );
   }
 });
