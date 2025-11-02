@@ -1748,9 +1748,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalBodyContent: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 20,
+    padding: 20,
+    flexGrow: 1,
   },
   modalFooter: {
     paddingHorizontal: 20,
