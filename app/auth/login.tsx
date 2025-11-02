@@ -329,7 +329,12 @@ export default function Login() {
             label="Correo electrónico"
             placeholder="tu@email.com"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(text) => {
+              setEmail(text);
+              if (loginError) {
+                dismissError();
+              }
+            }}
             keyboardType="email-address"
             autoCapitalize="none"
             leftIcon={<Mail size={20} color="#6B7280" />}
@@ -339,7 +344,12 @@ export default function Login() {
             label="Contraseña"
             placeholder="Tu contraseña"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(text) => {
+              setPassword(text);
+              if (loginError) {
+                dismissError();
+              }
+            }}
             secureTextEntry={!showPassword}
             leftIcon={<Lock size={20} color="#6B7280" />}
             rightIcon={
