@@ -320,15 +320,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     data?: any
   ): Promise<void> => {
     try {
-      // Check if target user has notifications enabled
+      // Check if target user has notifications enabled and get FCM token
       const { data: profile } = await supabaseClient
         .from('profiles')
-        .select('push_token, notification_preferences')
+        .select('fcm_token, notification_preferences')
         .eq('id', userId)
         .single();
 
-      if (!profile?.push_token) {
-        console.log('❌ User does not have push notifications enabled');
+      if (!profile?.fcm_token) {
+        console.log('❌ User does not have FCM token');
         return;
       }
 
@@ -338,21 +338,21 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         return;
       }
 
-      console.log('🚀 Sending push notification via Edge Function...');
+      console.log('🚀 Sending push notification via FCM v1 Edge Function...');
       console.log('Target user ID:', userId);
       console.log('Title:', title);
       console.log('Body:', body);
-      
-      // Call our secure Edge Function
+
+      // Call FCM v1 Edge Function
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      const response = await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
+      const response = await fetch(`${supabaseUrl}/functions/v1/send-notification-fcm-v1`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
-          userId,
+          fcmToken: profile.fcm_token,
           title,
           body,
           data: data || {}
@@ -361,18 +361,18 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ Edge Function error:', response.status, errorText);
-        throw new Error(`Edge Function error: ${response.status} - ${errorText}`);
+        console.error('❌ FCM v1 Edge Function error:', response.status, errorText);
+        throw new Error(`FCM v1 Edge Function error: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
-      console.log('✅ Push notification sent via Edge Function:', result);
-      
+      console.log('✅ Push notification sent via FCM v1:', result);
+
       if (!result.success) {
-        console.warn('⚠️ Edge Function returned success=false:', result.error);
+        console.warn('⚠️ FCM v1 Edge Function returned success=false:', result.error);
       }
     } catch (error) {
-      console.error('❌ Error sending push notification via Edge Function:', error);
+      console.error('❌ Error sending push notification via FCM v1:', error);
       // Don't throw error to avoid breaking the chat flow
     }
   };
