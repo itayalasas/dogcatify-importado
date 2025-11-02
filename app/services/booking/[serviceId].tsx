@@ -200,7 +200,7 @@ export default function ServiceBooking() {
     if (!partnerId || !serviceId) return;
 
     try {
-      console.log('Fetching booked times for date:', date.toDateString(), 'service:', serviceId);
+      console.log('🔍 Fetching booked times for date:', date.toDateString(), 'service:', serviceId);
 
       const dateString = date.toISOString().split('T')[0];
 
@@ -209,9 +209,10 @@ export default function ServiceBooking() {
       // 1. service_id = el servicio actual
       // 2. appointment_date = la fecha seleccionada
       // 3. status != 'cancelled' (solo reservas activas)
+      // 4. order_type = 'service_booking' (solo reservas de servicios)
       const { data: orders, error: ordersError } = await supabaseClient
         .from('orders')
-        .select('appointment_time, status, order_type')
+        .select('id, appointment_time, appointment_date, status, order_type, service_name')
         .eq('service_id', serviceId)
         .gte('appointment_date', `${dateString}T00:00:00`)
         .lte('appointment_date', `${dateString}T23:59:59`)
@@ -219,19 +220,21 @@ export default function ServiceBooking() {
         .eq('order_type', 'service_booking');
 
       if (ordersError) {
-        console.error('Error fetching booked times from orders:', ordersError);
+        console.error('❌ Error fetching booked times from orders:', ordersError);
         return;
       }
+
+      console.log('📊 Found orders for date:', orders);
 
       // Extraer las horas ya reservadas
       const bookedTimeSlots = orders
         ?.filter(order => order.appointment_time) // Solo las que tienen hora
         .map(order => order.appointment_time) || [];
 
-      console.log('Booked times for date from ORDERS:', bookedTimeSlots);
+      console.log('⏰ Booked time slots from ORDERS:', bookedTimeSlots);
       setBookedTimes(bookedTimeSlots);
     } catch (error) {
-      console.error('Error fetching booked times:', error);
+      console.error('❌ Error fetching booked times:', error);
     }
   };
 
@@ -459,6 +462,49 @@ export default function ServiceBooking() {
         bookingDate.setHours(hours, minutes, 0, 0);
       }
 
+      // VALIDACIÓN CRÍTICA: Verificar que no exista una reserva para esta fecha/hora/servicio
+      if (selectedTime && selectedTime !== 'N/A') {
+        const dateString = selectedDate.toISOString().split('T')[0];
+
+        console.log('🔍 Validando disponibilidad de horario para servicio gratuito...');
+        const { data: existingOrders, error: checkError } = await supabaseClient
+          .from('orders')
+          .select('id, appointment_time, status')
+          .eq('service_id', service.id)
+          .gte('appointment_date', `${dateString}T00:00:00`)
+          .lte('appointment_date', `${dateString}T23:59:59`)
+          .eq('appointment_time', selectedTime)
+          .neq('status', 'cancelled')
+          .eq('order_type', 'service_booking');
+
+        if (checkError) {
+          console.error('❌ Error verificando disponibilidad:', checkError);
+          throw new Error('No se pudo verificar la disponibilidad del horario');
+        }
+
+        if (existingOrders && existingOrders.length > 0) {
+          console.warn('⚠️ Ya existe una reserva para esta fecha/hora/servicio:', existingOrders);
+          setPaymentLoading(false);
+          Alert.alert(
+            'Horario No Disponible',
+            `Lo sentimos, la hora ${selectedTime} para el día ${selectedDate.toLocaleDateString()} ya no está disponible. Por favor selecciona otro horario.`,
+            [
+              {
+                text: 'Entendido',
+                onPress: () => {
+                  // Recargar los horarios ocupados
+                  fetchBookedTimes(selectedDate);
+                  setSelectedTime(null);
+                }
+              }
+            ]
+          );
+          return;
+        }
+
+        console.log('✅ Horario disponible, continuando con la reserva gratuita...');
+      }
+
       // PASO 1: Crear la reserva (booking)
       const { data: bookingData, error: bookingError } = await supabaseClient
         .from('bookings')
@@ -487,26 +533,63 @@ export default function ServiceBooking() {
 
       if (bookingError) throw bookingError;
 
-      // PASO 2: Crear la orden (order) asociada
+      // PASO 2: Crear la orden (order) asociada con TODOS los datos necesarios
+      const serviceItem = {
+        id: serviceId,
+        name: service.name,
+        price: 0,
+        quantity: 1,
+        total: 0
+      };
+
+      const partnerBreakdown = {
+        iva_rate: 0,
+        iva_amount: 0,
+        iva_included: true,
+        shipping_cost: 0,
+        total_partners: 1,
+        commission_split: 0,
+        partners: {
+          [partnerId]: {
+            partner_id: partnerId,
+            partner_name: partner.business_name,
+            items: [serviceItem],
+            subtotal: 0
+          }
+        }
+      };
+
       const { data: orderData, error: orderError } = await supabaseClient
         .from('orders')
         .insert({
           partner_id: partnerId,
+          partner_name: partner.business_name,
           customer_id: currentUser.id,
+          customer_name: currentUser.displayName || currentUser.email,
+          customer_email: currentUser.email,
+          customer_phone: currentUser.phone || null,
           booking_id: bookingData.id,
           service_id: serviceId,
+          service_name: service.name,
           pet_id: petId,
+          pet_name: pet.name,
           appointment_date: bookingDate.toISOString(),
           appointment_time: selectedTime || null,
           booking_notes: notes.trim() || null,
-          items: [],
+          items: [serviceItem],
+          subtotal: 0,
+          iva_rate: 0,
+          iva_amount: 0,
+          iva_included_in_price: true,
           total_amount: 0,
           commission_amount: 0,
           partner_amount: 0,
+          shipping_address: null,
           payment_method: 'free',
           payment_status: 'paid',
           status: 'confirmed',
           order_type: 'service_booking',
+          partner_breakdown: partnerBreakdown,
           created_at: new Date().toISOString()
         })
         .select()
