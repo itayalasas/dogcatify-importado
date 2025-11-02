@@ -63,6 +63,10 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
     return [];
   }
 
+  // Verificar si el IVA está incluido en el precio
+  const ivaIncludedInPrice = orderData.iva_included_in_price === true;
+  const ivaRate = orderData.iva_rate || 0;
+
   // Construir el array de partners con sus items
   for (const partnerId of partnerIds) {
     const partnerInfo = partnersData.find((p: any) => p.id === partnerId);
@@ -75,34 +79,93 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
     // Para productos: usar breakdown
     // Para servicios: calcular a partir de la orden
     let partnerItems = (orderData.items || []).filter((item: any) => item.partnerId === partnerId || item.partner_id === partnerId);
+
+    // Ajustar los items si el IVA está incluido
+    if (ivaIncludedInPrice && ivaRate > 0) {
+      partnerItems = partnerItems.map((item: any) => {
+        const itemPrice = item.price || 0;
+        const itemSubtotal = item.subtotal || (itemPrice * item.quantity);
+
+        // Calcular precio sin IVA
+        const priceWithoutIva = itemPrice / (1 + ivaRate / 100);
+        const subtotalWithoutIva = itemSubtotal / (1 + ivaRate / 100);
+        const itemIvaAmount = itemSubtotal - subtotalWithoutIva;
+
+        return {
+          ...item,
+          price: Number(priceWithoutIva.toFixed(2)),
+          subtotal: Number(subtotalWithoutIva.toFixed(2)),
+          iva_amount: Number(itemIvaAmount.toFixed(2)),
+          original_price: itemPrice // Mantener el precio original con IVA para referencia
+        };
+      });
+    }
+
     let subtotal = 0;
     let ivaAmount = 0;
 
     if (partnerBreakdown[partnerId]) {
       // Productos con breakdown
       subtotal = partnerBreakdown[partnerId].subtotal || 0;
-      ivaAmount = partnerItems.reduce((sum: number, item: any) => sum + (item.iva_amount || 0), 0);
+
+      // Si el IVA está incluido en el precio, el subtotal viene con IVA
+      // Necesitamos calcular el subtotal sin IVA para el CRM
+      if (ivaIncludedInPrice && ivaRate > 0) {
+        // Calcular subtotal sin IVA: subtotalConIVA / (1 + ivaRate/100)
+        const subtotalSinIva = subtotal / (1 + ivaRate / 100);
+        ivaAmount = subtotal - subtotalSinIva;
+        subtotal = subtotalSinIva;
+
+        console.log(`📊 IVA incluido - Ajustando subtotal: ${partnerBreakdown[partnerId].subtotal} -> ${subtotal.toFixed(2)} (IVA: ${ivaAmount.toFixed(2)})`);
+      } else {
+        // Si el IVA no está incluido, calcular normalmente
+        ivaAmount = partnerItems.reduce((sum: number, item: any) => sum + (item.iva_amount || 0), 0);
+      }
     } else {
       // Servicios sin breakdown - calcular desde items o totales de la orden
       if (partnerItems.length > 0) {
-        // Usar subtotal sin IVA si está disponible, sino calcular desde price
+        // Calcular subtotal desde los items
         subtotal = partnerItems.reduce((sum: number, item: any) => {
-          // Si el item tiene subtotal (sin IVA), usarlo
+          let itemSubtotal = 0;
+
           if (item.subtotal !== undefined && item.subtotal !== null) {
-            return sum + item.subtotal;
+            itemSubtotal = item.subtotal;
+          } else {
+            itemSubtotal = (item.price * item.quantity);
           }
-          // Si no, usar price (para compatibilidad con órdenes antiguas)
-          return sum + (item.price * item.quantity);
+
+          // Si el IVA está incluido, ajustar el subtotal del item
+          if (ivaIncludedInPrice && ivaRate > 0) {
+            itemSubtotal = itemSubtotal / (1 + ivaRate / 100);
+          }
+
+          return sum + itemSubtotal;
         }, 0);
-        ivaAmount = partnerItems.reduce((sum: number, item: any) => sum + (item.iva_amount || 0), 0);
+
+        // Calcular IVA
+        if (ivaIncludedInPrice && ivaRate > 0) {
+          const totalConIva = partnerItems.reduce((sum: number, item: any) => {
+            return sum + ((item.subtotal !== undefined && item.subtotal !== null) ? item.subtotal : (item.price * item.quantity));
+          }, 0);
+          ivaAmount = totalConIva - subtotal;
+        } else {
+          ivaAmount = partnerItems.reduce((sum: number, item: any) => sum + (item.iva_amount || 0), 0);
+        }
       } else {
         // Si no hay items, usar los totales de la orden
         subtotal = orderData.subtotal || 0;
-        ivaAmount = orderData.iva_amount || 0;
+
+        if (ivaIncludedInPrice && ivaRate > 0) {
+          const subtotalSinIva = subtotal / (1 + ivaRate / 100);
+          ivaAmount = subtotal - subtotalSinIva;
+          subtotal = subtotalSinIva;
+        } else {
+          ivaAmount = orderData.iva_amount || 0;
+        }
       }
     }
 
-    // Calcular comisión
+    // Calcular comisión sobre el subtotal sin IVA
     const commissionPercentage = partnerInfo.commission_percentage || 5.0;
     const commissionAmount = (subtotal * commissionPercentage) / 100;
     const partnerAmount = subtotal - commissionAmount;
@@ -120,11 +183,11 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
       commission_percentage: commissionPercentage,
       is_primary: partnerId === orderData.partner_id,
       items: partnerItems,
-      subtotal: subtotal,
-      iva_amount: ivaAmount,
+      subtotal: Number(subtotal.toFixed(2)),
+      iva_amount: Number(ivaAmount.toFixed(2)),
       commission_amount: Number(commissionAmount.toFixed(2)),
       partner_amount: Number(partnerAmount.toFixed(2)),
-      total: subtotal
+      total: Number(subtotal.toFixed(2))
     });
   }
 
@@ -165,6 +228,19 @@ async function sendWebhookNotification(
     const partnersArray = await buildPartnersArray(orderData, supabase);
     const totalPartners = partnersArray.length;
 
+    // Calcular subtotal sin IVA si está incluido
+    const ivaIncludedInPrice = orderData.iva_included_in_price === true;
+    const ivaRate = orderData.iva_rate || 0;
+    let subtotalSinIva = orderData.subtotal || 0;
+    let ivaAmountCalculado = orderData.iva_amount || 0;
+
+    if (ivaIncludedInPrice && ivaRate > 0) {
+      // Si el IVA está incluido, calcular subtotal sin IVA
+      subtotalSinIva = (orderData.subtotal || 0) / (1 + ivaRate / 100);
+      ivaAmountCalculado = (orderData.subtotal || 0) - subtotalSinIva;
+      console.log(`📊 Totales - IVA incluido ajustado: Subtotal ${orderData.subtotal} -> ${subtotalSinIva.toFixed(2)} (IVA: ${ivaAmountCalculado.toFixed(2)})`);
+    }
+
     const payload = {
       data: {
         id: orderData.id,
@@ -174,10 +250,10 @@ async function sendWebhookNotification(
         customer: orderData.customer,
         partners: partnersArray,
         totals: {
-          subtotal: orderData.subtotal,
-          iva_amount: orderData.iva_amount,
+          subtotal: Number(subtotalSinIva.toFixed(2)),
+          iva_amount: Number(ivaAmountCalculado.toFixed(2)),
           iva_rate: orderData.iva_rate,
-          iva_included_in_price: true,
+          iva_included_in_price: ivaIncludedInPrice,
           shipping_cost: shippingCost,
           shipping_iva_amount: shippingIvaAmount,
           total_commission: orderData.commission_amount,
