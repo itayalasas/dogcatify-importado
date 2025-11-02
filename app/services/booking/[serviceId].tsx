@@ -459,7 +459,7 @@ export default function ServiceBooking() {
         bookingDate.setHours(hours, minutes, 0, 0);
       }
 
-      // Crear la reserva directamente sin pago
+      // PASO 1: Crear la reserva (booking)
       const { data: bookingData, error: bookingError } = await supabaseClient
         .from('bookings')
         .insert({
@@ -487,19 +487,66 @@ export default function ServiceBooking() {
 
       if (bookingError) throw bookingError;
 
-      // Enviar notificación al partner
+      // PASO 2: Crear la orden (order) asociada
+      const { data: orderData, error: orderError } = await supabaseClient
+        .from('orders')
+        .insert({
+          partner_id: partnerId,
+          customer_id: currentUser.id,
+          booking_id: bookingData.id,
+          service_id: serviceId,
+          pet_id: petId,
+          appointment_date: bookingDate.toISOString(),
+          appointment_time: selectedTime || null,
+          booking_notes: notes.trim() || null,
+          items: [],
+          total_amount: 0,
+          commission_amount: 0,
+          partner_amount: 0,
+          payment_method: 'free',
+          payment_status: 'paid',
+          status: 'confirmed',
+          order_type: 'service_booking',
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (orderError) {
+        console.error('Error creating order:', orderError);
+        // Si falla la orden, eliminamos el booking
+        await supabaseClient.from('bookings').delete().eq('id', bookingData.id);
+        throw orderError;
+      }
+
+      console.log('✅ Free booking created successfully:', {
+        bookingId: bookingData.id,
+        orderId: orderData.id
+      });
+
+      // Enviar notificación al partner mediante Edge Function
       try {
-        const { default: NotificationService } = await import('../../utils/notifications');
-        await NotificationService.sendNotification(
-          partnerId,
-          '🎉 Nueva Reserva',
-          `${currentUser.displayName || 'Un cliente'} ha reservado ${service.name} para el ${bookingDate.toLocaleDateString()}`,
-          {
-            type: 'booking',
-            bookingId: bookingData.id,
-            serviceId: serviceId
-          }
-        );
+        const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+        const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+        await fetch(`${supabaseUrl}/functions/v1/send-notification-fcm-v1`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: partnerId,
+            title: '🎉 Nueva Reserva',
+            body: `${currentUser.displayName || 'Un cliente'} ha reservado ${service.name} para el ${bookingDate.toLocaleDateString()}`,
+            data: {
+              type: 'booking',
+              bookingId: bookingData.id,
+              orderId: orderData.id,
+              serviceId: serviceId
+            }
+          })
+        });
       } catch (notifError) {
         console.error('Error sending notification:', notifError);
       }
