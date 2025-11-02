@@ -464,12 +464,20 @@ export default function ServiceBooking() {
         .from('bookings')
         .insert({
           service_id: serviceId,
+          service_name: service.name,
+          service_duration: service.duration || 60,
           partner_id: partnerId,
+          partner_name: partner.business_name,
           customer_id: currentUser.id,
+          customer_name: currentUser.displayName || currentUser.email,
+          customer_email: currentUser.email,
+          customer_phone: currentUser.phoneNumber || null,
           pet_id: petId,
-          booking_date: bookingDate.toISOString(),
-          booking_time: selectedTime || null,
+          pet_name: pet.name,
+          date: bookingDate.toISOString(),
+          time: selectedTime || null,
           status: 'confirmed',
+          total_amount: 0,
           notes: notes.trim() || null,
           boarding_category: boardingCategory || null,
           created_at: new Date().toISOString()
@@ -1259,6 +1267,8 @@ export default function ServiceBooking() {
                 />
               </View>
 
+              <ActivityIndicator size="large" color="#00A650" style={{ marginBottom: 20 }} />
+
               <Text style={styles.paymentLoadingTitle}>Procesando pago...</Text>
               <Text style={styles.paymentLoadingSubtitle}>
                 {paymentMessage}
@@ -1279,7 +1289,7 @@ export default function ServiceBooking() {
                 />
               </View>
 
-              <Text style={styles.loadingHint}>Serás redirigido a Mercado Pago</Text>
+              <Text style={styles.loadingHint}>🔒 Serás redirigido a Mercado Pago de forma segura</Text>
             </View>
           </View>
         </Modal>
@@ -1856,68 +1866,70 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 1000,
+    zIndex: 9999,
   },
   paymentLoadingContent: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 40,
+    borderRadius: 24,
+    padding: 48,
     alignItems: 'center',
-    width: 320,
+    width: '85%',
+    maxWidth: 360,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 15,
   },
   mpLogoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     backgroundColor: '#009EE3',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   mpLoadingLogo: {
-    width: 50,
-    height: 50,
+    width: 65,
+    height: 65,
   },
   paymentLoadingTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontFamily: 'Inter-Bold',
     color: '#1F2937',
-    marginBottom: 8,
+    marginBottom: 12,
     textAlign: 'center',
   },
   paymentLoadingSubtitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: 'Inter-Medium',
     color: '#00A650',
-    marginBottom: 24,
+    marginBottom: 28,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 24,
+    paddingHorizontal: 8,
   },
   progressBarContainer: {
     width: '100%',
-    height: 6,
+    height: 8,
     backgroundColor: '#E5E7EB',
-    borderRadius: 3,
+    borderRadius: 4,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   progressBarFill: {
     height: '100%',
     backgroundColor: '#00A650',
-    borderRadius: 3,
+    borderRadius: 4,
   },
   loadingHint: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
     textAlign: 'center',
   },
 });
