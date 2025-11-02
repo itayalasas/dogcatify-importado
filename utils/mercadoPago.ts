@@ -1017,6 +1017,13 @@ export const createServiceBookingOrder = async (bookingData: {
     
     console.log('Booking created with ID:', insertedBooking.id);
     
+    // Create appointment_date at midnight UTC for consistent querying
+    const appointmentDate = new Date(bookingData.date);
+    appointmentDate.setUTCHours(0, 0, 0, 0);
+
+    console.log('📅 Appointment date (UTC midnight):', appointmentDate.toISOString());
+    console.log('⏰ Appointment time:', bookingData.time);
+
     // Create order record for payment tracking
     const orderData = {
       partner_id: bookingData.partnerId,
@@ -1024,7 +1031,7 @@ export const createServiceBookingOrder = async (bookingData: {
       booking_id: insertedBooking.id,
       service_id: bookingData.serviceId,
       pet_id: bookingData.petId,
-      appointment_date: bookingData.date.toISOString(),
+      appointment_date: appointmentDate.toISOString(), // ✅ Fecha a medianoche UTC
       appointment_time: bookingData.time,
       booking_notes: bookingData.notes,
       partner_name: bookingData.partnerName,
