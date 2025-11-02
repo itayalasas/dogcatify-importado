@@ -177,7 +177,7 @@ async function sendWebhookNotification(
           subtotal: orderData.subtotal,
           iva_amount: orderData.iva_amount,
           iva_rate: orderData.iva_rate,
-          iva_included_in_price: orderData.iva_included_in_price,
+          iva_included_in_price: true,
           shipping_cost: shippingCost,
           shipping_iva_amount: shippingIvaAmount,
           total_commission: orderData.commission_amount,
