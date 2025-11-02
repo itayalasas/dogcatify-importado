@@ -365,12 +365,20 @@ export default function ServiceBooking() {
           .from('bookings')
           .insert({
             service_id: serviceId,
+            service_name: service.name,
+            service_duration: service.duration || 60,
             partner_id: partnerId,
+            partner_name: partnerInfo.businessName,
             customer_id: currentUser.id,
+            customer_name: currentUser.displayName || currentUser.email,
+            customer_email: currentUser.email,
+            customer_phone: currentUser.phoneNumber || null,
             pet_id: petId,
-            booking_date: bookingDate.toISOString(),
-            booking_time: selectedTime,
+            pet_name: pet.name,
+            date: bookingDate.toISOString(),
+            time: selectedTime,
             status: 'confirmed',
+            total_amount: 0,
             notes: notes.trim() || null,
             created_at: new Date().toISOString()
           })
