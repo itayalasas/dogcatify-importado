@@ -46,7 +46,7 @@ Valor:   application/json
 #### Header 2: ⚠️ **NUEVO - OBLIGATORIO**
 ```
 Nombre:  X-Cron-Secret
-Valor:   dogcatify-cron-2024-secure-key
+Valor:   
 ```
 
 ### Paso 4: Body (Request)
