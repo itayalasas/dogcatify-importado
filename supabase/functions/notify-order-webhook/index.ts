@@ -71,13 +71,17 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
       continue;
     }
 
-    let partnerItems = (orderData.items || []).filter((item: any) => item.partnerId === partnerId || item.partner_id === partnerId);
+    // Para productos: filtrar items por partnerId
+    // Para servicios: usar todos los items (no tienen partnerId)
+    let partnerItems = partnerBreakdown[partnerId]
+      ? (orderData.items || []).filter((item: any) => item.partnerId === partnerId || item.partner_id === partnerId)
+      : (orderData.items || []);
 
     let subtotal = 0;
     let ivaAmount = 0;
 
     if (partnerBreakdown[partnerId]) {
-      // IMPORTANTE: Los valores del breakdown YA VIENEN CORRECTOS desde mercadoPago.ts
+      // PRODUCTOS: Los valores del breakdown YA VIENEN CORRECTOS desde mercadoPago.ts
       // - subtotal: ya está sin IVA
       // - items: ya tienen subtotal sin IVA y iva_amount calculado
       // NO necesitamos recalcular nada, solo usar los valores tal cual
@@ -91,6 +95,7 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
 
       // Los items ya vienen correctos, no necesitamos ajustarlos
     } else {
+      // SERVICIOS: Los items vienen de la orden directamente
       if (partnerItems.length > 0) {
         const totalConIva = partnerItems.reduce((sum: number, item: any) => {
           return sum + ((item.subtotal !== undefined && item.subtotal !== null) ? item.subtotal : (item.price * item.quantity));
@@ -137,6 +142,24 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
     const commissionAmount = (subtotal * commissionPercentage) / 100;
     const partnerAmount = subtotal - commissionAmount;
 
+    // Para servicios, enriquecer los items con información del booking
+    const enrichedItems = partnerItems.map((item: any) => {
+      // Si es un servicio y tenemos booking_info, agregar esos datos
+      if (orderData.order_type === 'service_booking' && orderData.booking_id) {
+        return {
+          ...item,
+          service_name: orderData.service_name || item.name,
+          pet_name: orderData.pet_name,
+          pet_id: orderData.pet_id,
+          appointment_date: orderData.appointment_date,
+          appointment_time: orderData.appointment_time,
+          booking_notes: orderData.booking_notes,
+          type: 'service'
+        };
+      }
+      return item;
+    });
+
     partnersArray.push({
       id: partnerInfo.id,
       business_name: partnerInfo.business_name,
@@ -149,7 +172,7 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
       codigo_postal: partnerInfo.codigo_postal,
       commission_percentage: commissionPercentage,
       is_primary: partnerId === orderData.partner_id,
-      items: partnerItems,
+      items: enrichedItems,
       subtotal: Number(subtotal.toFixed(2)),
       iva_amount: Number(ivaAmount.toFixed(2)),
       commission_amount: Number(commissionAmount.toFixed(2)),
