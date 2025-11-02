@@ -115,6 +115,24 @@ function RootLayout() {
             router.push('/(tabs)');
           }, 500);
         }
+        else if (path?.startsWith('pet-share/')) {
+          const shareId = path.replace('pet-share/', '');
+          logger.info('Navigating to pet share invitation', { shareId });
+
+          setTimeout(() => {
+            const router = require('expo-router').router;
+            router.push(`/pet-share/${shareId}`);
+          }, 500);
+        }
+        else if (path?.startsWith('pets/')) {
+          const petId = path.replace('pets/', '');
+          logger.info('Navigating to pet details', { petId });
+
+          setTimeout(() => {
+            const router = require('expo-router').router;
+            router.push(`/pets/${petId}`);
+          }, 500);
+        }
       } catch (error) {
         logger.error('Error handling deep link', error as Error, { url });
       }
@@ -223,6 +241,8 @@ function RootLayout() {
                   <Stack.Screen name="medical-history/[id]" />
                   <Stack.Screen name="pets/medical-history-preview" />
                   <Stack.Screen name="pets/share-medical-history" />
+                  <Stack.Screen name="pets/share-pet" />
+                  <Stack.Screen name="pet-share/[id]" options={{ title: 'Invitación' }} />
                   <Stack.Screen name="+not-found" />
                 </Stack>
                   </ErrorBoundary>
