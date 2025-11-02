@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput, KeyboardAvoidingView, Platform, Alert, Linking } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Send, Phone, Heart } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
@@ -170,27 +170,52 @@ export default function AdoptionChat() {
         setNewMessage('');
       }
       
-      // Send push notification to partner
+      // Send push notification to partner using FCM v1
       try {
         const { data: partnerData } = await supabaseClient
           .from('partners')
           .select('user_id')
           .eq('id', partnerId)
           .single();
-        
+
         if (partnerData?.user_id) {
-          await sendNotificationToUser(
-            partnerData.user_id,
-            `Nuevo mensaje de adopción - ${petName}`,
-            `${currentUser!.displayName}: ${textToSend}`,
-            {
-              type: 'adoption_message',
-              chatId: chatToUse,
-              petId,
-              petName,
-              deepLink: `chat/partner-adoption/${chatToUse}`
+          // Get partner's FCM token
+          const { data: profileData } = await supabaseClient
+            .from('profiles')
+            .select('fcm_token')
+            .eq('id', partnerData.user_id)
+            .single();
+
+          if (profileData?.fcm_token) {
+            // Use FCM v1 endpoint
+            const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+            const response = await fetch(`${supabaseUrl}/functions/v1/send-notification-fcm-v1`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+              },
+              body: JSON.stringify({
+                fcmToken: profileData.fcm_token,
+                title: `Nuevo mensaje sobre ${petName}`,
+                body: `${currentUser!.displayName}: ${textToSend.substring(0, 100)}`,
+                data: {
+                  type: 'adoption_message',
+                  chatId: chatToUse,
+                  petId,
+                  petName,
+                  screen: 'AdoptionChat',
+                  url: `dogcatify://chat/adoption?petId=${petId}&petName=${petName}&partnerId=${partnerId}&partnerName=${partnerName}`
+                }
+              }),
+            });
+
+            if (!response.ok) {
+              console.error('Error sending FCM notification:', await response.text());
+            } else {
+              console.log('✅ Notification sent via FCM v1');
             }
-          );
+          }
         }
       } catch (notificationError) {
         console.error('Error sending notification:', notificationError);
@@ -233,28 +258,33 @@ export default function AdoptionChat() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>Adopción - {petName}</Text>
-          <Text style={styles.headerSubtitle}>{partnerName}</Text>
+    <View style={styles.container}>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color="#111827" />
+          </TouchableOpacity>
+          <View style={styles.headerInfo}>
+            <Text style={styles.headerTitle}>{partnerName}</Text>
+            <Text style={styles.headerSubtitle}>Sobre la adopción de {petName}</Text>
+          </View>
+          <TouchableOpacity onPress={handleContactShelter} style={styles.phoneButton}>
+            <Phone size={20} color="#3B82F6" />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={handleContactShelter} style={styles.phoneButton}>
-          <Phone size={20} color="#3B82F6" />
-        </TouchableOpacity>
-      </View>
+      </SafeAreaView>
 
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.chatContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        <ScrollView 
+        <ScrollView
           ref={scrollViewRef}
           style={styles.messagesContainer}
+          contentContainerStyle={styles.messagesContent}
           onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+          keyboardShouldPersistTaps="handled"
         >
           {messages.map((message) => (
             <View
@@ -292,12 +322,13 @@ export default function AdoptionChat() {
           <TextInput
             style={styles.messageInput}
             placeholder="Escribe tu mensaje..."
+            placeholderTextColor="#9CA3AF"
             value={newMessage}
             onChangeText={setNewMessage}
             multiline
             maxLength={500}
           />
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.sendButton, !newMessage.trim() && styles.sendButtonDisabled]}
             onPress={() => sendMessage()}
             disabled={!newMessage.trim() || loading}
@@ -306,7 +337,7 @@ export default function AdoptionChat() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -314,7 +345,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
-    paddingTop: 50,
+  },
+  safeArea: {
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
@@ -351,8 +384,11 @@ const styles = StyleSheet.create({
   },
   messagesContainer: {
     flex: 1,
+  },
+  messagesContent: {
     paddingHorizontal: 16,
     paddingVertical: 8,
+    paddingBottom: 16,
   },
   messageContainer: {
     marginVertical: 4,
@@ -411,7 +447,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'android' ? 16 : 12,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
