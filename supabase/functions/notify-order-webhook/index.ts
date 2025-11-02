@@ -38,11 +38,9 @@ async function generateSignature(payload: string, secret: string): Promise<strin
 async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]> {
   const partnersArray: any[] = [];
 
-  // Si hay partner_breakdown (productos), usar ese
   const partnerBreakdown = orderData.partner_breakdown?.partners || {};
   let partnerIds = Object.keys(partnerBreakdown);
 
-  // Si no hay partner_breakdown pero hay partner_id (servicios), usar ese
   if (partnerIds.length === 0 && orderData.partner_id) {
     partnerIds = [orderData.partner_id];
   }
@@ -52,7 +50,6 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
     return [];
   }
 
-  // Obtener información de todos los partners
   const { data: partnersData, error } = await supabase
     .from("partners")
     .select("id, business_name, email, phone, calle, numero, barrio, codigo_postal, rut, commission_percentage")
@@ -63,11 +60,9 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
     return [];
   }
 
-  // Verificar si el IVA está incluido en el precio
   const ivaIncludedInPrice = orderData.iva_included_in_price === true;
   const ivaRate = orderData.iva_rate || 0;
 
-  // Construir el array de partners con sus items
   for (const partnerId of partnerIds) {
     const partnerInfo = partnersData.find((p: any) => p.id === partnerId);
 
@@ -76,83 +71,73 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
       continue;
     }
 
-    // Para productos: usar breakdown
-    // Para servicios: calcular a partir de la orden
     let partnerItems = (orderData.items || []).filter((item: any) => item.partnerId === partnerId || item.partner_id === partnerId);
-
-    // Ajustar los items si el IVA está incluido
-    if (ivaIncludedInPrice && ivaRate > 0) {
-      partnerItems = partnerItems.map((item: any) => {
-        const itemPrice = item.price || 0;
-        const itemSubtotal = item.subtotal || (itemPrice * item.quantity);
-
-        // Calcular precio sin IVA
-        const priceWithoutIva = itemPrice / (1 + ivaRate / 100);
-        const subtotalWithoutIva = itemSubtotal / (1 + ivaRate / 100);
-        const itemIvaAmount = itemSubtotal - subtotalWithoutIva;
-
-        return {
-          ...item,
-          price: Number(priceWithoutIva.toFixed(2)),
-          subtotal: Number(subtotalWithoutIva.toFixed(2)),
-          iva_amount: Number(itemIvaAmount.toFixed(2)),
-          original_price: itemPrice // Mantener el precio original con IVA para referencia
-        };
-      });
-    }
 
     let subtotal = 0;
     let ivaAmount = 0;
 
     if (partnerBreakdown[partnerId]) {
-      // Productos con breakdown
       subtotal = partnerBreakdown[partnerId].subtotal || 0;
 
-      // Si el IVA está incluido en el precio, el subtotal viene con IVA
-      // Necesitamos calcular el subtotal sin IVA para el CRM
       if (ivaIncludedInPrice && ivaRate > 0) {
-        // Calcular subtotal sin IVA: subtotalConIVA / (1 + ivaRate/100)
         const subtotalSinIva = subtotal / (1 + ivaRate / 100);
         ivaAmount = subtotal - subtotalSinIva;
         subtotal = subtotalSinIva;
 
         console.log(`📊 IVA incluido - Ajustando subtotal: ${partnerBreakdown[partnerId].subtotal} -> ${subtotal.toFixed(2)} (IVA: ${ivaAmount.toFixed(2)})`);
       } else {
-        // Si el IVA no está incluido, calcular normalmente
         ivaAmount = partnerItems.reduce((sum: number, item: any) => sum + (item.iva_amount || 0), 0);
       }
+
+      if (ivaIncludedInPrice && ivaRate > 0) {
+        partnerItems = partnerItems.map((item: any) => {
+          const itemPrice = item.price || 0;
+          const itemSubtotal = item.subtotal || (itemPrice * item.quantity);
+
+          const priceWithoutIva = itemPrice / (1 + ivaRate / 100);
+          const subtotalWithoutIva = itemSubtotal / (1 + ivaRate / 100);
+          const itemIvaAmount = itemSubtotal - subtotalWithoutIva;
+
+          return {
+            ...item,
+            price: Number(priceWithoutIva.toFixed(2)),
+            subtotal: Number(subtotalWithoutIva.toFixed(2)),
+            iva_amount: Number(itemIvaAmount.toFixed(2)),
+            original_price: itemPrice
+          };
+        });
+      }
     } else {
-      // Servicios sin breakdown - calcular desde items o totales de la orden
       if (partnerItems.length > 0) {
-        // Calcular subtotal desde los items
-        subtotal = partnerItems.reduce((sum: number, item: any) => {
-          let itemSubtotal = 0;
-
-          if (item.subtotal !== undefined && item.subtotal !== null) {
-            itemSubtotal = item.subtotal;
-          } else {
-            itemSubtotal = (item.price * item.quantity);
-          }
-
-          // Si el IVA está incluido, ajustar el subtotal del item
-          if (ivaIncludedInPrice && ivaRate > 0) {
-            itemSubtotal = itemSubtotal / (1 + ivaRate / 100);
-          }
-
-          return sum + itemSubtotal;
+        const totalConIva = partnerItems.reduce((sum: number, item: any) => {
+          return sum + ((item.subtotal !== undefined && item.subtotal !== null) ? item.subtotal : (item.price * item.quantity));
         }, 0);
 
-        // Calcular IVA
         if (ivaIncludedInPrice && ivaRate > 0) {
-          const totalConIva = partnerItems.reduce((sum: number, item: any) => {
-            return sum + ((item.subtotal !== undefined && item.subtotal !== null) ? item.subtotal : (item.price * item.quantity));
-          }, 0);
+          subtotal = totalConIva / (1 + ivaRate / 100);
           ivaAmount = totalConIva - subtotal;
+
+          partnerItems = partnerItems.map((item: any) => {
+            const itemPrice = item.price || 0;
+            const itemSubtotal = item.subtotal || (itemPrice * item.quantity);
+
+            const priceWithoutIva = itemPrice / (1 + ivaRate / 100);
+            const subtotalWithoutIva = itemSubtotal / (1 + ivaRate / 100);
+            const itemIvaAmount = itemSubtotal - subtotalWithoutIva;
+
+            return {
+              ...item,
+              price: Number(priceWithoutIva.toFixed(2)),
+              subtotal: Number(subtotalWithoutIva.toFixed(2)),
+              iva_amount: Number(itemIvaAmount.toFixed(2)),
+              original_price: itemPrice
+            };
+          });
         } else {
+          subtotal = totalConIva;
           ivaAmount = partnerItems.reduce((sum: number, item: any) => sum + (item.iva_amount || 0), 0);
         }
       } else {
-        // Si no hay items, usar los totales de la orden
         subtotal = orderData.subtotal || 0;
 
         if (ivaIncludedInPrice && ivaRate > 0) {
@@ -165,7 +150,6 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
       }
     }
 
-    // Calcular comisión sobre el subtotal sin IVA
     const commissionPercentage = partnerInfo.commission_percentage || 5.0;
     const commissionAmount = (subtotal * commissionPercentage) / 100;
     const partnerAmount = subtotal - commissionAmount;
@@ -224,18 +208,15 @@ async function sendWebhookNotification(
       shipping_address: null,
     };
 
-    // Construir array de partners
     const partnersArray = await buildPartnersArray(orderData, supabase);
     const totalPartners = partnersArray.length;
 
-    // Calcular subtotal sin IVA si está incluido
     const ivaIncludedInPrice = orderData.iva_included_in_price === true;
     const ivaRate = orderData.iva_rate || 0;
     let subtotalSinIva = orderData.subtotal || 0;
     let ivaAmountCalculado = orderData.iva_amount || 0;
 
     if (ivaIncludedInPrice && ivaRate > 0) {
-      // Si el IVA está incluido, calcular subtotal sin IVA
       subtotalSinIva = (orderData.subtotal || 0) / (1 + ivaRate / 100);
       ivaAmountCalculado = (orderData.subtotal || 0) - subtotalSinIva;
       console.log(`📊 Totales - IVA incluido ajustado: Subtotal ${orderData.subtotal} -> ${subtotalSinIva.toFixed(2)} (IVA: ${ivaAmountCalculado.toFixed(2)})`);
@@ -630,7 +611,7 @@ Deno.serve(async (req: Request) => {
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+        }
     );
   }
 });
