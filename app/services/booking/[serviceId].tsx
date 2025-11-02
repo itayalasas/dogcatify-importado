@@ -613,7 +613,7 @@ export default function ServiceBooking() {
           shipping_address: null,
           payment_method: 'free',
           payment_status: 'paid',
-          status: 'confirmed',
+          status: 'reserved',
           order_type: 'service_booking',
           partner_breakdown: partnerBreakdown,
           created_at: new Date().toISOString()
