@@ -199,27 +199,11 @@ dependencies {
     }
 }
 
-// Configuración de Datadog para sourcemaps
-// Inyectar variables de entorno para el comando datadog-ci
+// Deshabilitar la subida de sourcemaps de Datadog para evitar errores de build
+// El SDK de DataDog sigue funcionando en runtime para logs, errores y métricas
 tasks.configureEach { task ->
     if (task.name.contains('uploadReleaseSourcemaps') || task.name.contains('uploadDebugSourcemaps')) {
-        task.doFirst {
-            println "🔧 Configurando variables de entorno para Datadog sourcemaps..."
-
-            // Obtener las variables de gradle.properties o del sistema
-            def ddApiKey = project.findProperty('DD_API_KEY') ?: System.getenv('DD_API_KEY') ?: '068208a98b131a96831ca92a86d4f158'
-            def datadogApiKey = project.findProperty('DATADOG_API_KEY') ?: System.getenv('DATADOG_API_KEY') ?: '068208a98b131a96831ca92a86d4f158'
-            def ddSite = project.findProperty('DD_SITE') ?: System.getenv('DD_SITE') ?: 'us5.datadoghq.com'
-            def datadogSite = project.findProperty('DATADOG_SITE') ?: System.getenv('DATADOG_SITE') ?: 'us5.datadoghq.com'
-
-            // Exportar para que el comando datadog-ci las pueda leer
-            task.environment('DD_API_KEY', ddApiKey)
-            task.environment('DATADOG_API_KEY', datadogApiKey)
-            task.environment('DD_SITE', ddSite)
-            task.environment('DATADOG_SITE', datadogSite)
-
-            println "   ✅ DD_API_KEY: ${ddApiKey.substring(0, Math.min(10, ddApiKey.length()))}..."
-            println "   ✅ DD_SITE: ${ddSite}"
-        }
+        task.enabled = false
+        println "⏭️  Saltando tarea de DataDog sourcemaps: ${task.name} (deshabilitada para evitar errores de build)"
     }
 }
