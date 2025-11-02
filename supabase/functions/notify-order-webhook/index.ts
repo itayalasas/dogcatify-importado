@@ -85,11 +85,19 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
     } else {
       // Servicios sin breakdown - calcular desde items o totales de la orden
       if (partnerItems.length > 0) {
-        subtotal = partnerItems.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
+        // Usar subtotal sin IVA si está disponible, sino calcular desde price
+        subtotal = partnerItems.reduce((sum: number, item: any) => {
+          // Si el item tiene subtotal (sin IVA), usarlo
+          if (item.subtotal !== undefined && item.subtotal !== null) {
+            return sum + item.subtotal;
+          }
+          // Si no, usar price (para compatibilidad con órdenes antiguas)
+          return sum + (item.price * item.quantity);
+        }, 0);
         ivaAmount = partnerItems.reduce((sum: number, item: any) => sum + (item.iva_amount || 0), 0);
       } else {
         // Si no hay items, usar los totales de la orden
-        subtotal = orderData.total_amount || 0;
+        subtotal = orderData.subtotal || 0;
         ivaAmount = orderData.iva_amount || 0;
       }
     }
