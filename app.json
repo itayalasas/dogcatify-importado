@@ -26,7 +26,13 @@
         }
       ],
       "expo-updates",
-      "expo-datadog"
+      [
+        "expo-datadog",
+        {
+          "iosDsyms": false,
+          "androidSourcemaps": false
+        }
+      ]
     ],
     "experiments": { "typedRoutes": true },
     "extra": {
