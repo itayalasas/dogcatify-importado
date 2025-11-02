@@ -17,14 +17,8 @@ Se agregó el campo `discount_amount` que representa el **monto del descuento po
 - `utils/mercadoPago.ts` - Incluido en items de productos y servicios
 - `supabase/functions/notify-order-webhook/index.ts` - Incluido en el JSON del webhook
 
-### 2. ✅ Agregado Campo `price_original`
 
-Se agregó el campo `price_original` que **siempre contiene el precio original unitario** del producto/servicio para trazabilidad en el CRM.
-
-**Archivos modificados:**
-- `supabase/functions/notify-order-webhook/index.ts` - Agregado a todos los items
-
-### 3. ✅ Fix Error de Foreign Key en Webhooks
+### 2. ✅ Fix Error de Foreign Key en Webhooks
 
 Se corrigió el error de foreign key que ocurría al procesar webhooks al CRM.
 
@@ -61,7 +55,6 @@ El trigger `trigger_webhook_notification()` usaba el ANON KEY hardcoded que est�
   "iva_rate": 22,
   "iva_amount": 196.11,
   "original_price": 1450,
-  "price_original": 1450,
   "discount_percentage": 25,
   "discount_amount": 362.5
 }
@@ -72,8 +65,7 @@ El trigger `trigger_webhook_notification()` usaba el ANON KEY hardcoded que est�
 | Campo | Descripción | Ejemplo |
 |-------|-------------|---------|
 | `price` | Precio final después del descuento | 1087.5 |
-| `original_price` | Precio original (legacy) | 1450 |
-| `price_original` | **NUEVO** - Precio original para trazabilidad | 1450 |
+| `original_price` | Precio original antes del descuento | 1450 |
 | `discount_percentage` | Porcentaje de descuento | 25 |
 | `discount_amount` | **NUEVO** - Monto del descuento unitario | 362.5 |
 
@@ -81,7 +73,7 @@ El trigger `trigger_webhook_notification()` usaba el ANON KEY hardcoded que est�
 
 ### Descuento por Unidad
 ```
-discount_amount = price_original - price
+discount_amount = original_price - price
 discount_amount = 1450 - 1087.5 = 362.5
 ```
 
@@ -93,7 +85,7 @@ discount_total = 362.5 * 1 = 362.5
 
 ### Verificación de Porcentaje
 ```
-discount_percentage = (discount_amount / price_original) * 100
+discount_percentage = (discount_amount / original_price) * 100
 discount_percentage = (362.5 / 1450) * 100 = 25%
 ```
 
@@ -120,7 +112,6 @@ discount_percentage = (362.5 / 1450) * 100 = 25%
 {
   "price": 1000,
   "original_price": 1000,
-  "price_original": 1000,
   "discount_percentage": 0,
   "discount_amount": 0
 }
@@ -131,7 +122,6 @@ discount_percentage = (362.5 / 1450) * 100 = 25%
 {
   "price": 1087.5,
   "original_price": 1450,
-  "price_original": 1450,
   "discount_percentage": 25,
   "discount_amount": 362.5
 }
@@ -142,7 +132,6 @@ discount_percentage = (362.5 / 1450) * 100 = 25%
 {
   "price": 532.79,
   "original_price": 650,
-  "price_original": 650,
   "discount_percentage": 18,
   "discount_amount": 117.21
 }
