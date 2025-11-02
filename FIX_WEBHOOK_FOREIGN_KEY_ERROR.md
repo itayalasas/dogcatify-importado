@@ -126,12 +126,21 @@ También se agregó el campo `discount_amount` a todos los items en el JSON del 
   "name": "Producto",
   "price": 532.79,
   "original_price": 650,
+  "price_original": 650,      // ← NUEVO CAMPO (precio original unitario)
   "discount_percentage": 18,
-  "discount_amount": 117.21,  // ← NUEVO CAMPO
+  "discount_amount": 117.21,  // ← NUEVO CAMPO (monto del descuento)
   "currency": "UYU",
   "currency_code_dgi": "858"
 }
 ```
+
+### Diferencia entre campos:
+
+- **`price`**: Precio final después del descuento (lo que se cobra)
+- **`original_price`**: Precio original antes del descuento (legacy)
+- **`price_original`**: Precio original unitario (para trazabilidad en CRM)
+- **`discount_percentage`**: Porcentaje de descuento aplicado
+- **`discount_amount`**: Monto del descuento por unidad
 
 ### Cálculo del descuento:
 
@@ -148,7 +157,7 @@ discount_amount = 650 - 532.79 = 117.21
 4. ✅ **shop.tsx**: Inicializa `discount_amount` en 0
 5. ✅ **services/booking/[serviceId].tsx**: Calcula `discount_amount` para servicios
 6. ✅ **mercadoPago.ts**: Incluye `discount_amount` en items de productos y servicios
-7. ✅ **notify-order-webhook**: Incluye `discount_amount` en el JSON enviado al CRM
+7. ✅ **notify-order-webhook**: Incluye `discount_amount` y `price_original` en el JSON enviado al CRM
 
 ## Testing
 
@@ -157,6 +166,7 @@ discount_amount = 650 - 532.79 = 117.21
 {
   "price": 1000,
   "original_price": 1000,
+  "price_original": 1000,
   "discount_percentage": 0,
   "discount_amount": 0
 }
@@ -167,6 +177,7 @@ discount_amount = 650 - 532.79 = 117.21
 {
   "price": 1087.50,
   "original_price": 1450.00,
+  "price_original": 1450.00,
   "discount_percentage": 25,
   "discount_amount": 362.50
 }
@@ -177,6 +188,7 @@ discount_amount = 650 - 532.79 = 117.21
 {
   "price": 532.79,
   "original_price": 650,
+  "price_original": 650,
   "discount_percentage": 18,
   "discount_amount": 117.21
 }
