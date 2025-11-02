@@ -426,7 +426,96 @@ export default function ServiceBooking() {
       Alert.alert('Error', 'Por favor selecciona una hora');
       return;
     }
-    setShowPaymentModal(true);
+
+    // Verificar si el servicio es gratuito
+    const servicePrice = getServicePrice();
+    const isFreeService = service?.has_cost === false || servicePrice === 0;
+
+    console.log('Confirming booking - Price:', servicePrice, 'Is Free:', isFreeService);
+
+    if (isFreeService) {
+      // Servicio gratuito - crear reserva directamente sin pago
+      handleFreeServiceBooking();
+    } else {
+      // Servicio con costo - mostrar modal de pago
+      setShowPaymentModal(true);
+    }
+  };
+
+  const handleFreeServiceBooking = async () => {
+    if (!selectedDate || !service || !partner || !pet || !currentUser) {
+      Alert.alert('Error', 'Información de reserva incompleta');
+      return;
+    }
+
+    setPaymentLoading(true);
+    setPaymentMessage('Confirmando tu reserva...');
+
+    try {
+      // Crear fecha y hora de la reserva
+      const bookingDate = new Date(selectedDate);
+      if (selectedTime) {
+        const [hours, minutes] = selectedTime.split(':').map(Number);
+        bookingDate.setHours(hours, minutes, 0, 0);
+      }
+
+      // Crear la reserva directamente sin pago
+      const { data: bookingData, error: bookingError } = await supabaseClient
+        .from('bookings')
+        .insert({
+          service_id: serviceId,
+          partner_id: partnerId,
+          customer_id: currentUser.id,
+          pet_id: petId,
+          booking_date: bookingDate.toISOString(),
+          booking_time: selectedTime || null,
+          status: 'confirmed',
+          notes: notes.trim() || null,
+          boarding_category: boardingCategory || null,
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (bookingError) throw bookingError;
+
+      // Enviar notificación al partner
+      try {
+        const { default: NotificationService } = await import('../../utils/notifications');
+        await NotificationService.sendNotification(
+          partnerId,
+          '🎉 Nueva Reserva',
+          `${currentUser.displayName || 'Un cliente'} ha reservado ${service.name} para el ${bookingDate.toLocaleDateString()}`,
+          {
+            type: 'booking',
+            bookingId: bookingData.id,
+            serviceId: serviceId
+          }
+        );
+      } catch (notifError) {
+        console.error('Error sending notification:', notifError);
+      }
+
+      setPaymentLoading(false);
+
+      const timeInfo = boardingCategory
+        ? `📦 Tipo: ${boardingCategory}`
+        : selectedTime ? `🕐 ${selectedTime}` : '';
+
+      Alert.alert(
+        '¡Reserva Confirmada! 🎉',
+        `Tu reserva ha sido confirmada:\n\n📅 ${selectedDate.toLocaleDateString()}\n${timeInfo}\n\nRecibirás una notificación de confirmación.`,
+        [{ text: 'Perfecto', onPress: () => router.replace('/(tabs)/services') }]
+      );
+    } catch (error) {
+      console.error('Error creating free booking:', error);
+      setPaymentLoading(false);
+      Alert.alert(
+        'Error',
+        'No se pudo crear la reserva. Por favor intenta nuevamente.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   const handlePaymentMethodSelect = (method: string) => {
