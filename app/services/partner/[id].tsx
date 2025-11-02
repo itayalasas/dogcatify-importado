@@ -1540,6 +1540,7 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginBottom: 6,
     lineHeight: 22,
+    flexWrap: 'wrap',
   },
   modernServiceDescription: {
     fontSize: 13,
