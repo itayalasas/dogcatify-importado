@@ -49,7 +49,6 @@ Este documento muestra el formato COMPLETO y ACTUALIZADO del JSON que se envía 
             "partnerId": "8dfe492a-688c-4abe-b079-2533d14f3a64",
             "partnerName": "Tienda",
             "original_price": 1450,
-            "price_original": 1450,
             "discount_percentage": 25,
             "discount_amount": 362.5
           }
@@ -102,8 +101,7 @@ Cada item en el array `items` contiene los siguientes campos relacionados con pr
 | Campo | Tipo | Descripción | Ejemplo |
 |-------|------|-------------|---------|
 | `price` | number | Precio FINAL después del descuento (lo que se cobra) | 1087.5 |
-| `original_price` | number | Precio original antes del descuento (campo legacy) | 1450 |
-| `price_original` | number | **NUEVO** - Precio original unitario para trazabilidad en CRM | 1450 |
+| `original_price` | number | Precio original antes del descuento | 1450 |
 | `discount_percentage` | number | Porcentaje de descuento aplicado | 25 |
 | `discount_amount` | number | **NUEVO** - Monto del descuento por unidad | 362.5 |
 | `quantity` | number | Cantidad de unidades | 1 |
@@ -114,13 +112,13 @@ Cada item en el array `items` contiene los siguientes campos relacionados con pr
 
 ### 1. Descuento por Unidad
 ```
-discount_amount = price_original - price
+discount_amount = original_price - price
 discount_amount = 1450 - 1087.5 = 362.5
 ```
 
 ### 2. Verificar Porcentaje
 ```
-discount_percentage = (discount_amount / price_original) * 100
+discount_percentage = (discount_amount / original_price) * 100
 discount_percentage = (362.5 / 1450) * 100 = 25%
 ```
 
@@ -132,8 +130,8 @@ discount_total = 362.5 * 1 = 362.5
 
 ### 4. Precio Original Total
 ```
-price_original_total = price_original * quantity
-price_original_total = 1450 * 1 = 1450
+original_price_total = original_price * quantity
+original_price_total = 1450 * 1 = 1450
 ```
 
 ### 5. Ahorro Total del Cliente
@@ -144,16 +142,16 @@ ahorro_total = 362.5 * 1 = 362.5
 
 ## Diferencia entre Campos de Precio
 
-### `price` vs `original_price` vs `price_original`
+### `price` vs `original_price`
 
 - **`price`**: Precio final que se cobra al cliente después de aplicar descuentos
-- **`original_price`**: Campo legacy que también contiene el precio original
-- **`price_original`**: Nuevo campo específico para trazabilidad en el CRM, siempre contiene el precio unitario original
+- **`original_price`**: Precio original antes de cualquier descuento
 
-**¿Por qué tres campos?**
-- `price`: Necesario para facturación
-- `original_price`: Mantenido por compatibilidad con versiones anteriores
-- `price_original`: Agregado específicamente para trazabilidad en CRM y análisis de descuentos
+### Campo `discount_amount` (NUEVO)
+
+- **`discount_amount`**: Monto exacto del descuento por unidad en la moneda local
+- Este campo facilita la trazabilidad en el CRM y análisis de descuentos
+- Siempre es `original_price - price`
 
 ## Casos de Uso en el CRM
 
@@ -167,7 +165,7 @@ const ahorroTotal = items.reduce((total, item) => {
 ### 2. Validar Precios
 ```javascript
 items.forEach(item => {
-  const precioCalculado = item.price_original * (1 - item.discount_percentage / 100);
+  const precioCalculado = item.original_price * (1 - item.discount_percentage / 100);
   const esValido = Math.abs(item.price - precioCalculado) < 0.01;
   console.log(`Item ${item.name}: ${esValido ? 'OK' : 'ERROR'}`);
 });
@@ -177,7 +175,7 @@ items.forEach(item => {
 ```javascript
 const reporteDescuentos = items.map(item => ({
   nombre: item.name,
-  precioOriginal: item.price_original,
+  precioOriginal: item.original_price,
   precioFinal: item.price,
   descuentoPorcentaje: item.discount_percentage,
   descuentoMonto: item.discount_amount,
@@ -190,7 +188,7 @@ const reporteDescuentos = items.map(item => ({
 ```javascript
 items.forEach(item => {
   const ingresoReal = item.price * item.quantity;
-  const ingresoSinDescuento = item.price_original * item.quantity;
+  const ingresoSinDescuento = item.original_price * item.quantity;
   const porcentajeMargenPerdido = ((ingresoSinDescuento - ingresoReal) / ingresoSinDescuento) * 100;
 
   console.log(`${item.name}:`);
@@ -217,7 +215,6 @@ Para servicios, la estructura es similar pero incluye información de la reserva
   "subtotal": 436.71,
   "iva_amount": 96.08,
   "original_price": 650,
-  "price_original": 650,
   "discount_percentage": 18,
   "discount_amount": 117.21,
   "pet_id": "pet-456",
@@ -234,8 +231,8 @@ Tu sistema CRM puede usar estos campos para:
 
 1. **Validar la integridad de los datos**:
    ```javascript
-   const precioEsperado = price_original * (1 - discount_percentage / 100);
-   const descuentoEsperado = price_original - price;
+   const precioEsperado = original_price * (1 - discount_percentage / 100);
+   const descuentoEsperado = original_price - price;
    ```
 
 2. **Generar facturas detalladas**:
@@ -249,7 +246,7 @@ Tu sistema CRM puede usar estos campos para:
    - Determinar la efectividad de las promociones
 
 4. **Reconciliación contable**:
-   - Usar `price_original` para calcular ingresos potenciales
+   - Usar `original_price` para calcular ingresos potenciales
    - Usar `price` para calcular ingresos reales
    - Usar `discount_amount` para reportar descuentos otorgados
 
@@ -257,6 +254,6 @@ Tu sistema CRM puede usar estos campos para:
 
 1. **Todos los precios están en la moneda especificada** en `currency` (ej: UYU)
 2. **Los montos están redondeados a 2 decimales** para evitar problemas de precisión
-3. **`price_original` siempre es unitario**, multiplicar por `quantity` para el total
+3. **`original_price` siempre es unitario**, multiplicar por `quantity` para el total
 4. **`discount_amount` también es unitario**, multiplicar por `quantity` para el ahorro total
-5. **Si no hay descuento**: `discount_percentage = 0`, `discount_amount = 0`, `price = price_original`
+5. **Si no hay descuento**: `discount_percentage = 0`, `discount_amount = 0`, `price = original_price`
