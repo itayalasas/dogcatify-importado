@@ -76,22 +76,29 @@ export default function ServiceBooking() {
       if (serviceError) throw serviceError;
       
       if (serviceData) {
+        // Determinar si el servicio tiene costo:
+        // 1. Si has_cost es explícitamente false → servicio gratis
+        // 2. Si price es 0 → servicio gratis
+        // 3. En cualquier otro caso → tiene costo
+        const isFreeService = serviceData.has_cost === false || serviceData.price === 0;
+
         console.log('Service data loaded:', {
           id: serviceData.id,
           name: serviceData.name,
           has_cost: serviceData.has_cost,
-          price: serviceData.price
+          price: serviceData.price,
+          isFreeService: isFreeService
         });
 
         setService({
           id: serviceData.id,
           name: serviceData.name,
           description: serviceData.description,
-          price: serviceData.price,
+          price: serviceData.price || 0,
           duration: serviceData.duration,
           category: serviceData.category,
           partnerId: serviceData.partner_id,
-          hasCost: serviceData.has_cost === true || serviceData.has_cost === null, // Only false if explicitly false
+          hasCost: !isFreeService, // False si es gratis, true si tiene costo
         });
       }
       
@@ -699,7 +706,7 @@ export default function ServiceBooking() {
       </ScrollView>
 
       {/* Modal de Métodos de Pago - Solo se muestra si el servicio tiene costo */}
-      {service?.hasCost === true && (
+      {service?.hasCost && (
         <Modal
           visible={showPaymentMethodModal}
           transparent
