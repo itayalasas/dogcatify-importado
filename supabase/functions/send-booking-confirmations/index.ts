@@ -4,7 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.43.2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, X-Cron-Secret",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
 interface BookingToConfirm {
@@ -28,31 +28,33 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Validar token secreto para llamadas de cron (desde URL query o header)
-    const url = new URL(req.url);
-    const cronSecretFromQuery = url.searchParams.get("secret");
-    const cronSecretFromHeader = req.headers.get("X-Cron-Secret");
-    const cronSecret = cronSecretFromQuery || cronSecretFromHeader;
+    // Validar Authorization header con SUPABASE_ANON_KEY
+    const authHeader = req.headers.get("Authorization");
+    const expectedKey = Deno.env.get("SUPABASE_ANON_KEY");
 
-    const expectedSecret = Deno.env.get("CRON_SECRET") || "dogcatify-cron-2024-secure-key";
-
-    console.log("DEBUG - URL:", req.url);
-    console.log("DEBUG - Secret from query:", cronSecretFromQuery);
-    console.log("DEBUG - Secret from header:", cronSecretFromHeader);
-    console.log("DEBUG - Expected secret:", expectedSecret);
-    console.log("DEBUG - Received secret:", cronSecret);
-
-    if (cronSecret !== expectedSecret) {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "Unauthorized: Invalid or missing cron secret",
-          debug: {
-            receivedFromQuery: cronSecretFromQuery,
-            receivedFromHeader: cronSecretFromHeader,
-            expectedLength: expectedSecret?.length,
-            receivedLength: cronSecret?.length,
-          }
+          error: "Unauthorized: Missing or invalid Authorization header",
+        }),
+        {
+          status: 401,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+
+    if (token !== expectedKey) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Unauthorized: Invalid API key",
         }),
         {
           status: 401,
