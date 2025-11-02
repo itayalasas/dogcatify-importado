@@ -81,7 +81,8 @@
           "data": [
             { "scheme": "dogcatify", "host": "*" },
             { "scheme": "https", "host": "dogcatify.app", "pathPrefix": "/album" },
-            { "scheme": "https", "host": "dogcatify.app", "pathPrefix": "/post" }
+            { "scheme": "https", "host": "dogcatify.app", "pathPrefix": "/post" },
+            { "scheme": "https", "host": "dogcatify.app", "pathPrefix": "/pet-share" }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
         }

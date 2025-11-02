@@ -7,19 +7,22 @@ import { Button } from '../../components/ui/Button';
 import { useBiometric } from '../../contexts/BiometricContext';
 
 export default function BiometricSetup() {
-  const { email, password, userName } = useLocalSearchParams<{
+  const { email, password, userName, redirect } = useLocalSearchParams<{
     email: string;
     password: string;
     userName: string;
+    redirect?: string;
   }>();
-  
-  const { 
-    isBiometricSupported, 
-    biometricType, 
-    enableBiometric 
+
+  const {
+    isBiometricSupported,
+    biometricType,
+    enableBiometric
   } = useBiometric();
-  
+
   const [loading, setLoading] = useState(false);
+
+  const getRedirectUrl = () => redirect || '/(tabs)';
 
   const handleEnableBiometric = async () => {
     if (!email || !password) {
@@ -35,18 +38,18 @@ export default function BiometricSetup() {
         Alert.alert(
           '¡Biometría configurada!',
           `${biometricType || 'La autenticación biométrica'} ha sido habilitada. Ahora puedes iniciar sesión más rápido.`,
-          [{ 
-            text: 'Continuar', 
-            onPress: () => router.replace('/(tabs)') 
+          [{
+            text: 'Continuar',
+            onPress: () => router.replace(getRedirectUrl() as any)
           }]
         );
       } else {
         Alert.alert(
           'No se pudo configurar',
           'La biometría no se pudo configurar. Puedes intentarlo más tarde desde tu perfil.',
-          [{ 
-            text: 'Continuar', 
-            onPress: () => router.replace('/(tabs)') 
+          [{
+            text: 'Continuar',
+            onPress: () => router.replace(getRedirectUrl() as any)
           }]
         );
       }
@@ -55,9 +58,9 @@ export default function BiometricSetup() {
       Alert.alert(
         'Error',
         'Hubo un problema configurando la biometría. Puedes intentarlo más tarde desde tu perfil.',
-        [{ 
-          text: 'Continuar', 
-          onPress: () => router.replace('/(tabs)') 
+        [{
+          text: 'Continuar',
+          onPress: () => router.replace(getRedirectUrl() as any)
         }]
       );
     } finally {
@@ -66,12 +69,12 @@ export default function BiometricSetup() {
   };
 
   const handleSkip = () => {
-    router.replace('/(tabs)');
+    router.replace(getRedirectUrl() as any);
   };
 
   if (!isBiometricSupported) {
-    // If biometric is not supported, go directly to main app
-    router.replace('/(tabs)');
+    // If biometric is not supported, go directly to main app or redirect
+    router.replace(getRedirectUrl() as any);
     return null;
   }
 

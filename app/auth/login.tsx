@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Modal, Platform, Animated, Alert, KeyboardAvoidingView } from 'react-native';
-import { Link, router } from 'expo-router';
+import { Link, router, useLocalSearchParams } from 'expo-router';
 import { Mail, Lock, Eye, EyeOff, Fingerprint, CircleAlert as AlertCircle, X, CircleCheck as CheckCircle } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -93,6 +93,7 @@ const ErrorBanner = ({ error, onDismiss }: {
 };
 
 export default function Login() {
+  const { redirect } = useLocalSearchParams<{ redirect?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -105,10 +106,10 @@ export default function Login() {
   const [biometricAttempted, setBiometricAttempted] = useState(false);
   const { login, authError, clearAuthError } = useAuth();
   const { t } = useLanguage();
-  const { 
-    isBiometricSupported, 
-    isBiometricEnabled, 
-    biometricType, 
+  const {
+    isBiometricSupported,
+    isBiometricEnabled,
+    biometricType,
     authenticateWithBiometric
   } = useBiometric();
 
@@ -219,15 +220,20 @@ export default function Login() {
           // Navigate to biometric setup screen instead of directly to tabs
           router.replace({
             pathname: '/auth/biometric-setup',
-            params: { 
-              email: loginEmail, 
+            params: {
+              email: loginEmail,
               password: loginPassword,
-              userName: result.displayName || 'Usuario'
+              userName: result.displayName || 'Usuario',
+              ...(redirect && { redirect })
             }
           });
         } else {
-          // Go directly to main app
-          router.replace('/(tabs)');
+          // Go to redirect URL if specified, otherwise go to main app
+          if (redirect) {
+            router.replace(redirect as any);
+          } else {
+            router.replace('/(tabs)');
+          }
         }
       }
     } catch (error: any) {
