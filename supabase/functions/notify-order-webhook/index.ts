@@ -162,14 +162,16 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
           appointment_time: orderData.appointment_time,
           booking_notes: orderData.booking_notes,
           discount_amount: discountAmount,
+          price_original: originalPrice,
           type: 'service'
         };
       }
 
-      // Para productos, solo agregar discount_amount
+      // Para productos, agregar discount_amount y price_original
       return {
         ...item,
-        discount_amount: discountAmount
+        discount_amount: discountAmount,
+        price_original: originalPrice
       };
     });
 
