@@ -764,14 +764,19 @@ export default function AdminPromotions() {
         onRequestClose={() => setShowPromotionModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <ScrollView contentContainerStyle={styles.modalScrollContent}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Crear Nueva Promoción</Text>
-                <TouchableOpacity onPress={() => setShowPromotionModal(false)}>
-                  <X size={24} color="#6B7280" />
-                </TouchableOpacity>
-              </View>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Crear Nueva Promoción</Text>
+              <TouchableOpacity onPress={() => setShowPromotionModal(false)}>
+                <X size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.modalBody}
+              contentContainerStyle={styles.modalBodyContent}
+              showsVerticalScrollIndicator={false}
+            >
 
               <Input
                 label="Título de la promoción *"
@@ -1126,26 +1131,32 @@ export default function AdminPromotions() {
                   </View>
                 )}
               </View>
+            </ScrollView>
 
+            <View style={styles.modalFooter}>
               <View style={styles.modalActions}>
-                <Button
-                  title="Cancelar"
-                  onPress={() => {
-                    setShowPromotionModal(false);
-                    resetForm();
-                  }}
-                  variant="outline"
-                  size="large"
-                />
-                <Button
-                  title="Crear Promoción"
-                  onPress={handleCreatePromotion}
-                  size="large"
-                  loading={loading}
-                />
+                <View style={{ flex: 1 }}>
+                  <Button
+                    title="Cancelar"
+                    onPress={() => {
+                      setShowPromotionModal(false);
+                      resetForm();
+                    }}
+                    variant="outline"
+                    size="large"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    title="Crear Promoción"
+                    onPress={handleCreatePromotion}
+                    size="large"
+                    loading={loading}
+                  />
+                </View>
               </View>
             </View>
-          </ScrollView>
+          </View>
         </View>
       </Modal>
 
@@ -1712,6 +1723,10 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 40,
   },
   modalScrollContent: {
     flexGrow: 1,
@@ -1724,13 +1739,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     width: '100%',
     maxWidth: 500,
-    height: '90%',
+    maxHeight: '90%',
     alignSelf: 'center',
     flexDirection: 'column',
+    overflow: 'hidden',
   },
   modalBody: {
     flex: 1,
-    minHeight: 200,
   },
   modalBodyContent: {
     paddingHorizontal: 20,
@@ -2034,8 +2049,9 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   modalActions: {
-    flexDirection: 'column',
+    flexDirection: 'row',
     gap: 12,
+    justifyContent: 'space-between',
   },
   partnersList: {
     maxHeight: 400,
