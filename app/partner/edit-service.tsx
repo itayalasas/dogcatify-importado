@@ -100,7 +100,7 @@ export default function EditService() {
         }
       } else {
         Alert.alert('Error', 'Servicio no encontrado');
-        router.back();
+        router.push('/(partner-tabs)/dashboard');
       }
     } catch (error) {
       console.error('Error fetching service details:', error);
@@ -539,7 +539,7 @@ export default function EditService() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.push('/(partner-tabs)/dashboard')} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>Editar {businessType === 'shop' ? 'Producto' : 'Servicio'}</Text>

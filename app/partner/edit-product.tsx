@@ -35,7 +35,7 @@ export default function EditProduct() {
   useEffect(() => {
     if (!productId) {
       Alert.alert('Error', 'ID de producto no proporcionado');
-      router.back();
+      router.push('/(partner-tabs)/products');
       return;
     }
     
@@ -85,7 +85,7 @@ export default function EditProduct() {
         }
       } else {
         Alert.alert('Error', 'Producto no encontrado');
-        router.back();
+        router.push('/(partner-tabs)/products');
       }
     } catch (error) {
       console.error('Error fetching product details:', error);
@@ -204,7 +204,7 @@ export default function EditProduct() {
       if (error) throw error;
 
       Alert.alert('Éxito', 'Producto actualizado correctamente', [
-        { text: 'OK', onPress: () => router.back() }
+        { text: 'OK', onPress: () => router.push('/(partner-tabs)/products') }
       ]);
     } catch (error) {
       console.error('Error updating product:', error);
@@ -245,7 +245,7 @@ export default function EditProduct() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.push('/(partner-tabs)/products')} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>Editar Producto</Text>
