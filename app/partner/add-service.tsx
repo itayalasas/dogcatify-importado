@@ -46,6 +46,9 @@ export default function AddService() {
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
   const [hasCost, setHasCost] = useState(true);
 
+  const [cancellationHours, setCancellationHours] = useState('24');
+  const [confirmationHours, setConfirmationHours] = useState('');
+
   useEffect(() => {
     if (partnerId) {
       fetchPartnerProfile();
@@ -276,6 +279,16 @@ export default function AddService() {
       return;
     }
 
+    if (!cancellationHours || parseInt(cancellationHours) < 1) {
+      Alert.alert('Error', 'Por favor especifica las horas mínimas para cancelar (mínimo 1 hora)');
+      return;
+    }
+
+    if (!hasCost && (!confirmationHours || parseInt(confirmationHours) < 1)) {
+      Alert.alert('Error', 'Para servicios sin costo, debes especificar las horas para enviar confirmación (mínimo 1 hora)');
+      return;
+    }
+
     if (config.needsStock && !stock) {
       Alert.alert('Error', 'Por favor especifica el stock disponible');
       return;
@@ -360,6 +373,8 @@ export default function AddService() {
           currency: currency,
           currency_code_dgi: currencyCodeDgi,
           has_cost: hasCost,
+          cancellation_hours: parseInt(cancellationHours) || 24,
+          confirmation_hours: !hasCost && confirmationHours ? parseInt(confirmationHours) : null,
           is_active: true,
           created_at: new Date().toISOString()
         };
@@ -384,6 +399,8 @@ export default function AddService() {
           currency: currency,
           currency_code_dgi: currencyCodeDgi,
           has_cost: hasCost,
+          cancellation_hours: parseInt(cancellationHours) || 24,
+          confirmation_hours: !hasCost && confirmationHours ? parseInt(confirmationHours) : null,
           is_active: true,
           created_at: new Date().toISOString()
         };
@@ -706,6 +723,35 @@ export default function AddService() {
                   thumbColor={hasCost ? '#FFFFFF' : '#F3F4F6'}
                 />
               </View>
+
+              {/* Campos de política de cancelación y confirmación */}
+              <Input
+                label="Horas para cancelar cita *"
+                placeholder="24"
+                value={cancellationHours}
+                onChangeText={setCancellationHours}
+                keyboardType="numeric"
+                leftIcon={<Clock size={20} color="#6B7280" />}
+              />
+              <Text style={styles.fieldHint}>
+                ⏰ Tiempo mínimo (en horas) para que el cliente pueda cancelar la cita
+              </Text>
+
+              {!hasCost && (
+                <>
+                  <Input
+                    label="Horas para confirmar reserva *"
+                    placeholder="48"
+                    value={confirmationHours}
+                    onChangeText={setConfirmationHours}
+                    keyboardType="numeric"
+                    leftIcon={<Clock size={20} color="#6B7280" />}
+                  />
+                  <Text style={styles.fieldHint}>
+                    📧 Se enviará un email de confirmación con este tiempo de anticipación (solo para servicios sin costo)
+                  </Text>
+                </>
+              )}
 
               {hasCost && (
                 <>
@@ -1219,5 +1265,13 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     marginTop: 8,
+  },
+  fieldHint: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: -12,
+    marginBottom: 16,
+    paddingLeft: 4,
   }
 });
