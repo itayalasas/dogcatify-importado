@@ -949,47 +949,51 @@ export default function PartnerServices() {
                     </View>
 
                     <View style={styles.modernServiceCenter}>
-                      <Text style={styles.modernServiceName}>
-                        {service.name}
-                      </Text>
-                      {service.description && (
-                        <Text style={styles.modernServiceDescription} numberOfLines={2}>
-                          {service.description}
-                        </Text>
-                      )}
+                      <View style={styles.serviceHeaderRow}>
+                        <View style={styles.serviceTitleContainer}>
+                          <Text style={styles.modernServiceName}>
+                            {service.name}
+                          </Text>
+                          {service.description && (
+                            <Text style={styles.modernServiceDescription} numberOfLines={2}>
+                              {service.description}
+                            </Text>
+                          )}
 
-                      {!isBoarding && (
-                        <View style={styles.modernServiceInfo}>
-                          {service.duration && (
-                            <View style={styles.modernInfoItem}>
-                              <Clock size={14} color="#10B981" />
-                              <Text style={styles.modernInfoText}>
-                                {service.duration} min
-                              </Text>
+                          {!isBoarding && (
+                            <View style={styles.modernServiceInfo}>
+                              {service.duration && (
+                                <View style={styles.modernInfoItem}>
+                                  <Clock size={14} color="#10B981" />
+                                  <Text style={styles.modernInfoText}>
+                                    {service.duration} min
+                                  </Text>
+                                </View>
+                              )}
+                              {service.price > 0 && (
+                                <View style={styles.modernInfoItem}>
+                                  <Text style={styles.modernPriceText}>
+                                    {formatPrice(service.price)}
+                                  </Text>
+                                </View>
+                              )}
                             </View>
                           )}
-                          {service.price > 0 && (
-                            <View style={styles.modernInfoItem}>
-                              <Text style={styles.modernPriceText}>
-                                {formatPrice(service.price)}
-                              </Text>
+
+                          {isBoarding && (
+                            <View style={styles.boardingBadge}>
+                              <Text style={styles.boardingBadgeText}>Ver opciones de hospedaje</Text>
                             </View>
                           )}
                         </View>
-                      )}
 
-                      {isBoarding && (
-                        <View style={styles.boardingBadge}>
-                          <Text style={styles.boardingBadgeText}>Ver opciones de hospedaje</Text>
+                        <View style={styles.modernServiceRight}>
+                          <View style={styles.reserveButton}>
+                            <Text style={styles.reserveButtonText}>
+                              {isBoarding ? 'Ver' : 'Reservar'}
+                            </Text>
+                          </View>
                         </View>
-                      )}
-                    </View>
-
-                    <View style={styles.modernServiceRight}>
-                      <View style={styles.reserveButton}>
-                        <Text style={styles.reserveButtonText}>
-                          {isBoarding ? 'Ver' : 'Reservar'}
-                        </Text>
                       </View>
                     </View>
                   </View>
@@ -1531,8 +1535,15 @@ const styles = StyleSheet.create({
   },
   modernServiceCenter: {
     flex: 1,
+  },
+  serviceHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  serviceTitleContainer: {
+    flex: 1,
     marginRight: 12,
-    justifyContent: 'center',
   },
   modernServiceName: {
     fontSize: 16,
@@ -1540,7 +1551,6 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginBottom: 6,
     lineHeight: 22,
-    flexWrap: 'wrap',
   },
   modernServiceDescription: {
     fontSize: 13,
@@ -1582,13 +1592,13 @@ const styles = StyleSheet.create({
     color: '#3B82F6',
   },
   modernServiceRight: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 4,
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    minWidth: 95,
   },
   reserveButton: {
     backgroundColor: '#10B981',
-    paddingHorizontal: 18,
+    paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 12,
     shadowColor: '#10B981',
@@ -1596,8 +1606,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 4,
-    minWidth: 90,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   reserveButtonText: {
     fontSize: 14,
