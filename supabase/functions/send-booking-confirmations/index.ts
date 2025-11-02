@@ -4,7 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.43.2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, X-Cron-Secret",
 };
 
 interface BookingToConfirm {
@@ -28,6 +28,26 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    // Validar token secreto para llamadas de cron
+    const cronSecret = req.headers.get("X-Cron-Secret");
+    const expectedSecret = Deno.env.get("CRON_SECRET") || "dogcatify-cron-2024-secure-key";
+
+    if (cronSecret !== expectedSecret) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Unauthorized: Invalid or missing cron secret",
+        }),
+        {
+          status: 401,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
@@ -48,11 +68,11 @@ Deno.serve(async (req: Request) => {
         appointment_date,
         appointment_time,
         pet_name,
-        service_id,
-        partner_services!inner(confirmation_hours)
+        service_id
       `)
       .eq("status", "reserved")
-      .not("appointment_date", "is", null);
+      .not("appointment_date", "is", null)
+      .not("service_id", "is", null);
 
     if (ordersError) {
       throw new Error(`Error fetching orders: ${ordersError.message}`);
@@ -79,7 +99,19 @@ Deno.serve(async (req: Request) => {
 
     for (const order of ordersToConfirm) {
       try {
-        const confirmationHours = order.partner_services?.confirmation_hours;
+        // Obtener datos del servicio
+        const { data: serviceData, error: serviceError } = await supabase
+          .from("partner_services")
+          .select("confirmation_hours")
+          .eq("id", order.service_id)
+          .single();
+
+        if (serviceError || !serviceData) {
+          console.log(`Order ${order.id} - could not fetch service data, skipping`);
+          continue;
+        }
+
+        const confirmationHours = serviceData.confirmation_hours;
 
         if (!confirmationHours) {
           console.log(`Order ${order.id} has no confirmation_hours, skipping`);
