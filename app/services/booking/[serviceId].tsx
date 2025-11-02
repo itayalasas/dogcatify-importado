@@ -177,9 +177,6 @@ export default function ServiceBooking() {
 
       if (scheduleError) throw scheduleError;
       setPartnerSchedule(scheduleData || []);
-
-      // Generate available times
-      await generateAvailableTimes();
     } catch (error) {
       console.error('Error fetching booking data:', error);
       Alert.alert('Error', 'No se pudo cargar la información de la reserva');
@@ -188,11 +185,33 @@ export default function ServiceBooking() {
     }
   };
 
-  const generateAvailableTimes = async () => {
-    const times = [];
-    for (let hour = 9; hour <= 17; hour++) {
-      times.push(`${hour.toString().padStart(2, '0')}:00`);
+  // Generar horarios disponibles cuando el servicio esté cargado
+  useEffect(() => {
+    if (service) {
+      generateAvailableTimes();
     }
+  }, [service]);
+
+  const generateAvailableTimes = async () => {
+    if (!service) return;
+
+    const times = [];
+    const serviceDuration = service.duration || 60; // Duración en minutos
+    const startHour = 9;
+    const endHour = 17;
+
+    // Generar slots según la duración del servicio
+    let currentTime = startHour * 60; // Convertir a minutos desde medianoche
+    const endTime = endHour * 60;
+
+    while (currentTime + serviceDuration <= endTime) {
+      const hour = Math.floor(currentTime / 60);
+      const minutes = currentTime % 60;
+      const timeString = `${hour.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+      times.push(timeString);
+      currentTime += serviceDuration; // Incrementar por la duración del servicio
+    }
+
     setAvailableTimes(times);
   };
 
