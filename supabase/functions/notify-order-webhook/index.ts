@@ -144,6 +144,13 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
 
     // Para servicios, enriquecer los items con información del booking
     const enrichedItems = partnerItems.map((item: any) => {
+      // Calcular discount_amount basado en discount_percentage
+      const discountPercentage = item.discount_percentage || 0;
+      const originalPrice = item.original_price || item.price;
+      const discountAmount = discountPercentage > 0
+        ? Number(((originalPrice * discountPercentage / 100) * item.quantity).toFixed(2))
+        : 0;
+
       // Si es un servicio y tenemos booking_info, agregar esos datos
       if (orderData.order_type === 'service_booking' && orderData.booking_id) {
         return {
@@ -154,10 +161,16 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
           appointment_date: orderData.appointment_date,
           appointment_time: orderData.appointment_time,
           booking_notes: orderData.booking_notes,
+          discount_amount: discountAmount,
           type: 'service'
         };
       }
-      return item;
+
+      // Para productos, solo agregar discount_amount
+      return {
+        ...item,
+        discount_amount: discountAmount
+      };
     });
 
     partnersArray.push({
