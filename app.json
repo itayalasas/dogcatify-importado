@@ -25,14 +25,7 @@
           "android": { "useNextNotificationsApi": true }
         }
       ],
-      "expo-updates",
-      [
-        "expo-datadog",
-        {
-          "iosDsyms": false,
-          "androidSourcemaps": false
-        }
-      ]
+      "expo-updates"
     ],
     "experiments": { "typedRoutes": true },
     "extra": {
