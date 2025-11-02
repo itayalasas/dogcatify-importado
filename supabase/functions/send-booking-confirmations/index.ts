@@ -36,11 +36,23 @@ Deno.serve(async (req: Request) => {
 
     const expectedSecret = Deno.env.get("CRON_SECRET") || "dogcatify-cron-2024-secure-key";
 
+    console.log("DEBUG - URL:", req.url);
+    console.log("DEBUG - Secret from query:", cronSecretFromQuery);
+    console.log("DEBUG - Secret from header:", cronSecretFromHeader);
+    console.log("DEBUG - Expected secret:", expectedSecret);
+    console.log("DEBUG - Received secret:", cronSecret);
+
     if (cronSecret !== expectedSecret) {
       return new Response(
         JSON.stringify({
           success: false,
           error: "Unauthorized: Invalid or missing cron secret",
+          debug: {
+            receivedFromQuery: cronSecretFromQuery,
+            receivedFromHeader: cronSecretFromHeader,
+            expectedLength: expectedSecret?.length,
+            receivedLength: cronSecret?.length,
+          }
         }),
         {
           status: 401,
