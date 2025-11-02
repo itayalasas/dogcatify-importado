@@ -28,8 +28,12 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Validar token secreto para llamadas de cron
-    const cronSecret = req.headers.get("X-Cron-Secret");
+    // Validar token secreto para llamadas de cron (desde URL query o header)
+    const url = new URL(req.url);
+    const cronSecretFromQuery = url.searchParams.get("secret");
+    const cronSecretFromHeader = req.headers.get("X-Cron-Secret");
+    const cronSecret = cronSecretFromQuery || cronSecretFromHeader;
+
     const expectedSecret = Deno.env.get("CRON_SECRET") || "dogcatify-cron-2024-secure-key";
 
     if (cronSecret !== expectedSecret) {
