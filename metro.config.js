@@ -1,6 +1,5 @@
 const path = require('path');
 const { getDefaultConfig } = require('expo/metro-config');
-const { withSentryConfig } = require('@sentry/react-native/metro');
 
 let config = getDefaultConfig(__dirname);
 
@@ -56,4 +55,4 @@ config.resolver.assetExts = [
   'json',
 ];
 
-module.exports = withSentryConfig(config);
+module.exports = config;
