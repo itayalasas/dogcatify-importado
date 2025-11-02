@@ -466,21 +466,23 @@ const calculateIVA = (cartItems: any[], partner: any): IVACalculation => {
   if (ivaIncluded) {
     // If IVA is included, we need to extract it from the price
     // Formula: subtotal = totalAmount / (1 + (ivaRate / 100))
-    totalAmount = itemsTotal;
-    subtotal = totalAmount / (1 + (ivaRate / 100));
+    totalAmount = Math.round(itemsTotal * 100) / 100;
+    subtotal = Math.round((totalAmount / (1 + (ivaRate / 100))) * 100) / 100;
+    // Calcular IVA como diferencia para asegurar que cuadre exacto
     ivaAmount = totalAmount - subtotal;
   } else {
     // If IVA is not included, we add it to the price
     // Formula: ivaAmount = subtotal * (ivaRate / 100)
-    subtotal = itemsTotal;
-    ivaAmount = subtotal * (ivaRate / 100);
+    subtotal = Math.round(itemsTotal * 100) / 100;
+    ivaAmount = Math.round((subtotal * (ivaRate / 100)) * 100) / 100;
+    // Calcular total como suma para asegurar que cuadre exacto
     totalAmount = subtotal + ivaAmount;
   }
 
   return {
-    subtotal: Math.round(subtotal * 100) / 100,
-    ivaAmount: Math.round(ivaAmount * 100) / 100,
-    totalAmount: Math.round(totalAmount * 100) / 100,
+    subtotal,
+    ivaAmount,
+    totalAmount,
     ivaRate,
     ivaIncluded
   };
@@ -542,19 +544,21 @@ export const createMultiPartnerOrder = async (
 
       if (ivaCalculation.ivaIncluded) {
         // IVA incluido: extraer del precio
-        itemSubtotal = itemIvaRate > 0 ? itemPrice / (1 + itemIvaRate / 100) : itemPrice;
-        itemIVA = itemPrice - itemSubtotal;
+        const itemPriceRounded = Math.round(itemPrice * 100) / 100;
+        itemSubtotal = itemIvaRate > 0 ? Math.round((itemPriceRounded / (1 + itemIvaRate / 100)) * 100) / 100 : itemPriceRounded;
+        // Calcular IVA como diferencia para que cuadre exacto
+        itemIVA = itemPriceRounded - itemSubtotal;
       } else {
         // IVA no incluido: sumar al precio
-        itemSubtotal = itemPrice;
-        itemIVA = itemIvaRate > 0 ? itemSubtotal * (itemIvaRate / 100) : 0;
+        itemSubtotal = Math.round(itemPrice * 100) / 100;
+        itemIVA = itemIvaRate > 0 ? Math.round((itemSubtotal * (itemIvaRate / 100)) * 100) / 100 : 0;
       }
 
       return {
         ...item,
-        subtotal: Math.round(itemSubtotal * 100) / 100,
+        subtotal: itemSubtotal,
         iva_rate: itemIvaRate,
-        iva_amount: Math.round(itemIVA * 100) / 100,
+        iva_amount: itemIVA,
         discount_percentage: item.discount_percentage ?? 0,
         original_price: item.original_price ?? item.price,
         currency: item.currency || 'UYU',
