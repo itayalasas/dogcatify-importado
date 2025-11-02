@@ -585,7 +585,7 @@ export const createMultiPartnerOrder = async (
       order_type: 'product_purchase',
       created_at: new Date().toISOString(),
       partner_breakdown: {
-        partners: cartItems.reduce((acc, item) => {
+        partners: itemsWithIVA.reduce((acc, item) => {
           if (!acc[item.partnerId]) {
             acc[item.partnerId] = {
               partner_id: item.partnerId,
@@ -599,12 +599,15 @@ export const createMultiPartnerOrder = async (
             name: item.name,
             price: item.price,
             quantity: item.quantity,
+            subtotal: item.subtotal,
+            iva_amount: item.iva_amount,
             total: item.price * item.quantity
           });
-          acc[item.partnerId].subtotal += item.price * item.quantity;
+          // Acumular subtotal SIN IVA para el partner
+          acc[item.partnerId].subtotal += item.subtotal;
           return acc;
         }, {}),
-        total_partners: [...new Set(cartItems.map(item => item.partnerId))].length,
+        total_partners: [...new Set(itemsWithIVA.map(item => item.partnerId))].length,
         commission_split: commissionAmount,
         shipping_cost: totalShippingCost,
         iva_rate: ivaCalculation.ivaRate,
