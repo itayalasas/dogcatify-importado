@@ -8,7 +8,6 @@ const https = require('https');
  * Uso:
  * node scripts/test-android-notifications.js <expo-push-token>
  */
-
 const token = process.argv[2];
 
 if (!token) {
@@ -18,7 +17,7 @@ if (!token) {
   process.exit(1);
 }
 
-if (!token.startsWith('ExponentPushToken[')) {
+if (!token.startsWith('ExponentPushToken[GmaZ8POLgyDoSH9O2tbukD]')) {
   console.error('❌ Error: El token debe empezar con "ExponentPushToken["');
   console.log('Token recibido:', token);
   process.exit(1);
