@@ -462,7 +462,14 @@ export default function AddVaccine() {
 
       try {
         // First try with real API if configured
-        extractedData = await extractMedicalRecordFromImage(imageUri, 'vaccine');
+        extractedData = await extractMedicalRecordFromImage(
+          imageUri,
+          'vaccine',
+          {
+            species: pet?.species,
+            name: pet?.name
+          }
+        );
       } catch (apiError) {
         console.log('API not available, using simulation:', apiError);
         // Fallback to simulation for demo
