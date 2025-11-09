@@ -110,10 +110,25 @@ const PromotionCard = memo(({ promotion, onPress, onLike }: PromotionCardProps) 
     </Card>
   );
 }, (prevProps, nextProps) => {
-  // Solo re-renderizar si cambian propiedades importantes
+  // Comparar propiedades importantes incluyendo likes
+  const prevLikes = prevProps.promotion.likes || [];
+  const nextLikes = nextProps.promotion.likes || [];
+
+  // Si los likes cambiaron, re-renderizar
+  if (prevLikes.length !== nextLikes.length) {
+    return false;
+  }
+
+  // Si el contenido de likes cambió, re-renderizar
+  const prevLikesSorted = JSON.stringify([...prevLikes].sort());
+  const nextLikesSorted = JSON.stringify([...nextLikes].sort());
+  if (prevLikesSorted !== nextLikesSorted) {
+    return false;
+  }
+
+  // Solo re-renderizar si cambian otras propiedades importantes
   return (
     prevProps.promotion.id === nextProps.promotion.id &&
-    prevProps.promotion.likes?.length === nextProps.promotion.likes?.length &&
     prevProps.promotion.title === nextProps.promotion.title &&
     prevProps.promotion.imageURL === nextProps.promotion.imageURL
   );
