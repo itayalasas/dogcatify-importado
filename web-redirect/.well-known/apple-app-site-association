@@ -1,0 +1,20 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAMID.com.dogcatify.app",
+        "paths": [
+          "/album/*",
+          "/post/*",
+          "/share/*"
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "TEAMID.com.dogcatify.app"
+    ]
+  }
+}
