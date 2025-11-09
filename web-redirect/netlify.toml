@@ -1,0 +1,43 @@
+# Configuración de Netlify para DogCatiFy Universal Links
+
+# Configuración de build (no necesitamos build para este sitio estático)
+[build]
+  publish = "."
+  command = "echo 'No build needed'"
+
+# Configuración de headers personalizados para archivos .well-known
+[[headers]]
+  for = "/.well-known/apple-app-site-association"
+  [headers.values]
+    Content-Type = "application/json"
+    Access-Control-Allow-Origin = "*"
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/.well-known/assetlinks.json"
+  [headers.values]
+    Content-Type = "application/json"
+    Access-Control-Allow-Origin = "*"
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# Redirecciones para URLs sin trailing slash
+[[redirects]]
+  from = "/album/:id"
+  to = "/index.html?type=album&id=:id"
+  status = 200
+
+[[redirects]]
+  from = "/post/:id"
+  to = "/index.html?type=post&id=:id"
+  status = 200
+
+[[redirects]]
+  from = "/share/*"
+  to = "/index.html"
+  status = 200
+
+# Fallback para todas las rutas no encontradas
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

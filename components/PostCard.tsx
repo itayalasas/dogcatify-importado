@@ -585,8 +585,8 @@ const PostCard: React.FC<PostCardProps> = ({
 
       // Create Universal Link (web URL que abre la app automáticamente)
       const webLink = isAlbum
-        ? `https://dogcatify.com/album/${post.album_id || post.id}`
-        : `https://dogcatify.com/post/${post.id}`;
+        ? `https://app-dogcatify.netlify.app/album/${post.album_id || post.id}`
+        : `https://app-dogcatify.netlify.app/post/${post.id}`;
 
       // Prepare share message with clickable universal link
       const shareMessage = isAlbum
