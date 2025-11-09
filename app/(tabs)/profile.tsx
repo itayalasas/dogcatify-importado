@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
 import { router } from 'expo-router';
-import Constants from 'expo-constants';
-import * as Device from 'expo-device';
 import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, Shield, CircleHelp as HelpCircle, Globe, Building, CreditCard, Fingerprint, ChevronRight, ArrowRight, Trash2, Crown } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -33,14 +31,8 @@ export default function Profile() {
   });
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
   const [userSubscription, setUserSubscription] = useState<any>(null);
-
-  // Computed values for notifications
-  const isExpoGo = Constants.appOwnership === 'expo';
-  const isPhysicalDevice = Device.isDevice;
-  const notificationsSupported = !isExpoGo && isPhysicalDevice;
 
   useEffect(() => {
     if (currentUser) {
@@ -338,17 +330,7 @@ export default function Profile() {
 
   const handleToggleNotifications = async () => {
     try {
-      if (!notificationsSupported) {
-        const message = isExpoGo
-          ? 'Las notificaciones push no están disponibles en Expo Go. Necesitas instalar una build de desarrollo o producción para usar esta función.'
-          : 'Las notificaciones push solo funcionan en dispositivos físicos, no en simuladores.';
-
-        Alert.alert('No disponible', message, [{ text: 'Entendido' }]);
-        return;
-      }
-
       if (notificationsEnabled) {
-        // Deshabilitar notificaciones
         Alert.alert(
           'Deshabilitar Notificaciones',
           '¿Estás seguro de que quieres deshabilitar las notificaciones push? Ya no recibirás actualizaciones sobre reservas, pedidos y mensajes.',
@@ -368,122 +350,10 @@ export default function Profile() {
             }
           ]
         );
-      } else {
-        // Habilitar notificaciones
-        Alert.alert(
-          'Habilitar Notificaciones',
-          '¿Quieres habilitar las notificaciones push para recibir actualizaciones importantes sobre reservas, pedidos y mensajes?',
-          [
-            { text: 'Cancelar', style: 'cancel' },
-            {
-              text: 'Habilitar',
-              onPress: () => enableNotifications()
-            }
-          ]
-        );
       }
     } catch (error) {
       console.error('Error in handleToggleNotifications:', error);
       Alert.alert('Error', 'Hubo un problema con la configuración de notificaciones');
-    }
-  };
-
-  const showNotificationDetails = () => {
-    Alert.alert(
-      '🔔 Detalles de Notificaciones',
-      `Estado: ✅ Activas\n\nTipo de notificaciones que recibirás:\n• Confirmaciones de reservas\n• Actualizaciones de pedidos\n• Mensajes de adopción\n• Recordatorios médicos\n• Ofertas especiales\n\nToken: ${expoPushToken?.substring(0, 30)}...`,
-      [
-        { text: 'Cerrar', style: 'cancel' },
-        { 
-          text: 'Probar Ahora', 
-          onPress: () => testPushNotification()
-        }
-      ]
-    );
-  };
-
-  const enableNotifications = async () => {
-    setNotificationsLoading(true);
-    try {
-      console.log('🔔 Attempting to enable notifications...');
-
-      const token = await registerForPushNotifications();
-
-      if (token) {
-        console.log('✅ Notifications enabled successfully');
-        Alert.alert(
-          '¡Notificaciones Habilitadas! 🎉',
-          'Las notificaciones push han sido configuradas correctamente.\n\nAhora recibirás actualizaciones sobre:\n• Reservas confirmadas\n• Pedidos actualizados\n• Mensajes de adopción\n• Recordatorios médicos\n• Ofertas especiales',
-          [{ text: 'Perfecto' }]
-        );
-      }
-    } catch (error: any) {
-      console.error('Error enabling notifications:', error);
-
-      let errorMessage = 'No se pudieron configurar las notificaciones.';
-      let suggestions = '\n\nPuedes intentar:\n• Verificar permisos en configuración\n• Reiniciar la app\n• Contactar soporte si persiste';
-
-      if (error.message) {
-        errorMessage = error.message;
-        suggestions = '';
-      }
-
-      Alert.alert(
-        'No se pudieron habilitar',
-        errorMessage + suggestions,
-        [{ text: 'Entendido' }]
-      );
-    } finally {
-      setNotificationsLoading(false);
-    }
-  };
-
-  const testPushNotification = async () => {
-    if (!expoPushToken) {
-      Alert.alert('Error', 'No hay token de notificación disponible');
-      return;
-    }
-
-    try {
-      console.log('=== TEST PUSH NOTIFICATION ===');
-      console.log('🧪 Testing push notification...');
-      console.log('📱 Token:', expoPushToken.substring(0, 30) + '...');
-      console.log('📱 Token length:', expoPushToken.length);
-      console.log('📱 Token format valid:', expoPushToken.startsWith('ExponentPushToken['));
-
-      // Send test notification using the utility function
-      const { NotificationService } = await import('../../utils/notifications');
-
-      console.log('📤 Calling sendPushNotification...');
-
-      const result = await NotificationService.sendPushNotification(
-        expoPushToken,
-        '🐾 Prueba DogCatiFy',
-        '¡Las notificaciones están funcionando perfectamente!',
-        {
-          type: 'test',
-          timestamp: new Date().toISOString()
-        }
-      );
-
-      console.log('✅ Push notification result:', result);
-      console.log('=== END TEST ===');
-
-      Alert.alert(
-        'Notificación Enviada 📤',
-        'Se envió una notificación de prueba a tu dispositivo. Deberías recibirla en unos segundos.\n\nSi no la recibes, verifica:\n• Permisos de notificación en configuración\n• Que la app no esté en "No molestar"\n• Tu conexión a internet',
-        [{ text: 'Perfecto' }]
-      );
-    } catch (error: any) {
-      console.error('❌ Error testing notification:', error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
-      console.log('=== END TEST (with error) ===');
-
-      Alert.alert(
-        'Error en la Prueba',
-        `No se pudo enviar la notificación de prueba.\n\nError: ${error.message || 'Desconocido'}\n\nVerifica tu conexión e intenta nuevamente.`,
-        [{ text: 'Entendido' }]
-      );
     }
   };
 
@@ -718,111 +588,6 @@ export default function Profile() {
 
         {/* Settings */}
         <Card style={styles.menuCard}>
-          {/* Notificaciones Push Card - Estilo consistente con Face ID */}
-          <View style={styles.notificationCard}>
-            <View style={styles.notificationHeader}>
-              <View style={styles.notificationIconContainer}>
-                <Bell size={24} color="#2D6A6F" />
-              </View>
-              <View style={styles.notificationInfo}>
-                <Text style={styles.notificationTitle}>Notificaciones Push v2</Text>
-                <Text style={styles.notificationDescription}>
-                  {notificationsEnabled
-                    ? '🔔 Habilita para recibir notificaciones'
-                    : notificationsSupported
-                    ? '🔔 Habilita para recibir notificaciones'
-                    : isExpoGo
-                    ? '❌ No disponible en Expo Go'
-                    : '❌ Dispositivo no compatible'}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[
-                  styles.notificationToggle,
-                  notificationsEnabled && styles.notificationToggleActive,
-                  !notificationsSupported && styles.notificationToggleDisabled
-                ]}
-                onPress={handleToggleNotifications}
-                disabled={notificationsLoading || !notificationsSupported}
-              >
-                <View style={[
-                  styles.notificationToggleHandle,
-                  notificationsEnabled && styles.notificationToggleHandleActive,
-                  notificationsLoading && styles.notificationToggleHandleLoading
-                ]} />
-              </TouchableOpacity>
-            </View>
-            
-            {notificationsEnabled ? (
-              <View style={styles.notificationStatus}>
-                <Text style={styles.statusTitle}>Estado de las notificaciones:</Text>
-                <Text style={styles.statusItem}>✅ Permisos concedidos</Text>
-                <Text style={styles.statusItem}>📱 Token configurado</Text>
-                <Text style={styles.statusItem}>🔔 Recibiendo notificaciones</Text>
-                <View style={styles.buttonRow}>
-                  <TouchableOpacity style={styles.testButton} onPress={testPushNotification}>
-                    <Text style={styles.testButtonText}>Probar notificación</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.testButton, styles.regenerateButton]}
-                    onPress={async () => {
-                      Alert.alert(
-                        'Regenerar Token',
-                        '¿Seguro que quieres regenerar tu token de notificaciones? Esto puede ayudar si las notificaciones no están llegando.',
-                        [
-                          { text: 'Cancelar', style: 'cancel' },
-                          {
-                            text: 'Regenerar',
-                            onPress: async () => {
-                              try {
-                                await disableNotifications();
-                                setTimeout(async () => {
-                                  await enableNotifications();
-                                }, 1000);
-                              } catch (error: any) {
-                                Alert.alert('Error', error.message || 'No se pudo regenerar el token');
-                              }
-                            }
-                          }
-                        ]
-                      );
-                    }}
-                  >
-                    <Text style={styles.testButtonText}>Regenerar Token</Text>
-                  </TouchableOpacity>
-                </View>
-                <Text style={styles.tokenInfo}>
-                  Token: {expoPushToken?.substring(0, 25)}...
-                </Text>
-              </View>
-            ) : !notificationsSupported ? (
-              <View style={styles.notificationBenefits}>
-                <Text style={styles.benefitsTitle}>Limitaciones:</Text>
-                <Text style={styles.benefitItem}>
-                  {isExpoGo ? 
-                    '• Expo Go no soporta notificaciones push' :
-                    '• Este dispositivo no soporta notificaciones'
-                  }
-                </Text>
-                <Text style={styles.benefitItem}>
-                  {isExpoGo ? 
-                    '• Necesitas una build nativa para usar esta función' :
-                    '• Usa un dispositivo físico para mejores resultados'
-                  }
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.notificationBenefits}>
-                <Text style={styles.benefitsTitle}>Beneficios:</Text>
-                <Text style={styles.benefitItem}>• Confirmaciones de reservas</Text>
-                <Text style={styles.benefitItem}>• Actualizaciones de pedidos</Text>
-                <Text style={styles.benefitItem}>• Mensajes de adopción</Text>
-                <Text style={styles.benefitItem}>• Recordatorios médicos</Text>
-                <Text style={styles.benefitItem}>• Ofertas especiales</Text>
-              </View>
-            )}
-          </View>
-
           {/* Biometric Authentication - Solo mostrar cuando está habilitada */}
           {isBiometricSupported && isBiometricEnabled && (
             <View style={styles.biometricCard}>
@@ -835,7 +600,7 @@ export default function Profile() {
                     Autenticación {biometricType || 'Biométrica'}
                   </Text>
                   <Text style={styles.biometricDescription}>
-                    🔓 Habilita para acceso instantáneo
+                    🔓 Habilitado para acceso instantáneo
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -859,6 +624,20 @@ export default function Profile() {
                 <Text style={styles.benefitItem}>• Credenciales protegidas en tu dispositivo</Text>
               </View>
             </View>
+          )}
+
+          {/* Notificaciones Push - Solo mostrar toggle para deshabilitarlas cuando están habilitadas */}
+          {notificationsEnabled && (
+            <TouchableOpacity style={styles.menuOption} onPress={handleToggleNotifications}>
+              <View style={styles.menuOptionLeft}>
+                <Bell size={20} color="#6B7280" />
+                <Text style={styles.menuOptionText}>Notificaciones Push</Text>
+              </View>
+              <View style={styles.toggleContainer}>
+                <Text style={styles.toggleStatus}>Habilitado</Text>
+                <ChevronRight size={16} color="#6B7280" />
+              </View>
+            </TouchableOpacity>
           )}
 
           <TouchableOpacity style={styles.menuOption} onPress={handleLanguageChange}>
@@ -1212,131 +991,15 @@ const styles = StyleSheet.create({
   dangerText: {
     color: '#EF4444',
   },
-  // Notification Card Styles (consistente con Face ID)
-  notificationCard: {
-    marginBottom: 16,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 16,
-    borderRadius: 12,
-  },
-  notificationHeader: {
+  toggleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
   },
-  notificationIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F0F9FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  notificationInfo: {
-    flex: 1,
-  },
-  notificationTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 2,
-  },
-  notificationDescription: {
+  toggleStatus: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  notificationToggle: {
-    width: 50,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#E5E7EB',
-    justifyContent: 'center',
-    padding: 2,
-  },
-  notificationToggleActive: {
-    backgroundColor: '#2D6A6F',
-  },
-  notificationToggleDisabled: {
-    backgroundColor: '#F3F4F6',
-    opacity: 0.5,
-  },
-  notificationToggleHandle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  notificationToggleHandleActive: {
-    transform: [{ translateX: 20 }],
-  },
-  notificationToggleHandleLoading: {
-    opacity: 0.7,
-  },
-  notificationStatus: {
-    backgroundColor: '#F0FDF4',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-  },
-  notificationBenefits: {
-    backgroundColor: '#F0F9FF',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-  },
-  statusTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#166534',
-    marginBottom: 8,
-  },
-  statusItem: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#166534',
-    marginBottom: 4,
-    lineHeight: 18,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
-    flexWrap: 'wrap',
-  },
-  testButton: {
-    backgroundColor: '#2D6A6F',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-    flex: 1,
-    minWidth: 120,
-  },
-  regenerateButton: {
-    backgroundColor: '#059669',
-  },
-  testButtonText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    textAlign: 'center',
-  },
-  tokenInfo: {
-    fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    color: '#166534',
-    marginTop: 8,
-    fontStyle: 'italic',
+    fontFamily: 'Inter-Medium',
+    color: '#059669',
+    marginRight: 8,
   },
   benefitsTitle: {
     fontSize: 14,
