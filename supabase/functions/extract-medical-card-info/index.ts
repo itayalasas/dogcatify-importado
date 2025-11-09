@@ -97,10 +97,29 @@ IMPORTANTE:
 - Si no puedes leer algo con claridad, déjalo vacío en ese registro específico
 - Si el veterinario o clínica son los mismos para todas, repite la información en cada registro
 
-VALIDACIÓN DE ESPECIE:
-- Analiza el carnet e identifica si las vacunas son para PERRO o GATO
-- Busca indicadores como: nombres de vacunas específicas (DHPP es para perros, FVRCP es para gatos), etiquetas, logos
-- La mascota es un ${speciesText}, así que las vacunas DEBEN ser apropiadas para esta especie
+VALIDACIÓN CRÍTICA DE ESPECIE:
+La mascota es un ${speciesText.toUpperCase()}. Debes identificar si este carnet es para esta especie.
+
+Vacunas EXCLUSIVAS de PERROS:
+- DHPP, DHLPP, DA2PP (Distemper, Hepatitis, Parvovirus, Parainfluenza)
+- Quíntuple canina, Séxtuple canina, Óctuple canina
+- Rabia canina
+- Bordetella (Tos de las perreras)
+- Leptospirosis
+- Coronavirus canino
+
+Vacunas EXCLUSIVAS de GATOS:
+- FVRCP, FVRCPP (Rinotraqueitis, Calicivirus, Panleucopenia felina)
+- Triple Felina, Cuádruple Felina
+- Leucemia Felina (FeLV)
+- Rabia felina
+- FIV (Inmunodeficiencia Felina)
+- Clamidiosis felina
+
+**IMPORTANTE**:
+- Si detectas vacunas de PERRO y la mascota es GATO → detectedSpecies: "dog"
+- Si detectas vacunas de GATO y la mascota es PERRO → detectedSpecies: "cat"
+- Si las vacunas NO coinciden con la especie esperada, IGUAL extrae los datos pero marca la especie detectada correctamente
 
 Responde ÚNICAMENTE en formato JSON válido:
 {
@@ -144,10 +163,29 @@ IMPORTANTE:
 - Si no puedes leer algo con claridad, déjalo vacío en ese registro específico
 - Si el veterinario o clínica son los mismos para todas, repite la información en cada registro
 
-VALIDACIÓN DE ESPECIE:
-- Analiza el registro e identifica si los productos son para PERRO o GATO
-- Busca indicadores como: nombres de productos específicos, dosis, presentación, etiquetas
-- La mascota es un ${speciesText}, así que los productos DEBEN ser apropiados para esta especie
+VALIDACIÓN CRÍTICA DE ESPECIE:
+La mascota es un ${speciesText.toUpperCase()}. Debes identificar si este registro es para esta especie.
+
+Productos comunes de PERROS:
+- Drontal Plus (perros)
+- Bravecto (perros)
+- NexGard (perros)
+- Simparica (perros)
+- Advocate (perros)
+- Dosis por peso: >5kg, >10kg, >20kg (típico de perros)
+
+Productos comunes de GATOS:
+- Milbemax (gatos)
+- Profender (gatos)
+- Drontal (gatos)
+- Broadline (gatos)
+- Advocate (gatos)
+- Dosis pequeñas: <2kg, 2-4kg, 4-8kg (típico de gatos)
+
+**IMPORTANTE**:
+- Si detectas productos de PERRO y la mascota es GATO → detectedSpecies: "dog"
+- Si detectas productos de GATO y la mascota es PERRO → detectedSpecies: "cat"
+- Si los productos NO coinciden con la especie esperada, IGUAL extrae los datos pero marca la especie detectada correctamente
 
 Responde ÚNICAMENTE en formato JSON válido:
 {
@@ -181,7 +219,7 @@ Si no encuentras ninguna desparasitación, retorna un array vacío con "totalFou
         messages: [
           {
             role: 'system',
-            content: `Eres un veterinario experto especializado en leer y analizar carnets de ${recordTypeText} de mascotas. Tu trabajo es extraer información precisa de las imágenes. Siempre respondes en español y en formato JSON válido.`
+            content: `Eres un veterinario experto especializado en leer y analizar carnets de ${recordTypeText} de mascotas. Tu trabajo es extraer información precisa de las imágenes y VALIDAR que el carnet corresponda a la especie correcta. Siempre respondes en español y en formato JSON válido.`
           },
           {
             role: 'user',
@@ -200,7 +238,7 @@ Si no encuentras ninguna desparasitación, retorna un array vacío con "totalFou
             ]
           }
         ],
-        temperature: 0.2,
+        temperature: 0.1,
         max_tokens: 2000,
       }),
     });
