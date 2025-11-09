@@ -8,6 +8,7 @@ import { LoadingScreen } from '../../components/ui/LoadingScreen';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
+import { getActivePromotionForItem, incrementPromotionClicks } from '@/utils/promotions';
 
 const { width } = Dimensions.get('window');
 
@@ -35,6 +36,7 @@ export default function ServiceDetail() {
   const [selectedPet, setSelectedPet] = useState<string | null>(null);
   const [loadingPets, setLoadingPets] = useState(false);
   const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
+  const [activePromotion, setActivePromotion] = useState<any>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [boardingCategories, setBoardingCategories] = useState<any[]>([]);
   const [categoryAvailability, setCategoryAvailability] = useState<{ [key: string]: number }>({});
@@ -76,14 +78,30 @@ export default function ServiceDetail() {
   useEffect(() => {
     fetchServiceDetails();
 
-    // Apply discount from promotion if provided
+    // Apply discount from promotion if provided (desde feed/inicio)
     if (discount) {
       const discountValue = parseFloat(discount);
       if (!isNaN(discountValue) && discountValue > 0 && discountValue <= 100) {
         setAppliedDiscount(discountValue);
       }
+    } else {
+      // Si no viene discount, buscar promoción activa
+      loadActivePromotion();
     }
   }, [id, discount]);
+
+  const loadActivePromotion = async () => {
+    try {
+      const promotion = await getActivePromotionForItem(id, 'service');
+      if (promotion) {
+        setActivePromotion(promotion);
+        setAppliedDiscount(promotion.discount_percentage);
+        console.log(`✨ Active promotion found for service: ${promotion.discount_percentage}% discount`);
+      }
+    } catch (error) {
+      console.error('Error loading active promotion:', error);
+    }
+  };
 
   // Fetch pets when service is loaded (to apply pet type filter)
   useEffect(() => {
@@ -332,6 +350,12 @@ export default function ServiceDetail() {
     if (boardingCategories.length > 0 && !selectedCategory) {
       Alert.alert('Selecciona una categoría', 'Por favor selecciona el tipo de hospedaje antes de continuar');
       return;
+    }
+
+    // Si tiene promoción activa, registrar click para facturación
+    if (activePromotion) {
+      incrementPromotionClicks(activePromotion.id);
+      console.log(`📊 Incremented promotion click for service booking: ${service?.name}`);
     }
 
     setShowBookingModal(true);

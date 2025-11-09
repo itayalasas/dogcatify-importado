@@ -8,6 +8,7 @@ import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { useCart } from '@/contexts/CartContext';
+import { getActivePromotionForItem, incrementPromotionClicks } from '@/utils/promotions';
 
 export default function ProductDetail() {
   const { id, discount } = useLocalSearchParams<{ id: string; discount?: string }>();
@@ -22,6 +23,7 @@ export default function ProductDetail() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
+  const [activePromotion, setActivePromotion] = useState<any>(null);
 
   const cartCount = getCartCount();
 
@@ -29,14 +31,30 @@ export default function ProductDetail() {
     fetchProductDetails();
     checkIfFavorite();
 
-    // Apply discount from promotion if provided
+    // Apply discount from promotion if provided (desde feed/inicio)
     if (discount) {
       const discountValue = parseFloat(discount);
       if (!isNaN(discountValue) && discountValue > 0 && discountValue <= 100) {
         setAppliedDiscount(discountValue);
       }
+    } else {
+      // Si no viene discount, buscar promoción activa
+      loadActivePromotion();
     }
   }, [id, discount]);
+
+  const loadActivePromotion = async () => {
+    try {
+      const promotion = await getActivePromotionForItem(id, 'product');
+      if (promotion) {
+        setActivePromotion(promotion);
+        setAppliedDiscount(promotion.discount_percentage);
+        console.log(`✨ Active promotion found for product: ${promotion.discount_percentage}% discount`);
+      }
+    } catch (error) {
+      console.error('Error loading active promotion:', error);
+    }
+  };
 
   const checkIfFavorite = async () => {
     if (!currentUser) return;
@@ -157,6 +175,12 @@ export default function ProductDetail() {
     const finalPrice = appliedDiscount > 0
       ? product.price * (1 - appliedDiscount / 100)
       : product.price;
+
+    // Si tiene promoción activa, registrar click para facturación
+    if (activePromotion) {
+      incrementPromotionClicks(activePromotion.id);
+      console.log(`📊 Incremented promotion click for product detail: ${product.name}`);
+    }
 
     addToCart({
       id: product.id,

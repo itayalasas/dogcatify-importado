@@ -63,14 +63,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, onAd
 
           {/* Mostrar descuento si existe */}
           {product.hasDiscount && product.originalPrice && product.discountedPrice ? (
-            <View style={styles.priceContainer}>
+            <View style={styles.priceSection}>
+              <View style={styles.priceRow}>
+                <Text style={styles.discountedPrice}>{formatPrice(product.discountedPrice)}</Text>
+                {product.activePromotion?.discount_percentage > 0 && (
+                  <View style={styles.discountBadge}>
+                    <Text style={styles.discountBadgeText}>-{product.activePromotion.discount_percentage}%</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.originalPrice}>{formatPrice(product.originalPrice)}</Text>
-              <Text style={styles.discountedPrice}>{formatPrice(product.discountedPrice)}</Text>
-              {product.activePromotion?.discount_percentage > 0 && (
-                <View style={styles.discountBadge}>
-                  <Text style={styles.discountBadgeText}>-{product.activePromotion.discount_percentage}%</Text>
-                </View>
-              )}
             </View>
           ) : (
             <Text style={styles.productPrice}>{formatPrice(product.price)}</Text>
@@ -156,28 +158,30 @@ const styles = StyleSheet.create({
     color: '#10B981',
     marginBottom: 8,
   },
-  priceContainer: {
+  priceSection: {
+    marginBottom: 8,
+  },
+  priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
-    flexWrap: 'wrap',
     gap: 6,
-  },
-  originalPrice: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    textDecorationLine: 'line-through',
+    marginBottom: 2,
   },
   discountedPrice: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
     color: '#EF4444',
   },
+  originalPrice: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
+  },
   discountBadge: {
     backgroundColor: '#FEE2E2',
     paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 6,
   },
   discountBadgeText: {
