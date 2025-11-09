@@ -1,0 +1,10 @@
+# Netlify redirects para DogCatiFy Universal Links
+# Esto asegura que todas las rutas sean manejadas por index.html
+
+# Redirecciones específicas para las rutas de la app
+/album/*  /index.html  200
+/post/*   /index.html  200
+/share/*  /index.html  200
+
+# Fallback para cualquier otra ruta
+/*        /index.html  200
