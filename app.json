@@ -41,9 +41,7 @@
       "bundleIdentifier": "com.dogcatify.app",
       "buildNumber": "15",
       "associatedDomains": [
-        "applinks:dogcatify.com",
-        "applinks:www.dogcatify.com",
-        "applinks:share.dogcatify.com"
+        "applinks:app-dogcatify.netlify.app"
       ],
       "infoPlist": {
         "NSCameraUsageDescription": "Esta aplicación necesita acceso a la cámara para tomar fotos de mascotas.",
@@ -80,10 +78,9 @@
           "autoVerify": true,
           "data": [
             { "scheme": "dogcatify", "host": "*" },
-            { "scheme": "https", "host": "dogcatify.com", "pathPrefix": "/album" },
-            { "scheme": "https", "host": "dogcatify.com", "pathPrefix": "/post" },
-            { "scheme": "https", "host": "dogcatify.com", "pathPrefix": "/share" },
-            { "scheme": "https", "host": "share.dogcatify.com" }
+            { "scheme": "https", "host": "app-dogcatify.netlify.app", "pathPrefix": "/album" },
+            { "scheme": "https", "host": "app-dogcatify.netlify.app", "pathPrefix": "/post" },
+            { "scheme": "https", "host": "app-dogcatify.netlify.app", "pathPrefix": "/share" }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
         }
