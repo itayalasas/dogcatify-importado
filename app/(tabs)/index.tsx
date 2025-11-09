@@ -154,8 +154,12 @@ const PromotionWrapper = React.memo(({ promotion, onPress, onLike }: { promotion
     />
   );
 }, (prevProps, nextProps) => {
-  // Solo comparar el ID - ignorar cambios en views y likes para evitar re-renders
-  return prevProps.promotion.id === nextProps.promotion.id;
+  // Comparar ID y likes para que se actualice cuando cambian los likes
+  const prevLikes = prevProps.promotion.likes || [];
+  const nextLikes = nextProps.promotion.likes || [];
+  return prevProps.promotion.id === nextProps.promotion.id &&
+         prevLikes.length === nextLikes.length &&
+         JSON.stringify(prevLikes.sort()) === JSON.stringify(nextLikes.sort());
 });
 
 export default function Home() {
@@ -502,70 +506,80 @@ export default function Home() {
   };
 
   const handlePromotionLike = async (promotionId: string) => {
+    console.log('=== PROMOTION LIKE START ===');
+    console.log('Promotion ID:', promotionId);
+    console.log('User ID:', currentUser?.id);
+
     if (!currentUser) {
       Alert.alert('Error', 'Debes iniciar sesión para dar me gusta');
       return;
     }
 
-    // Optimistic update for promotions too
-    setPromotions(prevPromotions => 
-      prevPromotions.map(promo => {
-        if (promo.id === promotionId) {
-          const likes = promo.likes || [];
-          const isLiked = likes.includes(currentUser.id);
-          const newLikes = isLiked
-            ? likes.filter((id: string) => id !== currentUser.id)
-            : [...likes, currentUser.id];
-          return { ...promo, likes: newLikes };
-        }
-        return promo;
-      })
-    );
-
     try {
-      // Get fresh data from database
+      // Get fresh data from database first
       const { data: promotionData, error: fetchError } = await supabaseClient
         .from('promotions')
         .select('likes')
         .eq('id', promotionId)
         .single();
-      
-      if (fetchError) throw fetchError;
-      
+
+      if (fetchError) {
+        console.error('Error fetching promotion:', fetchError);
+        throw fetchError;
+      }
+
+      console.log('Current likes from DB:', promotionData.likes);
+
       const likes = promotionData.likes || [];
       const isLiked = likes.includes(currentUser.id);
-      
+
+      console.log('Is currently liked:', isLiked);
+
       const newLikes = isLiked
         ? likes.filter((id: string) => id !== currentUser.id)
         : [...likes, currentUser.id];
-      
-      // Update database first
+
+      console.log('New likes array:', newLikes);
+
+      // Update database
       const { error } = await supabaseClient
         .from('promotions')
         .update({ likes: newLikes })
         .eq('id', promotionId);
-      
+
       if (error) {
-        // Revert optimistic update on error
-        setPromotions(prevPromotions => 
-          prevPromotions.map(promo => 
-            promo.id === promotionId 
-              ? { ...promo, likes: promotionData.likes }
-              : promo
-          )
-        );
+        console.error('Error updating promotion likes:', error);
         throw error;
       }
-      
-      // Also update feedItems state
-      setFeedItems(prevItems => 
-        prevItems.map(item => 
-          item.type === 'promotion' && item.data.id === promotionId
-            ? { ...item, data: { ...item.data, likes: newLikes } }
-            : item
-        )
+
+      console.log('Database updated successfully');
+
+      // Update local state
+      setPromotions(prevPromotions =>
+        prevPromotions.map(promo => {
+          if (promo.id === promotionId) {
+            console.log('Updating promotion in state:', promo.id);
+            return { ...promo, likes: newLikes };
+          }
+          return promo;
+        })
       );
+
+      // Also update feedItems state
+      setFeedItems(prevItems =>
+        prevItems.map(item => {
+          if (item.type === 'promotion' && item.data.id === promotionId) {
+            console.log('Updating promotion in feedItems:', item.data.id);
+            return { ...item, data: { ...item.data, likes: newLikes } };
+          }
+          return item;
+        })
+      );
+
+      console.log('=== PROMOTION LIKE END SUCCESS ===');
     } catch (error) {
+      console.error('=== PROMOTION LIKE END ERROR ===');
+      console.error('Error details:', error);
       Alert.alert('Error', 'No se pudo actualizar el me gusta. Intenta nuevamente.');
     }
   };
