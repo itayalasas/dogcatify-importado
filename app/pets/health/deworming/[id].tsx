@@ -503,7 +503,14 @@ export default function AddDeworming() {
 
       try {
         // First try with real API if configured
-        extractedData = await extractMedicalRecordFromImage(imageUri, 'deworming');
+        extractedData = await extractMedicalRecordFromImage(
+          imageUri,
+          'deworming',
+          {
+            species: pet?.species,
+            name: pet?.name
+          }
+        );
       } catch (apiError) {
         console.log('API not available, using simulation:', apiError);
         // Fallback to simulation for demo

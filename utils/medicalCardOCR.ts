@@ -10,16 +10,22 @@ export interface ExtractedMedicalRecord {
   applicationDate?: string;
   nextDueDate?: string;
   veterinarian?: string;
+  clinic?: string;
+  batchNumber?: string;
   notes?: string;
+  confidence?: 'high' | 'medium' | 'low';
 }
 
 /**
- * Process a vaccination or deworming card image and extract information using AI
- * This uses Google Cloud Vision API or a similar service
+ * Process a vaccination or deworming card image and extract information using OpenAI Vision
  */
 export const extractMedicalRecordFromImage = async (
   imageUri: string,
-  recordType: 'vaccine' | 'deworming'
+  recordType: 'vaccine' | 'deworming',
+  petInfo?: {
+    species?: 'dog' | 'cat';
+    name?: string;
+  }
 ): Promise<ExtractedMedicalRecord> => {
   try {
     console.log(`Processing ${recordType} card image:`, imageUri);
@@ -29,134 +35,52 @@ export const extractMedicalRecordFromImage = async (
       encoding: FileSystem.EncodingType.Base64,
     });
 
-    // TODO: Replace with actual API endpoint
-    // This should call Google Cloud Vision API, AWS Textract, or similar service
-    const apiEndpoint = process.env.EXPO_PUBLIC_VISION_API_ENDPOINT;
-    const apiKey = process.env.EXPO_PUBLIC_VISION_API_KEY;
+    // Get Supabase URL and anon key from environment
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-    if (!apiEndpoint || !apiKey) {
-      throw new Error('Vision API not configured. Please set up environment variables.');
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error('Supabase configuration not found');
     }
 
-    // Make API request to extract text
-    const response = await fetch(apiEndpoint, {
+    // Call our Edge Function
+    const functionUrl = `${supabaseUrl}/functions/v1/extract-medical-card-info`;
+
+    console.log('Calling Edge Function:', functionUrl);
+
+    const response = await fetch(functionUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${supabaseAnonKey}`,
       },
       body: JSON.stringify({
-        requests: [{
-          image: {
-            content: base64Image,
-          },
-          features: [
-            {
-              type: 'TEXT_DETECTION',
-              maxResults: 50,
-            },
-            {
-              type: 'DOCUMENT_TEXT_DETECTION',
-              maxResults: 50,
-            },
-          ],
-        }],
+        imageBase64: base64Image,
+        recordType,
+        petSpecies: petInfo?.species,
+        petName: petInfo?.name,
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`Vision API error: ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('Edge Function error:', errorText);
+      throw new Error(`Edge Function error: ${response.statusText}`);
     }
 
     const result = await response.json();
-    const textAnnotations = result.responses[0]?.textAnnotations || [];
-    const fullText = textAnnotations[0]?.description || '';
 
-    console.log('Extracted text:', fullText);
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to extract information');
+    }
 
-    // Parse the extracted text to find medical record information
-    const extractedData = parseExtractedText(fullText, recordType);
+    console.log('Extracted data:', result.data);
 
-    return extractedData;
+    return result.data as ExtractedMedicalRecord;
   } catch (error) {
     console.error('Error extracting medical record from image:', error);
     throw error;
   }
-};
-
-/**
- * Parse extracted text to find medical record information
- */
-const parseExtractedText = (
-  text: string,
-  recordType: 'vaccine' | 'deworming'
-): ExtractedMedicalRecord => {
-  const result: ExtractedMedicalRecord = { type: recordType };
-
-  // Common Spanish keywords for medical records
-  const vaccineKeywords = [
-    'rabia', 'dhpp', 'parvo', 'moquillo', 'hepatitis', 'leptospirosis',
-    'bordetella', 'leucemia', 'rinotraqueitis', 'calicivirus', 'panleucopenia',
-    'quintuple', 'sextuple', 'triple', 'vacuna', 'vacunacion'
-  ];
-
-  const dewormingKeywords = [
-    'desparasitante', 'antiparasitario', 'parasitos', 'gusanos',
-    'drontal', 'milbemax', 'panacur', 'advocate', 'revolution',
-    'heartgard', 'nexgard', 'bravecto', 'simparica'
-  ];
-
-  const dateRegex = /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/g;
-  const vetRegex = /(?:vet(?:erinario)?|dr|dra|doctor|doctora)[:\s]*([a-zA-ZáéíóúñÁÉÍÓÚÑ\s]+)/i;
-
-  // Extract dates
-  const dates = [];
-  let dateMatch;
-  while ((dateMatch = dateRegex.exec(text)) !== null) {
-    const day = dateMatch[1].padStart(2, '0');
-    const month = dateMatch[2].padStart(2, '0');
-    let year = dateMatch[3];
-
-    // Handle 2-digit years
-    if (year.length === 2) {
-      year = parseInt(year) > 50 ? `19${year}` : `20${year}`;
-    }
-
-    dates.push(`${day}/${month}/${year}`);
-  }
-
-  if (dates.length > 0) {
-    result.applicationDate = dates[0];
-    if (dates.length > 1) {
-      result.nextDueDate = dates[1];
-    }
-  }
-
-  // Extract veterinarian name
-  const vetMatch = text.match(vetRegex);
-  if (vetMatch && vetMatch[1]) {
-    result.veterinarian = vetMatch[1].trim();
-  }
-
-  // Extract vaccine or deworming product name
-  const textLower = text.toLowerCase();
-  const keywords = recordType === 'vaccine' ? vaccineKeywords : dewormingKeywords;
-
-  for (const keyword of keywords) {
-    if (textLower.includes(keyword)) {
-      if (recordType === 'vaccine') {
-        result.name = keyword.charAt(0).toUpperCase() + keyword.slice(1);
-      } else {
-        result.productName = keyword.charAt(0).toUpperCase() + keyword.slice(1);
-      }
-      break;
-    }
-  }
-
-  // Store full text as notes for reference
-  result.notes = text.substring(0, 200);
-
-  return result;
 };
 
 /**
@@ -168,7 +92,10 @@ export const simulateOCRExtraction = async (
   // Simulate API delay
   await new Promise(resolve => setTimeout(resolve, 2000));
 
-  const result: ExtractedMedicalRecord = { type: recordType };
+  const result: ExtractedMedicalRecord = {
+    type: recordType,
+    confidence: 'medium'
+  };
 
   // Generate sample data
   const today = new Date();
@@ -181,13 +108,15 @@ export const simulateOCRExtraction = async (
   result.applicationDate = formatDate(applicationDate);
   result.nextDueDate = formatDate(nextDate);
   result.veterinarian = 'Dr. García';
+  result.clinic = 'Clínica Veterinaria San Martín';
 
   if (recordType === 'vaccine') {
     result.name = 'DHPP (Quíntuple)';
+    result.batchNumber = 'VAC2024-001';
     result.notes = 'Vacuna aplicada sin reacciones adversas';
   } else {
     result.productName = 'Drontal Plus';
-    result.notes = 'Desparasitación interna completa';
+    result.notes = 'Desparasitación interna completa. Parásitos: Lombrices intestinales';
   }
 
   return result;
