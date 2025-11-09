@@ -82,7 +82,16 @@ Para cada vacuna encontrada, busca:
 
 1. **Nombre de la vacuna** (ej: "DHPP", "Rabia", "Quíntuple", "Triple Felina", "FVRCP", etc.)
 2. **Fecha de aplicación** (formato DD/MM/YYYY preferiblemente)
-3. **Próxima dosis/refuerzo** (fecha cuando debe aplicarse la siguiente dosis)
+3. **PRÓXIMA DOSIS/REFUERZO** - MUY IMPORTANTE:
+   - Busca INTENSAMENTE en el carnet: "próxima dosis", "refuerzo", "revacunación", "next dose", fecha futura
+   - Busca columnas como "Próx. Dosis", "Refuerzo", "Vencimiento"
+   - Puede estar escrita a mano o impresa
+   - Si NO encuentras la fecha en el carnet, CALCULA la próxima dosis basándote en intervalos estándar:
+     * Vacunas de cachorro/gatito (< 4 meses): +21 días (3 semanas)
+     * Primer refuerzo anual: +1 año desde aplicación
+     * Vacunas anuales (Rabia, DHPP, FVRCP): +1 año
+     * Si la vacuna ya tiene más de 10 meses desde aplicación: calcular +1 año desde aplicación
+   - NUNCA dejes este campo vacío, siempre debe tener una fecha estimada
 4. **Nombre del veterinario** (Dr./Dra. + nombre)
 5. **Clínica veterinaria** (nombre del establecimiento)
 6. **Número de lote** de la vacuna si está visible
@@ -93,8 +102,8 @@ IMPORTANTE:
 - Cada vacuna debe ser un objeto separado en el array
 - Las fechas deben estar en formato DD/MM/YYYY (ej: "15/03/2024")
 - Si una fecha tiene 2 dígitos de año, asume 2000+ (ej: "15/03/24" → "15/03/2024")
-- Busca variaciones como "próxima dosis", "refuerzo", "next dose", "revacunación"
-- Si no puedes leer algo con claridad, déjalo vacío en ese registro específico
+- **CRÍTICO**: El campo nextDueDate NUNCA puede estar vacío. Si no está en el carnet, DEBES calcularlo
+- Si no puedes leer algo con claridad (excepto nextDueDate), déjalo vacío en ese registro específico
 - Si el veterinario o clínica son los mismos para todas, repite la información en cada registro
 
 VALIDACIÓN CRÍTICA DE ESPECIE:
@@ -219,7 +228,7 @@ Si no encuentras ninguna desparasitación, retorna un array vacío con "totalFou
         messages: [
           {
             role: 'system',
-            content: `Eres un veterinario experto especializado en leer y analizar carnets de ${recordTypeText} de mascotas. Tu trabajo es extraer información precisa de las imágenes y VALIDAR que el carnet corresponda a la especie correcta. Siempre respondes en español y en formato JSON válido.`
+            content: `Eres un veterinario experto especializado en leer y analizar carnets de ${recordTypeText} de mascotas. Tu trabajo es extraer información precisa de las imágenes y VALIDAR que el carnet corresponda a la especie correcta. IMPORTANTE: El campo nextDueDate es OBLIGATORIO y NUNCA debe estar vacío - si no está visible en el carnet, debes calcularlo basándote en los intervalos estándar de vacunación. Siempre respondes en español y en formato JSON válido.`
           },
           {
             role: 'user',
