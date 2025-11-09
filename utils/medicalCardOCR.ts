@@ -33,36 +33,41 @@ export const extractMedicalRecordsFromImage = async (
   petInfo?: {
     species?: 'dog' | 'cat';
     name?: string;
-  }
+  },
+  base64Data?: string
 ): Promise<ExtractedMedicalRecords> => {
   try {
     console.log(`Processing ${recordType} card image:`, imageUri);
 
-    if (!imageUri) {
+    if (!imageUri && !base64Data) {
       throw new Error('No se proporcionó una imagen válida');
     }
 
-    // Validate FileSystem module
-    if (!FileSystem || !FileSystem.EncodingType) {
-      throw new Error('Módulo FileSystem no disponible');
-    }
-
-    console.log('Reading image as base64...');
-    console.log('FileSystem available:', !!FileSystem);
-    console.log('FileSystem.EncodingType available:', !!FileSystem?.EncodingType);
-    console.log('FileSystem.EncodingType.Base64:', FileSystem?.EncodingType?.Base64);
-
     // Convert image to base64
     let base64Image: string;
-    try {
-      base64Image = await FileSystem.readAsStringAsync(imageUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      console.log('Image converted to base64, length:', base64Image?.length || 0);
-    } catch (readError: any) {
-      console.error('Error reading image file:', readError);
-      console.error('Error details:', JSON.stringify(readError, null, 2));
-      throw new Error(`No se pudo leer la imagen: ${readError.message || 'Error desconocido'}`);
+
+    if (base64Data) {
+      // Use the provided base64 data directly
+      console.log('Using provided base64 data, length:', base64Data.length);
+      base64Image = base64Data;
+    } else {
+      // Fallback to FileSystem if no base64 provided
+      console.log('Reading image as base64 using FileSystem...');
+
+      // Validate FileSystem module
+      if (!FileSystem || !FileSystem.EncodingType) {
+        throw new Error('Módulo FileSystem no disponible y no se proporcionó base64');
+      }
+
+      try {
+        base64Image = await FileSystem.readAsStringAsync(imageUri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        console.log('Image converted to base64, length:', base64Image?.length || 0);
+      } catch (readError: any) {
+        console.error('Error reading image file:', readError);
+        throw new Error(`No se pudo leer la imagen: ${readError.message || 'Error desconocido'}`);
+      }
     }
 
     if (!base64Image || base64Image.length === 0) {

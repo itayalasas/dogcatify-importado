@@ -391,11 +391,12 @@ export default function PetDetail() {
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         quality: 0.8,
+        base64: true,
       });
 
       if (!result.canceled && result.assets[0]) {
         setShowScanOptionsModal(false);
-        await processMedicalCard(result.assets[0].uri);
+        await processMedicalCard(result.assets[0].uri, result.assets[0].base64);
       }
     } catch (error) {
       console.error('Error taking photo:', error);
@@ -416,11 +417,12 @@ export default function PetDetail() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         quality: 0.8,
+        base64: true,
       });
 
       if (!result.canceled && result.assets[0]) {
         setShowScanOptionsModal(false);
-        await processMedicalCard(result.assets[0].uri);
+        await processMedicalCard(result.assets[0].uri, result.assets[0].base64);
       }
     } catch (error) {
       console.error('Error selecting photo:', error);
@@ -428,7 +430,7 @@ export default function PetDetail() {
     }
   };
 
-  const processMedicalCard = async (imageUri: string) => {
+  const processMedicalCard = async (imageUri: string, base64Data?: string) => {
     if (!scanRecordType) {
       Alert.alert('Error', 'No se especificó el tipo de registro');
       return;
@@ -444,7 +446,8 @@ export default function PetDetail() {
         {
           species: pet?.species,
           name: pet?.name
-        }
+        },
+        base64Data
       );
 
       console.log('Result from extraction:', result);
