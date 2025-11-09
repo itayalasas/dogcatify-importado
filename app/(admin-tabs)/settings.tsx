@@ -44,6 +44,7 @@ export default function AdminSettings() {
   const [broadcastTitle, setBroadcastTitle] = useState('');
   const [broadcastLoading, setBroadcastLoading] = useState(false);
   const [broadcastProgress, setBroadcastProgress] = useState({ sent: 0, total: 0 });
+  const [batchSize, setBatchSize] = useState('20');
 
   useEffect(() => {
     if (currentUser?.email === 'admin@dogcatify.com') {
@@ -510,6 +511,12 @@ export default function AdminSettings() {
       return;
     }
 
+    const batchSizeNum = parseInt(batchSize);
+    if (isNaN(batchSizeNum) || batchSizeNum < 1 || batchSizeNum > 100) {
+      Alert.alert('Error', 'El tamaño del lote debe ser un número entre 1 y 100');
+      return;
+    }
+
     setBroadcastLoading(true);
     setBroadcastProgress({ sent: 0, total: 0 });
 
@@ -532,13 +539,13 @@ export default function AdminSettings() {
 
       Alert.alert(
         'Confirmar envío',
-        `Se enviarán notificaciones a ${totalUsers} usuarios en lotes de 20.\n\n¿Continuar?`,
+        `Se enviarán notificaciones a ${totalUsers} usuarios en lotes de ${batchSizeNum}.\n\n¿Continuar?`,
         [
           { text: 'Cancelar', style: 'cancel', onPress: () => setBroadcastLoading(false) },
           {
             text: 'Enviar',
             onPress: async () => {
-              const BATCH_SIZE = 20;
+              const BATCH_SIZE = batchSizeNum;
               let sent = 0;
 
               for (let i = 0; i < usersWithTokens.length; i += BATCH_SIZE) {
@@ -573,6 +580,7 @@ export default function AdminSettings() {
               setBroadcastLoading(false);
               setBroadcastMessage('');
               setBroadcastTitle('');
+              setBatchSize('20');
               setShowBroadcastModal(false);
 
               Alert.alert(
@@ -1274,75 +1282,101 @@ export default function AdminSettings() {
         onRequestClose={() => !broadcastLoading && setShowBroadcastModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Enviar Notificación Masiva</Text>
-              {!broadcastLoading && (
-                <TouchableOpacity onPress={() => setShowBroadcastModal(false)}>
-                  <Text style={styles.modalCloseText}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View style={styles.broadcastInfo}>
-              <Bell size={20} color="#2D6A6F" />
-              <Text style={styles.broadcastInfoText}>
-                Esta notificación se enviará a todos los usuarios con notificaciones habilitadas en lotes de 20.
-              </Text>
-            </View>
-
-            <Input
-              label="Título de la notificación *"
-              placeholder="Ej: Nueva actualización disponible"
-              value={broadcastTitle}
-              onChangeText={setBroadcastTitle}
-              editable={!broadcastLoading}
-            />
-
-            <Input
-              label="Mensaje *"
-              placeholder="Ej: Hemos agregado nuevas funciones..."
-              value={broadcastMessage}
-              onChangeText={setBroadcastMessage}
-              multiline
-              numberOfLines={4}
-              style={styles.broadcastMessageInput}
-              editable={!broadcastLoading}
-            />
-
-            {broadcastLoading && broadcastProgress.total > 0 && (
-              <View style={styles.broadcastProgressContainer}>
-                <Text style={styles.broadcastProgressText}>
-                  Enviando: {broadcastProgress.sent} / {broadcastProgress.total} usuarios
-                </Text>
-                <View style={styles.broadcastProgressBar}>
-                  <View
-                    style={[
-                      styles.broadcastProgressFill,
-                      { width: `${(broadcastProgress.sent / broadcastProgress.total) * 100}%` }
-                    ]}
-                  />
-                </View>
+          <ScrollView
+            contentContainerStyle={styles.modalScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Enviar Notificación Masiva</Text>
+                {!broadcastLoading && (
+                  <TouchableOpacity onPress={() => setShowBroadcastModal(false)}>
+                    <Text style={styles.modalCloseText}>✕</Text>
+                  </TouchableOpacity>
+                )}
               </View>
-            )}
 
-            <View style={styles.modalActions}>
-              <Button
-                title="Cancelar"
-                onPress={() => setShowBroadcastModal(false)}
-                variant="outline"
-                size="medium"
-                disabled={broadcastLoading}
+              <View style={styles.broadcastInfo}>
+                <Bell size={20} color="#2D6A6F" />
+                <Text style={styles.broadcastInfoText}>
+                  Esta notificación se enviará a todos los usuarios con notificaciones habilitadas.
+                </Text>
+              </View>
+
+              <Input
+                label="Título de la notificación *"
+                placeholder="Ej: Nueva actualización disponible"
+                value={broadcastTitle}
+                onChangeText={setBroadcastTitle}
+                editable={!broadcastLoading}
               />
-              <Button
-                title={broadcastLoading ? 'Enviando...' : 'Enviar a todos'}
-                onPress={handleBroadcastNotification}
-                size="medium"
-                disabled={broadcastLoading || !broadcastTitle.trim() || !broadcastMessage.trim()}
-                loading={broadcastLoading}
+
+              <Input
+                label="Mensaje *"
+                placeholder="Ej: Hemos agregado nuevas funciones..."
+                value={broadcastMessage}
+                onChangeText={setBroadcastMessage}
+                multiline
+                numberOfLines={4}
+                style={styles.broadcastMessageInput}
+                editable={!broadcastLoading}
               />
+
+              <Input
+                label="Tamaño del lote (1-100) *"
+                placeholder="20"
+                value={batchSize}
+                onChangeText={setBatchSize}
+                keyboardType="numeric"
+                editable={!broadcastLoading}
+              />
+
+              <View style={styles.batchSizeInfo}>
+                <Text style={styles.batchSizeInfoText}>
+                  💡 Se enviarán {batchSize || '20'} notificaciones a la vez. Un número más bajo es más seguro pero más lento.
+                </Text>
+              </View>
+
+              {broadcastLoading && broadcastProgress.total > 0 && (
+                <View style={styles.broadcastProgressContainer}>
+                  <Text style={styles.broadcastProgressText}>
+                    Enviando: {broadcastProgress.sent} / {broadcastProgress.total} usuarios
+                  </Text>
+                  <View style={styles.broadcastProgressBar}>
+                    <View
+                      style={[
+                        styles.broadcastProgressFill,
+                        { width: `${(broadcastProgress.sent / broadcastProgress.total) * 100}%` }
+                      ]}
+                    />
+                  </View>
+                </View>
+              )}
+
+              <View style={styles.broadcastModalActions}>
+                <TouchableOpacity
+                  style={[styles.broadcastCancelButton, broadcastLoading && styles.buttonDisabled]}
+                  onPress={() => setShowBroadcastModal(false)}
+                  disabled={broadcastLoading}
+                >
+                  <Text style={styles.broadcastCancelButtonText}>Cancelar</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.broadcastSendButton,
+                    (broadcastLoading || !broadcastTitle.trim() || !broadcastMessage.trim()) && styles.buttonDisabled
+                  ]}
+                  onPress={handleBroadcastNotification}
+                  disabled={broadcastLoading || !broadcastTitle.trim() || !broadcastMessage.trim()}
+                >
+                  <Text style={styles.broadcastSendButtonText}>
+                    {broadcastLoading ? 'Enviando...' : 'Enviar a todos'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          </ScrollView>
         </View>
       </Modal>
 
@@ -1944,5 +1978,61 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#10B981',
     borderRadius: 4,
+  },
+  batchSizeInfo: {
+    backgroundColor: '#FFFBEB',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  batchSizeInfoText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#92400E',
+    lineHeight: 18,
+  },
+  broadcastModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 20,
+  },
+  broadcastCancelButton: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  broadcastCancelButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#374151',
+  },
+  broadcastSendButton: {
+    flex: 1,
+    backgroundColor: '#2D6A6F',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  broadcastSendButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 20,
   },
 });
