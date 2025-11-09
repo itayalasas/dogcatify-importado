@@ -8,7 +8,6 @@ const corsHeaders = {
 serve(async (req)=>{
   console.log('=== SAVE MEDICAL RECORD FUNCTION START ===');
   console.log('Request method:', req.method);
-  // Handle CORS preflight request
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       status: 200,
@@ -16,7 +15,6 @@ serve(async (req)=>{
     });
   }
   try {
-    // Initialize Supabase client with service role
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!supabaseUrl || !supabaseServiceKey) {
@@ -45,7 +43,6 @@ serve(async (req)=>{
       hasToken: !!token,
       name: recordData.name || recordData.product_name
     });
-    // Validate required fields
     if (!recordData.pet_id || !recordData.user_id || !recordData.type) {
       return new Response(JSON.stringify({
         success: false,
@@ -58,7 +55,6 @@ serve(async (req)=>{
         }
       });
     }
-    // If token is provided, verify it for additional security
     if (token) {
       console.log('Verifying token for save operation...');
       const { data: tokenData, error: tokenError } = await supabase.from('medical_history_tokens').select('*').eq('token', token).eq('pet_id', recordData.pet_id).single();
@@ -75,7 +71,6 @@ serve(async (req)=>{
           }
         });
       }
-      // Check if token has expired
       const now = new Date();
       const expiresAt = new Date(tokenData.expires_at);
       if (now > expiresAt) {
@@ -93,7 +88,6 @@ serve(async (req)=>{
       }
       console.log('Token verified for save operation');
     }
-    // Verify pet exists and get owner info
     const { data: petData, error: petError } = await supabase.from('pets').select('id, name, owner_id').eq('id', recordData.pet_id).single();
     if (petError || !petData) {
       console.error('Pet not found:', petError);
@@ -108,7 +102,6 @@ serve(async (req)=>{
         }
       });
     }
-    // Use pet's actual owner_id instead of the provided user_id
     const finalRecordData = {
       ...recordData,
       user_id: petData.owner_id
@@ -118,7 +111,6 @@ serve(async (req)=>{
       petName: petData.name,
       ownerId: petData.owner_id
     });
-    // Insert the medical record using service role (bypasses RLS)
     const { data: insertedRecord, error: insertError } = await supabase.from('pet_health').insert([
       finalRecordData
     ]).select().single();
@@ -136,28 +128,7 @@ serve(async (req)=>{
       });
     }
     console.log('Medical record saved successfully:', insertedRecord.id);
-    // Try to create medical alert for future reminders
-    if (recordData.type === 'vaccine' && recordData.next_due_date) {
-      try {
-        const alertDate = new Date(recordData.next_due_date);
-        alertDate.setDate(alertDate.getDate() - 7); // 7 days before
-        if (alertDate > new Date()) {
-          await supabase.from('medical_alerts').insert({
-            pet_id: recordData.pet_id,
-            user_id: petData.owner_id,
-            alert_type: 'vaccine',
-            title: `Refuerzo de vacuna: ${recordData.name}`,
-            description: `Es hora del refuerzo de ${recordData.name} para ${petData.name}`,
-            due_date: alertDate.toISOString().split('T')[0],
-            priority: recordData.name?.toLowerCase().includes('dhpp') || recordData.name?.toLowerCase().includes('rabia') ? 'high' : 'medium',
-            status: 'pending'
-          });
-          console.log('Medical alert created for vaccine');
-        }
-      } catch (alertError) {
-        console.warn('Could not create medical alert:', alertError);
-      }
-    }
+
     return new Response(JSON.stringify({
       success: true,
       recordId: insertedRecord.id,

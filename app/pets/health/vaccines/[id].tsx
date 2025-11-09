@@ -349,43 +349,6 @@ export default function AddVaccine() {
         throw error;
       }
 
-      // Try to generate medical alert for next dose
-      if (nextDueDate) {
-        try {
-          const alertDate = new Date(nextDueDate);
-          alertDate.setDate(alertDate.getDate() - 7); // 7 days before
-          
-          if (alertDate > new Date()) {
-            const { error: alertError } = await supabaseClient
-              .from('medical_alerts')
-              .insert({
-                pet_id: id,
-                user_id: currentUser.id,
-                alert_type: 'vaccine',
-                title: `Refuerzo de vacuna: ${vaccineName.trim()}`,
-                description: `Es hora del refuerzo de ${vaccineName.trim()} para ${pet?.name}`,
-                due_date: alertDate.toISOString().split('T')[0],
-                priority: vaccineName.toLowerCase().includes('dhpp') || 
-                         vaccineName.toLowerCase().includes('rabia') ? 'high' : 'medium',
-                status: 'pending',
-                metadata: {
-                  vaccine_name: vaccineName.trim(),
-                  last_application: formatDate(vaccineDate),
-                  veterinarian: veterinarian.trim() || null
-                }
-              });
-            
-            if (alertError) {
-              console.warn('Could not create medical alert:', alertError);
-            } else {
-              console.log('Medical alert created for next vaccine dose');
-            }
-          }
-        } catch (alertError) {
-          console.warn('Error creating medical alert:', alertError);
-        }
-      }
-
       Alert.alert('Éxito', isEditing ? 'Vacuna actualizada correctamente' : 'Vacuna registrada correctamente', [
         { text: 'OK', onPress: () => router.push({
           pathname: `/pets/${id}`,
