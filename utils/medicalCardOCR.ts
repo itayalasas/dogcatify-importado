@@ -38,10 +38,36 @@ export const extractMedicalRecordsFromImage = async (
   try {
     console.log(`Processing ${recordType} card image:`, imageUri);
 
+    if (!imageUri) {
+      throw new Error('No se proporcionó una imagen válida');
+    }
+
+    // Validate FileSystem module
+    if (!FileSystem || !FileSystem.EncodingType) {
+      throw new Error('Módulo FileSystem no disponible');
+    }
+
+    console.log('Reading image as base64...');
+    console.log('FileSystem available:', !!FileSystem);
+    console.log('FileSystem.EncodingType available:', !!FileSystem?.EncodingType);
+    console.log('FileSystem.EncodingType.Base64:', FileSystem?.EncodingType?.Base64);
+
     // Convert image to base64
-    const base64Image = await FileSystem.readAsStringAsync(imageUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
+    let base64Image: string;
+    try {
+      base64Image = await FileSystem.readAsStringAsync(imageUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      console.log('Image converted to base64, length:', base64Image?.length || 0);
+    } catch (readError: any) {
+      console.error('Error reading image file:', readError);
+      console.error('Error details:', JSON.stringify(readError, null, 2));
+      throw new Error(`No se pudo leer la imagen: ${readError.message || 'Error desconocido'}`);
+    }
+
+    if (!base64Image || base64Image.length === 0) {
+      throw new Error('La imagen está vacía o no se pudo leer');
+    }
 
     // Get Supabase URL and anon key from environment
     const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
