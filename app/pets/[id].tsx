@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Modal, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Calendar, Scale, Syringe, Heart, TriangleAlert as AlertTriangle, Pill, Camera, Plus, CreditCard as Edit, Trash2, Play } from 'lucide-react-native';
+import { ArrowLeft, Calendar, Scale, Syringe, Heart, TriangleAlert as AlertTriangle, Pill, Camera, Plus, CreditCard as Edit, Trash2, Play, Image as ImageIcon } from 'lucide-react-native';
 import { Video } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { extractMedicalRecordsFromImage, ExtractedMedicalRecord } from '../../utils/medicalCardOCR';
 
 export default function PetDetail() {
   const { id, refresh, activeTab: initialTab, permissionLevel } = useLocalSearchParams<{
@@ -36,6 +37,9 @@ export default function PetDetail() {
   const [activeTab, setActiveTab] = useState<'basics' | 'health' | 'albums' | 'behavior' | 'appointments'>(
     initialTab as any || 'basics'
   );
+  const [showScanOptionsModal, setShowScanOptionsModal] = useState(false);
+  const [scanRecordType, setScanRecordType] = useState<'vaccine' | 'deworming' | null>(null);
+  const [processingImage, setProcessingImage] = useState(false);
 
   useEffect(() => {
     fetchPetDetails();
@@ -368,6 +372,175 @@ export default function PetDetail() {
 
   const handleAddDeworming = () => {
     router.push(`/pets/health/deworming/${id}`);
+  };
+
+  const handleScanMedicalCard = (type: 'vaccine' | 'deworming') => {
+    setScanRecordType(type);
+    setShowScanOptionsModal(true);
+  };
+
+  const handleTakePhoto = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+
+      if (permissionResult.granted === false) {
+        Alert.alert('Permisos requeridos', 'Se necesitan permisos para usar la cámara');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setShowScanOptionsModal(false);
+        await processMedicalCard(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'No se pudo tomar la foto');
+    }
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (permissionResult.granted === false) {
+        Alert.alert('Permisos requeridos', 'Se necesitan permisos para acceder a la galería');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setShowScanOptionsModal(false);
+        await processMedicalCard(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error selecting photo:', error);
+      Alert.alert('Error', 'No se pudo seleccionar la foto');
+    }
+  };
+
+  const processMedicalCard = async (imageUri: string) => {
+    if (!scanRecordType) return;
+
+    setProcessingImage(true);
+    try {
+      const result = await extractMedicalRecordsFromImage(
+        imageUri,
+        scanRecordType,
+        {
+          species: pet?.species,
+          name: pet?.name
+        }
+      );
+
+      if (result.records.length === 0) {
+        Alert.alert(
+          'Sin resultados',
+          `No se encontraron ${scanRecordType === 'vaccine' ? 'vacunas' : 'desparasitaciones'} en la imagen.`
+        );
+        return;
+      }
+
+      if (result.records.length === 1) {
+        Alert.alert(
+          '1 registro encontrado',
+          '¿Deseas guardar este registro?',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            { text: 'Guardar', onPress: () => saveMultipleRecords(result.records) }
+          ]
+        );
+      } else {
+        Alert.alert(
+          `¡${result.records.length} registros encontrados!`,
+          `Se encontraron ${result.records.length} ${scanRecordType === 'vaccine' ? 'vacunas' : 'desparasitaciones'}. ¿Deseas guardarlas todas?`,
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            { text: 'Guardar todas', onPress: () => saveMultipleRecords(result.records) }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Error processing medical card:', error);
+      Alert.alert(
+        'Error',
+        'No se pudo procesar la imagen. Por favor intenta nuevamente.'
+      );
+    } finally {
+      setProcessingImage(false);
+      setScanRecordType(null);
+    }
+  };
+
+  const saveMultipleRecords = async (records: ExtractedMedicalRecord[]) => {
+    if (!currentUser || !scanRecordType) return;
+
+    setProcessingImage(true);
+    try {
+      const formatDate = (date: Date) => {
+        return date.toLocaleDateString('es-ES', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        });
+      };
+
+      const recordsToInsert = records.map(record => {
+        if (scanRecordType === 'vaccine') {
+          return {
+            pet_id: id,
+            user_id: currentUser.id,
+            type: 'vaccine',
+            name: record.name || 'Vacuna',
+            application_date: record.applicationDate || formatDate(new Date()),
+            next_due_date: record.nextDueDate || null,
+            veterinarian: record.veterinarian || null,
+            notes: record.notes || null,
+            created_at: new Date().toISOString()
+          };
+        } else {
+          return {
+            pet_id: id,
+            user_id: currentUser.id,
+            type: 'deworming',
+            product_name: record.productName || 'Desparasitante',
+            application_date: record.applicationDate || formatDate(new Date()),
+            next_due_date: record.nextDueDate || null,
+            veterinarian: record.veterinarian || null,
+            notes: record.notes || null,
+            created_at: new Date().toISOString()
+          };
+        }
+      });
+
+      const { error } = await supabaseClient
+        .from('pet_health')
+        .insert(recordsToInsert);
+
+      if (error) throw error;
+
+      Alert.alert(
+        'Éxito',
+        `Se guardaron ${records.length} ${scanRecordType === 'vaccine' ? 'vacunas' : 'desparasitaciones'} correctamente`
+      );
+
+      fetchHealthRecords();
+    } catch (error) {
+      console.error('Error saving multiple records:', error);
+      Alert.alert('Error', 'No se pudieron guardar los registros');
+    } finally {
+      setProcessingImage(false);
+      setScanRecordType(null);
+    }
   };
   
   const handleAddWeight = () => {
@@ -794,9 +967,17 @@ export default function PetDetail() {
             <Text style={styles.healthTitle}>Vacunas</Text>
           </View>
           {canEdit && (
-            <TouchableOpacity style={styles.addButton} onPress={handleAddVaccine}>
-              <Plus size={16} color="#FFFFFF" />
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={styles.scanButton}
+                onPress={() => handleScanMedicalCard('vaccine')}
+              >
+                <Camera size={16} color="#3B82F6" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.addButton} onPress={handleAddVaccine}>
+                <Plus size={16} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           )}
         </View>
         
@@ -994,9 +1175,17 @@ export default function PetDetail() {
             <Text style={styles.healthTitle}>Desparasitaciones</Text>
           </View>
           {canEdit && (
-            <TouchableOpacity style={styles.addButton} onPress={handleAddDeworming}>
-              <Plus size={16} color="#FFFFFF" />
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={styles.scanButton}
+                onPress={() => handleScanMedicalCard('deworming')}
+              >
+                <Camera size={16} color="#10B981" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.addButton} onPress={handleAddDeworming}>
+                <Plus size={16} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           )}
         </View>
 
@@ -1565,6 +1754,62 @@ export default function PetDetail() {
         {activeTab === 'behavior' && renderBehaviorTab()}
         {activeTab === 'appointments' && renderAppointmentsTab()}
       </ScrollView>
+
+      {/* Scan Options Modal */}
+      <Modal
+        visible={showScanOptionsModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowScanOptionsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              Escanear {scanRecordType === 'vaccine' ? 'Carnet de Vacunación' : 'Registro de Desparasitación'}
+            </Text>
+            <Text style={styles.modalSubtitle}>
+              Toma una foto o selecciona una imagen para extraer automáticamente todas las {scanRecordType === 'vaccine' ? 'vacunas' : 'desparasitaciones'} visibles
+            </Text>
+
+            {processingImage ? (
+              <View style={styles.processingContainer}>
+                <ActivityIndicator size="large" color="#3B82F6" />
+                <Text style={styles.processingText}>Procesando imagen...</Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.scanOptionsContainer}>
+                  <TouchableOpacity
+                    style={styles.scanOptionButton}
+                    onPress={handleTakePhoto}
+                  >
+                    <Camera size={32} color={scanRecordType === 'vaccine' ? '#3B82F6' : '#10B981'} />
+                    <Text style={styles.scanOptionText}>Tomar Foto</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.scanOptionButton}
+                    onPress={handlePickImage}
+                  >
+                    <ImageIcon size={32} color={scanRecordType === 'vaccine' ? '#3B82F6' : '#10B981'} />
+                    <Text style={styles.scanOptionText}>Desde Galería</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Button
+                  title="Cancelar"
+                  onPress={() => {
+                    setShowScanOptionsModal(false);
+                    setScanRecordType(null);
+                  }}
+                  variant="outline"
+                  size="large"
+                />
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1778,6 +2023,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
     marginLeft: 8,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  scanButton: {
+    backgroundColor: '#F3F4F6',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   addButton: {
     backgroundColor: '#3B82F6',
@@ -2287,5 +2544,65 @@ const styles = StyleSheet.create({
     color: '#0369A1',
     marginBottom: 16,
     lineHeight: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 40,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  processingContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  processingText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    marginTop: 16,
+  },
+  scanOptionsContainer: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 24,
+  },
+  scanOptionButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  scanOptionText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    textAlign: 'center',
   },
 });
