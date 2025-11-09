@@ -256,11 +256,20 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
           
           {/* Price Badge - Only show for non-boarding services */}
           {service.price && service.partnerType !== 'boarding' && (
-            <View style={styles.priceBadge}>
-              <DollarSign size={12} color="#FFFFFF" />
-              <Text style={styles.priceText}>
-                {formatPrice(service.price)}
-              </Text>
+            <View style={styles.priceContainer}>
+              <View style={styles.priceBadge}>
+                <DollarSign size={12} color="#FFFFFF" />
+                <Text style={styles.priceText}>
+                  {service.hasDiscount && service.discountedPrice
+                    ? formatPrice(service.discountedPrice)
+                    : formatPrice(service.price)}
+                </Text>
+              </View>
+              {service.hasDiscount && service.activePromotion?.discount_percentage > 0 && (
+                <View style={styles.discountBadge}>
+                  <Text style={styles.discountBadgeText}>-{service.activePromotion.discount_percentage}%</Text>
+                </View>
+              )}
             </View>
           )}
           
@@ -461,23 +470,39 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.3)',
     zIndex: 2,
   },
-  priceBadge: {
+  priceContainer: {
     position: 'absolute',
     top: 12,
     right: 12,
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: 4,
+    zIndex: 3,
+  },
+  priceBadge: {
     backgroundColor: 'rgba(16, 185, 129, 0.9)',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    zIndex: 3,
   },
   priceText: {
     fontSize: 12,
     fontFamily: 'Inter-Bold',
     color: '#FFFFFF',
     marginLeft: 2,
+  },
+  discountBadge: {
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  discountBadgeText: {
+    fontSize: 10,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
   },
   logoContainer: {
     position: 'absolute',

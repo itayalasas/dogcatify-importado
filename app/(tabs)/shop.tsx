@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import { supabaseClient } from '../../lib/supabase';
 import { router } from 'expo-router';
+import { getActivePromotionsForItems, calculateDiscountedPrice, incrementPromotionClicks, type ActivePromotion } from '../../utils/promotions';
 
 
 export default function Shop() {
@@ -41,11 +42,36 @@ export default function Shop() {
         .order('created_at', { ascending: false });
 
       if (productsData && !error) {
-        const processedProducts = productsData.map(product => ({
-          ...product,
-          createdAt: new Date(product.created_at),
-        }));
+        // Obtener IDs de todos los productos
+        const productIds = productsData.map(p => p.id);
+
+        // Buscar promociones activas para estos productos
+        const promotionsMap = await getActivePromotionsForItems(productIds, 'product');
+
+        // Aplicar promociones a los productos
+        const processedProducts = productsData.map(product => {
+          const promotion = promotionsMap.get(product.id);
+          const originalPrice = product.price;
+          const discountedPrice = promotion
+            ? calculateDiscountedPrice(originalPrice, promotion)
+            : originalPrice;
+
+          return {
+            ...product,
+            createdAt: new Date(product.created_at),
+            // Agregar información de promoción
+            activePromotion: promotion || null,
+            originalPrice: promotion ? originalPrice : null,
+            discountedPrice: promotion ? discountedPrice : null,
+            hasDiscount: !!promotion,
+          };
+        });
+
         setProducts(processedProducts);
+
+        if (promotionsMap.size > 0) {
+          console.log(`✨ Applied ${promotionsMap.size} active promotions to products`);
+        }
       }
     } catch (error) {
       console.error('Error fetching products:', error);
@@ -54,7 +80,15 @@ export default function Shop() {
     }
   };
 
-  const handleProductPress = (productId: string) => {
+  const handleProductPress = async (productId: string) => {
+    const product = products.find(p => p.id === productId);
+
+    // Si tiene promoción activa, incrementar clicks para facturación
+    if (product?.activePromotion) {
+      await incrementPromotionClicks(product.activePromotion.id);
+      console.log(`📊 Incremented promotion click for product: ${product.name}`);
+    }
+
     router.push({
       pathname: `/products/${productId}`,
     });
@@ -89,17 +123,27 @@ export default function Shop() {
       return;
     }
 
+    // Si tiene promoción activa, incrementar clicks para facturación
+    if (product.activePromotion) {
+      incrementPromotionClicks(product.activePromotion.id);
+      console.log(`📊 Incremented promotion click for cart addition: ${product.name}`);
+    }
+
+    // Usar precio con descuento si existe
+    const finalPrice = product.discountedPrice || product.price;
+    const discountPercentage = product.activePromotion?.discount_percentage || 0;
+
     addToCart({
       id: product.id,
       name: product.name,
-      price: product.price,
+      price: finalPrice,
       quantity: 1,
       image: product.images && product.images.length > 0 ? product.images[0] : null,
       partnerId: product.partner_id,
       partnerName: product.partner_name || 'Tienda',
       iva_rate: product.iva_rate,
-      discount_percentage: 0,
-      original_price: product.price,
+      discount_percentage: discountPercentage,
+      original_price: product.originalPrice || product.price,
       currency: product.currency,
       currency_code_dgi: product.currency_code_dgi
     }, product.stock);
