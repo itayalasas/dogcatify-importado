@@ -546,33 +546,39 @@ export default function AdminSettings() {
             text: 'Enviar',
             onPress: async () => {
               const BATCH_SIZE = batchSizeNum;
-              let sent = 0;
+              let inserted = 0;
+
+              const broadcastData = {
+                type: 'broadcast',
+                timestamp: new Date().toISOString()
+              };
 
               for (let i = 0; i < usersWithTokens.length; i += BATCH_SIZE) {
                 const batch = usersWithTokens.slice(i, i + BATCH_SIZE);
 
-                const promises = batch.map(user =>
-                  fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/send-notification-fcm-v1`, {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
-                    },
-                    body: JSON.stringify({
-                      fcmToken: user.fcm_token,
-                      title: broadcastTitle,
-                      body: broadcastMessage,
-                      data: {
-                        type: 'broadcast',
-                        timestamp: new Date().toISOString()
-                      }
-                    })
-                  }).catch(err => console.error('Error sending to user:', user.id, err))
-                );
+                const notificationsToInsert = batch.map(user => ({
+                  user_id: user.id,
+                  notification_type: 'broadcast',
+                  reference_id: user.id,
+                  reference_type: 'broadcast',
+                  title: broadcastTitle,
+                  body: broadcastMessage,
+                  data: broadcastData,
+                  scheduled_for: new Date().toISOString(),
+                  status: 'pending'
+                }));
 
-                await Promise.all(promises);
-                sent += batch.length;
-                setBroadcastProgress({ sent, total: totalUsers });
+                const { error: insertError } = await supabaseClient
+                  .from('scheduled_notifications')
+                  .insert(notificationsToInsert);
+
+                if (insertError) {
+                  console.error('Error inserting batch:', insertError);
+                } else {
+                  inserted += batch.length;
+                }
+
+                setBroadcastProgress({ sent: inserted, total: totalUsers });
 
                 await new Promise(resolve => setTimeout(resolve, 500));
               }
@@ -584,8 +590,8 @@ export default function AdminSettings() {
               setShowBroadcastModal(false);
 
               Alert.alert(
-                'Envío completado',
-                `Se enviaron notificaciones a ${sent} usuarios exitosamente`
+                'Notificaciones programadas',
+                `Se programaron ${inserted} notificaciones. Se enviarán automáticamente en los próximos minutos.`
               );
             }
           }
@@ -593,7 +599,7 @@ export default function AdminSettings() {
       );
     } catch (error) {
       console.error('Error broadcasting notifications:', error);
-      Alert.alert('Error', 'No se pudieron enviar las notificaciones');
+      Alert.alert('Error', 'No se pudieron programar las notificaciones');
       setBroadcastLoading(false);
     }
   };
@@ -1340,7 +1346,7 @@ export default function AdminSettings() {
               {broadcastLoading && broadcastProgress.total > 0 && (
                 <View style={styles.broadcastProgressContainer}>
                   <Text style={styles.broadcastProgressText}>
-                    Enviando: {broadcastProgress.sent} / {broadcastProgress.total} usuarios
+                    Programando: {broadcastProgress.sent} / {broadcastProgress.total} notificaciones
                   </Text>
                   <View style={styles.broadcastProgressBar}>
                     <View
