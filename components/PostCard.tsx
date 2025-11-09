@@ -592,18 +592,14 @@ const PostCard: React.FC<PostCardProps> = ({
         ? `dogcatify://album/${post.album_id || post.id}`
         : `dogcatify://post/${post.id}`;
 
-      // Prepare share message with deep link and store fallback
-      const shareMessage = Platform.OS === 'android'
-        ? isAlbum
-          ? `🐾 ¡Mira este ${contentType} de ${post.pet?.name || 'mascota'} compartido por ${post.author?.name} en DogCatiFy!\n\n📸 ${post.album_images?.length || 1} foto(s)\n\n${deepLink}\n\n¿No tienes la app? Descárgala aquí:\n${PLAY_STORE_URL}`
-          : `🐾 ¡Mira esta ${contentType} de ${post.author?.name} en DogCatiFy!\n\n${deepLink}\n\n¿No tienes la app? Descárgala aquí:\n${PLAY_STORE_URL}`
-        : Platform.OS === 'ios'
-        ? isAlbum
-          ? `🐾 ¡Mira este ${contentType} de ${post.pet?.name || 'mascota'} compartido por ${post.author?.name} en DogCatiFy!\n\n📸 ${post.album_images?.length || 1} foto(s)\n\n${deepLink}\n\n¿No tienes la app? Descárgala aquí:\n${APP_STORE_URL}`
-          : `🐾 ¡Mira esta ${contentType} de ${post.author?.name} en DogCatiFy!\n\n${deepLink}\n\n¿No tienes la app? Descárgala aquí:\n${APP_STORE_URL}`
-        : isAlbum
-        ? `🐾 ¡Mira este ${contentType} de ${post.pet?.name || 'mascota'} compartido por ${post.author?.name} en DogCatiFy!\n\n📸 ${post.album_images?.length || 1} foto(s)\n\n${deepLink}`
-        : `🐾 ¡Mira esta ${contentType} de ${post.author?.name} en DogCatiFy!\n\n${deepLink}`;
+      // Detectar plataforma para el link de la tienda
+      const storeURL = Platform.OS === 'ios' ? APP_STORE_URL : PLAY_STORE_URL;
+
+      // Prepare share message with instructions and download link
+      const albumId = post.album_id || post.id;
+      const shareMessage = isAlbum
+        ? `🐾 ¡Mira este ${contentType} de ${post.pet?.name || 'mascota'} compartido por ${post.author?.name} en DogCatiFy!\n\n📸 ${post.album_images?.length || 1} foto(s)\n\n¿Cómo verlo?\n1. Descarga la app DogCatiFy:\n   ${storeURL}\n\n2. Abre la app e inicia sesión\n\n3. Busca el álbum en la sección de inicio o usa el ID: ${albumId}`
+        : `🐾 ¡Mira esta ${contentType} de ${post.author?.name} en DogCatiFy!\n\n¿Cómo verlo?\n1. Descarga la app DogCatiFy:\n   ${storeURL}\n\n2. Abre la app e inicia sesión\n\n3. Busca la publicación en la sección de inicio o usa el ID: ${post.id}`;
 
       // Share implementation
       if (Platform.OS === 'web') {
