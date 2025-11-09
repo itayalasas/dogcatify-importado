@@ -101,16 +101,16 @@ export const extractMedicalRecordsFromImage = async (
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Edge Function error:', errorText);
-      throw new Error(`Edge Function error: ${response.statusText}`);
-    }
-
     const result = await response.json();
 
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to extract information');
+    if (!response.ok || !result.success) {
+      // Check if it's a species mismatch error
+      if (result.error === 'species_mismatch') {
+        throw new Error(result.message || 'La especie detectada no coincide con tu mascota');
+      }
+
+      console.error('Edge Function error:', result);
+      throw new Error(result.message || result.error || `Edge Function error: ${response.statusText}`);
     }
 
     console.log(`Extracted ${result.totalFound} records:`, result.records);

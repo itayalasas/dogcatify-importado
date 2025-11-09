@@ -29,6 +29,7 @@ interface ExtractedData {
 interface ExtractedRecords {
   records: ExtractedData[];
   totalFound: number;
+  detectedSpecies?: 'dog' | 'cat' | 'unknown';
 }
 
 Deno.serve(async (req: Request) => {
@@ -96,8 +97,14 @@ IMPORTANTE:
 - Si no puedes leer algo con claridad, déjalo vacío en ese registro específico
 - Si el veterinario o clínica son los mismos para todas, repite la información en cada registro
 
-Responde ÚNICAMENTE en formato JSON válido con un array:
+VALIDACIÓN DE ESPECIE:
+- Analiza el carnet e identifica si las vacunas son para PERRO o GATO
+- Busca indicadores como: nombres de vacunas específicas (DHPP es para perros, FVRCP es para gatos), etiquetas, logos
+- La mascota es un ${speciesText}, así que las vacunas DEBEN ser apropiadas para esta especie
+
+Responde ÚNICAMENTE en formato JSON válido:
 {
+  "detectedSpecies": "dog" o "cat" o "unknown",
   "records": [
     {
       "name": "Nombre de la vacuna",
@@ -137,8 +144,14 @@ IMPORTANTE:
 - Si no puedes leer algo con claridad, déjalo vacío en ese registro específico
 - Si el veterinario o clínica son los mismos para todas, repite la información en cada registro
 
-Responde ÚNICAMENTE en formato JSON válido con un array:
+VALIDACIÓN DE ESPECIE:
+- Analiza el registro e identifica si los productos son para PERRO o GATO
+- Busca indicadores como: nombres de productos específicos, dosis, presentación, etiquetas
+- La mascota es un ${speciesText}, así que los productos DEBEN ser apropiados para esta especie
+
+Responde ÚNICAMENTE en formato JSON válido:
 {
+  "detectedSpecies": "dog" o "cat" o "unknown",
   "records": [
     {
       "productName": "Nombre del producto",
@@ -244,6 +257,29 @@ Si no encuentras ninguna desparasitación, retorna un array vacío con "totalFou
 
     console.log(`Extracted ${processedRecords.length} ${recordType} records:`, processedRecords);
 
+    // Validate species match if petSpecies was provided
+    const detectedSpecies = extractedRecords.detectedSpecies;
+    console.log('Detected species:', detectedSpecies, 'Expected species:', petSpecies);
+
+    if (petSpecies && detectedSpecies && detectedSpecies !== 'unknown' && detectedSpecies !== petSpecies) {
+      const detectedSpeciesText = detectedSpecies === 'dog' ? 'perro' : 'gato';
+      const expectedSpeciesText = petSpecies === 'dog' ? 'perro' : 'gato';
+
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'species_mismatch',
+          message: `El carnet parece ser de ${detectedSpeciesText}, pero tu mascota es un ${expectedSpeciesText}. Por favor verifica que estés usando el carnet correcto.`,
+          detectedSpecies,
+          expectedSpecies: petSpecies
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -251,7 +287,8 @@ Si no encuentras ninguna desparasitación, retorna un array vacío con "totalFou
         totalFound: extractedRecords.totalFound || processedRecords.length,
         recordType,
         petSpecies,
-        petName
+        petName,
+        detectedSpecies
       }),
       {
         status: 200,
@@ -290,11 +327,11 @@ function normalizeDateFormat(dateStr: string): string {
     return `${parts[0]}/${parts[1]}/${fullYear}`;
   }
 
-  if (/^\d{2}[-\.]\d{2}[-\.]\d{4}$/.test(dateStr)) {
+  if (/^\d{2}[-.\.]\d{2}[-.\.]\d{4}$/.test(dateStr)) {
     return dateStr.replace(/[-\.]/g, '/');
   }
 
-  if (/^\d{2}[-\.]\d{2}[-\.]\d{2}$/.test(dateStr)) {
+  if (/^\d{2}[-.\.]\d{2}[-.\.]\d{2}$/.test(dateStr)) {
     const parts = dateStr.split(/[-\.]/);
     const year = parseInt(parts[2]);
     const fullYear = year > 50 ? `19${year}` : `20${year}`;
