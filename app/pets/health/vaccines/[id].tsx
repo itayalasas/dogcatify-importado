@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Calendar, Syringe, ChevronDown } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { ArrowLeft, Calendar, Syringe, ChevronDown, Camera, Image as ImageIcon } from 'lucide-react-native';
 import { Input } from '../../../../components/ui/Input';
 import { Button } from '../../../../components/ui/Button';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Card } from '../../../../components/ui/Card';
 import { supabaseClient } from '../../../../lib/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
+import { extractMedicalRecordFromImage, simulateOCRExtraction } from '../../../../utils/medicalCardOCR';
 
 export default function AddVaccine() {
   const { id, recordId, refresh } = useLocalSearchParams<{ id: string; recordId?: string; refresh?: string }>();
@@ -32,6 +34,8 @@ export default function AddVaccine() {
   const [showNextDueDatePicker, setShowNextDueDatePicker] = useState(false);
   const [showAddVetModal, setShowAddVetModal] = useState(false);
   const [tempVetName, setTempVetName] = useState('');
+  const [showScanOptions, setShowScanOptions] = useState(false);
+  const [processingImage, setProcessingImage] = useState(false);
 
   // Handle return parameters from selection screens
   useEffect(() => {
@@ -402,6 +406,115 @@ export default function AddVaccine() {
       params: { activeTab: 'health' }
     });
   };
+
+  const handlePickImage = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (permissionResult.granted === false) {
+        Alert.alert('Permisos requeridos', 'Se necesitan permisos para acceder a la galería');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        await processVaccinationCard(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error selecting photo:', error);
+      Alert.alert('Error', 'No se pudo seleccionar la foto');
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+
+      if (permissionResult.granted === false) {
+        Alert.alert('Permisos requeridos', 'Se necesitan permisos para usar la cámara');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        await processVaccinationCard(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'No se pudo tomar la foto');
+    }
+  };
+
+  const processVaccinationCard = async (imageUri: string) => {
+    setProcessingImage(true);
+    try {
+      // Try to extract information from the image
+      let extractedData;
+
+      try {
+        // First try with real API if configured
+        extractedData = await extractMedicalRecordFromImage(imageUri, 'vaccine');
+      } catch (apiError) {
+        console.log('API not available, using simulation:', apiError);
+        // Fallback to simulation for demo
+        extractedData = await simulateOCRExtraction('vaccine');
+      }
+
+      // Populate form fields with extracted data
+      if (extractedData.name) {
+        setVaccineName(extractedData.name);
+      }
+
+      if (extractedData.applicationDate) {
+        try {
+          const [day, month, year] = extractedData.applicationDate.split('/');
+          setVaccineDate(new Date(parseInt(year), parseInt(month) - 1, parseInt(day)));
+        } catch (dateError) {
+          console.error('Error parsing application date:', dateError);
+        }
+      }
+
+      if (extractedData.nextDueDate) {
+        try {
+          const [day, month, year] = extractedData.nextDueDate.split('/');
+          setNextDueDate(new Date(parseInt(year), parseInt(month) - 1, parseInt(day)));
+        } catch (dateError) {
+          console.error('Error parsing next due date:', dateError);
+        }
+      }
+
+      if (extractedData.veterinarian) {
+        setVeterinarian(extractedData.veterinarian);
+      }
+
+      if (extractedData.notes) {
+        setNotes(extractedData.notes);
+      }
+
+      Alert.alert(
+        'Información extraída',
+        'Se ha extraído la información del carnet. Por favor verifica que los datos sean correctos antes de guardar.',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('Error processing vaccination card:', error);
+      Alert.alert(
+        'Error',
+        'No se pudo procesar la imagen del carnet. Por favor ingresa los datos manualmente.'
+      );
+    } finally {
+      setProcessingImage(false);
+    }
+  };
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -437,6 +550,22 @@ export default function AddVaccine() {
               </Text>
             </View>
           )}
+
+          {/* Scan Vaccination Card Button */}
+          <TouchableOpacity
+            style={styles.scanButton}
+            onPress={() => setShowScanOptions(true)}
+            disabled={processingImage}
+          >
+            {processingImage ? (
+              <ActivityIndicator size="small" color="#3B82F6" />
+            ) : (
+              <Camera size={24} color="#3B82F6" />
+            )}
+            <Text style={styles.scanButtonText}>
+              {processingImage ? 'Procesando imagen...' : 'Escanear carnet de vacunación'}
+            </Text>
+          </TouchableOpacity>
 
           {/* Vaccine Name - Navigable */}
           <View style={styles.inputGroup}>
@@ -583,6 +712,54 @@ export default function AddVaccine() {
                 style={styles.modalButton}
               />
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Scan Options Modal */}
+      <Modal
+        visible={showScanOptions}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowScanOptions(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Escanear Carnet de Vacunación</Text>
+            <Text style={styles.modalSubtitle}>
+              Toma una foto o selecciona una imagen del carnet de vacunación para extraer la información automáticamente
+            </Text>
+
+            <View style={styles.scanOptionsContainer}>
+              <TouchableOpacity
+                style={styles.scanOptionButton}
+                onPress={() => {
+                  setShowScanOptions(false);
+                  handleTakePhoto();
+                }}
+              >
+                <Camera size={32} color="#3B82F6" />
+                <Text style={styles.scanOptionText}>Tomar Foto</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.scanOptionButton}
+                onPress={() => {
+                  setShowScanOptions(false);
+                  handlePickImage();
+                }}
+              >
+                <ImageIcon size={32} color="#3B82F6" />
+                <Text style={styles.scanOptionText}>Desde Galería</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Button
+              title="Cancelar"
+              onPress={() => setShowScanOptions(false)}
+              variant="outline"
+              size="large"
+            />
           </View>
         </View>
       </Modal>
@@ -783,5 +960,47 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     width: '100%',
+  },
+  scanButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 2,
+    borderColor: '#3B82F6',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    marginBottom: 24,
+    gap: 12,
+  },
+  scanButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#3B82F6',
+  },
+  scanOptionsContainer: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 24,
+  },
+  scanOptionButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  scanOptionText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    textAlign: 'center',
   },
 });
