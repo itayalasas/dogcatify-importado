@@ -429,10 +429,15 @@ export default function PetDetail() {
   };
 
   const processMedicalCard = async (imageUri: string) => {
-    if (!scanRecordType) return;
+    if (!scanRecordType) {
+      Alert.alert('Error', 'No se especificó el tipo de registro');
+      return;
+    }
 
     setProcessingImage(true);
     try {
+      console.log('Processing medical card:', imageUri, 'Type:', scanRecordType);
+
       const result = await extractMedicalRecordsFromImage(
         imageUri,
         scanRecordType,
@@ -442,6 +447,12 @@ export default function PetDetail() {
         }
       );
 
+      console.log('Result from extraction:', result);
+
+      if (!result || !result.records) {
+        throw new Error('Respuesta inválida del servidor');
+      }
+
       if (result.records.length === 0) {
         Alert.alert(
           'Sin resultados',
@@ -450,30 +461,33 @@ export default function PetDetail() {
         return;
       }
 
+      const recordType = scanRecordType;
+
       if (result.records.length === 1) {
         Alert.alert(
           '1 registro encontrado',
           '¿Deseas guardar este registro?',
           [
             { text: 'Cancelar', style: 'cancel' },
-            { text: 'Guardar', onPress: () => saveMultipleRecords(result.records) }
+            { text: 'Guardar', onPress: () => saveMultipleRecords(result.records, recordType) }
           ]
         );
       } else {
         Alert.alert(
           `¡${result.records.length} registros encontrados!`,
-          `Se encontraron ${result.records.length} ${scanRecordType === 'vaccine' ? 'vacunas' : 'desparasitaciones'}. ¿Deseas guardarlas todas?`,
+          `Se encontraron ${result.records.length} ${recordType === 'vaccine' ? 'vacunas' : 'desparasitaciones'}. ¿Deseas guardarlas todas?`,
           [
             { text: 'Cancelar', style: 'cancel' },
-            { text: 'Guardar todas', onPress: () => saveMultipleRecords(result.records) }
+            { text: 'Guardar todas', onPress: () => saveMultipleRecords(result.records, recordType) }
           ]
         );
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error processing medical card:', error);
+      const errorMessage = error?.message || 'Error desconocido';
       Alert.alert(
         'Error',
-        'No se pudo procesar la imagen. Por favor intenta nuevamente.'
+        `No se pudo procesar la imagen. ${errorMessage}`
       );
     } finally {
       setProcessingImage(false);
@@ -481,8 +495,8 @@ export default function PetDetail() {
     }
   };
 
-  const saveMultipleRecords = async (records: ExtractedMedicalRecord[]) => {
-    if (!currentUser || !scanRecordType) return;
+  const saveMultipleRecords = async (records: ExtractedMedicalRecord[], recordType: 'vaccine' | 'deworming') => {
+    if (!currentUser) return;
 
     setProcessingImage(true);
     try {
@@ -495,7 +509,7 @@ export default function PetDetail() {
       };
 
       const recordsToInsert = records.map(record => {
-        if (scanRecordType === 'vaccine') {
+        if (recordType === 'vaccine') {
           return {
             pet_id: id,
             user_id: currentUser.id,
@@ -530,7 +544,7 @@ export default function PetDetail() {
 
       Alert.alert(
         'Éxito',
-        `Se guardaron ${records.length} ${scanRecordType === 'vaccine' ? 'vacunas' : 'desparasitaciones'} correctamente`
+        `Se guardaron ${records.length} ${recordType === 'vaccine' ? 'vacunas' : 'desparasitaciones'} correctamente`
       );
 
       fetchHealthRecords();
@@ -539,7 +553,6 @@ export default function PetDetail() {
       Alert.alert('Error', 'No se pudieron guardar los registros');
     } finally {
       setProcessingImage(false);
-      setScanRecordType(null);
     }
   };
   
