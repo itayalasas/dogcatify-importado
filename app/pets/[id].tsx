@@ -395,7 +395,6 @@ export default function PetDetail() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        setShowScanOptionsModal(false);
         await processMedicalCard(result.assets[0].uri, result.assets[0].base64);
       }
     } catch (error) {
@@ -421,7 +420,6 @@ export default function PetDetail() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        setShowScanOptionsModal(false);
         await processMedicalCard(result.assets[0].uri, result.assets[0].base64);
       }
     } catch (error) {
@@ -459,7 +457,8 @@ export default function PetDetail() {
       if (result.records.length === 0) {
         Alert.alert(
           'Sin resultados',
-          `No se encontraron ${scanRecordType === 'vaccine' ? 'vacunas' : 'desparasitaciones'} en la imagen.`
+          `No se encontraron ${scanRecordType === 'vaccine' ? 'vacunas' : 'desparasitaciones'} en la imagen.\n\nConsejos:\n• Asegúrate de que la imagen esté clara y enfocada\n• La escritura manual puede ser difícil de reconocer\n• Intenta con una imagen con mejor iluminación`,
+          [{ text: 'Entendido' }]
         );
         return;
       }
@@ -494,6 +493,7 @@ export default function PetDetail() {
       );
     } finally {
       setProcessingImage(false);
+      setShowScanOptionsModal(false);
       setScanRecordType(null);
     }
   };
@@ -1790,7 +1790,10 @@ export default function PetDetail() {
             {processingImage ? (
               <View style={styles.processingContainer}>
                 <ActivityIndicator size="large" color="#3B82F6" />
-                <Text style={styles.processingText}>Procesando imagen...</Text>
+                <Text style={styles.processingText}>Analizando la imagen...</Text>
+                <Text style={styles.processingSubtext}>
+                  Esto puede tomar unos segundos
+                </Text>
               </View>
             ) : (
               <>
@@ -2593,10 +2596,16 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   processingText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1F2937',
     marginTop: 16,
+  },
+  processingSubtext: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 8,
   },
   scanOptionsContainer: {
     flexDirection: 'row',
