@@ -108,6 +108,38 @@ Asegúrate de que al desplegar:
 4. 🏗️ Crear nuevo build de la app con EAS
 5. 📱 Probar en dispositivos reales
 
+## 🚨 IMPORTANTE: Error 404 / Link no abre la app
+
+Si encuentras alguno de estos problemas:
+
+### ❌ Error 404 "Page not found"
+- **Solución**: Ver guía `SOLUCION_404.md` en `web-redirect/`
+- Ya está resuelto con el archivo `_redirects`
+
+### ❌ El link NO abre la app (se queda en navegador)
+- **Causa**: Archivos `.well-known` tienen valores de ejemplo
+- **Solución**: Ver guía `../SOLUCION_RAPIDA_UNIVERSAL_LINKS.md`
+- Necesitas configurar Team ID (iOS) y SHA256 (Android)
+
+## 🛠️ Scripts Automatizados
+
+Para facilitar la configuración, usa estos scripts:
+
+```bash
+# Obtener SHA256 de Android
+./scripts/get-android-sha256.sh
+
+# Actualizar ambos archivos .well-known automáticamente
+./scripts/update-well-known-files.sh
+```
+
+## 📚 Documentación Completa
+
+- **Solución rápida** (3 pasos, 25 min): `../SOLUCION_RAPIDA_UNIVERSAL_LINKS.md`
+- **Guía completa** (todos los detalles): `../CONFIGURAR_UNIVERSAL_LINKS.md`
+- **Error 404**: `SOLUCION_404.md`
+- **Setup Netlify**: `../NETLIFY_SETUP.md`
+
 ## 🎉 ¿Funcionó?
 
 Una vez configurado:
@@ -117,4 +149,4 @@ Una vez configurado:
 
 ---
 
-Para más detalles, consulta `NETLIFY_SETUP.md` en la raíz del proyecto.
+**¿Necesitas ayuda?** Consulta las guías mencionadas arriba para solucionar cualquier problema.
