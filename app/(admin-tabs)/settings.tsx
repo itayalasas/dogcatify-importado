@@ -39,6 +39,11 @@ export default function AdminSettings() {
   const [mpLoading, setMpLoading] = useState(false);
   const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
   const [loadingSubscriptions, setLoadingSubscriptions] = useState(false);
+  const [showBroadcastModal, setShowBroadcastModal] = useState(false);
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [broadcastTitle, setBroadcastTitle] = useState('');
+  const [broadcastLoading, setBroadcastLoading] = useState(false);
+  const [broadcastProgress, setBroadcastProgress] = useState({ sent: 0, total: 0 });
 
   useEffect(() => {
     if (currentUser?.email === 'admin@dogcatify.com') {
@@ -479,7 +484,7 @@ export default function AdminSettings() {
   const handleSystemMaintenance = () => {
     Alert.alert(
       'Modo Mantenimiento',
-      settings.maintenanceMode 
+      settings.maintenanceMode
         ? 'Se desactivará el modo mantenimiento y los usuarios podrán acceder normalmente.'
         : 'Se activará el modo mantenimiento y los usuarios no podrán acceder a la aplicación.',
       [
@@ -497,6 +502,92 @@ export default function AdminSettings() {
         }
       ]
     );
+  };
+
+  const handleBroadcastNotification = async () => {
+    if (!broadcastTitle.trim() || !broadcastMessage.trim()) {
+      Alert.alert('Error', 'Por favor completa el título y el mensaje');
+      return;
+    }
+
+    setBroadcastLoading(true);
+    setBroadcastProgress({ sent: 0, total: 0 });
+
+    try {
+      const { data: users, error } = await supabaseClient
+        .from('profiles')
+        .select('id, fcm_token')
+        .not('fcm_token', 'is', null);
+
+      if (error) throw error;
+
+      const usersWithTokens = users.filter(u => u.fcm_token);
+      const totalUsers = usersWithTokens.length;
+
+      if (totalUsers === 0) {
+        Alert.alert('Sin usuarios', 'No hay usuarios con notificaciones habilitadas');
+        setBroadcastLoading(false);
+        return;
+      }
+
+      Alert.alert(
+        'Confirmar envío',
+        `Se enviarán notificaciones a ${totalUsers} usuarios en lotes de 20.\n\n¿Continuar?`,
+        [
+          { text: 'Cancelar', style: 'cancel', onPress: () => setBroadcastLoading(false) },
+          {
+            text: 'Enviar',
+            onPress: async () => {
+              const BATCH_SIZE = 20;
+              let sent = 0;
+
+              for (let i = 0; i < usersWithTokens.length; i += BATCH_SIZE) {
+                const batch = usersWithTokens.slice(i, i + BATCH_SIZE);
+
+                const promises = batch.map(user =>
+                  fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/send-notification-fcm-v1`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+                    },
+                    body: JSON.stringify({
+                      fcmToken: user.fcm_token,
+                      title: broadcastTitle,
+                      body: broadcastMessage,
+                      data: {
+                        type: 'broadcast',
+                        timestamp: new Date().toISOString()
+                      }
+                    })
+                  }).catch(err => console.error('Error sending to user:', user.id, err))
+                );
+
+                await Promise.all(promises);
+                sent += batch.length;
+                setBroadcastProgress({ sent, total: totalUsers });
+
+                await new Promise(resolve => setTimeout(resolve, 500));
+              }
+
+              setBroadcastLoading(false);
+              setBroadcastMessage('');
+              setBroadcastTitle('');
+              setShowBroadcastModal(false);
+
+              Alert.alert(
+                'Envío completado',
+                `Se enviaron notificaciones a ${sent} usuarios exitosamente`
+              );
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error broadcasting notifications:', error);
+      Alert.alert('Error', 'No se pudieron enviar las notificaciones');
+      setBroadcastLoading(false);
+    }
   };
 
   const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
@@ -530,7 +621,7 @@ export default function AdminSettings() {
         {/* Notifications Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>🔔 Notificaciones</Text>
-          
+
           <Card style={styles.settingsCard}>
             <View style={styles.settingItem}>
               <View style={styles.settingInfo}>
@@ -544,9 +635,9 @@ export default function AdminSettings() {
                 thumbColor={settings.emailNotifications ? '#FFFFFF' : '#FFFFFF'}
               />
             </View>
-            
+
             {settings.emailNotifications && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.emailConfigButton}
                 onPress={() => setShowEmailModal(true)}
               >
@@ -567,6 +658,16 @@ export default function AdminSettings() {
                 thumbColor={settings.pushNotifications ? '#FFFFFF' : '#FFFFFF'}
               />
             </View>
+
+            {settings.pushNotifications && (
+              <TouchableOpacity
+                style={styles.broadcastButton}
+                onPress={() => setShowBroadcastModal(true)}
+              >
+                <Bell size={16} color="#2D6A6F" />
+                <Text style={styles.broadcastButtonText}>Enviar notificación masiva</Text>
+              </TouchableOpacity>
+            )}
           </Card>
         </View>
 
@@ -1164,7 +1265,87 @@ export default function AdminSettings() {
           </View>
         </View>
       </Modal>
-      
+
+      {/* Broadcast Notification Modal */}
+      <Modal
+        visible={showBroadcastModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !broadcastLoading && setShowBroadcastModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Enviar Notificación Masiva</Text>
+              {!broadcastLoading && (
+                <TouchableOpacity onPress={() => setShowBroadcastModal(false)}>
+                  <Text style={styles.modalCloseText}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.broadcastInfo}>
+              <Bell size={20} color="#2D6A6F" />
+              <Text style={styles.broadcastInfoText}>
+                Esta notificación se enviará a todos los usuarios con notificaciones habilitadas en lotes de 20.
+              </Text>
+            </View>
+
+            <Input
+              label="Título de la notificación *"
+              placeholder="Ej: Nueva actualización disponible"
+              value={broadcastTitle}
+              onChangeText={setBroadcastTitle}
+              editable={!broadcastLoading}
+            />
+
+            <Input
+              label="Mensaje *"
+              placeholder="Ej: Hemos agregado nuevas funciones..."
+              value={broadcastMessage}
+              onChangeText={setBroadcastMessage}
+              multiline
+              numberOfLines={4}
+              style={styles.broadcastMessageInput}
+              editable={!broadcastLoading}
+            />
+
+            {broadcastLoading && broadcastProgress.total > 0 && (
+              <View style={styles.broadcastProgressContainer}>
+                <Text style={styles.broadcastProgressText}>
+                  Enviando: {broadcastProgress.sent} / {broadcastProgress.total} usuarios
+                </Text>
+                <View style={styles.broadcastProgressBar}>
+                  <View
+                    style={[
+                      styles.broadcastProgressFill,
+                      { width: `${(broadcastProgress.sent / broadcastProgress.total) * 100}%` }
+                    ]}
+                  />
+                </View>
+              </View>
+            )}
+
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancelar"
+                onPress={() => setShowBroadcastModal(false)}
+                variant="outline"
+                size="medium"
+                disabled={broadcastLoading}
+              />
+              <Button
+                title={broadcastLoading ? 'Enviando...' : 'Enviar a todos'}
+                onPress={handleBroadcastNotification}
+                size="medium"
+                disabled={broadcastLoading || !broadcastTitle.trim() || !broadcastMessage.trim()}
+                loading={broadcastLoading}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -1699,5 +1880,69 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     lineHeight: 16,
+  },
+  broadcastButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F9FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 8,
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+    marginLeft: 40,
+  },
+  broadcastButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#2D6A6F',
+    marginLeft: 8,
+  },
+  broadcastInfo: {
+    flexDirection: 'row',
+    backgroundColor: '#F0F9FF',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    alignItems: 'flex-start',
+  },
+  broadcastInfoText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#0369A1',
+    marginLeft: 8,
+    lineHeight: 18,
+  },
+  broadcastMessageInput: {
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  broadcastProgressContainer: {
+    marginVertical: 16,
+    padding: 12,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  broadcastProgressText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#166534',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  broadcastProgressBar: {
+    height: 8,
+    backgroundColor: '#D1FAE5',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  broadcastProgressFill: {
+    height: '100%',
+    backgroundColor: '#10B981',
+    borderRadius: 4,
   },
 });
