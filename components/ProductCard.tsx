@@ -60,7 +60,21 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, onAd
         
         <View style={styles.content}>
           <Text style={styles.productName} numberOfLines={2}>{product.name}</Text>
-          <Text style={styles.productPrice}>{formatPrice(product.price)}</Text>
+
+          {/* Mostrar descuento si existe */}
+          {product.hasDiscount && product.originalPrice && product.discountedPrice ? (
+            <View style={styles.priceContainer}>
+              <Text style={styles.originalPrice}>{formatPrice(product.originalPrice)}</Text>
+              <Text style={styles.discountedPrice}>{formatPrice(product.discountedPrice)}</Text>
+              {product.activePromotion?.discount_percentage > 0 && (
+                <View style={styles.discountBadge}>
+                  <Text style={styles.discountBadgeText}>-{product.activePromotion.discount_percentage}%</Text>
+                </View>
+              )}
+            </View>
+          ) : (
+            <Text style={styles.productPrice}>{formatPrice(product.price)}</Text>
+          )}
           
           {product.rating && (
             <View style={styles.rating}>
@@ -141,6 +155,35 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     color: '#10B981',
     marginBottom: 8,
+  },
+  priceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  originalPrice: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
+  },
+  discountedPrice: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#EF4444',
+  },
+  discountBadge: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  discountBadgeText: {
+    fontSize: 11,
+    fontFamily: 'Inter-Bold',
+    color: '#EF4444',
   },
   rating: {
     flexDirection: 'row',

@@ -8,6 +8,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 import { router } from 'expo-router';
+import { getActivePromotionsForItems, calculateDiscountedPrice, incrementPromotionClicks, type ActivePromotion } from '@/utils/promotions';
 
 // Ignore specific Firebase warnings that appear on logout
 LogBox.ignoreLogs([
@@ -138,10 +139,44 @@ export default function Services() {
         }
 
         console.log(`✅ Processed ${allPartnersWithServices.length} partners with services`);
-        setPartners(allPartnersWithServices);
+
+        // Obtener IDs de servicios (excluir adopciones)
+        const serviceIds = allPartnersWithServices
+          .filter(s => !s.id.startsWith('adoption-'))
+          .map(s => s.id);
+
+        // Buscar promociones activas para estos servicios
+        const promotionsMap = await getActivePromotionsForItems(serviceIds, 'service');
+
+        // Aplicar promociones a los servicios
+        const servicesWithPromotions = allPartnersWithServices.map(service => {
+          if (service.id.startsWith('adoption-')) {
+            return service; // Las adopciones no tienen promociones
+          }
+
+          const promotion = promotionsMap.get(service.id);
+          const originalPrice = service.price;
+          const discountedPrice = promotion
+            ? calculateDiscountedPrice(originalPrice, promotion)
+            : originalPrice;
+
+          return {
+            ...service,
+            activePromotion: promotion || null,
+            originalPrice: promotion ? originalPrice : null,
+            discountedPrice: promotion ? discountedPrice : null,
+            hasDiscount: !!promotion,
+          };
+        });
+
+        if (promotionsMap.size > 0) {
+          console.log(`✨ Applied ${promotionsMap.size} active promotions to services`);
+        }
+
+        setPartners(servicesWithPromotions);
 
         // Cargar todos los servicios de una vez
-        setDisplayedPartners(allPartnersWithServices);
+        setDisplayedPartners(servicesWithPromotions);
         setCurrentPage(1);
         setHasMoreData(false);
       }
@@ -187,7 +222,7 @@ export default function Services() {
     };
   }, []);
 
-  const handlePartnerPress = (partnerId: string) => {
+  const handlePartnerPress = async (partnerId: string) => {
     if (!partnerId || typeof partnerId !== 'string') {
       console.error('Invalid partner ID for navigation:', partnerId);
       Alert.alert('Error', 'ID de partner inválido');
@@ -199,6 +234,13 @@ export default function Services() {
       console.error('Partner ID is not a valid UUID for navigation:', partnerId);
       Alert.alert('Error', 'ID de partner no válido');
       return;
+    }
+
+    // Buscar si algún servicio de este partner tiene promoción activa
+    const partnerService = displayedPartners.find(p => p.partnerId === partnerId);
+    if (partnerService?.activePromotion) {
+      await incrementPromotionClicks(partnerService.activePromotion.id);
+      console.log(`📊 Incremented promotion click for service: ${partnerService.name}`);
     }
 
     console.log('Navigating to partner with valid UUID:', partnerId);
