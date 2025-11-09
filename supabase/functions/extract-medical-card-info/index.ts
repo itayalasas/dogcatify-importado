@@ -26,6 +26,11 @@ interface ExtractedData {
   confidence: 'high' | 'medium' | 'low';
 }
 
+interface ExtractedRecords {
+  records: ExtractedData[];
+  totalFound: number;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -70,9 +75,9 @@ Deno.serve(async (req: Request) => {
     const prompt = recordType === 'vaccine'
       ? `Eres un veterinario experto analizando un carnet de vacunación${petText} (${speciesText}).
 
-Analiza cuidadosamente esta imagen y extrae TODA la información visible del carnet de vacunación.
+Analiza cuidadosamente esta imagen y extrae información de TODAS LAS VACUNAS visibles en el carnet.
 
-Busca específicamente:
+Para cada vacuna encontrada, busca:
 
 1. **Nombre de la vacuna** (ej: "DHPP", "Rabia", "Quíntuple", "Triple Felina", "FVRCP", etc.)
 2. **Fecha de aplicación** (formato DD/MM/YYYY preferiblemente)
@@ -83,30 +88,37 @@ Busca específicamente:
 7. **Observaciones** o notas adicionales
 
 IMPORTANTE:
-- Si encuentras múltiples vacunas, extrae información de la MÁS RECIENTE o la que está más visible
+- Extrae TODAS las vacunas que encuentres en la imagen (pueden ser múltiples filas, columnas o secciones)
+- Cada vacuna debe ser un objeto separado en el array
 - Las fechas deben estar en formato DD/MM/YYYY (ej: "15/03/2024")
 - Si una fecha tiene 2 dígitos de año, asume 2000+ (ej: "15/03/24" → "15/03/2024")
 - Busca variaciones como "próxima dosis", "refuerzo", "next dose", "revacunación"
-- Si no puedes leer algo con claridad, déjalo vacío
+- Si no puedes leer algo con claridad, déjalo vacío en ese registro específico
+- Si el veterinario o clínica son los mismos para todas, repite la información en cada registro
 
-Responde ÚNICAMENTE en formato JSON válido:
+Responde ÚNICAMENTE en formato JSON válido con un array:
 {
-  "name": "Nombre de la vacuna",
-  "applicationDate": "DD/MM/YYYY",
-  "nextDueDate": "DD/MM/YYYY",
-  "veterinarian": "Dr./Dra. Nombre",
-  "clinic": "Nombre de la clínica",
-  "batchNumber": "Número de lote",
-  "notes": "Observaciones relevantes",
-  "confidence": "high/medium/low"
+  "records": [
+    {
+      "name": "Nombre de la vacuna",
+      "applicationDate": "DD/MM/YYYY",
+      "nextDueDate": "DD/MM/YYYY",
+      "veterinarian": "Dr./Dra. Nombre",
+      "clinic": "Nombre de la clínica",
+      "batchNumber": "Número de lote",
+      "notes": "Observaciones relevantes",
+      "confidence": "high/medium/low"
+    }
+  ],
+  "totalFound": 0
 }
 
-Si no encuentras información en la imagen, indica "confidence": "low" y deja los campos vacíos.`
+Si no encuentras ninguna vacuna, retorna un array vacío con "totalFound": 0.`
       : `Eres un veterinario experto analizando un registro de desparasitación${petText} (${speciesText}).
 
-Analiza cuidadosamente esta imagen y extrae TODA la información visible del registro de desparasitación.
+Analiza cuidadosamente esta imagen y extrae información de TODAS LAS DESPARASITACIONES visibles en el registro.
 
-Busca específicamente:
+Para cada desparasitación encontrada, busca:
 
 1. **Producto/Desparasitante usado** (ej: "Drontal Plus", "Advocate", "Bravecto", "Milbemax", etc.)
 2. **Fecha de aplicación** (formato DD/MM/YYYY preferiblemente)
@@ -117,28 +129,34 @@ Busca específicamente:
 7. **Observaciones** o notas adicionales
 
 IMPORTANTE:
-- Si encuentras múltiples aplicaciones, extrae información de la MÁS RECIENTE
+- Extrae TODAS las desparasitaciones que encuentres en la imagen (pueden ser múltiples filas o entradas)
+- Cada desparasitación debe ser un objeto separado en el array
 - Las fechas deben estar en formato DD/MM/YYYY (ej: "15/03/2024")
 - Si una fecha tiene 2 dígitos de año, asume 2000+ (ej: "15/03/24" → "15/03/2024")
 - Busca palabras clave como "desparasitante", "antiparasitario", "vermífugo"
-- Si no puedes leer algo con claridad, déjalo vacío
+- Si no puedes leer algo con claridad, déjalo vacío en ese registro específico
+- Si el veterinario o clínica son los mismos para todas, repite la información en cada registro
 
-Responde ÚNICAMENTE en formato JSON válido:
+Responde ÚNICAMENTE en formato JSON válido con un array:
 {
-  "productName": "Nombre del producto",
-  "applicationDate": "DD/MM/YYYY",
-  "nextDueDate": "DD/MM/YYYY",
-  "veterinarian": "Dr./Dra. Nombre",
-  "clinic": "Nombre de la clínica",
-  "notes": "Tipo de parásitos tratados y observaciones",
-  "confidence": "high/medium/low"
+  "records": [
+    {
+      "productName": "Nombre del producto",
+      "applicationDate": "DD/MM/YYYY",
+      "nextDueDate": "DD/MM/YYYY",
+      "veterinarian": "Dr./Dra. Nombre",
+      "clinic": "Nombre de la clínica",
+      "notes": "Tipo de parásitos tratados y observaciones",
+      "confidence": "high/medium/low"
+    }
+  ],
+  "totalFound": 0
 }
 
-Si no encuentras información en la imagen, indica "confidence": "low" y deja los campos vacíos.`;
+Si no encuentras ninguna desparasitación, retorna un array vacío con "totalFound": 0.`;
 
     console.log('Calling OpenAI Vision API...');
 
-    // Llamar a OpenAI Vision API
     const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -170,7 +188,7 @@ Si no encuentras información en la imagen, indica "confidence": "low" y deja lo
           }
         ],
         temperature: 0.2,
-        max_tokens: 1000,
+        max_tokens: 2000,
       }),
     });
 
@@ -194,43 +212,43 @@ Si no encuentras información en la imagen, indica "confidence": "low" y deja lo
 
     console.log('OpenAI response:', responseText);
 
-    // Parsear el JSON
-    let extractedData: ExtractedData;
+    let extractedRecords: ExtractedRecords;
     try {
-      // Intentar parsear directamente
       const parsed = JSON.parse(responseText);
-      extractedData = {
-        type: recordType,
-        ...parsed
-      };
+      extractedRecords = parsed;
     } catch (e) {
-      // Si falla, intentar extraer el JSON del texto
       const match = responseText.match(/\{[\s\S]*\}/);
       if (match) {
         const parsed = JSON.parse(match[0]);
-        extractedData = {
-          type: recordType,
-          ...parsed
-        };
+        extractedRecords = parsed;
       } else {
         throw new Error('No se pudo parsear la respuesta de OpenAI');
       }
     }
 
-    // Validar fechas y convertir formatos si es necesario
-    if (extractedData.applicationDate) {
-      extractedData.applicationDate = normalizeDateFormat(extractedData.applicationDate);
-    }
-    if (extractedData.nextDueDate) {
-      extractedData.nextDueDate = normalizeDateFormat(extractedData.nextDueDate);
-    }
+    const processedRecords = extractedRecords.records.map((record: any) => {
+      const processedRecord: ExtractedData = {
+        type: recordType,
+        ...record
+      };
 
-    console.log('Extracted data:', extractedData);
+      if (processedRecord.applicationDate) {
+        processedRecord.applicationDate = normalizeDateFormat(processedRecord.applicationDate);
+      }
+      if (processedRecord.nextDueDate) {
+        processedRecord.nextDueDate = normalizeDateFormat(processedRecord.nextDueDate);
+      }
+
+      return processedRecord;
+    });
+
+    console.log(`Extracted ${processedRecords.length} ${recordType} records:`, processedRecords);
 
     return new Response(
       JSON.stringify({
         success: true,
-        data: extractedData,
+        records: processedRecords,
+        totalFound: extractedRecords.totalFound || processedRecords.length,
         recordType,
         petSpecies,
         petName
@@ -256,21 +274,15 @@ Si no encuentras información en la imagen, indica "confidence": "low" y deja lo
   }
 });
 
-/**
- * Normaliza el formato de fecha a DD/MM/YYYY
- */
 function normalizeDateFormat(dateStr: string): string {
   if (!dateStr) return '';
 
-  // Eliminar espacios
   dateStr = dateStr.trim();
 
-  // Si ya está en formato DD/MM/YYYY, retornar
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
     return dateStr;
   }
 
-  // Si está en formato DD/MM/YY, convertir a DD/MM/YYYY
   if (/^\d{2}\/\d{2}\/\d{2}$/.test(dateStr)) {
     const parts = dateStr.split('/');
     const year = parseInt(parts[2]);
@@ -278,12 +290,10 @@ function normalizeDateFormat(dateStr: string): string {
     return `${parts[0]}/${parts[1]}/${fullYear}`;
   }
 
-  // Si está en formato DD-MM-YYYY o DD.MM.YYYY, convertir a DD/MM/YYYY
   if (/^\d{2}[-\.]\d{2}[-\.]\d{4}$/.test(dateStr)) {
     return dateStr.replace(/[-\.]/g, '/');
   }
 
-  // Si está en formato DD-MM-YY o DD.MM.YY, convertir
   if (/^\d{2}[-\.]\d{2}[-\.]\d{2}$/.test(dateStr)) {
     const parts = dateStr.split(/[-\.]/);
     const year = parseInt(parts[2]);
@@ -291,12 +301,10 @@ function normalizeDateFormat(dateStr: string): string {
     return `${parts[0]}/${parts[1]}/${fullYear}`;
   }
 
-  // Si está en formato YYYY/MM/DD o similar, convertir
   if (/^\d{4}[\/\-\.]\d{2}[\/\-\.]\d{2}$/.test(dateStr)) {
     const parts = dateStr.split(/[\/\-\.]/);
     return `${parts[2]}/${parts[1]}/${parts[0]}`;
   }
 
-  // Si no se puede normalizar, retornar tal cual
   return dateStr;
 }
