@@ -17,16 +17,24 @@ export interface ExtractedMedicalRecord {
 }
 
 /**
- * Process a vaccination or deworming card image and extract information using OpenAI Vision
+ * Response from the extraction API with multiple records
  */
-export const extractMedicalRecordFromImage = async (
+export interface ExtractedMedicalRecords {
+  records: ExtractedMedicalRecord[];
+  totalFound: number;
+}
+
+/**
+ * Process a vaccination or deworming card image and extract ALL records using OpenAI Vision
+ */
+export const extractMedicalRecordsFromImage = async (
   imageUri: string,
   recordType: 'vaccine' | 'deworming',
   petInfo?: {
     species?: 'dog' | 'cat';
     name?: string;
   }
-): Promise<ExtractedMedicalRecord> => {
+): Promise<ExtractedMedicalRecords> => {
   try {
     console.log(`Processing ${recordType} card image:`, imageUri);
 
@@ -74,9 +82,12 @@ export const extractMedicalRecordFromImage = async (
       throw new Error(result.error || 'Failed to extract information');
     }
 
-    console.log('Extracted data:', result.data);
+    console.log(`Extracted ${result.totalFound} records:`, result.records);
 
-    return result.data as ExtractedMedicalRecord;
+    return {
+      records: result.records as ExtractedMedicalRecord[],
+      totalFound: result.totalFound || result.records.length
+    };
   } catch (error) {
     console.error('Error extracting medical record from image:', error);
     throw error;

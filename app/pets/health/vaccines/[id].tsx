@@ -9,7 +9,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Card } from '../../../../components/ui/Card';
 import { supabaseClient } from '../../../../lib/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
-import { extractMedicalRecordFromImage, simulateOCRExtraction } from '../../../../utils/medicalCardOCR';
+import { extractMedicalRecordsFromImage, ExtractedMedicalRecord, simulateOCRExtraction } from '../../../../utils/medicalCardOCR';
 
 export default function AddVaccine() {
   const { id, recordId, refresh } = useLocalSearchParams<{ id: string; recordId?: string; refresh?: string }>();
@@ -457,12 +457,10 @@ export default function AddVaccine() {
   const processVaccinationCard = async (imageUri: string) => {
     setProcessingImage(true);
     try {
-      // Try to extract information from the image
-      let extractedData;
+      let extractedRecords: ExtractedMedicalRecord[] = [];
 
       try {
-        // First try with real API if configured
-        extractedData = await extractMedicalRecordFromImage(
+        const result = await extractMedicalRecordsFromImage(
           imageUri,
           'vaccine',
           {
@@ -470,48 +468,31 @@ export default function AddVaccine() {
             name: pet?.name
           }
         );
+        extractedRecords = result.records;
       } catch (apiError) {
         console.log('API not available, using simulation:', apiError);
-        // Fallback to simulation for demo
-        extractedData = await simulateOCRExtraction('vaccine');
+        const simulatedData = await simulateOCRExtraction('vaccine');
+        extractedRecords = [simulatedData];
       }
 
-      // Populate form fields with extracted data
-      if (extractedData.name) {
-        setVaccineName(extractedData.name);
+      if (extractedRecords.length === 0) {
+        Alert.alert(
+          'Sin resultados',
+          'No se encontraron vacunas en la imagen. Por favor ingresa los datos manualmente.'
+        );
+        return;
       }
 
-      if (extractedData.applicationDate) {
-        try {
-          const [day, month, year] = extractedData.applicationDate.split('/');
-          setVaccineDate(new Date(parseInt(year), parseInt(month) - 1, parseInt(day)));
-        } catch (dateError) {
-          console.error('Error parsing application date:', dateError);
-        }
+      if (extractedRecords.length === 1) {
+        populateFormWithRecord(extractedRecords[0]);
+        Alert.alert(
+          'Información extraída',
+          'Se extrajo 1 vacuna. Por favor verifica los datos antes de guardar.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        handleMultipleRecords(extractedRecords);
       }
-
-      if (extractedData.nextDueDate) {
-        try {
-          const [day, month, year] = extractedData.nextDueDate.split('/');
-          setNextDueDate(new Date(parseInt(year), parseInt(month) - 1, parseInt(day)));
-        } catch (dateError) {
-          console.error('Error parsing next due date:', dateError);
-        }
-      }
-
-      if (extractedData.veterinarian) {
-        setVeterinarian(extractedData.veterinarian);
-      }
-
-      if (extractedData.notes) {
-        setNotes(extractedData.notes);
-      }
-
-      Alert.alert(
-        'Información extraída',
-        'Se ha extraído la información del carnet. Por favor verifica que los datos sean correctos antes de guardar.',
-        [{ text: 'OK' }]
-      );
     } catch (error) {
       console.error('Error processing vaccination card:', error);
       Alert.alert(
@@ -520,6 +501,112 @@ export default function AddVaccine() {
       );
     } finally {
       setProcessingImage(false);
+    }
+  };
+
+  const populateFormWithRecord = (record: ExtractedMedicalRecord) => {
+    if (record.name) {
+      setVaccineName(record.name);
+    }
+
+    if (record.applicationDate) {
+      try {
+        const [day, month, year] = record.applicationDate.split('/');
+        setVaccineDate(new Date(parseInt(year), parseInt(month) - 1, parseInt(day)));
+      } catch (dateError) {
+        console.error('Error parsing application date:', dateError);
+      }
+    }
+
+    if (record.nextDueDate) {
+      try {
+        const [day, month, year] = record.nextDueDate.split('/');
+        setNextDueDate(new Date(parseInt(year), parseInt(month) - 1, parseInt(day)));
+      } catch (dateError) {
+        console.error('Error parsing next due date:', dateError);
+      }
+    }
+
+    if (record.veterinarian) {
+      setVeterinarian(record.veterinarian);
+    }
+
+    if (record.notes) {
+      setNotes(record.notes);
+    }
+  };
+
+  const handleMultipleRecords = async (records: ExtractedMedicalRecord[]) => {
+    Alert.alert(
+      `¡${records.length} vacunas encontradas!`,
+      `Se encontraron ${records.length} vacunas en la imagen. ¿Deseas guardarlas todas automáticamente?`,
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel'
+        },
+        {
+          text: 'Revisar una por una',
+          onPress: () => {
+            populateFormWithRecord(records[0]);
+            Alert.alert(
+              'Primera vacuna',
+              `Mostrando la primera de ${records.length} vacunas. Guarda esta y luego escanea nuevamente para las demás.`
+            );
+          }
+        },
+        {
+          text: 'Guardar todas',
+          onPress: () => saveMultipleRecords(records)
+        }
+      ]
+    );
+  };
+
+  const saveMultipleRecords = async (records: ExtractedMedicalRecord[]) => {
+    if (!currentUser) {
+      Alert.alert('Error', 'Usuario no autenticado');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const recordsToInsert = records.map(record => ({
+        pet_id: id,
+        user_id: currentUser.id,
+        type: 'vaccine',
+        name: record.name || 'Vacuna',
+        application_date: record.applicationDate || formatDate(new Date()),
+        next_due_date: record.nextDueDate || null,
+        veterinarian: record.veterinarian || null,
+        notes: record.notes || null,
+        created_at: new Date().toISOString()
+      }));
+
+      const { error } = await supabaseClient
+        .from('pet_health')
+        .insert(recordsToInsert);
+
+      if (error) throw error;
+
+      Alert.alert(
+        'Éxito',
+        `Se guardaron ${records.length} vacunas correctamente`,
+        [
+          {
+            text: 'OK',
+            onPress: () => router.push({
+              pathname: `/pets/${id}`,
+              params: { activeTab: 'health' }
+            })
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error saving multiple vaccines:', error);
+      Alert.alert('Error', 'No se pudieron guardar todas las vacunas');
+    } finally {
+      setLoading(false);
     }
   };
   return (
