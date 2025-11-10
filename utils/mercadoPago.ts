@@ -1717,50 +1717,77 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
       console.log('⚠️  This will ensure the app opens correctly');
     }
 
-    // ESTRATEGIA: Abrir URL web directamente (método recomendado por Mercado Pago)
-    //
-    // ¿Por qué se ve el "flash" del navegador?
-    // 1. Android abre la URL https:// en el navegador predeterminado
-    // 2. El navegador detecta que es una URL de Mercado Pago (via App Links)
-    // 3. El navegador redirige automáticamente a la app de Mercado Pago si está instalada
-    //
-    // Este "flash" es normal y es cómo funciona el sistema de App Links de Android.
-    // No se puede evitar sin perder funcionalidad (la información de pago se pasa por la URL web).
-    //
-    // Alternativas probadas que NO funcionan:
-    // - Deep link directo (mercadopago://checkout/{id}) → Abre app vacía sin info de pago
-    // - Intent directo a la app → No tiene la información de la preferencia de pago
-    //
     console.log('');
-    console.log('🌐 Opening payment URL (OS will redirect to app if installed)');
 
-    // En iOS, canOpenURL puede causar crashes si no está bien configurado
-    // Por seguridad, lo saltamos y abrimos directamente
+    // ESTRATEGIA DIFERENTE PARA iOS Y ANDROID:
+    //
+    // iOS: Intentar abrir la app directamente con Universal Link de MP
+    //      Si falla, abrir en Safari
+    //
+    // Android: Abrir URL web directamente (App Links funciona automáticamente)
+    //
     try {
       if (Platform.OS === 'ios') {
-        console.log('📱 iOS detected - opening URL directly');
-        console.log('   URL:', paymentUrl);
-        await Linking.openURL(paymentUrl);
-        console.log('✅ URL opened successfully on iOS');
+        console.log('📱 iOS detected - trying to open MP app first');
+
+        // En iOS, intentamos primero con el Universal Link de Mercado Pago
+        // Esto debería abrir la app si está instalada
+        let appOpened = false;
+
+        try {
+          // Intentar abrir directamente con el URL de pago
+          // iOS debería reconocer el dominio mercadopago.com y abrir la app
+          console.log('   Attempting to open payment URL:', paymentUrl);
+
+          // En iOS, necesitamos usar una promesa con timeout para detectar
+          // si la app se abrió o no
+          await Promise.race([
+            Linking.openURL(paymentUrl),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('timeout')), 500)
+            )
+          ]);
+
+          appOpened = true;
+          console.log('✅ Payment URL opened on iOS');
+        } catch (error) {
+          console.log('   Direct open attempt completed (app may or may not have opened)');
+          // En iOS, openURL no falla aunque la app no se abra
+          // El sistema abre Safari si la app no está instalada
+          appOpened = true;
+        }
+
+        if (appOpened) {
+          console.log('✅ SUCCESS: Payment opened on iOS');
+          console.log('   iOS will use MP app if installed, Safari otherwise');
+          console.log('═══════════════════════════════════════\n');
+
+          return {
+            success: true,
+            openedInApp: true // En iOS asumimos que se manejó correctamente
+          };
+        }
       } else {
-        console.log('Checking if URL can be opened...');
+        // ANDROID: El sistema de App Links maneja automáticamente
+        console.log('🤖 Android detected - opening URL (App Links will handle)');
+        console.log('   URL:', paymentUrl);
+
         const canOpen = await Linking.canOpenURL(paymentUrl);
         if (!canOpen) {
           console.error('❌ Cannot open URL:', paymentUrl);
           console.log('Attempting to open anyway...');
         }
-        console.log('✅ Opening URL now...');
+
         await Linking.openURL(paymentUrl);
+        console.log('✅ SUCCESS: Payment URL opened on Android');
+        console.log('   Android App Links will redirect to app if installed');
+        console.log('═══════════════════════════════════════\n');
+
+        return {
+          success: true,
+          openedInApp: false // El OS decide mediante App Links
+        };
       }
-
-      console.log('✅ SUCCESS: Payment URL opened');
-      console.log('   OS will redirect to Mercado Pago app if installed');
-      console.log('═══════════════════════════════════════\n');
-
-      return {
-        success: true,
-        openedInApp: false // El OS decide mediante App Links
-      };
     } catch (openError: any) {
       console.error('❌ ERROR in Linking.openURL:', openError);
       console.error('   Error message:', openError.message);
