@@ -1,5 +1,6 @@
 import { supabaseClient } from '@/lib/supabase';
 import { logger } from '@/utils/datadogLogger';
+import { Linking, Platform } from 'react-native';
 
 /**
  * Mercado Pago OAuth2 Marketplace Implementation
@@ -1626,8 +1627,6 @@ export const validateCredentialsFormat = (accessToken: string, publicKey: string
  */
 export const isMercadoPagoAppInstalled = async (): Promise<boolean> => {
   try {
-    const { Linking, Platform } = await import('react-native');
-
     console.log('🔍 Checking for Mercado Pago app...', { platform: Platform.OS });
 
     // En web siempre retornamos false
@@ -1699,8 +1698,6 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
   error?: string;
 }> => {
   try {
-    const { Linking, Platform } = await import('react-native');
-
     const urlDomain = new URL(paymentUrl).hostname;
     const isSandboxUrl = urlDomain.includes('sandbox');
 
@@ -1778,7 +1775,6 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
 
     // Fallback: intentar abrir en navegador web
     try {
-      const { Linking } = await import('react-native');
       console.log('🔄 FALLBACK: Trying to open web URL...');
       await Linking.openURL(paymentUrl);
       console.log('✅ Fallback successful');
