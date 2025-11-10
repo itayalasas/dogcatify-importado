@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, TextInput, ActivityIndicator, Linking, Image, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, TextInput, ActivityIndicator, Linking, Image, Animated, AppState, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { ArrowLeft, Calendar, Clock, CreditCard, X, Lock, User, FileText, CircleCheck as CheckCircle } from 'lucide-react-native';
@@ -128,6 +128,30 @@ export default function ServiceBooking() {
       return () => clearTimeout(timer);
     }, [paymentLoading])
   );
+
+  // NUEVO: Listener de AppState para detectar cuando la app vuelve al primer plano (iOS fix)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      console.log('📱 AppState changed to:', nextAppState);
+
+      // Si la app vuelve al primer plano ('active') y el loader está visible
+      if (nextAppState === 'active' && paymentLoading && !isProcessingPayment.current) {
+        console.log('✅ iOS: App returned to foreground, hiding payment loader');
+
+        // En iOS, agregar un pequeño delay para asegurar que la transición se complete
+        const delay = Platform.OS === 'ios' ? 800 : 500;
+
+        setTimeout(() => {
+          setPaymentLoading(false);
+          setPaymentMessage('Preparando tu pago con Mercado Pago');
+        }, delay);
+      }
+    });
+
+    return () => {
+      subscription?.remove();
+    };
+  }, [paymentLoading]);
 
   // Detect card type based on number
   useEffect(() => {
