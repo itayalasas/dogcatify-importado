@@ -13,14 +13,6 @@ import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { Platform, Alert, View } from 'react-native';
 import { supabaseClient } from '@/lib/supabase';
 import { SafeAppWrapper } from '../components/SafeAppWrapper';
-import { logger } from '@/utils/datadogLogger';
-///
-// Initialize DataDog
-if (Platform.OS !== 'web') {
-  logger.initialize().catch((error) => {
-    console.error('Failed to initialize DataDog:', error);
-  });
-}
 // Global error handler
 if (typeof ErrorUtils !== 'undefined') {
   const originalHandler = ErrorUtils.getGlobalHandler();
@@ -31,7 +23,6 @@ if (typeof ErrorUtils !== 'undefined') {
     console.error('Stack:', error.stack);
     console.error('===================');
 
-    logger.trackError(error, 'GlobalErrorHandler', { isFatal });
 
     if (originalHandler) {
       originalHandler(error, isFatal);
@@ -48,7 +39,6 @@ global.onunhandledrejection = (event: any) => {
   console.error('===================================');
 
   const error = event.reason instanceof Error ? event.reason : new Error(String(event.reason));
-  logger.trackError(error, 'UnhandledPromiseRejection');
 
   if (originalUnhandled) {
     originalUnhandled(event);
@@ -58,23 +48,14 @@ global.onunhandledrejection = (event: any) => {
 function RootLayout() {
   useFrameworkReady();
 
-  // Add navigation state logging
-  useEffect(() => {
-    logger.info('RootLayout Mount', {
-      platform: Platform.OS,
-      version: Platform.Version,
-    });
-  }, []);
 
   // Prevent Supabase from showing automatic modals
   useEffect(() => {
     try {
       const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
         (event, session) => {
-          logger.debug('Auth event intercepted', { event, hasSession: !!session });
-
           if (event === 'SIGNED_UP') {
-            logger.info('Blocking SIGNED_UP event to prevent modal');
+            console.log('Blocking SIGNED_UP event to prevent modal');
           }
         }
       );
@@ -83,7 +64,7 @@ function RootLayout() {
         subscription?.unsubscribe();
       };
     } catch (error) {
-      logger.error('Error setting up auth listener', error as Error);
+      console.error('Error setting up auth listener:', error);
     }
   }, []);
 
@@ -91,15 +72,15 @@ function RootLayout() {
   useEffect(() => {
     const handleDeepLink = (event: { url: string }) => {
       const url = event.url;
-      logger.info('Deep link received', { url });
+      console.log('Deep link received:', url);
 
       try {
         const { hostname, path, queryParams } = Linking.parse(url);
-        logger.debug('Parsed URL', { hostname, path, queryParams });
+        console.log('Parsed URL:', { hostname, path, queryParams });
 
         if (path?.startsWith('album/')) {
           const albumId = path.replace('album/', '');
-          logger.info('Navigating to album', { albumId });
+          console.log('Navigating to album:', albumId);
 
           setTimeout(() => {
             const router = require('expo-router').router;
@@ -108,7 +89,7 @@ function RootLayout() {
         }
         else if (path?.startsWith('post/')) {
           const postId = path.replace('post/', '');
-          logger.info('Navigating to post', { postId });
+          console.log('Navigating to post:', postId);
 
           setTimeout(() => {
             const router = require('expo-router').router;
@@ -117,7 +98,7 @@ function RootLayout() {
         }
         else if (path?.startsWith('pet-share/')) {
           const shareId = path.replace('pet-share/', '');
-          logger.info('Navigating to pet share invitation', { shareId });
+          console.log('Navigating to pet share invitation:', shareId);
 
           setTimeout(() => {
             const router = require('expo-router').router;
@@ -126,7 +107,7 @@ function RootLayout() {
         }
         else if (path?.startsWith('pets/')) {
           const petId = path.replace('pets/', '');
-          logger.info('Navigating to pet details', { petId });
+          console.log('Navigating to pet details:', petId);
 
           setTimeout(() => {
             const router = require('expo-router').router;
@@ -134,13 +115,13 @@ function RootLayout() {
           }, 500);
         }
       } catch (error) {
-        logger.error('Error handling deep link', error as Error, { url });
+        console.error('Error handling deep link:', error, url);
       }
     };
 
     Linking.getInitialURL().then((url) => {
       if (url) {
-        logger.info('Initial URL detected', { url });
+        console.log('Initial URL detected:', url);
         handleDeepLink({ url });
       }
     });

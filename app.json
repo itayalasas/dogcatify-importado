@@ -30,11 +30,7 @@
     "experiments": { "typedRoutes": true },
     "extra": {
       "router": { "origin": false },
-      "eas": { "projectId": "0618d9ae-6714-46bb-adce-f4ee57fff324" },
-      "DATADOG_CLIENT_TOKEN": "pub3fcdf022fb8e66a33efd28db475fe01a",
-      "DATADOG_APPLICATION_ID": "2491c224-f0c9-4d3d-b1a9-ed7492600baa",
-      "DATADOG_ENV": "production",
-      "DATADOG_SITE": "us5.datadoghq.com"
+      "eas": { "projectId": "0618d9ae-6714-46bb-adce-f4ee57fff324" }
     },
     "ios": {
       "supportsTablet": true,
