@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Modal, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Modal, ActivityIndicator, Animated, AppState, Platform } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { ArrowLeft, ShoppingCart, Trash2, Plus, Minus, MapPin, ChevronDown, ChevronUp, CreditCard, X } from 'lucide-react-native';
@@ -110,6 +110,30 @@ export default function Cart() {
       return () => clearTimeout(timer);
     }, [cart, paymentLoading])
   );
+
+  // NUEVO: Listener de AppState para detectar cuando la app vuelve al primer plano (iOS fix)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      console.log('📱 AppState changed to:', nextAppState);
+
+      // Si la app vuelve al primer plano ('active') y el loader está visible
+      if (nextAppState === 'active' && paymentLoading && !isProcessingPayment.current) {
+        console.log('✅ iOS: App returned to foreground, hiding payment loader');
+
+        // En iOS, agregar un pequeño delay para asegurar que la transición se complete
+        const delay = Platform.OS === 'ios' ? 800 : 500;
+
+        setTimeout(() => {
+          setPaymentLoading(false);
+          setPaymentMessage('Preparando tu pago con Mercado Pago');
+        }, delay);
+      }
+    });
+
+    return () => {
+      subscription?.remove();
+    };
+  }, [paymentLoading]);
 
   const loadProductStocks = async () => {
     if (!cart || cart.length === 0) return;
