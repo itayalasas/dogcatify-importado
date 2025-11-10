@@ -5,6 +5,7 @@ import { CircleCheck as CheckCircle, Package, Calendar } from 'lucide-react-nati
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { supabaseClient } from '@/lib/supabase';
+import { useCart } from '../../contexts/CartContext';
 
 export default function PaymentSuccess() {
   const { order_id, type, payment_id } = useLocalSearchParams<{
@@ -13,12 +14,15 @@ export default function PaymentSuccess() {
     payment_id?: string;
   }>();
 
+  const { clearCart } = useCart();
   const [orderDetails, setOrderDetails] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadOrderDetails();
+    // Limpiar el carrito cuando llegamos a la pantalla de éxito
+    clearCart();
   }, [order_id, type]);
 
   const loadOrderDetails = async () => {
@@ -93,15 +97,17 @@ export default function PaymentSuccess() {
   };
 
   const handleViewOrders = () => {
+    // Usar push en lugar de replace porque ya limpiamos el historial al llegar aquí
     if (orderDetails?.isBooking) {
-      router.replace('/(tabs)/services');
+      router.push('/(tabs)/services');
     } else {
-      router.replace('/orders');
+      router.push('/orders');
     }
   };
 
   const handleGoHome = () => {
-    router.replace('/(tabs)');
+    // Usar push para ir al home
+    router.push('/(tabs)');
   };
 
   if (loading) {

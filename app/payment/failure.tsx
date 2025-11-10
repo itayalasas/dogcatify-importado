@@ -145,14 +145,15 @@ export default function PaymentFailure() {
 
   const handleRetryPayment = () => {
     if (orderDetails?.isBooking) {
-      router.replace('/(tabs)/services');
+      router.push('/(tabs)/services');
     } else {
-      router.replace('/cart');
+      // No volver al carrito, ir a la tienda para comenzar de nuevo
+      router.push('/(tabs)/shop');
     }
   };
 
   const handleGoHome = () => {
-    router.replace('/(tabs)');
+    router.push('/(tabs)');
   };
 
   if (loading) {
