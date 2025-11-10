@@ -114,6 +114,24 @@ function RootLayout() {
             router.push(`/pets/${petId}`);
           }, 500);
         }
+        else if (path?.startsWith('payment/success')) {
+          console.log('Payment success deep link detected');
+
+          setTimeout(() => {
+            const router = require('expo-router').router;
+            // Usar replace para limpiar el stack y que no se pueda volver al carrito
+            router.replace(url.replace('dogcatify://', '/'));
+          }, 500);
+        }
+        else if (path?.startsWith('payment/failure')) {
+          console.log('Payment failure deep link detected');
+
+          setTimeout(() => {
+            const router = require('expo-router').router;
+            // Usar replace para limpiar el stack
+            router.replace(url.replace('dogcatify://', '/'));
+          }, 500);
+        }
       } catch (error) {
         console.error('Error handling deep link:', error, url);
       }
@@ -215,8 +233,20 @@ function RootLayout() {
                   <Stack.Screen name="profile/mercadopago-config" />
                   <Stack.Screen name="profile/help-support" />
                   <Stack.Screen name="profile/delete-account" />
-                  <Stack.Screen name="payment/success" />
-                  <Stack.Screen name="payment/failure" />
+                  <Stack.Screen
+                    name="payment/success"
+                    options={{
+                      gestureEnabled: false,
+                      headerShown: false
+                    }}
+                  />
+                  <Stack.Screen
+                    name="payment/failure"
+                    options={{
+                      gestureEnabled: false,
+                      headerShown: false
+                    }}
+                  />
                   <Stack.Screen name="payment/pending" />
                   <Stack.Screen name="test-adoption" />
                   <Stack.Screen name="medical-history/[id]" />
