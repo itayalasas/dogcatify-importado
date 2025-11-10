@@ -386,8 +386,19 @@ export default function Cart() {
 
         // Open Mercado Pago directly (same as services)
         console.log('🚀 Abriendo Mercado Pago...');
-        const openResult = await openMercadoPagoPayment(paymentUrl, isTestModeByUrl);
-        console.log('📱 openMercadoPagoPayment completado:', openResult);
+
+        let openResult;
+        try {
+          openResult = await openMercadoPagoPayment(paymentUrl, isTestModeByUrl);
+          console.log('📱 openMercadoPagoPayment completado:', openResult);
+        } catch (openMPError: any) {
+          console.error('❌ Exception al abrir Mercado Pago:', openMPError);
+          openResult = {
+            success: false,
+            openedInApp: false,
+            error: openMPError.message || 'No se pudo abrir Mercado Pago'
+          };
+        }
 
         if (!openResult.success) {
           console.error('❌ Error abriendo Mercado Pago');
@@ -396,13 +407,20 @@ export default function Cart() {
           isProcessingPayment.current = false;
           console.log('🚩 isProcessingPayment = false (error al abrir MP)');
 
-          Alert.alert(
-            'Error',
-            openResult.error || 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.'
-          );
           // CRÍTICO: Ocultar loader si falló al abrir
           setPaymentLoading(false);
           setPaymentMessage('Preparando tu pago con Mercado Pago');
+
+          // Mostrar mensaje de error después de un momento
+          setTimeout(() => {
+            Alert.alert(
+              'Error al abrir Mercado Pago',
+              openResult.error || 'No se pudo abrir la pasarela de pago. Por favor intenta nuevamente.',
+              [
+                { text: 'OK', style: 'default' }
+              ]
+            );
+          }, 300);
         } else {
           console.log('✅ Mercado Pago abierto exitosamente');
           console.log('⏳ Loader DEBE permanecer visible hasta que el usuario regrese');

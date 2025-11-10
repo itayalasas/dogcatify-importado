@@ -1736,27 +1736,41 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
     //
     console.log('');
     console.log('🌐 Opening payment URL (OS will redirect to app if installed)');
-    console.log('Checking if URL can be opened...');
 
-    const canOpen = await Linking.canOpenURL(paymentUrl);
-    if (!canOpen) {
-      console.error('❌ Cannot open URL:', paymentUrl);
+    // En iOS, canOpenURL puede causar crashes si no está bien configurado
+    // Por seguridad, lo saltamos y abrimos directamente
+    try {
+      if (Platform.OS === 'ios') {
+        console.log('📱 iOS detected - opening URL directly');
+        console.log('   URL:', paymentUrl);
+        await Linking.openURL(paymentUrl);
+        console.log('✅ URL opened successfully on iOS');
+      } else {
+        console.log('Checking if URL can be opened...');
+        const canOpen = await Linking.canOpenURL(paymentUrl);
+        if (!canOpen) {
+          console.error('❌ Cannot open URL:', paymentUrl);
+          console.log('Attempting to open anyway...');
+        }
+        console.log('✅ Opening URL now...');
+        await Linking.openURL(paymentUrl);
+      }
+
+      console.log('✅ SUCCESS: Payment URL opened');
+      console.log('   OS will redirect to Mercado Pago app if installed');
       console.log('═══════════════════════════════════════\n');
-      throw new Error('No se puede abrir la URL de pago');
+
+      return {
+        success: true,
+        openedInApp: false // El OS decide mediante App Links
+      };
+    } catch (openError: any) {
+      console.error('❌ ERROR in Linking.openURL:', openError);
+      console.error('   Error message:', openError.message);
+      console.error('   Error name:', openError.name);
+      // Re-throw para que sea capturado por el catch externo
+      throw openError;
     }
-
-    console.log('✅ URL can be opened, opening now...');
-    await Linking.openURL(paymentUrl);
-
-    console.log('✅ SUCCESS: Payment URL opened');
-    console.log('   Android will open browser briefly, then redirect to Mercado Pago app');
-    console.log('   This "flash" is normal and expected behavior (App Links redirection)');
-    console.log('═══════════════════════════════════════\n');
-
-    return {
-      success: true,
-      openedInApp: false // El OS decide mediante App Links
-    };
 
   } catch (error) {
     console.error('❌ ERROR opening Mercado Pago payment:', error);
