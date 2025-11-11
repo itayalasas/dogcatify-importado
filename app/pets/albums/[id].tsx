@@ -11,6 +11,106 @@ import { supabaseClient } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { detectPetInVideo, validateVideoDuration } from '../../../utils/petDetection';
 import { Video } from 'expo-av';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
+
+const ZoomableImage = ({ uri, onSwipeLeft, onSwipeRight }: { uri: string; onSwipeLeft?: () => void; onSwipeRight?: () => void }) => {
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((e) => {
+      scale.value = savedScale.value * e.scale;
+    })
+    .onEnd(() => {
+      if (scale.value < 1) {
+        scale.value = withSpring(1);
+        savedScale.value = 1;
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      } else if (scale.value > 4) {
+        scale.value = withSpring(4);
+        savedScale.value = 4;
+      } else {
+        savedScale.value = scale.value;
+      }
+    });
+
+  const panGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      if (savedScale.value > 1) {
+        translateX.value = savedTranslateX.value + e.translationX;
+        translateY.value = savedTranslateY.value + e.translationY;
+      } else {
+        translateX.value = e.translationX;
+      }
+    })
+    .onEnd((e) => {
+      if (savedScale.value > 1) {
+        savedTranslateX.value = translateX.value;
+        savedTranslateY.value = translateY.value;
+      } else {
+        if (Math.abs(e.translationX) > 100 && Math.abs(e.velocityX) > 500) {
+          if (e.translationX > 0 && onSwipeRight) {
+            runOnJS(onSwipeRight)();
+          } else if (e.translationX < 0 && onSwipeLeft) {
+            runOnJS(onSwipeLeft)();
+          }
+        }
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      }
+    });
+
+  const doubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => {
+      if (scale.value > 1) {
+        scale.value = withSpring(1);
+        savedScale.value = 1;
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      } else {
+        scale.value = withSpring(2);
+        savedScale.value = 2;
+      }
+    });
+
+  const composedGesture = Gesture.Simultaneous(
+    doubleTapGesture,
+    Gesture.Simultaneous(pinchGesture, panGesture)
+  );
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  return (
+    <GestureDetector gesture={composedGesture}>
+      <Animated.View style={[styles.zoomableContainer]}>
+        <Animated.Image
+          source={{ uri }}
+          style={[styles.fullscreenMedia, animatedStyle]}
+          resizeMode="contain"
+        />
+      </Animated.View>
+    </GestureDetector>
+  );
+};
 
 export default function AlbumDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -947,6 +1047,24 @@ export default function AlbumDetail() {
             const isVideo = mediaUrl.startsWith('VIDEO:');
             const actualUrl = isVideo ? mediaUrl.replace('VIDEO:', '') : mediaUrl;
 
+            const handleSwipeLeft = () => {
+              if (currentMediaIndex < album.images.length - 1) {
+                if (videoRef.current) {
+                  videoRef.current.pauseAsync();
+                }
+                setCurrentMediaIndex(currentMediaIndex + 1);
+              }
+            };
+
+            const handleSwipeRight = () => {
+              if (currentMediaIndex > 0) {
+                if (videoRef.current) {
+                  videoRef.current.pauseAsync();
+                }
+                setCurrentMediaIndex(currentMediaIndex - 1);
+              }
+            };
+
             return (
               <View style={styles.mediaContent}>
                 {isVideo ? (
@@ -960,10 +1078,10 @@ export default function AlbumDetail() {
                     useNativeControls
                   />
                 ) : (
-                  <Image
-                    source={{ uri: actualUrl }}
-                    style={styles.fullscreenMedia}
-                    resizeMode="contain"
+                  <ZoomableImage
+                    uri={actualUrl}
+                    onSwipeLeft={handleSwipeLeft}
+                    onSwipeRight={handleSwipeRight}
                   />
                 )}
               </View>
@@ -1478,6 +1596,13 @@ const styles = StyleSheet.create({
   mediaContent: {
     flex: 1,
     width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  zoomableContainer: {
+    flex: 1,
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
     justifyContent: 'center',
     alignItems: 'center',
   },

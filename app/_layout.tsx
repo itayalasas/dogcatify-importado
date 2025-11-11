@@ -13,6 +13,7 @@ import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { Platform, Alert, View } from 'react-native';
 import { supabaseClient } from '@/lib/supabase';
 import { SafeAppWrapper } from '../components/SafeAppWrapper';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 // Global error handler test
 if (typeof ErrorUtils !== 'undefined') {
   const originalHandler = ErrorUtils.getGlobalHandler();
@@ -155,14 +156,15 @@ function RootLayout() {
   const initialRouteName = Platform.OS === 'web' ? 'web-info' : '(tabs)';
 
   return (
-    <SafeAppWrapper>
-      <ConfigProvider>
-        <LanguageProvider>
-          <AuthProvider>
-            <BiometricProvider>
-              <NotificationProvider>
-                <CartProvider>
-                  <ErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAppWrapper>
+        <ConfigProvider>
+          <LanguageProvider>
+            <AuthProvider>
+              <BiometricProvider>
+                <NotificationProvider>
+                  <CartProvider>
+                    <ErrorBoundary>
                 <Stack screenOptions={{ headerShown: false }} initialRouteName={initialRouteName}>
                   <Stack.Screen name="(tabs)" />
                   <Stack.Screen name="(admin-tabs)" />
@@ -265,6 +267,7 @@ function RootLayout() {
         </LanguageProvider>
       </ConfigProvider>
     </SafeAppWrapper>
+    </GestureHandlerRootView>
   );
 }
 
