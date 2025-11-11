@@ -255,24 +255,38 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
 
         // Get FCM token for Android (native token for FCM v1 API)
+        // IMPORTANTE: Este es el token prioritario para notificaciones
         let fcmToken: string | null = null;
         if (Platform.OS === 'android') {
           try {
-            console.log('Getting native FCM token for Android...');
+            console.log('🔑 Getting native FCM token for Android (PRIORITARIO)...');
             const devicePushToken = await Notifications.getDevicePushTokenAsync();
             fcmToken = devicePushToken.data;
             console.log('✅ FCM token obtained:', fcmToken ? fcmToken.substring(0, 30) + '...' : 'null');
+
+            if (!fcmToken) {
+              console.error('❌ CRÍTICO: No se pudo obtener FCM token en Android');
+              throw new Error('No se pudo obtener el token FCM. Las notificaciones podrían no funcionar.');
+            }
           } catch (fcmError) {
-            console.warn('⚠️ Could not get FCM token:', fcmError);
+            console.error('❌ Error obteniendo FCM token:', fcmError);
+            throw new Error('Error al obtener token FCM: ' + fcmError.message);
           }
         }
 
         // Store tokens in user profile if user is logged in
-        if (currentUser && tokenData.data) {
-          console.log('Storing push tokens in user profile...');
-          console.log('- Expo Push Token:', tokenData.data.substring(0, 30) + '...');
+        if (currentUser) {
+          console.log('💾 Storing push tokens in user profile...');
+
+          // En Android, fcm_token es OBLIGATORIO
+          if (Platform.OS === 'android' && !fcmToken) {
+            console.error('❌ CRÍTICO: No se puede registrar notificaciones sin FCM token en Android');
+            throw new Error('No se pudo obtener el token FCM requerido para notificaciones.');
+          }
+
+          console.log('- Expo Push Token (legacy):', tokenData.data ? tokenData.data.substring(0, 30) + '...' : 'null');
           if (fcmToken) {
-            console.log('- FCM Token:', fcmToken.substring(0, 30) + '...');
+            console.log('- FCM Token (PRIORITARIO):', fcmToken.substring(0, 30) + '...');
           }
 
           const { error: updateError } = await supabaseClient
@@ -289,13 +303,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             .eq('id', currentUser.id);
 
           if (updateError) {
-            console.error('Error updating push tokens:', updateError);
+            console.error('❌ Error updating push tokens:', updateError);
             throw new Error('No se pudo guardar el token de notificación.');
           }
 
           console.log('✅ Push tokens saved successfully');
           if (fcmToken) {
-            console.log('✅ FCM v1 API ready for Android');
+            console.log('✅ FCM v1 API ready for Android (método preferido)');
+          } else {
+            console.warn('⚠️ Sin FCM token - usando Expo legacy API (descontinuada)');
           }
         }
 
