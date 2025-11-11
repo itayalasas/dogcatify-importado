@@ -40,6 +40,13 @@ const ZoomableImage = ({ uri, style }: { uri: string; style?: any }) => {
     });
 
   const panGesture = Gesture.Pan()
+    .enabled(false)
+    .manualActivation(true)
+    .onTouchesDown((e) => {
+      if (savedScale.value > 1) {
+        panGesture.activate();
+      }
+    })
     .onUpdate((e) => {
       if (savedScale.value > 1) {
         translateX.value = savedTranslateX.value + e.translationX;
@@ -69,7 +76,7 @@ const ZoomableImage = ({ uri, style }: { uri: string; style?: any }) => {
       }
     });
 
-  const composedGesture = Gesture.Simultaneous(
+  const composedGesture = Gesture.Race(
     doubleTapGesture,
     Gesture.Simultaneous(pinchGesture, panGesture)
   );
