@@ -774,6 +774,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     try {
       logger.info('User logging out', { userId: currentUser?.id });
+
+      // Limpiar tokens de notificación del usuario que cierra sesión
+      if (currentUser?.id) {
+        try {
+          await supabaseClient
+            .from('profiles')
+            .update({
+              push_token: null,
+              fcm_token: null,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', currentUser.id);
+
+          console.log('✅ Tokens de notificación limpiados en logout');
+        } catch (tokenError) {
+          console.warn('⚠️ Error limpiando tokens en logout:', tokenError);
+          // No fallar el logout si falla la limpieza de tokens
+        }
+      }
+
       const { error } = await supabaseClient.auth.signOut();
       if (error) throw error;
 
