@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Modal, ActivityIndicator, Dimensions, StatusBar } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Camera, Trash2, Share, X, CreditCard as Edit, Video as VideoIcon, Play } from 'lucide-react-native';
+import { ArrowLeft, Camera, Trash2, Share, X, CreditCard as Edit, Video as VideoIcon, Play, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
@@ -10,6 +10,7 @@ import * as FileSystem from 'expo-file-system';
 import { supabaseClient } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { detectPetInVideo, validateVideoDuration } from '../../../utils/petDetection';
+import { Video } from 'expo-av';
 
 export default function AlbumDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -28,6 +29,9 @@ export default function AlbumDetail() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [imageToDelete, setImageToDelete] = useState<string | null>(null);
   const [showMediaTypeModal, setShowMediaTypeModal] = useState(false);
+  const [showMediaViewer, setShowMediaViewer] = useState(false);
+  const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
+  const videoRef = useRef<Video>(null);
 
   useEffect(() => {
     fetchAlbumDetails();
@@ -861,7 +865,15 @@ export default function AlbumDetail() {
             const actualUrl = isVideo ? mediaUrl.replace('VIDEO:', '') : mediaUrl;
 
             return (
-              <View key={index} style={styles.photoContainer}>
+              <TouchableOpacity
+                key={index}
+                style={styles.photoContainer}
+                onPress={() => {
+                  setCurrentMediaIndex(index);
+                  setShowMediaViewer(true);
+                }}
+                activeOpacity={0.9}
+              >
                 {isVideo ? (
                   <View style={styles.videoThumbnailContainer}>
                     <View style={styles.videoPlaceholder}>
@@ -877,7 +889,10 @@ export default function AlbumDetail() {
                 )}
                 <TouchableOpacity
                   style={styles.deletePhotoButton}
-                  onPress={() => confirmDeleteImage(mediaUrl)}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    confirmDeleteImage(mediaUrl);
+                  }}
                 >
                   <Trash2 size={16} color="#FFFFFF" />
                 </TouchableOpacity>
@@ -886,11 +901,109 @@ export default function AlbumDetail() {
                     <VideoIcon size={12} color="#FFFFFF" />
                   </View>
                 )}
-              </View>
+              </TouchableOpacity>
             );
           })}
         </View>
       </ScrollView>
+
+      {/* Media Viewer Modal */}
+      <Modal
+        visible={showMediaViewer}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowMediaViewer(false);
+          if (videoRef.current) {
+            videoRef.current.pauseAsync();
+          }
+        }}
+      >
+        <StatusBar hidden />
+        <View style={styles.mediaViewerContainer}>
+          {/* Close Button */}
+          <TouchableOpacity
+            style={styles.closeViewerButton}
+            onPress={() => {
+              setShowMediaViewer(false);
+              if (videoRef.current) {
+                videoRef.current.pauseAsync();
+              }
+            }}
+          >
+            <X size={28} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          {/* Media Counter */}
+          <View style={styles.mediaCounter}>
+            <Text style={styles.mediaCounterText}>
+              {currentMediaIndex + 1} / {album?.images?.length || 0}
+            </Text>
+          </View>
+
+          {/* Media Content */}
+          {album?.images && album.images[currentMediaIndex] && (() => {
+            const mediaUrl = album.images[currentMediaIndex];
+            const isVideo = mediaUrl.startsWith('VIDEO:');
+            const actualUrl = isVideo ? mediaUrl.replace('VIDEO:', '') : mediaUrl;
+
+            return (
+              <View style={styles.mediaContent}>
+                {isVideo ? (
+                  <Video
+                    ref={videoRef}
+                    source={{ uri: actualUrl }}
+                    style={styles.fullscreenMedia}
+                    resizeMode="contain"
+                    shouldPlay
+                    isLooping
+                    useNativeControls
+                  />
+                ) : (
+                  <Image
+                    source={{ uri: actualUrl }}
+                    style={styles.fullscreenMedia}
+                    resizeMode="contain"
+                  />
+                )}
+              </View>
+            );
+          })()}
+
+          {/* Navigation Buttons */}
+          {album?.images && album.images.length > 1 && (
+            <>
+              {currentMediaIndex > 0 && (
+                <TouchableOpacity
+                  style={[styles.navButton, styles.navButtonLeft]}
+                  onPress={() => {
+                    if (videoRef.current) {
+                      videoRef.current.pauseAsync();
+                    }
+                    setCurrentMediaIndex(currentMediaIndex - 1);
+                  }}
+                >
+                  <ChevronLeft size={32} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+
+              {currentMediaIndex < album.images.length - 1 && (
+                <TouchableOpacity
+                  style={[styles.navButton, styles.navButtonRight]}
+                  onPress={() => {
+                    if (videoRef.current) {
+                      videoRef.current.pauseAsync();
+                    }
+                    setCurrentMediaIndex(currentMediaIndex + 1);
+                  }}
+                >
+                  <ChevronRight size={32} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </View>
+      </Modal>
 
       {/* Edit Album Modal */}
       <Modal
@@ -1326,5 +1439,68 @@ const styles = StyleSheet.create({
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  mediaViewerContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeViewerButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mediaCounter: {
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  mediaCounterText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  mediaContent: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullscreenMedia: {
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
+  },
+  navButton: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -40,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 40,
+    width: 64,
+    height: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  navButtonLeft: {
+    left: 20,
+  },
+  navButtonRight: {
+    right: 20,
   },
 });
