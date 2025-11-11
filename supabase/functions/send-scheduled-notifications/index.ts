@@ -174,14 +174,27 @@ Deno.serve(async (req: Request) => {
             body: JSON.stringify(message),
           });
 
-          const pushResult = await pushResponse.json();
-          console.log('Expo Push result:', JSON.stringify(pushResult));
+          if (!pushResponse.ok) {
+            const errorText = await pushResponse.text();
+            console.error('Expo Push HTTP error:', pushResponse.status, errorText);
+            ticket = {
+              status: 'error',
+              message: `HTTP ${pushResponse.status}: ${errorText}`,
+              details: { httpStatus: pushResponse.status }
+            };
+          } else {
+            const pushResult = await pushResponse.json();
+            console.log('Expo Push result:', JSON.stringify(pushResult));
 
-          ticket = pushResult.data?.[0] || pushResult;
+            ticket = pushResult.data?.[0] || pushResult;
 
-          if (ticket.status === 'ok') {
-            notificationSent = true;
-            sendMethod = 'expo-legacy';
+            if (ticket.status === 'ok') {
+              notificationSent = true;
+              sendMethod = 'expo-legacy';
+            } else {
+              // Log del error específico de Expo
+              console.error('Expo Push error:', JSON.stringify(ticket));
+            }
           }
         }
 
@@ -205,7 +218,14 @@ Deno.serve(async (req: Request) => {
             method: sendMethod,
           });
         } else {
-          // Error al enviar
+          // Error al enviar - capturar todos los detalles posibles
+          const errorMessage = ticket.message
+            || ticket.details?.error
+            || JSON.stringify(ticket.details || {})
+            || 'Unknown error - check logs';
+
+          console.error(`❌ Failed to send notification ${notification.id}:`, errorMessage);
+
           const retryCount = (notification.retry_count || 0) + 1;
           const maxRetries = 3;
 
@@ -215,7 +235,7 @@ Deno.serve(async (req: Request) => {
               .from('scheduled_notifications')
               .update({
                 retry_count: retryCount,
-                error_message: ticket.message || 'Unknown error',
+                error_message: errorMessage,
                 updated_at: new Date().toISOString(),
               })
               .eq('id', notification.id);
@@ -224,7 +244,7 @@ Deno.serve(async (req: Request) => {
               notification_id: notification.id,
               status: 'retry',
               retry_count: retryCount,
-              error: ticket.message,
+              error: errorMessage,
             });
           } else {
             // Máximo de reintentos alcanzado
@@ -233,7 +253,7 @@ Deno.serve(async (req: Request) => {
               .update({
                 status: 'failed',
                 retry_count: retryCount,
-                error_message: ticket.message || 'Max retries exceeded',
+                error_message: `Max retries exceeded. Last error: ${errorMessage}`,
                 updated_at: new Date().toISOString(),
               })
               .eq('id', notification.id);
@@ -242,6 +262,7 @@ Deno.serve(async (req: Request) => {
               notification_id: notification.id,
               status: 'failed',
               error: 'Max retries exceeded',
+              last_error: errorMessage,
             });
           }
         }
