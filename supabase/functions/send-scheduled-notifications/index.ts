@@ -64,14 +64,14 @@ Deno.serve(async (req: Request) => {
 
     for (const notification of pendingNotifications) {
       try {
-        // Obtener los tokens del usuario (FCM v1 y Expo legacy)
+        // Obtener tokens del usuario - PRIORIZAR fcm_token (FCM v1 API)
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('push_token, fcm_token')
           .eq('id', notification.user_id)
           .single();
 
-        if (profileError || (!profile?.push_token && !profile?.fcm_token)) {
+        if (profileError || (!profile?.fcm_token && !profile?.push_token)) {
           console.log(`No push tokens for user ${notification.user_id}`);
 
           // Marcar como fallida
@@ -96,7 +96,7 @@ Deno.serve(async (req: Request) => {
         let sendMethod = 'none';
         let ticket: PushTicket = { status: 'error', message: 'No method available' };
 
-        // Intentar con FCM v1 primero (si hay token)
+        // PRIORIDAD 1: FCM v1 (API actual y recomendada)
         if (profile.fcm_token) {
           try {
             console.log(`Attempting FCM v1 for notification ${notification.id}...`);
@@ -144,8 +144,11 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        // Fallback a Expo Push Service (API heredada) si FCM v1 falló
+        // PRIORIDAD 2: Fallback a Expo Push Service (API legacy/descontinuada)
+        // Solo si FCM v1 falló y el usuario tiene push_token legacy
         if (!notificationSent && profile.push_token) {
+          console.warn(`⚠️ Usando Expo legacy API (descontinuada) para notificación ${notification.id}`);
+          console.warn('⚠️ Usuario debería actualizar app para obtener fcm_token');
           console.log(`Attempting Expo Push Service for notification ${notification.id}...`);
 
           const message = {
