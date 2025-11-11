@@ -42,6 +42,7 @@ export default function PetDetail() {
   const [processingImage, setProcessingImage] = useState(false);
   const [currentAlertIndex, setCurrentAlertIndex] = useState(0);
   const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertsToShow, setAlertsToShow] = useState<any[]>([]);
 
   useEffect(() => {
     fetchPetDetails();
@@ -52,12 +53,21 @@ export default function PetDetail() {
   }, [id]);
 
   useEffect(() => {
-    if (medicalAlerts.length > 0 && currentAlertIndex === 0 && !showAlertModal) {
+    if (medicalAlerts.length > 0 && alertsToShow.length === 0) {
+      setAlertsToShow([...medicalAlerts]);
+      setCurrentAlertIndex(0);
       setTimeout(() => {
         setShowAlertModal(true);
       }, 1000);
     }
   }, [medicalAlerts]);
+
+  useEffect(() => {
+    if (alertsToShow.length === 0 && showAlertModal) {
+      setShowAlertModal(false);
+      setCurrentAlertIndex(0);
+    }
+  }, [alertsToShow]);
 
   // Add effect to refetch health records when returning from health forms
   useEffect(() => {
@@ -308,14 +318,13 @@ export default function PetDetail() {
 
       if (error) throw error;
 
-      setShowAlertModal(false);
+      const remainingAlerts = alertsToShow.filter(alert => alert.id !== alertId);
+      setAlertsToShow(remainingAlerts);
 
-      if (currentAlertIndex < medicalAlerts.length - 1) {
-        setTimeout(() => {
-          setCurrentAlertIndex(currentAlertIndex + 1);
-          setShowAlertModal(true);
-        }, 500);
+      if (remainingAlerts.length > 0) {
+        setCurrentAlertIndex(0);
       } else {
+        setShowAlertModal(false);
         setCurrentAlertIndex(0);
       }
 
@@ -338,14 +347,13 @@ export default function PetDetail() {
 
       if (error) throw error;
 
-      setShowAlertModal(false);
+      const remainingAlerts = alertsToShow.filter(alert => alert.id !== alertId);
+      setAlertsToShow(remainingAlerts);
 
-      if (currentAlertIndex < medicalAlerts.length - 1) {
-        setTimeout(() => {
-          setCurrentAlertIndex(currentAlertIndex + 1);
-          setShowAlertModal(true);
-        }, 500);
+      if (remainingAlerts.length > 0) {
+        setCurrentAlertIndex(0);
       } else {
+        setShowAlertModal(false);
         setCurrentAlertIndex(0);
       }
 
@@ -1767,7 +1775,7 @@ export default function PetDetail() {
       </ScrollView>
 
       {/* Medical Alerts Modal */}
-      {medicalAlerts.length > 0 && showAlertModal && (
+      {alertsToShow.length > 0 && showAlertModal && alertsToShow[currentAlertIndex] && (
         <Modal
           visible={showAlertModal}
           transparent
@@ -1778,39 +1786,39 @@ export default function PetDetail() {
             <View style={styles.alertModalContent}>
               <View style={[
                 styles.alertModalHeader,
-                { borderLeftColor: getAlertPriorityColor(medicalAlerts[currentAlertIndex]?.priority || 'medium') }
+                { borderLeftColor: getAlertPriorityColor(alertsToShow[currentAlertIndex]?.priority || 'medium') }
               ]}>
                 <View style={styles.alertModalIconContainer}>
-                  {getAlertIcon(medicalAlerts[currentAlertIndex]?.alert_type || 'vaccine')}
+                  {getAlertIcon(alertsToShow[currentAlertIndex]?.alert_type || 'vaccine')}
                 </View>
                 <Text style={styles.alertModalTitle}>
-                  {medicalAlerts[currentAlertIndex]?.title}
+                  {alertsToShow[currentAlertIndex]?.title || 'Sin título'}
                 </Text>
               </View>
 
               <Text style={styles.alertModalDescription}>
-                {medicalAlerts[currentAlertIndex]?.description}
+                {alertsToShow[currentAlertIndex]?.description || 'Sin descripción'}
               </Text>
 
               <View style={styles.alertModalFooter}>
                 <View style={styles.alertModalDateContainer}>
                   <Calendar size={16} color="#6B7280" />
                   <Text style={styles.alertModalDate}>
-                    {formatAlertDate(medicalAlerts[currentAlertIndex]?.due_date || '')}
+                    {formatAlertDate(alertsToShow[currentAlertIndex]?.due_date || '')}
                   </Text>
                 </View>
 
                 <View style={[
                   styles.alertModalPriorityBadge,
-                  { backgroundColor: getAlertPriorityColor(medicalAlerts[currentAlertIndex]?.priority || 'medium') + '20' }
+                  { backgroundColor: getAlertPriorityColor(alertsToShow[currentAlertIndex]?.priority || 'medium') + '20' }
                 ]}>
                   <Text style={[
                     styles.alertModalPriorityText,
-                    { color: getAlertPriorityColor(medicalAlerts[currentAlertIndex]?.priority || 'medium') }
+                    { color: getAlertPriorityColor(alertsToShow[currentAlertIndex]?.priority || 'medium') }
                   ]}>
-                    {medicalAlerts[currentAlertIndex]?.priority === 'urgent' ? 'URGENTE' :
-                     medicalAlerts[currentAlertIndex]?.priority === 'high' ? 'ALTA' :
-                     medicalAlerts[currentAlertIndex]?.priority === 'medium' ? 'MEDIA' : 'BAJA'}
+                    {alertsToShow[currentAlertIndex]?.priority === 'urgent' ? 'URGENTE' :
+                     alertsToShow[currentAlertIndex]?.priority === 'high' ? 'ALTA' :
+                     alertsToShow[currentAlertIndex]?.priority === 'medium' ? 'MEDIA' : 'BAJA'}
                   </Text>
                 </View>
               </View>
@@ -1818,7 +1826,7 @@ export default function PetDetail() {
               <View style={styles.alertModalActions}>
                 <TouchableOpacity
                   style={styles.alertModalDismissButton}
-                  onPress={() => handleDismissAlert(medicalAlerts[currentAlertIndex]?.id)}
+                  onPress={() => handleDismissAlert(alertsToShow[currentAlertIndex]?.id)}
                 >
                   <X size={20} color="#6B7280" />
                   <Text style={styles.alertModalDismissText}>Descartar</Text>
@@ -1826,16 +1834,16 @@ export default function PetDetail() {
 
                 <TouchableOpacity
                   style={styles.alertModalCompleteButton}
-                  onPress={() => handleCompleteAlert(medicalAlerts[currentAlertIndex]?.id)}
+                  onPress={() => handleCompleteAlert(alertsToShow[currentAlertIndex]?.id)}
                 >
                   <Heart size={20} color="#FFFFFF" />
                   <Text style={styles.alertModalCompleteText}>Completado</Text>
                 </TouchableOpacity>
               </View>
 
-              {medicalAlerts.length > 1 && (
+              {alertsToShow.length > 1 && (
                 <Text style={styles.alertModalCounter}>
-                  Alerta {currentAlertIndex + 1} de {medicalAlerts.length}
+                  Alerta {currentAlertIndex + 1} de {alertsToShow.length}
                 </Text>
               )}
             </View>
