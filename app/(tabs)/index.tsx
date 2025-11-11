@@ -9,7 +9,6 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { NotificationPermissionPrompt } from '../../components/NotificationPermissionPrompt';
 import { LocationPermissionPrompt } from '../../components/LocationPermissionPrompt';
-import { MedicalAlertsWidget } from '../../components/MedicalAlertsWidget';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { supabaseClient } from '@/lib/supabase';
 
@@ -780,7 +779,7 @@ export default function Home() {
   };
 
   // Memoizar el header para evitar re-renders que causen saltos
-  const listHeader = React.useMemo(() => <MedicalAlertsWidget />, []);
+  const listHeader = React.useMemo(() => null, []);
 
   // Manejar redirección cuando no hay usuario - FUERA del render condicional
   useEffect(() => {

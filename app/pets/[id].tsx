@@ -40,6 +40,8 @@ export default function PetDetail() {
   const [showScanOptionsModal, setShowScanOptionsModal] = useState(false);
   const [scanRecordType, setScanRecordType] = useState<'vaccine' | 'deworming' | null>(null);
   const [processingImage, setProcessingImage] = useState(false);
+  const [currentAlertIndex, setCurrentAlertIndex] = useState(0);
+  const [showAlertModal, setShowAlertModal] = useState(false);
 
   useEffect(() => {
     fetchPetDetails();
@@ -48,6 +50,14 @@ export default function PetDetail() {
     fetchMedicalAlerts();
     fetchBehaviorHistory();
   }, [id]);
+
+  useEffect(() => {
+    if (medicalAlerts.length > 0 && currentAlertIndex === 0 && !showAlertModal) {
+      setTimeout(() => {
+        setShowAlertModal(true);
+      }, 1000);
+    }
+  }, [medicalAlerts]);
 
   // Add effect to refetch health records when returning from health forms
   useEffect(() => {
@@ -295,10 +305,20 @@ export default function PetDetail() {
           completed_at: new Date().toISOString()
         })
         .eq('id', alertId);
-      
+
       if (error) throw error;
-      
-      // Refresh alerts
+
+      setShowAlertModal(false);
+
+      if (currentAlertIndex < medicalAlerts.length - 1) {
+        setTimeout(() => {
+          setCurrentAlertIndex(currentAlertIndex + 1);
+          setShowAlertModal(true);
+        }, 500);
+      } else {
+        setCurrentAlertIndex(0);
+      }
+
       fetchMedicalAlerts();
     } catch (error) {
       console.error('Error completing alert:', error);
@@ -315,10 +335,20 @@ export default function PetDetail() {
           completed_at: new Date().toISOString()
         })
         .eq('id', alertId);
-      
+
       if (error) throw error;
-      
-      // Refresh alerts
+
+      setShowAlertModal(false);
+
+      if (currentAlertIndex < medicalAlerts.length - 1) {
+        setTimeout(() => {
+          setCurrentAlertIndex(currentAlertIndex + 1);
+          setShowAlertModal(true);
+        }, 500);
+      } else {
+        setCurrentAlertIndex(0);
+      }
+
       fetchMedicalAlerts();
     } catch (error) {
       console.error('Error dismissing alert:', error);
@@ -1510,61 +1540,26 @@ export default function PetDetail() {
 
   const renderMedicalAlerts = () => {
     if (medicalAlerts.length === 0) return null;
-    
+
     return (
-      <Card style={styles.alertsCard}>
-        <Text style={styles.alertsTitle}>🚨 Alertas Médicas</Text>
-        
-        {medicalAlerts.map((alert) => (
-          <View 
-            key={alert.id} 
-            style={[
-              styles.alertItem,
-              alert.priority === 'high' && styles.highPriorityAlert,
-              alert.priority === 'urgent' && styles.urgentAlert
-            ]}
-          >
-            <View style={styles.alertHeader}>
-              <View style={styles.alertTitleContainer}>
-                {getAlertIcon(alert.alert_type)}
-                <Text style={styles.alertTitle}>{alert.title}</Text>
-              </View>
-              <View style={styles.alertActions}>
-                <TouchableOpacity 
-                  style={styles.completeButton}
-                  onPress={() => handleCompleteAlert(alert.id)}
-                >
-                  <Text style={styles.completeButtonText}>✓</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.dismissButton}
-                  onPress={() => handleDismissAlert(alert.id)}
-                >
-                  <Text style={styles.dismissButtonText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            
-            <Text style={styles.alertDescription}>{alert.description}</Text>
-            
-            <View style={styles.alertFooter}>
-              <Text style={styles.alertDueDate}>
-                📅 {formatAlertDate(alert.due_date)}
-              </Text>
-              <View style={[
-                styles.priorityBadge,
-                alert.priority === 'high' && styles.highPriorityBadge,
-                alert.priority === 'urgent' && styles.urgentPriorityBadge
-              ]}>
-                <Text style={styles.priorityText}>
-                  {alert.priority === 'urgent' ? 'URGENTE' :
-                   alert.priority === 'high' ? 'ALTA' :
-                   alert.priority === 'medium' ? 'MEDIA' : 'BAJA'}
-                </Text>
-              </View>
-            </View>
+      <Card style={styles.alertsSummaryCard}>
+        <View style={styles.alertsSummaryHeader}>
+          <View style={styles.alertsIconContainer}>
+            <Heart size={24} color="#2D6A6F" />
           </View>
-        ))}
+          <View style={styles.alertsSummaryText}>
+            <Text style={styles.alertsSummaryTitle}>Alertas Médicas</Text>
+            <Text style={styles.alertsSummarySubtitle}>
+              {medicalAlerts.length} {medicalAlerts.length === 1 ? 'alerta pendiente' : 'alertas pendientes'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.viewAlertsButton}
+            onPress={() => setShowAlertModal(true)}
+          >
+            <Text style={styles.viewAlertsButtonText}>Ver</Text>
+          </TouchableOpacity>
+        </View>
       </Card>
     );
   };
@@ -1770,6 +1765,83 @@ export default function PetDetail() {
         {activeTab === 'behavior' && renderBehaviorTab()}
         {activeTab === 'appointments' && renderAppointmentsTab()}
       </ScrollView>
+
+      {/* Medical Alerts Modal */}
+      {medicalAlerts.length > 0 && showAlertModal && (
+        <Modal
+          visible={showAlertModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowAlertModal(false)}
+        >
+          <View style={styles.alertModalOverlay}>
+            <View style={styles.alertModalContent}>
+              <View style={[
+                styles.alertModalHeader,
+                { borderLeftColor: getAlertPriorityColor(medicalAlerts[currentAlertIndex]?.priority || 'medium') }
+              ]}>
+                <View style={styles.alertModalIconContainer}>
+                  {getAlertIcon(medicalAlerts[currentAlertIndex]?.alert_type || 'vaccine')}
+                </View>
+                <Text style={styles.alertModalTitle}>
+                  {medicalAlerts[currentAlertIndex]?.title}
+                </Text>
+              </View>
+
+              <Text style={styles.alertModalDescription}>
+                {medicalAlerts[currentAlertIndex]?.description}
+              </Text>
+
+              <View style={styles.alertModalFooter}>
+                <View style={styles.alertModalDateContainer}>
+                  <Calendar size={16} color="#6B7280" />
+                  <Text style={styles.alertModalDate}>
+                    {formatAlertDate(medicalAlerts[currentAlertIndex]?.due_date || '')}
+                  </Text>
+                </View>
+
+                <View style={[
+                  styles.alertModalPriorityBadge,
+                  { backgroundColor: getAlertPriorityColor(medicalAlerts[currentAlertIndex]?.priority || 'medium') + '20' }
+                ]}>
+                  <Text style={[
+                    styles.alertModalPriorityText,
+                    { color: getAlertPriorityColor(medicalAlerts[currentAlertIndex]?.priority || 'medium') }
+                  ]}>
+                    {medicalAlerts[currentAlertIndex]?.priority === 'urgent' ? 'URGENTE' :
+                     medicalAlerts[currentAlertIndex]?.priority === 'high' ? 'ALTA' :
+                     medicalAlerts[currentAlertIndex]?.priority === 'medium' ? 'MEDIA' : 'BAJA'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.alertModalActions}>
+                <TouchableOpacity
+                  style={styles.alertModalDismissButton}
+                  onPress={() => handleDismissAlert(medicalAlerts[currentAlertIndex]?.id)}
+                >
+                  <X size={20} color="#6B7280" />
+                  <Text style={styles.alertModalDismissText}>Descartar</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.alertModalCompleteButton}
+                  onPress={() => handleCompleteAlert(medicalAlerts[currentAlertIndex]?.id)}
+                >
+                  <Heart size={20} color="#FFFFFF" />
+                  <Text style={styles.alertModalCompleteText}>Completado</Text>
+                </TouchableOpacity>
+              </View>
+
+              {medicalAlerts.length > 1 && (
+                <Text style={styles.alertModalCounter}>
+                  Alerta {currentAlertIndex + 1} de {medicalAlerts.length}
+                </Text>
+              )}
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {/* Scan Options Modal */}
       <Modal
@@ -2536,6 +2608,169 @@ const styles = StyleSheet.create({
   },
   highPriorityBadge: {
     backgroundColor: '#EF4444',
+  },
+  urgentPriorityBadge: {
+    backgroundColor: '#DC2626',
+  },
+  priorityText: {
+    fontSize: 10,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+  },
+  alertsSummaryCard: {
+    marginBottom: 16,
+    backgroundColor: '#F0FDFA',
+    borderWidth: 2,
+    borderColor: '#2D6A6F',
+  },
+  alertsSummaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  alertsIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#CCFBF1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  alertsSummaryText: {
+    flex: 1,
+  },
+  alertsSummaryTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    color: '#0F766E',
+    marginBottom: 2,
+  },
+  alertsSummarySubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#14B8A6',
+  },
+  viewAlertsButton: {
+    backgroundColor: '#2D6A6F',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  viewAlertsButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  alertModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  alertModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  alertModalHeader: {
+    borderLeftWidth: 4,
+    paddingLeft: 12,
+    marginBottom: 16,
+  },
+  alertModalIconContainer: {
+    marginBottom: 8,
+  },
+  alertModalTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    lineHeight: 28,
+  },
+  alertModalDescription: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#4B5563',
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  alertModalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  alertModalDateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  alertModalDate: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
+  },
+  alertModalPriorityBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  alertModalPriorityText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+    letterSpacing: 0.5,
+  },
+  alertModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  alertModalDismissButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  alertModalDismissText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
+  },
+  alertModalCompleteButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2D6A6F',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  alertModalCompleteText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  alertModalCounter: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 16,
   },
   urgentPriorityBadge: {
     backgroundColor: '#DC2626',
