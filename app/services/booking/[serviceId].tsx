@@ -1094,6 +1094,22 @@ export default function ServiceBooking() {
             <View style={styles.timesGrid}>
               {availableTimes.map((time) => {
                 const isBooked = bookedTimes.includes(time);
+
+                const isToday = selectedDate.toDateString() === new Date().toDateString();
+                let isPastTime = false;
+
+                if (isToday) {
+                  const now = new Date();
+                  const [hours, minutes] = time.split(':').map(Number);
+                  const timeDate = new Date();
+                  timeDate.setHours(hours, minutes, 0, 0);
+                  isPastTime = timeDate < now;
+                }
+
+                if (isPastTime) {
+                  return null;
+                }
+
                 return (
                 <TouchableOpacity
                   key={time}
