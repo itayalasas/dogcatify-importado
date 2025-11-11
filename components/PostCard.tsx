@@ -139,6 +139,12 @@ const VideoPlayer = memo(({
     videoRef(ref);
   };
 
+  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+    if (status.isLoaded && status.didJustFinish && !status.isLooping) {
+      onTogglePlay();
+    }
+  };
+
   return (
     <View style={styles.videoContainer}>
       <Video
@@ -146,11 +152,12 @@ const VideoPlayer = memo(({
         source={source}
         style={style}
         resizeMode={ResizeMode.COVER}
-        isLooping
+        isLooping={false}
         shouldPlay={isInViewport && isPlaying}
         isMuted={false}
         useNativeControls={false}
         progressUpdateIntervalMillis={500}
+        onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
         onReadyForDisplay={() => {}}
         onError={(error) => {
           console.log('Video error:', error);
