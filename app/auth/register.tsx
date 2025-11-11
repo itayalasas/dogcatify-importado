@@ -77,6 +77,9 @@ export default function Register() {
             full_name: trimmedName,
           },
           emailRedirectTo: undefined,
+          // Disable Supabase's automatic email confirmation
+          // We handle email confirmation manually via our API
+          shouldCreateUser: true,
         },
       });
 
