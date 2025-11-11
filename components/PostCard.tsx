@@ -1,13 +1,113 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions, Modal, TextInput, FlatList, ActivityIndicator, ScrollView, Image, Share, Platform, KeyboardAvoidingView, StatusBar } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { Heart, MessageCircle, Share2, MoveHorizontal as MoreHorizontal, ArrowLeft, Send, Play, Pause } from 'lucide-react-native';
+import { Heart, MessageCircle, Share2, MoveHorizontal as MoreHorizontal, ArrowLeft, Send, Play, Pause, X, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { supabaseClient } from '../lib/supabase';
 import { FollowButton } from './FollowButton';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, runOnJS } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
 const STATUS_BAR_HEIGHT = Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0;
+
+const ZoomableImage = ({ uri, onSwipeLeft, onSwipeRight }: { uri: string; onSwipeLeft?: () => void; onSwipeRight?: () => void }) => {
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((e) => {
+      scale.value = savedScale.value * e.scale;
+    })
+    .onEnd(() => {
+      if (scale.value < 1) {
+        scale.value = withSpring(1);
+        savedScale.value = 1;
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      } else if (scale.value > 4) {
+        scale.value = withSpring(4);
+        savedScale.value = 4;
+      } else {
+        savedScale.value = scale.value;
+      }
+    });
+
+  const panGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      if (savedScale.value > 1) {
+        translateX.value = savedTranslateX.value + e.translationX;
+        translateY.value = savedTranslateY.value + e.translationY;
+      } else {
+        translateX.value = e.translationX;
+      }
+    })
+    .onEnd((e) => {
+      if (savedScale.value > 1) {
+        savedTranslateX.value = translateX.value;
+        savedTranslateY.value = translateY.value;
+      } else {
+        if (Math.abs(e.translationX) > 100 && Math.abs(e.velocityX) > 500) {
+          if (e.translationX > 0 && onSwipeRight) {
+            runOnJS(onSwipeRight)();
+          } else if (e.translationX < 0 && onSwipeLeft) {
+            runOnJS(onSwipeLeft)();
+          }
+        }
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      }
+    });
+
+  const doubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => {
+      if (scale.value > 1) {
+        scale.value = withSpring(1);
+        savedScale.value = 1;
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      } else {
+        scale.value = withSpring(2);
+        savedScale.value = 2;
+      }
+    });
+
+  const composedGesture = Gesture.Simultaneous(
+    doubleTapGesture,
+    Gesture.Simultaneous(pinchGesture, panGesture)
+  );
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  return (
+    <GestureDetector gesture={composedGesture}>
+      <Animated.View style={styles.zoomableContainer}>
+        <Animated.Image
+          source={{ uri }}
+          style={[styles.fullscreenMedia, animatedStyle]}
+          resizeMode="contain"
+        />
+      </Animated.View>
+    </GestureDetector>
+  );
+};
 
 // Memoized video component to prevent unnecessary re-renders
 const VideoPlayer = memo(({
@@ -137,6 +237,8 @@ const PostCard: React.FC<PostCardProps> = ({
   const [playingVideos, setPlayingVideos] = useState<{[key: number]: boolean}>({});
   const [videoSpeeds, setVideoSpeeds] = useState<{[key: number]: number}>({});
   const [videosInitialized, setVideosInitialized] = useState<{[key: number]: boolean}>({});
+  const [showMediaViewer, setShowMediaViewer] = useState(false);
+  const [viewerMediaIndex, setViewerMediaIndex] = useState(0);
   const commentInputRef = useRef<TextInput>(null);
   const videoRefs = useRef<{[key: number]: Video | null}>({});
 
@@ -777,7 +879,10 @@ const PostCard: React.FC<PostCardProps> = ({
                 index={0}
               />
             ) : (
-              <TouchableOpacity activeOpacity={0.9} onPress={handleImagePress}>
+              <TouchableOpacity activeOpacity={0.9} onPress={() => {
+                setViewerMediaIndex(0);
+                setShowMediaViewer(true);
+              }}>
                 <Image source={{ uri: post.imageURL }} style={styles.singleImage} />
                 {showLikeAnimation && (
                   <View style={styles.likeAnimationContainer}>
@@ -849,7 +954,10 @@ const PostCard: React.FC<PostCardProps> = ({
                     ) : (
                       <TouchableOpacity
                         activeOpacity={0.9}
-                        onPress={handleImagePress}
+                        onPress={() => {
+                          setViewerMediaIndex(index);
+                          setShowMediaViewer(true);
+                        }}
                       >
                         <Image
                           source={{ uri: cleanUrl }}
@@ -1001,6 +1109,91 @@ const PostCard: React.FC<PostCardProps> = ({
             </View>
             </View>
           </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* Media Viewer Modal */}
+      <Modal
+        visible={showMediaViewer}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMediaViewer(false)}
+      >
+        <StatusBar hidden />
+        <View style={styles.mediaViewerContainer}>
+          <TouchableOpacity
+            style={styles.closeViewerButton}
+            onPress={() => setShowMediaViewer(false)}
+          >
+            <X size={28} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          <View style={styles.mediaCounter}>
+            <Text style={styles.mediaCounterText}>
+              {viewerMediaIndex + 1} / {(post.albumImages?.length || 1)}
+            </Text>
+          </View>
+
+          {(() => {
+            const images = post.albumImages || [post.imageURL];
+            const mediaUrl = images[viewerMediaIndex];
+            const isVideo = isVideoUrl(mediaUrl);
+            const cleanUrl = getCleanUrl(mediaUrl);
+
+            const handleSwipeLeft = () => {
+              if (viewerMediaIndex < images.length - 1) {
+                setViewerMediaIndex(viewerMediaIndex + 1);
+              }
+            };
+
+            const handleSwipeRight = () => {
+              if (viewerMediaIndex > 0) {
+                setViewerMediaIndex(viewerMediaIndex - 1);
+              }
+            };
+
+            return (
+              <View style={styles.mediaContent}>
+                {isVideo ? (
+                  <Video
+                    source={{ uri: cleanUrl }}
+                    style={styles.fullscreenMedia}
+                    resizeMode={ResizeMode.CONTAIN}
+                    shouldPlay
+                    useNativeControls
+                  />
+                ) : (
+                  <ZoomableImage
+                    uri={cleanUrl}
+                    onSwipeLeft={handleSwipeLeft}
+                    onSwipeRight={handleSwipeRight}
+                  />
+                )}
+              </View>
+            );
+          })()}
+
+          {(post.albumImages?.length || 0) > 1 && (
+            <>
+              {viewerMediaIndex > 0 && (
+                <TouchableOpacity
+                  style={[styles.navButton, styles.navButtonLeft]}
+                  onPress={() => setViewerMediaIndex(viewerMediaIndex - 1)}
+                >
+                  <ChevronLeft size={32} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+
+              {viewerMediaIndex < (post.albumImages?.length || 1) - 1 && (
+                <TouchableOpacity
+                  style={[styles.navButton, styles.navButtonRight]}
+                  onPress={() => setViewerMediaIndex(viewerMediaIndex + 1)}
+                >
+                  <ChevronRight size={32} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+            </>
+          )}
         </View>
       </Modal>
     </View>
@@ -1398,6 +1591,76 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
+  },
+  mediaViewerContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeViewerButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mediaCounter: {
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  mediaCounterText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  mediaContent: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  zoomableContainer: {
+    flex: 1,
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullscreenMedia: {
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
+  },
+  navButton: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -40,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 40,
+    width: 64,
+    height: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  navButtonLeft: {
+    left: 20,
+  },
+  navButtonRight: {
+    right: 20,
   },
 });
 
