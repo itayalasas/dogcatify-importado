@@ -173,6 +173,9 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
       };
     });
 
+    // Calculate partner total: subtotal + IVA
+    const partnerTotal = subtotal + ivaAmount;
+
     partnersArray.push({
       id: partnerInfo.id,
       business_name: partnerInfo.business_name,
@@ -190,7 +193,7 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
       iva_amount: Number(ivaAmount.toFixed(2)),
       commission_amount: Number(commissionAmount.toFixed(2)),
       partner_amount: Number(partnerAmount.toFixed(2)),
-      total: Number(subtotal.toFixed(2))
+      total: Number(partnerTotal.toFixed(2))
     });
   }
 
