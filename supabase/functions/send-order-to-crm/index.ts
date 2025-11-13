@@ -370,7 +370,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Obtener configuración del CRM desde variables de entorno
     const crmWebhookUrl = Deno.env.get("CRM_WEBHOOK_URL");
     const crmApiKey = Deno.env.get("CRM_API_KEY");
 
@@ -487,7 +486,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Filtrar órdenes gratuitas
     if (order.payment_method === 'free' || order.total_amount === 0) {
       console.log(`⚠️ Orden gratuita, no se envía al CRM: ${order_id}`);
       return new Response(
