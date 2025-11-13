@@ -356,7 +356,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const validEvents = ["order.created", "order.updated", "order.cancelled", "order.completed"];
+    const validEvents = ["order.created", "order.updated", "order.cancelled", "order.completed", "order.confirmed", "order.payment_updated"];
     if (!validEvents.includes(event_type)) {
       return new Response(
         JSON.stringify({
