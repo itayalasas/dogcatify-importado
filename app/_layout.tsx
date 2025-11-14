@@ -14,7 +14,7 @@ import { Platform, Alert, View } from 'react-native';
 import { supabaseClient } from '@/lib/supabase';
 import { SafeAppWrapper } from '../components/SafeAppWrapper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-// Global error handler
+// Global error handler test
 if (typeof ErrorUtils !== 'undefined') {
   const originalHandler = ErrorUtils.getGlobalHandler();
   ErrorUtils.setGlobalHandler((error, isFatal) => {
