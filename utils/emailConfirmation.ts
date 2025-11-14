@@ -303,43 +303,31 @@ export const generateConfirmationUrl = (token: string, type: 'signup' | 'passwor
 };
 
 /**
- * Send confirmation email directly to external API (bypassing Supabase Edge Function)
+ * Base function to send emails via Supabase edge function
  */
-export const sendConfirmationEmailAPI = async (
-  email: string,
-  name: string,
-  confirmationUrl: string
+const sendEmailViaSupabase = async (
+  templateName: string,
+  recipientEmail: string,
+  data: Record<string, any>
 ): Promise<{ success: boolean; error?: string; log_id?: string }> => {
-  console.log('📧 === SENDING CONFIRMATION EMAIL ===');
-  console.log('📧 Recipient:', email);
-  console.log('📧 Name:', name);
-  console.log('📧 Confirmation URL:', confirmationUrl);
+  console.log(`📧 === SENDING ${templateName.toUpperCase()} EMAIL ===`);
+  console.log('📧 Recipient:', recipientEmail);
+  console.log('📧 Data:', JSON.stringify(data, null, 2));
 
   try {
-    console.log('📧 Email API Configuration:', {
-      hasUrl: !!EMAIL_API_URL,
-      url: EMAIL_API_URL,
-      hasKey: !!EMAIL_API_KEY,
-      keyLength: EMAIL_API_KEY?.length,
-      keyPrefix: EMAIL_API_KEY?.substring(0, 10) + '...',
-    });
-
     if (!EMAIL_API_URL || !EMAIL_API_KEY) {
       console.error('❌ Email API configuration missing!');
       return { success: false, error: 'Email API configuration missing' };
     }
 
     const emailPayload = {
-      template_name: 'confirmation',
-      recipient_email: email,
-      data: {
-        client_name: name,
-        confirmation_url: confirmationUrl,
-      },
+      template_name: templateName,
+      recipient_email: recipientEmail,
+      data: data,
     };
 
-    console.log('📧 Email payload:', JSON.stringify(emailPayload, null, 2));
-    console.log('📧 Making fetch request to:', EMAIL_API_URL);
+    console.log('📧 Calling Supabase function:', EMAIL_API_URL);
+    console.log('📧 Payload:', JSON.stringify(emailPayload, null, 2));
 
     const response = await fetch(EMAIL_API_URL, {
       method: 'POST',
@@ -352,88 +340,55 @@ export const sendConfirmationEmailAPI = async (
     });
 
     console.log('📧 Response status:', response.status);
-    console.log('📧 Response headers:', Object.fromEntries(response.headers.entries()));
 
     const responseText = await response.text();
-    console.log('📧 Response body (raw):', responseText);
+    console.log('📧 Response body:', responseText);
 
     if (!response.ok) {
-      console.error('❌ Email API returned error status:', response.status);
-      console.error('❌ Error details:', responseText);
+      console.error('❌ Email API error:', response.status, responseText);
       return { success: false, error: `API error: ${response.status} - ${responseText}` };
     }
 
     try {
       const result = JSON.parse(responseText);
-      console.log('✅ Confirmation email sent successfully!');
-      console.log('✅ Result:', result);
-
-      return {
-        success: true,
-        log_id: result.log_id,
-      };
+      console.log('✅ Email sent successfully!');
+      return { success: true, log_id: result.log_id };
     } catch (parseError) {
-      console.error('⚠️ Could not parse response as JSON:', parseError);
-      return {
-        success: true,
-      };
+      console.warn('⚠️ Could not parse response as JSON, but request succeeded');
+      return { success: true };
     }
   } catch (error: any) {
-    console.error('❌ Error sending confirmation email:', error);
+    console.error('❌ Error sending email:', error);
     console.error('❌ Error stack:', error.stack);
     return { success: false, error: error.message || 'Unknown error' };
   }
 };
 
 /**
- * Send welcome email directly to external API (bypassing Supabase Edge Function)
+ * Send confirmation email
+ */
+export const sendConfirmationEmailAPI = async (
+  email: string,
+  name: string,
+  confirmationUrl: string
+): Promise<{ success: boolean; error?: string; log_id?: string }> => {
+  return sendEmailViaSupabase('confirmation', email, {
+    client_name: name,
+    confirmation_url: confirmationUrl,
+  });
+};
+
+/**
+ * Send welcome email
  */
 export const sendWelcomeEmailAPI = async (
   email: string,
   name: string
 ): Promise<{ success: boolean; error?: string; log_id?: string }> => {
-  try {
-    if (!EMAIL_API_URL || !EMAIL_API_KEY) {
-      console.error('Email API configuration missing');
-      return { success: false, error: 'Email API configuration missing' };
-    }
-
-    console.log('Sending welcome email directly to external API:', email);
-
-    const response = await fetch(EMAIL_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${EMAIL_API_KEY}`,
-        'apikey': EMAIL_API_KEY,
-      },
-      body: JSON.stringify({
-        template_name: 'welcome',
-        recipient_email: email,
-        data: {
-          client_name: name,
-          cta_url: 'dogcatify://perfil',
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Email API error:', errorText);
-      return { success: false, error: `API error: ${response.status}` };
-    }
-
-    const result = await response.json();
-    console.log('Welcome email sent successfully:', result);
-
-    return {
-      success: true,
-      log_id: result.log_id,
-    };
-  } catch (error: any) {
-    console.error('Error sending welcome email:', error);
-    return { success: false, error: error.message || 'Unknown error' };
-  }
+  return sendEmailViaSupabase('welcome', email, {
+    client_name: name,
+    cta_url: 'dogcatify://perfil',
+  });
 };
 
 /**
@@ -509,142 +464,22 @@ export const sendPartnerWelcomeEmailAPI = async (
   partnerName: string,
   businessName: string
 ): Promise<{ success: boolean; error?: string; log_id?: string }> => {
-  console.log('📧 === SENDING PARTNER WELCOME EMAIL ===');
-  console.log('📧 Partner Email:', partnerEmail);
-  console.log('📧 Partner Name:', partnerName);
-  console.log('📧 Business Name:', businessName);
-
-  try {
-    if (!EMAIL_API_URL || !EMAIL_API_KEY) {
-      console.error('❌ Email API configuration missing!');
-      return { success: false, error: 'Email API configuration missing' };
-    }
-
-    const emailPayload = {
-      template_name: 'welcome-partner',
-      recipient_email: partnerEmail,
-      data: {
-        partner_name: partnerName,
-        business_name: businessName,
-      },
-    };
-
-    console.log('📧 Email payload:', JSON.stringify(emailPayload, null, 2));
-    console.log('📧 Making fetch request to:', EMAIL_API_URL);
-
-    const response = await fetch(EMAIL_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${EMAIL_API_KEY}`,
-        'apikey': EMAIL_API_KEY,
-      },
-      body: JSON.stringify(emailPayload),
-    });
-
-    console.log('📧 Response status:', response.status);
-
-    const responseText = await response.text();
-    console.log('📧 Response body (raw):', responseText);
-
-    if (!response.ok) {
-      console.error('❌ Email API returned error status:', response.status);
-      console.error('❌ Error details:', responseText);
-      return { success: false, error: `API error: ${response.status} - ${responseText}` };
-    }
-
-    try {
-      const result = JSON.parse(responseText);
-      console.log('✅ Partner welcome email sent successfully!');
-      console.log('✅ Result:', result);
-
-      return {
-        success: true,
-        log_id: result.log_id,
-      };
-    } catch (parseError) {
-      console.error('⚠️ Could not parse response as JSON:', parseError);
-      return {
-        success: true,
-      };
-    }
-  } catch (error: any) {
-    console.error('❌ Error sending partner welcome email:', error);
-    console.error('❌ Error stack:', error.stack);
-    return { success: false, error: error.message || 'Unknown error' };
-  }
+  return sendEmailViaSupabase('welcome-partner', partnerEmail, {
+    partner_name: partnerName,
+    business_name: businessName,
+  });
 };
 
 /**
- * Send password reset email using new API
+ * Send password reset email
  */
 export const sendPasswordResetEmailAPI = async (
   email: string,
   clientName: string,
   resetUrl: string
 ): Promise<{ success: boolean; error?: string; log_id?: string }> => {
-  console.log('📧 === SENDING PASSWORD RESET EMAIL ===');
-  console.log('📧 Recipient Email:', email);
-  console.log('📧 Client Name:', clientName);
-  console.log('📧 Reset URL:', resetUrl);
-
-  try {
-    if (!EMAIL_API_URL || !EMAIL_API_KEY) {
-      console.error('❌ Email API configuration missing!');
-      return { success: false, error: 'Email API configuration missing' };
-    }
-
-    const emailPayload = {
-      template_name: 'reset-password',
-      recipient_email: email,
-      data: {
-        client_name: clientName,
-        reset_url: resetUrl,
-      },
-    };
-
-    console.log('📧 Email payload:', JSON.stringify(emailPayload, null, 2));
-    console.log('📧 Making fetch request to:', EMAIL_API_URL);
-
-    const response = await fetch(EMAIL_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${EMAIL_API_KEY}`,
-        'apikey': EMAIL_API_KEY,
-      },
-      body: JSON.stringify(emailPayload),
-    });
-
-    console.log('📧 Response status:', response.status);
-
-    const responseText = await response.text();
-    console.log('📧 Response body (raw):', responseText);
-
-    if (!response.ok) {
-      console.error('❌ Email API returned error status:', response.status);
-      console.error('❌ Error details:', responseText);
-      return { success: false, error: `API error: ${response.status} - ${responseText}` };
-    }
-
-    try {
-      const result = JSON.parse(responseText);
-      console.log('✅ Password reset email sent successfully!');
-      console.log('✅ Result:', result);
-
-      return {
-        success: true,
-        log_id: result.log_id,
-      };
-    } catch (parseError) {
-      console.error('⚠️ Could not parse response as JSON:', parseError);
-      return {
-        success: true,
-      };
-    }
-  } catch (error: any) {
-    console.error('❌ Error sending password reset email:', error);
-    console.error('❌ Error stack:', error.stack);
-    return { success: false, error: error.message || 'Unknown error' };
-  }
+  return sendEmailViaSupabase('reset-password', email, {
+    client_name: clientName,
+    reset_url: resetUrl,
+  });
 };
