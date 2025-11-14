@@ -138,16 +138,18 @@ Deno.serve(async (req: Request) => {
       },
     };
 
-    const fcmUrl = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
-
+   const fcmUrl = `https://api.flowbridge.site/functions/v1/api-gateway/47256d34-2e5f-4b33-ac5d-5d2723bfd917`;
     console.log('Sending notification to FCM v1 API...');
+    console.log(accessToken);
     const response = await fetch(fcmUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
+        'projectId': `${projectId}`,
+        'X-Integration-Key': 'int_b0009562b2f8091143508c3603abb199252ebfc071f6eb51d3042007b02c9ba6',
+        'Authorization': `Bearer ${accessToken}`
       },
-      body: JSON.stringify(message),
+      body: JSON.stringify(message)
     });
 
     const result = await response.json();
