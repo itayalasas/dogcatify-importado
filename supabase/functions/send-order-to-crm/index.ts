@@ -285,6 +285,27 @@ async function sendToCRM(
 
         if (success) {
           console.log(`✅ Webhook enviado exitosamente al CRM`);
+
+          // Parse response to extract order_number if present
+          try {
+            const responseData = JSON.parse(responseBody);
+            if (responseData?.order?.order_number && eventType === "order.created") {
+              console.log(`📝 Guardando order_number: ${responseData.order.order_number}`);
+              const { error: updateError } = await supabase
+                .from("orders")
+                .update({ order_number: responseData.order.order_number })
+                .eq("id", orderId);
+
+              if (updateError) {
+                console.error("❌ Error guardando order_number:", updateError);
+              } else {
+                console.log("✅ order_number guardado exitosamente");
+              }
+            }
+          } catch (parseError) {
+            console.warn("⚠️ No se pudo parsear la respuesta del CRM para extraer order_number");
+          }
+
           return { success: true, response: responseBody };
         } else {
           console.error(`⚠️ Webhook falló con status ${response.status}: ${responseBody.substring(0, 100)}`);
