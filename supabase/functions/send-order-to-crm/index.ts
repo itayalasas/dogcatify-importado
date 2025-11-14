@@ -278,8 +278,7 @@ async function sendToCRM(
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-API-Key": crmApiKey,
-            "User-Agent": "DogCatiFy-CRM-Webhook/1.0",
+            "X-Integration-Key": crmApiKey,
           },
           body: payloadString,
         });
