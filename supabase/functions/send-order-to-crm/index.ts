@@ -370,8 +370,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const crmWebhookUrl = Deno.env.get("CRM_WEBHOOK_URL");
-    const crmApiKey = Deno.env.get("CRM_API_KEY");
+    const crmWebhookUrl ="https://api.flowbridge.site/functions/v1/api-gateway/25371166-4565-497d-b58e-d2b9d5fdfaa9"; //Deno.env.get("CRM_WEBHOOK_URL");
+    const crmApiKey = "int_15b2980b24ff287dce9540bd1f984a7175af30d6a0bc0d3ed0ddf64bd1fffb2e";//Deno.env.get("CRM_API_KEY");
 
     if (!crmWebhookUrl || !crmApiKey) {
       console.error("❌ CRM_WEBHOOK_URL o CRM_API_KEY no configurados");
