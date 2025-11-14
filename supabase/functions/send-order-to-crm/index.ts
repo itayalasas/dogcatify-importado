@@ -32,7 +32,6 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
     return [];
   }
 
-  // Obtener configuración de IVA de la orden
   const ivaIncludedInPrice = orderData.iva_included_in_price === true;
   const orderIvaRate = parseFloat(orderData.iva_rate) || 0;
 
@@ -51,18 +50,14 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
     let subtotalPartner = 0;
     let ivaAmountPartner = 0;
 
-    // Procesar cada item del partner
     const enrichedItems = partnerItems.map((item: any) => {
-      // Obtener valores base del item
       const itemPrice = parseFloat(item.price) || 0;
       const itemQuantity = parseInt(item.quantity) || 1;
       const itemIvaRate = parseFloat(item.iva_rate) || orderIvaRate;
       const discountPercentage = parseFloat(item.discount_percentage) || 0;
 
-      // Calcular precio original (antes de descuento)
       const originalPrice = parseFloat(item.original_price) || itemPrice;
 
-      // Calcular precio con descuento
       let priceAfterDiscount = originalPrice;
       let discountAmount = 0;
 
@@ -71,36 +66,28 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
         priceAfterDiscount = originalPrice * (1 - discountPercentage / 100);
       }
 
-      // Calcular subtotal del item (precio con descuento * cantidad)
       let itemSubtotal = priceAfterDiscount * itemQuantity;
       let itemIvaAmount = 0;
       let priceWithoutIva = priceAfterDiscount;
       let subtotalWithoutIva = itemSubtotal;
 
-      // Calcular IVA según configuración
       if (itemIvaRate > 0) {
         if (ivaIncludedInPrice) {
-          // IVA incluido en el precio: extraer el IVA
           priceWithoutIva = priceAfterDiscount / (1 + itemIvaRate / 100);
           subtotalWithoutIva = itemSubtotal / (1 + itemIvaRate / 100);
           itemIvaAmount = itemSubtotal - subtotalWithoutIva;
         } else {
-          // IVA NO incluido: agregar el IVA
           itemIvaAmount = itemSubtotal * (itemIvaRate / 100);
-          // El precio y subtotal sin IVA ya están correctos
           priceWithoutIva = priceAfterDiscount;
           subtotalWithoutIva = itemSubtotal;
         }
       }
 
-      // Acumular totales del partner
       subtotalPartner += subtotalWithoutIva;
       ivaAmountPartner += itemIvaAmount;
 
-      // Calcular total del item (subtotal + IVA)
       const itemTotal = subtotalWithoutIva + itemIvaAmount;
 
-      // Construir objeto del item enriquecido
       const enrichedItem: any = {
         ...item,
         price: Number(priceWithoutIva.toFixed(2)),
@@ -113,7 +100,6 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
         total: Number(itemTotal.toFixed(2)),
       };
 
-      // Agregar información de servicio si aplica
       if (orderData.order_type === 'service_booking' && orderData.booking_id) {
         enrichedItem.service_name = orderData.service_name || item.name;
         enrichedItem.pet_name = orderData.pet_name;
@@ -127,12 +113,10 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
       return enrichedItem;
     });
 
-    // Calcular comisión sobre el subtotal sin IVA
     const commissionPercentage = partnerInfo.commission_percentage || 5.0;
     const commissionAmount = (subtotalPartner * commissionPercentage) / 100;
     const partnerAmount = subtotalPartner - commissionAmount;
 
-    // Total del partner (subtotal + IVA)
     const partnerTotal = subtotalPartner + ivaAmountPartner;
 
     partnersArray.push({
@@ -171,7 +155,6 @@ async function sendToCRM(
   console.log(`📨 Enviando orden ${orderId} al CRM con evento: ${eventType}`);
 
   try {
-    // Calcular información de envío
     const shippingCost = parseFloat(orderData.shipping_cost) || 0;
     const orderIvaRate = parseFloat(orderData.iva_rate) || 0;
     const ivaIncludedInPrice = orderData.iva_included_in_price === true;
@@ -179,11 +162,9 @@ async function sendToCRM(
     let shippingIvaAmount = 0;
     if (shippingCost > 0 && orderIvaRate > 0) {
       if (ivaIncludedInPrice) {
-        // IVA incluido: extraer
         const shippingWithoutIva = shippingCost / (1 + orderIvaRate / 100);
         shippingIvaAmount = shippingCost - shippingWithoutIva;
       } else {
-        // IVA no incluido: agregar
         shippingIvaAmount = shippingCost * (orderIvaRate / 100);
       }
     }
@@ -202,22 +183,18 @@ async function sendToCRM(
       shipping_address: null,
     };
 
-    // Construir array de partners con cálculos correctos
     const partnersArray = await buildPartnersArray(orderData, supabase);
     const totalPartners = partnersArray.length;
 
-    // Calcular totales de la orden
     const subtotalOrder = partnersArray.reduce((sum, p) => sum + p.subtotal, 0);
     const ivaAmountOrder = partnersArray.reduce((sum, p) => sum + p.iva_amount, 0);
     const totalCommission = partnersArray.reduce((sum, p) => sum + p.commission_amount, 0);
     const totalPartnerAmount = partnersArray.reduce((sum, p) => sum + p.partner_amount, 0);
 
-    // Total de la orden (subtotal + IVA + shipping)
     const totalAmount = subtotalOrder + ivaAmountOrder + (ivaIncludedInPrice ? 0 : shippingIvaAmount) + shippingCost;
 
     console.log(`📊 Totales calculados: Subtotal=${subtotalOrder.toFixed(2)}, IVA=${ivaAmountOrder.toFixed(2)}, Total=${totalAmount.toFixed(2)}`);
 
-    // Construir información de pago
     const paymentInfo = {
       payment_id: orderData.payment_id || null,
       payment_status: orderData.payment_status || null,
@@ -225,7 +202,6 @@ async function sendToCRM(
       payment_preference_id: orderData.payment_preference_id || null,
     };
 
-    // Construir información de booking si aplica
     const bookingInfo = orderData.booking_id ? {
       booking_id: orderData.booking_id,
       service_id: orderData.service_id,
@@ -402,15 +378,15 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const crmWebhookUrl = Deno.env.get("CRM_WEBHOOK_URL");
-    const crmApiKey = Deno.env.get("CRM_API_KEY");
+    const crmWebhookUrl = Deno.env.get("CRM_WEBHOOK_URL") || "https://api.flowbridge.site/functions/v1/api-gateway/25371166-4565-497d-b58e-d2b9d5fdfaa9";
+    const crmApiKey = Deno.env.get("CRM_API_KEY") || "int_15b2980b24ff287dce9540bd1f984a7175af30d6a0bc0d3ed0ddf64bd1fffb2e";
 
     if (!crmWebhookUrl || !crmApiKey) {
       console.error("❌ CRM_WEBHOOK_URL o CRM_API_KEY no configurados");
       return new Response(
         JSON.stringify({
           error: "Configuración incompleta",
-          message: "CRM_WEBHOOK_URL y CRM_API_KEY deben estar configurados en las variables de entorno",
+          message: "CRM_WEBHOOK_URL y CRM_API_KEY deben estar configurados",
         }),
         {
           status: 500,
@@ -418,6 +394,8 @@ Deno.serve(async (req: Request) => {
         }
       );
     }
+
+    console.log(`🔧 Usando CRM URL: ${crmWebhookUrl.substring(0, 50)}...`);
 
     console.log(`🔍 Buscando orden: ${order_id}, evento: ${event_type}`);
     console.log(`🎯 CRM URL: ${crmWebhookUrl}`);
