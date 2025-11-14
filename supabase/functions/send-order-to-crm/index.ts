@@ -32,8 +32,9 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
     return [];
   }
 
+  // Obtener configuración de IVA de la orden
   const ivaIncludedInPrice = orderData.iva_included_in_price === true;
-  const ivaRate = orderData.iva_rate || 0;
+  const orderIvaRate = parseFloat(orderData.iva_rate) || 0;
 
   for (const partnerId of partnerIds) {
     const partnerInfo = partnersData.find((p: any) => p.id === partnerId);
@@ -47,87 +48,92 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
       ? (orderData.items || []).filter((item: any) => item.partnerId === partnerId || item.partner_id === partnerId)
       : (orderData.items || []);
 
-    let subtotal = 0;
-    let ivaAmount = 0;
+    let subtotalPartner = 0;
+    let ivaAmountPartner = 0;
 
-    if (partnerBreakdown[partnerId]) {
-      subtotal = partnerBreakdown[partnerId].subtotal || 0;
-      ivaAmount = partnerItems.reduce((sum: number, item: any) => sum + (item.iva_amount || 0), 0);
-    } else {
-      if (partnerItems.length > 0) {
-        const totalConIva = partnerItems.reduce((sum: number, item: any) => {
-          return sum + ((item.subtotal !== undefined && item.subtotal !== null) ? item.subtotal : (item.price * item.quantity));
-        }, 0);
-
-        if (ivaIncludedInPrice && ivaRate > 0) {
-          subtotal = totalConIva / (1 + ivaRate / 100);
-          ivaAmount = totalConIva - subtotal;
-
-          partnerItems = partnerItems.map((item: any) => {
-            const itemPrice = item.price || 0;
-            const itemSubtotal = item.subtotal || (itemPrice * item.quantity);
-
-            const priceWithoutIva = itemPrice / (1 + ivaRate / 100);
-            const subtotalWithoutIva = itemSubtotal / (1 + ivaRate / 100);
-            const itemIvaAmount = itemSubtotal - subtotalWithoutIva;
-
-            return {
-              ...item,
-              price: Number(priceWithoutIva.toFixed(2)),
-              subtotal: Number(subtotalWithoutIva.toFixed(2)),
-              iva_amount: Number(itemIvaAmount.toFixed(2)),
-              original_price: itemPrice
-            };
-          });
-        } else {
-          subtotal = totalConIva;
-          ivaAmount = partnerItems.reduce((sum: number, item: any) => sum + (item.iva_amount || 0), 0);
-        }
-      } else {
-        subtotal = orderData.subtotal || 0;
-
-        if (ivaIncludedInPrice && ivaRate > 0) {
-          const subtotalSinIva = subtotal / (1 + ivaRate / 100);
-          ivaAmount = subtotal - subtotalSinIva;
-          subtotal = subtotalSinIva;
-        } else {
-          ivaAmount = orderData.iva_amount || 0;
-        }
-      }
-    }
-
-    const commissionPercentage = partnerInfo.commission_percentage || 5.0;
-    const commissionAmount = (subtotal * commissionPercentage) / 100;
-    const partnerAmount = subtotal - commissionAmount;
-
+    // Procesar cada item del partner
     const enrichedItems = partnerItems.map((item: any) => {
-      const discountPercentage = item.discount_percentage || 0;
-      const originalPrice = item.original_price || item.price;
-      const discountAmount = discountPercentage > 0
-        ? Number(((originalPrice * discountPercentage / 100) * item.quantity).toFixed(2))
-        : 0;
+      // Obtener valores base del item
+      const itemPrice = parseFloat(item.price) || 0;
+      const itemQuantity = parseInt(item.quantity) || 1;
+      const itemIvaRate = parseFloat(item.iva_rate) || orderIvaRate;
+      const discountPercentage = parseFloat(item.discount_percentage) || 0;
 
-      if (orderData.order_type === 'service_booking' && orderData.booking_id) {
-        return {
-          ...item,
-          service_name: orderData.service_name || item.name,
-          pet_name: orderData.pet_name,
-          pet_id: orderData.pet_id,
-          appointment_date: orderData.appointment_date,
-          appointment_time: orderData.appointment_time,
-          booking_notes: orderData.booking_notes,
-          discount_amount: discountAmount,
-          type: 'service'
-        };
+      // Calcular precio original (antes de descuento)
+      const originalPrice = parseFloat(item.original_price) || itemPrice;
+
+      // Calcular precio con descuento
+      let priceAfterDiscount = originalPrice;
+      let discountAmount = 0;
+
+      if (discountPercentage > 0) {
+        discountAmount = Number(((originalPrice * discountPercentage / 100) * itemQuantity).toFixed(2));
+        priceAfterDiscount = originalPrice * (1 - discountPercentage / 100);
       }
 
-      return {
+      // Calcular subtotal del item (precio con descuento * cantidad)
+      let itemSubtotal = priceAfterDiscount * itemQuantity;
+      let itemIvaAmount = 0;
+      let priceWithoutIva = priceAfterDiscount;
+      let subtotalWithoutIva = itemSubtotal;
+
+      // Calcular IVA según configuración
+      if (itemIvaRate > 0) {
+        if (ivaIncludedInPrice) {
+          // IVA incluido en el precio: extraer el IVA
+          priceWithoutIva = priceAfterDiscount / (1 + itemIvaRate / 100);
+          subtotalWithoutIva = itemSubtotal / (1 + itemIvaRate / 100);
+          itemIvaAmount = itemSubtotal - subtotalWithoutIva;
+        } else {
+          // IVA NO incluido: agregar el IVA
+          itemIvaAmount = itemSubtotal * (itemIvaRate / 100);
+          // El precio y subtotal sin IVA ya están correctos
+          priceWithoutIva = priceAfterDiscount;
+          subtotalWithoutIva = itemSubtotal;
+        }
+      }
+
+      // Acumular totales del partner
+      subtotalPartner += subtotalWithoutIva;
+      ivaAmountPartner += itemIvaAmount;
+
+      // Calcular total del item (subtotal + IVA)
+      const itemTotal = subtotalWithoutIva + itemIvaAmount;
+
+      // Construir objeto del item enriquecido
+      const enrichedItem: any = {
         ...item,
-        discount_amount: discountAmount
+        price: Number(priceWithoutIva.toFixed(2)),
+        original_price: Number(originalPrice.toFixed(2)),
+        subtotal: Number(subtotalWithoutIva.toFixed(2)),
+        iva_rate: itemIvaRate,
+        iva_amount: Number(itemIvaAmount.toFixed(2)),
+        discount_percentage: discountPercentage,
+        discount_amount: discountAmount,
+        total: Number(itemTotal.toFixed(2)),
       };
+
+      // Agregar información de servicio si aplica
+      if (orderData.order_type === 'service_booking' && orderData.booking_id) {
+        enrichedItem.service_name = orderData.service_name || item.name;
+        enrichedItem.pet_name = orderData.pet_name;
+        enrichedItem.pet_id = orderData.pet_id;
+        enrichedItem.appointment_date = orderData.appointment_date;
+        enrichedItem.appointment_time = orderData.appointment_time;
+        enrichedItem.booking_notes = orderData.booking_notes;
+        enrichedItem.type = 'service';
+      }
+
+      return enrichedItem;
     });
 
-    const partnerTotal = subtotal + ivaAmount;
+    // Calcular comisión sobre el subtotal sin IVA
+    const commissionPercentage = partnerInfo.commission_percentage || 5.0;
+    const commissionAmount = (subtotalPartner * commissionPercentage) / 100;
+    const partnerAmount = subtotalPartner - commissionAmount;
+
+    // Total del partner (subtotal + IVA)
+    const partnerTotal = subtotalPartner + ivaAmountPartner;
 
     partnersArray.push({
       id: partnerInfo.id,
@@ -142,8 +148,8 @@ async function buildPartnersArray(orderData: any, supabase: any): Promise<any[]>
       commission_percentage: commissionPercentage,
       is_primary: partnerId === orderData.partner_id,
       items: enrichedItems,
-      subtotal: Number(subtotal.toFixed(2)),
-      iva_amount: Number(ivaAmount.toFixed(2)),
+      subtotal: Number(subtotalPartner.toFixed(2)),
+      iva_amount: Number(ivaAmountPartner.toFixed(2)),
       commission_amount: Number(commissionAmount.toFixed(2)),
       partner_amount: Number(partnerAmount.toFixed(2)),
       total: Number(partnerTotal.toFixed(2))
@@ -165,30 +171,70 @@ async function sendToCRM(
   console.log(`📨 Enviando orden ${orderId} al CRM con evento: ${eventType}`);
 
   try {
-    const shippingCost = orderData.shipping_cost || 0;
-    const shippingIvaAmount = orderData.iva_rate && !orderData.iva_included_in_price
-      ? (shippingCost * orderData.iva_rate / 100)
-      : 0;
+    // Calcular información de envío
+    const shippingCost = parseFloat(orderData.shipping_cost) || 0;
+    const orderIvaRate = parseFloat(orderData.iva_rate) || 0;
+    const ivaIncludedInPrice = orderData.iva_included_in_price === true;
+
+    let shippingIvaAmount = 0;
+    if (shippingCost > 0 && orderIvaRate > 0) {
+      if (ivaIncludedInPrice) {
+        // IVA incluido: extraer
+        const shippingWithoutIva = shippingCost / (1 + orderIvaRate / 100);
+        shippingIvaAmount = shippingCost - shippingWithoutIva;
+      } else {
+        // IVA no incluido: agregar
+        shippingIvaAmount = shippingCost * (orderIvaRate / 100);
+      }
+    }
+
+    const shippingTotal = shippingCost + (ivaIncludedInPrice ? 0 : shippingIvaAmount);
 
     const shippingInfo = orderData.order_type === 'product_purchase' ? {
-      shipping_cost: shippingCost,
-      shipping_iva_amount: shippingIvaAmount,
-      shipping_total: shippingCost + shippingIvaAmount,
+      shipping_cost: Number(shippingCost.toFixed(2)),
+      shipping_iva_amount: Number(shippingIvaAmount.toFixed(2)),
+      shipping_total: Number(shippingTotal.toFixed(2)),
       shipping_address: orderData.shipping_address || null,
     } : {
-      shipping_cost: null,
-      shipping_iva_amount: null,
-      shipping_total: null,
+      shipping_cost: 0,
+      shipping_iva_amount: 0,
+      shipping_total: 0,
       shipping_address: null,
     };
 
+    // Construir array de partners con cálculos correctos
     const partnersArray = await buildPartnersArray(orderData, supabase);
     const totalPartners = partnersArray.length;
 
-    const subtotalSinIva = orderData.subtotal || 0;
-    const ivaAmountCalculado = orderData.iva_amount || 0;
+    // Calcular totales de la orden
+    const subtotalOrder = partnersArray.reduce((sum, p) => sum + p.subtotal, 0);
+    const ivaAmountOrder = partnersArray.reduce((sum, p) => sum + p.iva_amount, 0);
+    const totalCommission = partnersArray.reduce((sum, p) => sum + p.commission_amount, 0);
+    const totalPartnerAmount = partnersArray.reduce((sum, p) => sum + p.partner_amount, 0);
 
-    console.log(`📊 Totales de orden: Subtotal=${subtotalSinIva.toFixed(2)}, IVA=${ivaAmountCalculado.toFixed(2)}, Total=${orderData.total_amount}`);
+    // Total de la orden (subtotal + IVA + shipping)
+    const totalAmount = subtotalOrder + ivaAmountOrder + (ivaIncludedInPrice ? 0 : shippingIvaAmount) + shippingCost;
+
+    console.log(`📊 Totales calculados: Subtotal=${subtotalOrder.toFixed(2)}, IVA=${ivaAmountOrder.toFixed(2)}, Total=${totalAmount.toFixed(2)}`);
+
+    // Construir información de pago
+    const paymentInfo = {
+      payment_id: orderData.payment_id || null,
+      payment_status: orderData.payment_status || null,
+      payment_method: orderData.payment_method || null,
+      payment_preference_id: orderData.payment_preference_id || null,
+    };
+
+    // Construir información de booking si aplica
+    const bookingInfo = orderData.booking_id ? {
+      booking_id: orderData.booking_id,
+      service_id: orderData.service_id,
+      appointment_date: orderData.appointment_date,
+      appointment_time: orderData.appointment_time,
+      pet_id: orderData.pet_id,
+      pet_name: orderData.pet_name,
+      booking_notes: orderData.booking_notes
+    } : null;
 
     const payload = {
       data: {
@@ -199,33 +245,20 @@ async function sendToCRM(
         customer: orderData.customer,
         partners: partnersArray,
         totals: {
-          subtotal: Number(subtotalSinIva.toFixed(2)),
-          iva_amount: Number(ivaAmountCalculado.toFixed(2)),
-          iva_rate: orderData.iva_rate,
-          iva_included_in_price: orderData.iva_included_in_price === true,
-          shipping_cost: shippingCost,
-          shipping_iva_amount: shippingIvaAmount,
-          total_commission: orderData.commission_amount,
-          total_partner_amount: orderData.partner_amount,
-          total_amount: orderData.total_amount,
+          subtotal: Number(subtotalOrder.toFixed(2)),
+          iva_amount: Number(ivaAmountOrder.toFixed(2)),
+          iva_rate: orderIvaRate,
+          iva_included_in_price: ivaIncludedInPrice,
+          shipping_cost: Number(shippingCost.toFixed(2)),
+          shipping_iva_amount: Number(shippingIvaAmount.toFixed(2)),
+          total_commission: Number(totalCommission.toFixed(2)),
+          total_partner_amount: Number(totalPartnerAmount.toFixed(2)),
+          total_amount: Number(totalAmount.toFixed(2)),
           total_partners: totalPartners
         },
         shipping_info: shippingInfo,
-        payment_info: {
-          payment_id: orderData.payment_id,
-          payment_status: orderData.payment_status,
-          payment_method: orderData.payment_method,
-          payment_preference_id: orderData.payment_preference_id
-        },
-        booking_info: orderData.booking_id ? {
-          booking_id: orderData.booking_id,
-          service_id: orderData.service_id,
-          appointment_date: orderData.appointment_date,
-          appointment_time: orderData.appointment_time,
-          pet_id: orderData.pet_id,
-          pet_name: orderData.pet_name,
-          booking_notes: orderData.booking_notes
-        } : null,
+        payment_info: paymentInfo,
+        booking_info: bookingInfo,
         created_at: orderData.created_at,
         updated_at: orderData.updated_at
       },
@@ -245,8 +278,8 @@ async function sendToCRM(
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-Integration-Key": crmApiKey
-        
+            "X-API-Key": crmApiKey,
+            "User-Agent": "DogCatiFy-CRM-Webhook/1.0",
           },
           body: payloadString,
         });
@@ -370,8 +403,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const crmWebhookUrl ="https://api.flowbridge.site/functions/v1/api-gateway/25371166-4565-497d-b58e-d2b9d5fdfaa9"; //Deno.env.get("CRM_WEBHOOK_URL");
-    const crmApiKey = "int_15b2980b24ff287dce9540bd1f984a7175af30d6a0bc0d3ed0ddf64bd1fffb2e";//Deno.env.get("CRM_API_KEY");
+    const crmWebhookUrl = Deno.env.get("CRM_WEBHOOK_URL");
+    const crmApiKey = Deno.env.get("CRM_API_KEY");
 
     if (!crmWebhookUrl || !crmApiKey) {
       console.error("❌ CRM_WEBHOOK_URL o CRM_API_KEY no configurados");
@@ -540,7 +573,7 @@ Deno.serve(async (req: Request) => {
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      }
+    );
   }
 });
