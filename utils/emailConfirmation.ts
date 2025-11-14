@@ -542,7 +542,7 @@ export const sendPartnerWelcomeEmailAPI = async (
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': EMAIL_API_KEY,
+        'X-Integration-Key': EMAIL_API_KEY,
       },
       body: JSON.stringify(emailPayload),
     });
