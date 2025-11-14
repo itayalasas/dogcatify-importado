@@ -268,8 +268,8 @@ export const getPartnerMercadoPagoConfig = async (partnerId: string) => {
       ...data.mercadopago_config,
       commission_percentage: data.commission_percentage || 5.0,
       business_name: data.business_name,
-      iva_rate: data.iva_rate || 0,
-      iva_included_in_price: data.iva_included_in_price || false,
+      iva_rate: data.iva_rate != null ? parseFloat(data.iva_rate.toString()) : 22.0,
+      iva_included_in_price: data.iva_included_in_price !== false,
       // Para configuraciones manuales, usar el partner_id como user_id si no existe
       user_id: data.mercadopago_config.user_id || data.mercadopago_config.account_id || partnerId
     };
@@ -949,9 +949,20 @@ export const createServiceBookingOrder = async (bookingData: {
     let ivaRate = 0;
     if (serviceData?.iva_rate != null) {
       ivaRate = serviceData.iva_rate;
+      console.log(`✅ Using service iva_rate: ${ivaRate}%`);
     } else if (partnerConfig.iva_rate != null) {
       ivaRate = partnerConfig.iva_rate;
+      console.log(`✅ Using partner iva_rate: ${ivaRate}%`);
+    } else {
+      console.log(`⚠️ No IVA rate configured, using default: ${ivaRate}%`);
     }
+
+    console.log('IVA configuration debug:', {
+      service_iva_rate: serviceData?.iva_rate,
+      partner_iva_rate: partnerConfig.iva_rate,
+      final_iva_rate: ivaRate,
+      partner_iva_included: partnerConfig.iva_included_in_price
+    });
 
     // Get IVA included flag: partner config (default true)
     const ivaIncluded = partnerConfig.iva_included_in_price !== false;
