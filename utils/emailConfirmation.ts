@@ -2,9 +2,13 @@ import { supabaseClient } from '../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 
-// Email API Configuration
-const EMAIL_API_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_EMAIL_API_URL || process.env.EXPO_PUBLIC_EMAIL_API_URL;
-const EMAIL_API_KEY = Constants.expoConfig?.extra?.EXPO_PUBLIC_EMAIL_API_KEY || process.env.EXPO_PUBLIC_EMAIL_API_KEY;
+// Get Supabase configuration
+const SUPABASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+// Email API Configuration (using Supabase edge function)
+const EMAIL_API_URL = `${SUPABASE_URL}/functions/v1/send-email`;
+const EMAIL_API_KEY = SUPABASE_ANON_KEY;
 
 export interface EmailConfirmationToken {
   id: string;
@@ -312,21 +316,15 @@ export const sendConfirmationEmailAPI = async (
   console.log('📧 Confirmation URL:', confirmationUrl);
 
   try {
-    // Get environment variables - React Native requires direct access
-    const emailApiUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_EMAIL_API_URL ||
-                        (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_EMAIL_API_URL);
-    const emailApiKey = Constants.expoConfig?.extra?.EXPO_PUBLIC_EMAIL_API_KEY ||
-                        (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_EMAIL_API_KEY);
-
     console.log('📧 Email API Configuration:', {
-      hasUrl: !!emailApiUrl,
-      url: emailApiUrl,
-      hasKey: !!emailApiKey,
-      keyLength: emailApiKey?.length,
-      keyPrefix: emailApiKey?.substring(0, 10) + '...',
+      hasUrl: !!EMAIL_API_URL,
+      url: EMAIL_API_URL,
+      hasKey: !!EMAIL_API_KEY,
+      keyLength: EMAIL_API_KEY?.length,
+      keyPrefix: EMAIL_API_KEY?.substring(0, 10) + '...',
     });
 
-    if (!emailApiUrl || !emailApiKey) {
+    if (!EMAIL_API_URL || !EMAIL_API_KEY) {
       console.error('❌ Email API configuration missing!');
       return { success: false, error: 'Email API configuration missing' };
     }
@@ -341,13 +339,14 @@ export const sendConfirmationEmailAPI = async (
     };
 
     console.log('📧 Email payload:', JSON.stringify(emailPayload, null, 2));
-    console.log('📧 Making fetch request to:', emailApiUrl);
+    console.log('📧 Making fetch request to:', EMAIL_API_URL);
 
-    const response = await fetch(emailApiUrl, {
+    const response = await fetch(EMAIL_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': emailApiKey,
+        'Authorization': `Bearer ${EMAIL_API_KEY}`,
+        'apikey': EMAIL_API_KEY,
       },
       body: JSON.stringify(emailPayload),
     });
@@ -394,24 +393,19 @@ export const sendWelcomeEmailAPI = async (
   name: string
 ): Promise<{ success: boolean; error?: string; log_id?: string }> => {
   try {
-    // Get environment variables - React Native requires direct access
-    const emailApiUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_EMAIL_API_URL ||
-                        (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_EMAIL_API_URL);
-    const emailApiKey = Constants.expoConfig?.extra?.EXPO_PUBLIC_EMAIL_API_KEY ||
-                        (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_EMAIL_API_KEY);
-
-    if (!emailApiUrl || !emailApiKey) {
+    if (!EMAIL_API_URL || !EMAIL_API_KEY) {
       console.error('Email API configuration missing');
       return { success: false, error: 'Email API configuration missing' };
     }
 
     console.log('Sending welcome email directly to external API:', email);
 
-    const response = await fetch(emailApiUrl, {
+    const response = await fetch(EMAIL_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': emailApiKey,
+        'Authorization': `Bearer ${EMAIL_API_KEY}`,
+        'apikey': EMAIL_API_KEY,
       },
       body: JSON.stringify({
         template_name: 'welcome',
@@ -542,7 +536,8 @@ export const sendPartnerWelcomeEmailAPI = async (
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Integration-Key': EMAIL_API_KEY,
+        'Authorization': `Bearer ${EMAIL_API_KEY}`,
+        'apikey': EMAIL_API_KEY,
       },
       body: JSON.stringify(emailPayload),
     });
@@ -615,7 +610,8 @@ export const sendPasswordResetEmailAPI = async (
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': EMAIL_API_KEY,
+        'Authorization': `Bearer ${EMAIL_API_KEY}`,
+        'apikey': EMAIL_API_KEY,
       },
       body: JSON.stringify(emailPayload),
     });
