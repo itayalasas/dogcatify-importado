@@ -35,6 +35,7 @@ async function sendToAccounting(
     const subtotal = parseFloat(orderData.subtotal) || 0;
     const ivaAmount = parseFloat(orderData.iva_amount) || 0;
     const total = parseFloat(orderData.total_amount) || 0;
+    let totalDiscount = 0; // Acumulador de descuentos
 
     // Construir items con información del partner
     const items = [];
@@ -64,10 +65,27 @@ async function sendToAccounting(
           continue;
         }
 
-        // Calcular el precio unitario y total del item
+        // Calcular precios y descuentos
         const quantity = parseInt(item.quantity) || 1;
-        const unitPrice = parseFloat(item.price) || 0;
-        const itemTotal = unitPrice * quantity;
+        const originalPrice = parseFloat(item.original_price) || parseFloat(item.price) || 0;
+        const finalPrice = parseFloat(item.price) || 0;
+        const discountPercentage = parseFloat(item.discount_percentage) || 0;
+
+        // Calcular subtotal (precio original * cantidad)
+        const itemSubtotal = originalPrice * quantity;
+
+        // Calcular descuento en valor absoluto
+        const discountAmount = itemSubtotal - (finalPrice * quantity);
+
+        // Calcular total después del descuento
+        const itemTotal = finalPrice * quantity;
+
+        // Obtener información del IVA
+        const taxRate = parseFloat(item.iva_rate) / 100 || 0.22; // Default 22%
+        const taxAmount = parseFloat(item.iva_amount) || 0;
+
+        // Acumular descuento total
+        totalDiscount += discountAmount;
 
         // Generar código corto (máximo 35 caracteres para el sistema contable)
         let codigo: string;
@@ -86,8 +104,13 @@ async function sendToAccounting(
           sku: codigo,
           name: item.name || item.title || "Producto",
           quantity: quantity,
-          unit_price: Number(unitPrice.toFixed(2)),
+          unit_price: Number(originalPrice.toFixed(2)),
+          subtotal: Number(itemSubtotal.toFixed(2)),
+          discount: Number(discountAmount.toFixed(2)),
+          discount_percentage: Number(discountPercentage.toFixed(3)),
           total: Number(itemTotal.toFixed(2)),
+          tax_rate: Number(taxRate.toFixed(2)),
+          tax_amount: Number(taxAmount.toFixed(2)),
           partner: {
             partner_id: partnerInfo.id,
             name: partnerInfo.business_name,
@@ -105,15 +128,18 @@ async function sendToAccounting(
       event: "order.created",
       empresa_id: empresaId,
       timestamp: new Date().toISOString(),
+      items: items,
       order: {
         order_id: orderData.id,
         order_number: orderData.order_number || `ORD-${orderData.id.substring(0, 8)}`,
         created_at: orderData.created_at,
         status: orderData.status,
-        total: Number(total.toFixed(2)),
-        subtotal: Number(subtotal.toFixed(2)),
+        subtotal: Number((subtotal + totalDiscount).toFixed(2)), // Subtotal antes de descuentos
+        discount: Number(totalDiscount.toFixed(2)),
         tax: Number(ivaAmount.toFixed(2)),
+        total: Number(total.toFixed(2)),
         currency: "UYU",
+        payment_method: orderData.payment_method || "unknown",
         payment_status: orderData.payment_status || "paid"
       },
       customer: {
@@ -121,8 +147,7 @@ async function sendToAccounting(
         name: customerData.display_name || "Cliente",
         email: customerData.email || "",
         phone: customerData.phone || ""
-      },
-      items: items
+      }
     };
 
     const payloadString = JSON.stringify(payload);
