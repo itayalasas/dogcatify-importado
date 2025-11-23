@@ -69,8 +69,21 @@ async function sendToAccounting(
         const unitPrice = parseFloat(item.price) || 0;
         const itemTotal = unitPrice * quantity;
 
+        // Generar código corto (máximo 35 caracteres para el sistema contable)
+        let codigo: string;
+        if (item.sku) {
+          // Si hay SKU, usarlo pero truncarlo si es muy largo
+          codigo = item.sku.substring(0, 35);
+        } else if (item.id) {
+          // Usar los primeros 8 caracteres del UUID del item
+          codigo = `ITEM-${item.id.substring(0, 8).toUpperCase()}`;
+        } else {
+          // Generar código aleatorio corto
+          codigo = `ITEM-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+        }
+
         items.push({
-          sku: item.sku || `ITEM-${item.id || Math.random().toString(36).substr(2, 9)}`,
+          sku: codigo,
           name: item.name || item.title || "Producto",
           quantity: quantity,
           unit_price: Number(unitPrice.toFixed(2)),
