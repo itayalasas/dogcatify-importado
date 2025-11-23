@@ -2,6 +2,34 @@
 
 ## Scripts Disponibles
 
+### Scripts de Webhooks
+
+#### `test-accounting-webhook.js`
+Prueba el envío de webhooks al sistema contable
+
+**Uso:**
+```bash
+node scripts/test-accounting-webhook.js <order_id>
+```
+
+**Ejemplo:**
+```bash
+node scripts/test-accounting-webhook.js 123e4567-e89b-12d3-a456-426614174000
+```
+
+**Qué hace:**
+- Envía una orden específica al sistema contable
+- Muestra la respuesta del servidor
+- Consulta los logs de intentos de webhook
+- Útil para depurar problemas de integración
+
+**Requisitos:**
+- La orden debe existir en la base de datos
+- La orden debe estar pagada (payment_status = 'paid' o 'approved')
+- La orden no debe ser gratuita (total_amount > 0)
+
+---
+
 ### 1. `get-android-sha256.sh`
 Extrae el SHA256 Fingerprint del keystore de Android
 
