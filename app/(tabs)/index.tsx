@@ -218,7 +218,7 @@ export default function Home() {
         .from('profiles')
         .select('onboarding_completed')
         .eq('id', currentUser.id)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
 
