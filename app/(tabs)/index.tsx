@@ -6,6 +6,7 @@ import Constants from 'expo-constants';
 import PostCard from '../../components/PostCard';
 import PromotionCard from '../../components/PromotionCard';
 import { DottyAssistant } from '../../components/DottyAssistant';
+import { FloatingVoiceBot } from '../../components/FloatingVoiceBot';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { NotificationPermissionPrompt } from '../../components/NotificationPermissionPrompt';
@@ -941,6 +942,10 @@ export default function Home() {
           onComplete={handleOnboardingComplete}
           onSkip={handleOnboardingComplete}
         />
+      )}
+
+      {!showOnboarding && currentUser && (
+        <FloatingVoiceBot />
       )}
     </SafeAreaView>
   );
