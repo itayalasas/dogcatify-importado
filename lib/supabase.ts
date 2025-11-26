@@ -125,9 +125,55 @@ export const getUserProfile = async (userId: string) => {
       .from('profiles')
       .select('*')
       .eq('id', userId)
-      .single();
-    
+      .maybeSingle();
+
     if (error) throw error;
+
+    // If profile doesn't exist, create it automatically
+    if (!data) {
+      console.log('Profile not found for user:', userId);
+      console.log('Attempting to fetch user data from auth.users and create profile...');
+
+      // Get user data from auth
+      const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+
+      if (authError || !user) {
+        throw new Error('Could not fetch user data from auth');
+      }
+
+      // Create the missing profile
+      const newProfile = {
+        id: userId,
+        email: user.email!,
+        display_name: (user.user_metadata?.full_name as string) || user.email?.split('@')[0] || 'Usuario',
+        is_owner: true,
+        is_partner: false,
+        email_confirmed: user.email_confirmed_at !== null,
+        email_confirmed_at: user.email_confirmed_at,
+        onboarding_completed: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        followers: [],
+        following: []
+      };
+
+      console.log('Creating missing profile:', newProfile);
+
+      const { data: createdProfile, error: createError } = await supabaseClient
+        .from('profiles')
+        .insert(newProfile)
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Error creating profile:', createError);
+        throw createError;
+      }
+
+      console.log('Profile created successfully');
+      return createdProfile;
+    }
+
     return data;
   } catch (error) {
     console.error('Error fetching user profile:', error);
