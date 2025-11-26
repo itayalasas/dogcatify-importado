@@ -398,22 +398,69 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
   try {
     console.log('Resending confirmation email for:', email);
 
-    // Find user by email
-    const { data: userData, error: userError } = await supabaseClient
+    // First try to find user in profiles table
+    const { data: profileData, error: profileError } = await supabaseClient
       .from('profiles')
       .select('id, display_name')
       .eq('email', email)
-      .single();
+      .maybeSingle();
 
-    if (userError) {
-      console.error('User not found for email resend:', userError);
-      if (userError.code === 'PGRST116') {
+    let userId: string | null = null;
+    let displayName: string = 'Usuario';
+
+    if (profileData) {
+      userId = profileData.id;
+      displayName = profileData.display_name || 'Usuario';
+      console.log('Found user in profiles:', userId);
+    } else {
+      // If not found in profiles, try to find in auth.users using service client
+      console.log('User not found in profiles, checking auth.users...');
+      const serviceClient = getServiceClient();
+
+      const { data: authUser, error: authError } = await serviceClient.auth.admin.listUsers();
+
+      if (authError) {
+        console.error('Error listing users from auth:', authError);
+        return { success: false, error: 'Error buscando usuario' };
+      }
+
+      const foundUser = authUser.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
+
+      if (!foundUser) {
+        console.error('User not found in auth.users either');
         return { success: false, error: 'No existe una cuenta con este correo electrónico' };
       }
-      return { success: false, error: 'Usuario no encontrado' };
+
+      userId = foundUser.id;
+      displayName = (foundUser.user_metadata?.full_name as string) || 'Usuario';
+      console.log('Found user in auth.users:', userId);
+
+      // Create the missing profile
+      console.log('Creating missing profile for user...');
+      const { error: createProfileError } = await serviceClient
+        .from('profiles')
+        .insert({
+          id: userId,
+          email: email,
+          display_name: displayName,
+          is_owner: true,
+          is_partner: false,
+          email_confirmed: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (createProfileError) {
+        console.error('Error creating profile:', createProfileError);
+        // Continue anyway, we can still send the email
+      } else {
+        console.log('Profile created successfully');
+      }
     }
 
-    console.log('Resending confirmation email for user:', userData.id);
+    console.log('Resending confirmation email for user:', userId);
 
     // Invalidate any existing signup tokens for this user
     const serviceClient = getServiceClient();
@@ -423,7 +470,7 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
         is_confirmed: true,
         confirmed_at: new Date().toISOString()
       })
-      .eq('user_id', userData.id)
+      .eq('user_id', userId)
       .eq('type', 'signup')
       .eq('is_confirmed', false);
 
@@ -432,7 +479,7 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
     }
 
     // Create new confirmation token
-    const token = await createEmailConfirmationToken(userData.id, email, 'signup');
+    const token = await createEmailConfirmationToken(userId, email, 'signup');
     const confirmationUrl = generateConfirmationUrl(token, 'signup');
 
     console.log('New confirmation URL generated:', confirmationUrl);
@@ -440,7 +487,7 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
     // Send confirmation email using new API
     const result = await sendConfirmationEmailAPI(
       email,
-      userData.display_name || 'Usuario',
+      displayName,
       confirmationUrl
     );
 
