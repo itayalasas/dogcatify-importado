@@ -5,6 +5,7 @@ import { Platform, Linking, InteractionManager } from 'react-native';
 import Constants from 'expo-constants';
 import PostCard from '../../components/PostCard';
 import PromotionCard from '../../components/PromotionCard';
+import { DottyAssistant } from '../../components/DottyAssistant';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { NotificationPermissionPrompt } from '../../components/NotificationPermissionPrompt';
@@ -177,6 +178,8 @@ export default function Home() {
   const [visiblePostIds, setVisiblePostIds] = useState<Set<string>>(new Set());
   const [isTabFocused, setIsTabFocused] = useState(true);
   const [shuffledPromotions, setShuffledPromotions] = useState<any[]>([]);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
   const { t } = useLanguage();
   const { currentUser } = useAuth();
   
@@ -199,12 +202,104 @@ export default function Home() {
 
   useEffect(() => {
     if (currentUser) {
+      checkOnboardingStatus();
       // Defer heavy operations until after initial render
       InteractionManager.runAfterInteractions(() => {
         fetchFeedData();
       });
     }
   }, [currentUser]);
+
+  const checkOnboardingStatus = async () => {
+    if (!currentUser || onboardingChecked) return;
+
+    try {
+      const { data, error } = await supabaseClient
+        .from('profiles')
+        .select('onboarding_completed')
+        .eq('id', currentUser.id)
+        .single();
+
+      if (error) throw error;
+
+      if (data && !data.onboarding_completed) {
+        setTimeout(() => {
+          setShowOnboarding(true);
+        }, 1500);
+      }
+
+      setOnboardingChecked(true);
+    } catch (error) {
+      console.error('Error checking onboarding status:', error);
+      setOnboardingChecked(true);
+    }
+  };
+
+  const handleOnboardingComplete = async () => {
+    if (!currentUser) return;
+
+    try {
+      const { error } = await supabaseClient
+        .from('profiles')
+        .update({
+          onboarding_completed: true,
+          onboarding_completed_at: new Date().toISOString(),
+        })
+        .eq('id', currentUser.id);
+
+      if (error) throw error;
+
+      setShowOnboarding(false);
+    } catch (error) {
+      console.error('Error completing onboarding:', error);
+      setShowOnboarding(false);
+    }
+  };
+
+  const onboardingMessages = [
+    {
+      id: '1',
+      title: '¡Bienvenido a DogCatiFy!',
+      message: 'Soy Dotty, tu asistente virtual. Estoy aquí para ayudarte a descubrir todas las funcionalidades de la app y hacer que tu experiencia sea increíble.',
+    },
+    {
+      id: '2',
+      title: 'Feed de mascotas',
+      message: 'Aquí verás publicaciones de otros usuarios con sus mascotas. Puedes dar like, comentar y compartir. ¡Es como Instagram pero solo para peluditos!',
+    },
+    {
+      id: '3',
+      title: 'Tus mascotas',
+      message: 'En la pestaña "Mascotas" podrás registrar a tus compañeros peludos, llevar su historial médico, vacunas, desparasitaciones y mucho más.',
+      action: {
+        label: 'Ver mis mascotas',
+        onPress: () => {},
+      },
+    },
+    {
+      id: '4',
+      title: 'Servicios y productos',
+      message: 'Encuentra veterinarios, peluquerías, tiendas y más servicios cercanos. También puedes comprar productos para tus mascotas directamente desde la app.',
+      action: {
+        label: 'Explorar servicios',
+        onPress: () => {},
+      },
+    },
+    {
+      id: '5',
+      title: 'Lugares pet-friendly',
+      message: 'Descubre restaurantes, parques y lugares donde puedes ir con tus mascotas. ¡Nunca más te quedarás sin opciones!',
+      action: {
+        label: 'Ver lugares',
+        onPress: () => {},
+      },
+    },
+    {
+      id: '6',
+      title: '¡Todo listo!',
+      message: 'Ya conoces lo básico. Recuerda que siempre puedes encontrar ayuda en tu perfil. ¡Disfruta de DogCatiFy y cuida bien de tus peluditos!',
+    },
+  ];
 
   const fetchFeedData = async () => {
     setLoading(true);
@@ -839,6 +934,14 @@ export default function Home() {
         }
         getItemLayout={undefined}
       />
+
+      {showOnboarding && (
+        <DottyAssistant
+          messages={onboardingMessages}
+          onComplete={handleOnboardingComplete}
+          onSkip={handleOnboardingComplete}
+        />
+      )}
     </SafeAreaView>
   );
 }
