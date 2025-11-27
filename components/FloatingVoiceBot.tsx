@@ -191,12 +191,17 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   });
 
   const onPanResponderGrant = () => {
-    if (isExpanded) return;
+    if (isExpanded) {
+      console.log('[Dotty] Grant blocked: isExpanded=true');
+      return;
+    }
 
+    console.log('[Dotty] Grant: Starting gesture');
     isDragging.current = false;
     gestureStartTime.current = Date.now();
     position.stopAnimation((value) => {
       startPosition.current = { x: value.x, y: value.y };
+      console.log('[Dotty] Start position:', value);
     });
   };
 
@@ -210,7 +215,8 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       Math.pow(dx, 2) + Math.pow(dy, 2)
     );
 
-    if (distanceMoved > 15) {
+    if (distanceMoved > 8 && !isDragging.current) {
+      console.log('[Dotty] Move: Drag activated at distance:', distanceMoved);
       isDragging.current = true;
     }
 
@@ -223,22 +229,38 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   };
 
   const onPanResponderRelease = (_: any, gestureState: any) => {
-    if (isExpanded) return;
+    if (isExpanded) {
+      console.log('[Dotty] Release blocked: isExpanded=true');
+      return;
+    }
 
     const gestureDuration = Date.now() - gestureStartTime.current;
     const dx = gestureState?.dx || 0;
     const dy = gestureState?.dy || 0;
     const distanceMoved = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
 
-    if (!isDragging.current && distanceMoved < 5 && gestureDuration < 200) {
+    console.log('[Dotty] Release:', {
+      isDragging: isDragging.current,
+      distance: distanceMoved,
+      duration: gestureDuration
+    });
+
+    // Si NO se movió mucho Y fue rápido = TAP
+    if (distanceMoved < 8 && gestureDuration < 300) {
+      console.log('[Dotty] Detected TAP - Opening modal');
       toggleExpand();
+      isDragging.current = false;
       return;
     }
 
+    // Si NO se activó el drag, ignorar
     if (!isDragging.current) {
+      console.log('[Dotty] No drag detected - Ignoring');
       return;
     }
 
+    // Es un DRAG válido - mover el ícono
+    console.log('[Dotty] Valid DRAG - Moving icon');
     const finalX = startPosition.current.x + dx;
     const finalY = startPosition.current.y + dy;
 
@@ -246,7 +268,9 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     let boundedY = Math.max(40, Math.min(SCREEN_HEIGHT - 100, finalY));
 
     if (boundedY > SCREEN_HEIGHT - 250) {
+      console.log('[Dotty] Dismissed - too low');
       handleDismiss();
+      isDragging.current = false;
       return;
     }
 
@@ -255,9 +279,10 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       useNativeDriver: false,
       friction: 7,
       tension: 40,
-    }).start();
-
-    isDragging.current = false;
+    }).start(() => {
+      isDragging.current = false;
+      console.log('[Dotty] Drag complete');
+    });
   };
 
   const handleDismiss = async () => {
@@ -275,6 +300,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   };
 
   const toggleExpand = () => {
+    console.log('[Dotty] toggleExpand called. Current isExpanded:', isExpanded);
     const toValue = isExpanded ? 0 : 1;
     Animated.spring(expandAnim, {
       toValue,
@@ -283,6 +309,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       useNativeDriver: false,
     }).start();
     setIsExpanded(!isExpanded);
+    console.log('[Dotty] toggleExpand: Setting isExpanded to', !isExpanded);
 
     if (!isExpanded && !currentSessionId) {
       createNewSession();
@@ -544,6 +571,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   };
 
   const handleClose = () => {
+    console.log('[Dotty] handleClose called');
     setIsExpanded(false);
     Keyboard.dismiss();
     Animated.spring(expandAnim, {
