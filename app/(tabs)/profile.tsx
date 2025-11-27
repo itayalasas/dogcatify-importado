@@ -328,6 +328,35 @@ export default function Profile() {
     }
   };
 
+  const handleToggleDottyAssistant = async () => {
+    try {
+      Alert.alert(
+        'Ocultar Asistente Dotty',
+        'Puedes arrastrar a Dotty hacia la parte inferior de la pantalla para ocultarlo, o hacerlo desde aquí. ¿Deseas ocultarlo?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Ocultar',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await supabaseClient
+                  .from('profiles')
+                  .update({ dotty_enabled: false })
+                  .eq('id', currentUser.id);
+                Alert.alert('Ocultado', 'Dotty ha sido ocultado. Puedes volver a mostrarlo desde esta opción en tu perfil.');
+              } catch (error) {
+                Alert.alert('Error', 'No se pudo ocultar el asistente');
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error toggling Dotty:', error);
+    }
+  };
+
   const handleToggleNotifications = async () => {
     try {
       if (notificationsEnabled) {
@@ -639,6 +668,17 @@ export default function Profile() {
               </View>
             </TouchableOpacity>
           )}
+
+          <TouchableOpacity style={styles.menuOption} onPress={handleToggleDottyAssistant}>
+            <View style={styles.menuOptionLeft}>
+              <HelpCircle size={20} color="#6B7280" />
+              <Text style={styles.menuOptionText}>Asistente Dotty 🐾</Text>
+            </View>
+            <View style={styles.toggleContainer}>
+              <Text style={styles.toggleStatus}>Visible</Text>
+              <ChevronRight size={16} color="#6B7280" />
+            </View>
+          </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuOption} onPress={handleLanguageChange}>
             <View style={styles.menuOptionLeft}>
