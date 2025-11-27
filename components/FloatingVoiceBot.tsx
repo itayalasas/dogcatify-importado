@@ -88,6 +88,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   const isDragging = useRef(false);
   const startPosition = useRef({ x: 0, y: 0 });
+  const gestureStartTime = useRef(0);
 
   useEffect(() => {
     checkDottyStatus();
@@ -193,6 +194,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     if (isExpanded) return;
 
     isDragging.current = false;
+    gestureStartTime.current = Date.now();
     position.stopAnimation((value) => {
       startPosition.current = { x: value.x, y: value.y };
     });
@@ -208,7 +210,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       Math.pow(dx, 2) + Math.pow(dy, 2)
     );
 
-    if (distanceMoved > 5) {
+    if (distanceMoved > 15) {
       isDragging.current = true;
     }
 
@@ -223,13 +225,19 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const onPanResponderRelease = (_: any, gestureState: any) => {
     if (isExpanded) return;
 
-    if (!isDragging.current) {
+    const gestureDuration = Date.now() - gestureStartTime.current;
+    const dx = gestureState?.dx || 0;
+    const dy = gestureState?.dy || 0;
+    const distanceMoved = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
+
+    if (!isDragging.current && distanceMoved < 5 && gestureDuration < 200) {
       toggleExpand();
       return;
     }
 
-    const dx = gestureState?.dx || 0;
-    const dy = gestureState?.dy || 0;
+    if (!isDragging.current) {
+      return;
+    }
 
     const finalX = startPosition.current.x + dx;
     const finalY = startPosition.current.y + dy;
