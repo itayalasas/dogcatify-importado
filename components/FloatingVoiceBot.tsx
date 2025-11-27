@@ -5,16 +5,13 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
-  Platform,
   ScrollView,
   Dimensions,
   ActivityIndicator,
   TextInput,
-  PanResponder,
   Keyboard,
 } from 'react-native';
-import { X, Send, PawPrint, HelpCircle, ChevronRight, Sparkles } from 'lucide-react-native';
-import * as Speech from 'expo-speech';
+import { X, Send, PawPrint, HelpCircle, ChevronRight, Sparkles, ArrowLeft } from 'lucide-react-native';
 import { supabaseClient } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
@@ -81,81 +78,22 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const [showQuickActions, setShowQuickActions] = useState(true);
   const [isDottyEnabled, setIsDottyEnabled] = useState(true);
 
-  const pan = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 90, y: SCREEN_HEIGHT - 200 })).current;
+  const position = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 90, y: SCREEN_HEIGHT - 200 })).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const expandAnim = useRef(new Animated.Value(showWelcome ? 1 : 0)).current;
   const scrollViewRef = useRef<ScrollView>(null);
   const pawRotation = useRef(new Animated.Value(0)).current;
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5;
-      },
-      onPanResponderGrant: () => {
-        if (isExpanded) return;
-        pan.extractOffset();
-      },
-      onPanResponderMove: (_, gestureState) => {
-        if (isExpanded) return;
-        pan.setValue({ x: gestureState.dx, y: gestureState.dy });
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (isExpanded) return;
-
-        pan.flattenOffset();
-
-        const currentX = (pan.x as any)._value;
-        const currentY = (pan.y as any)._value;
-
-        let finalX = currentX;
-        let finalY = currentY;
-
-        finalX = Math.max(10, Math.min(SCREEN_WIDTH - 74, finalX));
-        finalY = Math.max(60, Math.min(SCREEN_HEIGHT - 200, finalY));
-
-        if (finalY > SCREEN_HEIGHT - 250) {
-          checkDismissZone(finalX, finalY);
-        }
-
-        Animated.spring(pan, {
-          toValue: { x: finalX, y: finalY },
-          useNativeDriver: false,
-          friction: 7,
-          tension: 40,
-        }).start();
-      },
-    })
-  ).current;
-
-  const checkDismissZone = async (x: number, y: number) => {
-    if (y > SCREEN_HEIGHT - 250) {
-      setIsDottyEnabled(false);
-      if (currentUser) {
-        try {
-          await supabaseClient
-            .from('profiles')
-            .update({ dotty_enabled: false })
-            .eq('id', currentUser.id);
-        } catch (error) {
-          console.error('Error hiding Dotty:', error);
-        }
-      }
-    }
-  };
+  const isDragging = useRef(false);
+  const startPosition = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     checkDottyStatus();
     startPulseAnimation();
     startPawRotation();
 
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {});
-    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {});
-
     return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
+      Keyboard.dismiss();
     };
   }, []);
 
@@ -169,7 +107,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           .single();
 
         if (data) {
-          setIsDottyEnabled(data.dotty_enabled);
+          setIsDottyEnabled(data.dotty_enabled !== false);
         }
       } catch (error) {
         console.error('Error checking Dotty status:', error);
@@ -200,7 +138,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     const welcomeMessage: Message = {
       id: Date.now().toString(),
       role: 'assistant',
-      content: '¡Hola! Soy Dotty, tu asistente personal en DogCatiFy.\n\nEstoy aquí para guiarte en cada paso. ¿En qué puedo ayudarte hoy?',
+      content: '¡Hola! Soy Dotty, tu asistente personal.\n\nEstoy aquí para guiarte en cada paso. ¿En qué puedo ayudarte?',
       audioUsed: false,
       timestamp: new Date(),
     };
@@ -248,6 +186,77 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     inputRange: [0, 1],
     outputRange: ['0deg', '10deg'],
   });
+
+  const onPanResponderGrant = () => {
+    if (isExpanded) return;
+
+    isDragging.current = false;
+    position.stopAnimation((value) => {
+      startPosition.current = { x: value.x, y: value.y };
+    });
+  };
+
+  const onPanResponderMove = (_: any, gestureState: any) => {
+    if (isExpanded) return;
+
+    const distanceMoved = Math.sqrt(
+      Math.pow(gestureState.dx, 2) + Math.pow(gestureState.dy, 2)
+    );
+
+    if (distanceMoved > 5) {
+      isDragging.current = true;
+    }
+
+    if (isDragging.current) {
+      position.setValue({
+        x: startPosition.current.x + gestureState.dx,
+        y: startPosition.current.y + gestureState.dy,
+      });
+    }
+  };
+
+  const onPanResponderRelease = (_: any, gestureState: any) => {
+    if (isExpanded) return;
+
+    if (!isDragging.current) {
+      toggleExpand();
+      return;
+    }
+
+    const finalX = startPosition.current.x + gestureState.dx;
+    const finalY = startPosition.current.y + gestureState.dy;
+
+    let boundedX = Math.max(10, Math.min(SCREEN_WIDTH - 78, finalX));
+    let boundedY = Math.max(60, Math.min(SCREEN_HEIGHT - 200, finalY));
+
+    if (boundedY > SCREEN_HEIGHT - 250) {
+      handleDismiss();
+      return;
+    }
+
+    Animated.spring(position, {
+      toValue: { x: boundedX, y: boundedY },
+      useNativeDriver: false,
+      friction: 7,
+      tension: 40,
+    }).start();
+
+    isDragging.current = false;
+  };
+
+  const handleDismiss = async () => {
+    setIsDottyEnabled(false);
+    if (currentUser) {
+      try {
+        await supabaseClient
+          .from('profiles')
+          .update({ dotty_enabled: false })
+          .eq('id', currentUser.id);
+      } catch (error) {
+        console.error('Error hiding Dotty:', error);
+      }
+    }
+  };
 
   const toggleExpand = () => {
     const toValue = isExpanded ? 0 : 1;
@@ -299,6 +308,12 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     } catch (error) {
       console.error('Error saving message:', error);
     }
+  };
+
+  const handleBackToMenu = () => {
+    setShowQuickActions(true);
+    setMessages([]);
+    sendWelcomeMessage();
   };
 
   const handleQuickAction = (actionId: string) => {
@@ -537,6 +552,11 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           <Animated.View style={[styles.chatContainer, { height: expandedHeight }]}>
             <View style={styles.chatHeader}>
               <View style={styles.headerLeft}>
+                {!showQuickActions && (
+                  <TouchableOpacity onPress={handleBackToMenu} style={styles.backButton}>
+                    <ArrowLeft size={20} color="#2D6A6F" />
+                  </TouchableOpacity>
+                )}
                 <View style={styles.headerIconContainer}>
                   <PawPrint size={22} color="#2D6A6F" />
                 </View>
@@ -642,7 +662,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
             </ScrollView>
 
             <View style={styles.inputContainer}>
-              <View style={styles.inputRow}>
+              <View style={styles.inputWrapper}>
                 <TextInput
                   style={styles.textInput}
                   placeholder="Escribe tu pregunta..."
@@ -655,36 +675,34 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                   maxLength={500}
                   blurOnSubmit={false}
                 />
-                <TouchableOpacity
-                  onPress={handleSendMessage}
-                  style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
-                  disabled={!inputText.trim()}
-                >
-                  <Send size={18} color={inputText.trim() ? '#FFFFFF' : '#D1D5DB'} />
-                </TouchableOpacity>
               </View>
+              <TouchableOpacity
+                onPress={handleSendMessage}
+                style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+                disabled={!inputText.trim()}
+              >
+                <Send size={18} color={inputText.trim() ? '#FFFFFF' : '#D1D5DB'} />
+              </TouchableOpacity>
             </View>
           </Animated.View>
         </View>
       )}
 
       <Animated.View
-        {...panResponder.panHandlers}
         style={[
           styles.floatingButtonContainer,
           {
-            transform: [
-              { translateX: pan.x },
-              { translateY: pan.y },
-            ],
+            left: position.x,
+            top: position.y,
           },
         ]}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderGrant={onPanResponderGrant}
+        onResponderMove={onPanResponderMove}
+        onResponderRelease={onPanResponderRelease}
       >
-        <TouchableOpacity
-          onPress={toggleExpand}
-          activeOpacity={0.9}
-          style={styles.floatingButton}
-        >
+        <View style={styles.floatingButton}>
           <Animated.View
             style={[
               styles.buttonContent,
@@ -703,7 +721,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
               <HelpCircle size={16} color="#FFFFFF" />
             </View>
           )}
-        </TouchableOpacity>
+        </View>
       </Animated.View>
     </>
   );
@@ -747,6 +765,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#CCFBF1',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerIconContainer: {
     width: 44,
@@ -933,18 +959,18 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 12,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     padding: 16,
     backgroundColor: '#FFFFFF',
   },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 12,
+  inputWrapper: {
+    flex: 1,
   },
   textInput: {
-    flex: 1,
     minHeight: 44,
     maxHeight: 100,
     paddingHorizontal: 18,
