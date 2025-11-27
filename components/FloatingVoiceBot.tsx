@@ -197,10 +197,13 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   };
 
   const onPanResponderMove = (_: any, gestureState: any) => {
-    if (isExpanded) return;
+    if (isExpanded || !gestureState) return;
+
+    const dx = gestureState.dx || 0;
+    const dy = gestureState.dy || 0;
 
     const distanceMoved = Math.sqrt(
-      Math.pow(gestureState.dx, 2) + Math.pow(gestureState.dy, 2)
+      Math.pow(dx, 2) + Math.pow(dy, 2)
     );
 
     if (distanceMoved > 5) {
@@ -209,8 +212,8 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
     if (isDragging.current) {
       position.setValue({
-        x: startPosition.current.x + gestureState.dx,
-        y: startPosition.current.y + gestureState.dy,
+        x: startPosition.current.x + dx,
+        y: startPosition.current.y + dy,
       });
     }
   };
@@ -223,8 +226,11 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       return;
     }
 
-    const finalX = startPosition.current.x + gestureState.dx;
-    const finalY = startPosition.current.y + gestureState.dy;
+    const dx = gestureState?.dx || 0;
+    const dy = gestureState?.dy || 0;
+
+    const finalX = startPosition.current.x + dx;
+    const finalY = startPosition.current.y + dy;
 
     let boundedX = Math.max(10, Math.min(SCREEN_WIDTH - 78, finalX));
     let boundedY = Math.max(60, Math.min(SCREEN_HEIGHT - 200, finalY));
@@ -543,7 +549,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     outputRange: [0, SCREEN_HEIGHT * 0.75],
   });
 
-  if (!isDottyEnabled) return null;
+  if (!isDottyEnabled || !currentUser) return null;
 
   return (
     <>
