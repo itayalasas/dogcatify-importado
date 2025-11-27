@@ -13,7 +13,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { X, Send, PawPrint, HelpCircle, ChevronRight, Sparkles, ArrowLeft } from 'lucide-react-native';
+import { X, Send, PawPrint, CircleHelp as HelpCircle, ChevronRight, Sparkles, ArrowLeft } from 'lucide-react-native';
 import { supabaseClient } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
