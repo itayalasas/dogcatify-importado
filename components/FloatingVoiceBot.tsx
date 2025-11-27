@@ -565,10 +565,18 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     <>
       {isExpanded && (
         <View style={styles.chatOverlay}>
+          <TouchableOpacity
+            style={styles.overlayTouchable}
+            activeOpacity={1}
+            onPress={handleClose}
+          >
+            <View />
+          </TouchableOpacity>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.keyboardAvoidContainer}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+            pointerEvents="box-none"
           >
             <Animated.View style={[styles.chatContainer, { height: expandedHeight }]}>
             <View style={styles.chatHeader}>
@@ -761,6 +769,13 @@ const styles = StyleSheet.create({
     zIndex: 10000,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  overlayTouchable: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   keyboardAvoidContainer: {
     width: SCREEN_WIDTH - 24,
