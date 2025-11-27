@@ -618,11 +618,24 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     outputRange: [0, 1, 1],
   });
 
+  // Log para debug
+  useEffect(() => {
+    const listenerId = expandAnim.addListener(({ value }) => {
+      console.log('[Dotty] expandAnim value:', value, 'height:', SCREEN_HEIGHT * 0.75 * value);
+    });
+    return () => expandAnim.removeListener(listenerId);
+  }, []);
+
   if (!isDottyEnabled || !currentUser) return null;
+
+  // Log cuando el componente se renderiza
+  console.log('[Dotty] Render - isExpanded:', isExpanded, 'isDottyEnabled:', isDottyEnabled);
 
   return (
     <>
-      {isExpanded && (
+      {isExpanded && (() => {
+        console.log('[Dotty] Rendering modal overlay');
+        return (
         <Animated.View style={[styles.chatOverlay, { opacity: overlayOpacity }]}>
           <TouchableOpacity
             style={styles.overlayTouchable}
@@ -775,7 +788,8 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
             </Animated.View>
           </KeyboardAvoidingView>
         </Animated.View>
-      )}
+        );
+      })()}
 
       <Animated.View
         style={[
@@ -840,9 +854,10 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH - 24,
     maxWidth: 480,
     maxHeight: SCREEN_HEIGHT * 0.85,
+    zIndex: 10001,
   },
   chatContainer: {
-    flex: 1,
+    width: '100%',
     backgroundColor: '#FFFFFF',
     borderRadius: 28,
     overflow: 'hidden',
