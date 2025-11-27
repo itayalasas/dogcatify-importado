@@ -10,27 +10,60 @@ import {
   Dimensions,
   ActivityIndicator,
   TextInput,
+  PanResponder,
+  Keyboard,
 } from 'react-native';
-import { X, Volume2, Send, PawPrint } from 'lucide-react-native';
+import { X, Volume2, Send, PawPrint, HelpCircle, ChevronRight } from 'lucide-react-native';
 import * as Speech from 'expo-speech';
 import { Audio } from 'expo-av';
 import { supabaseClient } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { router } from 'expo-router';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'action';
   content: string;
   audioUsed: boolean;
   timestamp: Date;
+  actionButtons?: ActionButton[];
+}
+
+interface ActionButton {
+  label: string;
+  action: () => void;
+  icon?: string;
 }
 
 interface FloatingVoiceBotProps {
   onClose?: () => void;
   showWelcome?: boolean;
 }
+
+const quickActions = [
+  {
+    id: 'add-pet',
+    label: 'Agregar mi primera mascota 🐕',
+    description: 'Te guiaré paso a paso para registrar tu mascota',
+  },
+  {
+    id: 'medical-history',
+    label: 'Ver historial médico 📋',
+    description: 'Aprende a usar el historial de salud',
+  },
+  {
+    id: 'find-vet',
+    label: 'Encontrar veterinario 🏥',
+    description: 'Busca servicios veterinarios cerca',
+  },
+  {
+    id: 'explore-app',
+    label: 'Explorar la app 🎯',
+    description: 'Tour completo de funcionalidades',
+  },
+];
 
 export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, showWelcome = false }) => {
   const { currentUser } = useAuth();
@@ -42,25 +75,65 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [inputText, setInputText] = useState('');
+  const [showQuickActions, setShowQuickActions] = useState(true);
 
+  const pan = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 90, y: SCREEN_HEIGHT - 180 })).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const expandAnim = useRef(new Animated.Value(showWelcome ? 1 : 0)).current;
   const scrollViewRef = useRef<ScrollView>(null);
   const pawRotation = useRef(new Animated.Value(0)).current;
 
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => !isExpanded,
+      onMoveShouldSetPanResponder: () => !isExpanded,
+      onPanResponderGrant: () => {
+        pan.setOffset({
+          x: (pan.x as any)._value,
+          y: (pan.y as any)._value,
+        });
+        pan.setValue({ x: 0, y: 0 });
+      },
+      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], {
+        useNativeDriver: false,
+      }),
+      onPanResponderRelease: (_, gesture) => {
+        pan.flattenOffset();
+
+        let finalX = (pan.x as any)._value;
+        let finalY = (pan.y as any)._value;
+
+        finalX = Math.max(20, Math.min(SCREEN_WIDTH - 90, finalX));
+        finalY = Math.max(50, Math.min(SCREEN_HEIGHT - 180, finalY));
+
+        Animated.spring(pan, {
+          toValue: { x: finalX, y: finalY },
+          useNativeDriver: false,
+        }).start();
+      },
+    })
+  ).current;
+
   useEffect(() => {
     startPulseAnimation();
     startPawRotation();
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {});
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {});
+
     return () => {
       stopSpeaking();
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
     };
   }, []);
 
   useEffect(() => {
     if (showWelcome && !currentSessionId) {
-      toggleExpand();
       setTimeout(() => {
+        if (!isExpanded) {
+          toggleExpand();
+        }
         sendWelcomeMessage();
       }, 500);
     }
@@ -68,7 +141,9 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   useEffect(() => {
     if (messages.length > 0 && scrollViewRef.current) {
-      scrollViewRef.current.scrollToEnd({ animated: true });
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
     }
   }, [messages]);
 
@@ -76,19 +151,21 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     const welcomeMessage: Message = {
       id: Date.now().toString(),
       role: 'assistant',
-      content: '¡Hola! 🐾 Soy Dotty, tu asistente en DogCatiFy.\n\nEstoy aquí para ayudarte a:\n\n• 📋 Gestionar el historial médico de tus mascotas\n• 🏥 Encontrar veterinarios y servicios\n• 🛒 Comprar productos\n• 📍 Descubrir lugares pet-friendly\n• 💬 Interactuar en nuestra red social\n\n¿En qué puedo ayudarte hoy?',
+      content: '¡Hola! 🐾 Soy Dotty, tu asistente personal en DogCatiFy.\n\nEstoy aquí para guiarte paso a paso. ¿Qué te gustaría hacer?',
       audioUsed: false,
       timestamp: new Date(),
     };
     setMessages([welcomeMessage]);
-    await saveMessage('assistant', welcomeMessage.content, false);
+    if (currentSessionId) {
+      await saveMessage('assistant', welcomeMessage.content, false);
+    }
   };
 
   const startPulseAnimation = () => {
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
-          toValue: 1.2,
+          toValue: 1.15,
           duration: 1200,
           useNativeDriver: true,
         }),
@@ -120,7 +197,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   const rotation = pawRotation.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '15deg'],
+    outputRange: ['0deg', '12deg'],
   });
 
   const toggleExpand = () => {
@@ -175,107 +252,91 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     }
   };
 
-  const startListening = async () => {
-    if (Platform.OS === 'web') {
-      startWebSpeechRecognition();
-      return;
-    }
+  const handleQuickAction = (actionId: string) => {
+    setShowQuickActions(false);
 
-    try {
-      const permission = await Audio.requestPermissionsAsync();
-      if (!permission.granted) {
-        alert('Se necesitan permisos de micrófono para usar esta función');
-        return;
-      }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-
-      setRecording(recording);
-      setIsListening(true);
-
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(scaleAnim, {
-            toValue: 1.3,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(scaleAnim, {
-            toValue: 1,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    } catch (error) {
-      console.error('Error starting recording:', error);
-      alert('Error al iniciar la grabación');
-    }
-  };
-
-  const startWebSpeechRecognition = () => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('Tu navegador no soporta reconocimiento de voz');
-      return;
-    }
-
-    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'es-ES';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    recognition.onstart = () => {
-      setIsListening(true);
+    const actionMessages: { [key: string]: Message } = {
+      'add-pet': {
+        id: Date.now().toString(),
+        role: 'action',
+        content: '¡Perfecto! Te voy a guiar para agregar tu primera mascota. Aquí están los pasos:',
+        audioUsed: false,
+        timestamp: new Date(),
+        actionButtons: [
+          {
+            label: 'Paso 1: Ir a Mascotas',
+            action: () => {
+              const msg: Message = {
+                id: Date.now().toString(),
+                role: 'assistant',
+                content: '1️⃣ Primero, toca la pestaña "Mascotas" en el menú inferior. Es el segundo ícono con forma de huella 🐾',
+                audioUsed: false,
+                timestamp: new Date(),
+                actionButtons: [
+                  {
+                    label: 'Ir a Mascotas ahora →',
+                    action: () => {
+                      router.push('/(tabs)/pets');
+                      const nextMsg: Message = {
+                        id: (Date.now() + 1).toString(),
+                        role: 'assistant',
+                        content: '2️⃣ Ahora, busca el botón "+" o "Agregar Mascota" en la parte superior derecha y tócalo.',
+                        audioUsed: false,
+                        timestamp: new Date(),
+                      };
+                      setMessages(prev => [...prev, nextMsg]);
+                    },
+                  },
+                ],
+              };
+              setMessages(prev => [...prev, msg]);
+            },
+          },
+        ],
+      },
+      'medical-history': {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: 'El historial médico te permite:\n\n📋 Registrar vacunas\n💊 Desparasitaciones\n⚠️ Alergias\n🏥 Enfermedades y tratamientos\n⚖️ Seguimiento de peso\n\n¿Sobre qué quieres saber más?',
+        audioUsed: false,
+        timestamp: new Date(),
+      },
+      'find-vet': {
+        id: Date.now().toString(),
+        role: 'action',
+        content: 'Para encontrar veterinarios cerca de ti:',
+        audioUsed: false,
+        timestamp: new Date(),
+        actionButtons: [
+          {
+            label: 'Ir a Servicios →',
+            action: () => {
+              router.push('/(tabs)/services');
+              const msg: Message = {
+                id: Date.now().toString(),
+                role: 'assistant',
+                content: '¡Perfecto! Ahora puedes ver todos los servicios disponibles cerca de ti. Puedes filtrar por:\n\n🏥 Veterinarias\n✂️ Peluquerías\n🎓 Entrenadores\n🏠 Guarderías',
+                audioUsed: false,
+                timestamp: new Date(),
+              };
+              setMessages(prev => [...prev, msg]);
+            },
+          },
+        ],
+      },
+      'explore-app': {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: 'La app tiene 5 secciones principales:\n\n🏠 Inicio: Feed de publicaciones\n🐾 Mascotas: Tus mascotas y su historial\n🛒 Tienda: Productos para mascotas\n🏥 Servicios: Veterinarios y más\n📍 Lugares: Sitios pet-friendly\n\n¿Sobre cuál quieres aprender?',
+        audioUsed: false,
+        timestamp: new Date(),
+      },
     };
 
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      handleUserMessage(transcript, true);
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error('Speech recognition error:', event.error);
-      setIsListening(false);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
-    recognition.start();
-  };
-
-  const stopListening = async () => {
-    setIsListening(false);
-    scaleAnim.stopAnimation();
-    scaleAnim.setValue(1);
-
-    if (Platform.OS === 'web') {
-      return;
-    }
-
-    if (recording) {
-      try {
-        await recording.stopAndUnloadAsync();
-        const uri = recording.getURI();
-
-        if (uri) {
-          const transcribedText = 'Hola, necesito ayuda con mi mascota';
-          handleUserMessage(transcribedText, true);
-        }
-
-        setRecording(null);
-      } catch (error) {
-        console.error('Error stopping recording:', error);
-      }
+    const message = actionMessages[actionId];
+    if (message) {
+      setMessages(prev => [...prev, message]);
+      saveMessage('assistant', message.content, false);
     }
   };
 
@@ -283,11 +344,14 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     if (inputText.trim()) {
       handleUserMessage(inputText.trim(), false);
       setInputText('');
+      Keyboard.dismiss();
     }
   };
 
   const handleUserMessage = async (text: string, fromVoice: boolean = false) => {
     if (!text.trim()) return;
+
+    setShowQuickActions(false);
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -297,7 +361,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages(prev => [...prev, userMessage]);
     await saveMessage('user', text, fromVoice);
 
     setIsProcessing(true);
@@ -312,12 +376,8 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, assistantMessage]);
+    setMessages(prev => [...prev, assistantMessage]);
     await saveMessage('assistant', response, false);
-
-    if (fromVoice) {
-      speakText(response);
-    }
 
     setIsProcessing(false);
   };
@@ -325,7 +385,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const getAIResponse = async (userMessage: string): Promise<string> => {
     try {
       const conversationHistory = messages.map(m => ({
-        role: m.role,
+        role: m.role === 'action' ? 'assistant' : m.role,
         content: m.content
       }));
 
@@ -355,7 +415,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       return data.response || 'Lo siento, no pude procesar tu mensaje. ¿Podrías intentar de nuevo?';
     } catch (error) {
       console.error('Error getting AI response:', error);
-      return 'Disculpa, estoy teniendo problemas para responder en este momento. Por favor, intenta de nuevo en unos segundos. 🐾';
+      return 'Disculpa, estoy teniendo problemas para responder. Puedes usar las acciones rápidas arriba o preguntarme algo específico. 🐾';
     }
   };
 
@@ -384,6 +444,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const handleClose = () => {
     stopSpeaking();
     setIsExpanded(false);
+    Keyboard.dismiss();
     Animated.spring(expandAnim, {
       toValue: 0,
       tension: 50,
@@ -394,192 +455,182 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   const expandedHeight = expandAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, SCREEN_HEIGHT * 0.65],
+    outputRange: [0, SCREEN_HEIGHT * 0.7],
   });
 
   return (
-    <View style={styles.container}>
+    <>
       {isExpanded && (
-        <Animated.View style={[styles.chatContainer, { height: expandedHeight }]}>
-          <View style={styles.chatHeader}>
-            <View style={styles.headerLeft}>
-              <View style={styles.headerIcon}>
-                <PawPrint size={24} color="#2D6A6F" />
+        <View style={styles.chatOverlay}>
+          <Animated.View style={[styles.chatContainer, { height: expandedHeight }]}>
+            <View style={styles.chatHeader}>
+              <View style={styles.headerLeft}>
+                <View style={styles.headerIcon}>
+                  <PawPrint size={20} color="#2D6A6F" />
+                </View>
+                <View>
+                  <Text style={styles.chatTitle}>Dotty Assistant 🐾</Text>
+                  <Text style={styles.chatSubtitle}>Tu guía paso a paso</Text>
+                </View>
               </View>
-              <View>
-                <Text style={styles.chatTitle}>Dotty Assistant 🐾</Text>
-                <Text style={styles.chatSubtitle}>Tu guía en DogCatiFy</Text>
-              </View>
+              <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+                <X size={22} color="#6B7280" />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-              <X size={24} color="#6B7280" />
-            </TouchableOpacity>
-          </View>
 
-          <ScrollView
-            ref={scrollViewRef}
-            style={styles.messagesContainer}
-            contentContainerStyle={styles.messagesContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {messages.map((message) => (
-              <View
-                key={message.id}
-                style={[
-                  styles.messageBubble,
-                  message.role === 'user' ? styles.userBubble : styles.assistantBubble,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.messageText,
-                    message.role === 'user' ? styles.userText : styles.assistantText,
-                  ]}
-                >
-                  {message.content}
-                </Text>
-                {message.audioUsed && (
-                  <View style={styles.audioIndicator}>
-                    <Volume2 size={12} color={message.role === 'user' ? '#FFFFFF' : '#2D6A6F'} />
+            <ScrollView
+              ref={scrollViewRef}
+              style={styles.messagesContainer}
+              contentContainerStyle={styles.messagesContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {messages.map((message) => (
+                <View key={message.id}>
+                  <View
+                    style={[
+                      styles.messageBubble,
+                      message.role === 'user' ? styles.userBubble : styles.assistantBubble,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.messageText,
+                        message.role === 'user' ? styles.userText : styles.assistantText,
+                      ]}
+                    >
+                      {message.content}
+                    </Text>
                   </View>
-                )}
-              </View>
-            ))}
-            {isProcessing && (
-              <View style={styles.processingIndicator}>
-                <ActivityIndicator size="small" color="#2D6A6F" />
-                <Text style={styles.processingText}>Dotty está pensando... 🐾</Text>
-              </View>
-            )}
-          </ScrollView>
+                  {message.actionButtons && (
+                    <View style={styles.actionButtonsContainer}>
+                      {message.actionButtons.map((btn, idx) => (
+                        <TouchableOpacity
+                          key={idx}
+                          onPress={btn.action}
+                          style={styles.actionButton}
+                        >
+                          <Text style={styles.actionButtonText}>{btn.label}</Text>
+                          <ChevronRight size={16} color="#2D6A6F" />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              ))}
+              {isProcessing && (
+                <View style={styles.processingIndicator}>
+                  <ActivityIndicator size="small" color="#2D6A6F" />
+                  <Text style={styles.processingText}>Dotty está pensando... 🐾</Text>
+                </View>
+              )}
+              {showQuickActions && (
+                <View style={styles.quickActionsContainer}>
+                  <Text style={styles.quickActionsTitle}>Acciones rápidas:</Text>
+                  {quickActions.map((action) => (
+                    <TouchableOpacity
+                      key={action.id}
+                      onPress={() => handleQuickAction(action.id)}
+                      style={styles.quickActionCard}
+                    >
+                      <Text style={styles.quickActionLabel}>{action.label}</Text>
+                      <Text style={styles.quickActionDescription}>{action.description}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
 
-          <View style={styles.inputContainer}>
-            {isSpeaking && (
-              <TouchableOpacity onPress={stopSpeaking} style={styles.stopSpeakingButton}>
-                <Volume2 size={20} color="#DC2626" />
-                <Text style={styles.stopSpeakingText}>Detener audio</Text>
-              </TouchableOpacity>
-            )}
-            <View style={styles.inputRow}>
-              <TouchableOpacity
-                onPress={isListening ? stopListening : startListening}
-                style={[styles.micButton, isListening && styles.micButtonActive]}
-              >
-                <PawPrint size={20} color={isListening ? '#DC2626' : '#2D6A6F'} />
-              </TouchableOpacity>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Escribe tu pregunta..."
-                placeholderTextColor="#9CA3AF"
-                value={inputText}
-                onChangeText={setInputText}
-                onSubmitEditing={handleSendMessage}
-                returnKeyType="send"
-                multiline
-                maxLength={500}
-              />
-              <TouchableOpacity
-                onPress={handleSendMessage}
-                style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
-                disabled={!inputText.trim()}
-              >
-                <Send size={20} color={inputText.trim() ? '#2D6A6F' : '#D1D5DB'} />
-              </TouchableOpacity>
+            <View style={styles.inputContainer}>
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Pregúntame lo que quieras..."
+                  placeholderTextColor="#9CA3AF"
+                  value={inputText}
+                  onChangeText={setInputText}
+                  onSubmitEditing={handleSendMessage}
+                  returnKeyType="send"
+                  multiline
+                  maxLength={500}
+                  blurOnSubmit={false}
+                />
+                <TouchableOpacity
+                  onPress={handleSendMessage}
+                  style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+                  disabled={!inputText.trim()}
+                >
+                  <Send size={18} color={inputText.trim() ? '#2D6A6F' : '#D1D5DB'} />
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </Animated.View>
+          </Animated.View>
+        </View>
       )}
 
-      <TouchableOpacity
-        onPress={toggleExpand}
-        activeOpacity={0.8}
-        style={styles.floatingButton}
+      <Animated.View
+        {...panResponder.panHandlers}
+        style={[
+          styles.floatingButtonContainer,
+          {
+            transform: [
+              { translateX: pan.x },
+              { translateY: pan.y },
+            ],
+          },
+        ]}
       >
-        <Animated.View
-          style={[
-            styles.buttonContent,
-            {
-              transform: [
-                { scale: isListening ? scaleAnim : pulseAnim },
-                { rotate: rotation }
-              ],
-            },
-          ]}
+        <TouchableOpacity
+          onPress={toggleExpand}
+          activeOpacity={0.8}
+          style={styles.floatingButton}
         >
-          <PawPrint size={32} color="#FFFFFF" strokeWidth={2.5} />
-        </Animated.View>
-        {!isExpanded && (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>¡Hola!</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-    </View>
+          <Animated.View
+            style={[
+              styles.buttonContent,
+              {
+                transform: [
+                  { scale: pulseAnim },
+                  { rotate: rotation }
+                ],
+              },
+            ]}
+          >
+            <PawPrint size={28} color="#FFFFFF" strokeWidth={2.5} />
+          </Animated.View>
+          {!isExpanded && (
+            <View style={styles.badge}>
+              <HelpCircle size={14} color="#FFFFFF" />
+            </View>
+          )}
+        </TouchableOpacity>
+      </Animated.View>
+    </>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  chatOverlay: {
     position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 100 : 90,
-    right: 20,
-    zIndex: 1000,
-  },
-  floatingButton: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#2D6A6F',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 999,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  buttonContent: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badge: {
-    position: 'absolute',
-    top: -8,
-    right: -8,
-    backgroundColor: '#F59E0B',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  badgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontFamily: 'Inter-Bold',
   },
   chatContainer: {
-    position: 'absolute',
-    bottom: 85,
-    right: 0,
-    width: SCREEN_WIDTH - 40,
+    width: SCREEN_WIDTH - 32,
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: -4,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 12,
+    borderRadius: 24,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 16,
   },
   chatHeader: {
     flexDirection: 'row',
@@ -597,27 +648,27 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   headerIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#CCFBF1',
     justifyContent: 'center',
     alignItems: 'center',
   },
   chatTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontFamily: 'Inter-Bold',
     color: '#111827',
   },
   chatSubtitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
   },
   closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
@@ -627,10 +678,10 @@ const styles = StyleSheet.create({
   },
   messagesContent: {
     padding: 16,
-    gap: 12,
+    paddingBottom: 24,
   },
   messageBubble: {
-    maxWidth: '80%',
+    maxWidth: '85%',
     padding: 12,
     borderRadius: 16,
     marginBottom: 8,
@@ -656,9 +707,26 @@ const styles = StyleSheet.create({
   assistantText: {
     color: '#111827',
   },
-  audioIndicator: {
-    marginTop: 4,
-    alignSelf: 'flex-end',
+  actionButtonsContainer: {
+    marginBottom: 12,
+    gap: 8,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#2D6A6F',
+  },
+  actionButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#2D6A6F',
+    flex: 1,
   },
   processingIndicator: {
     flexDirection: 'row',
@@ -672,6 +740,34 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontStyle: 'italic',
   },
+  quickActionsContainer: {
+    marginTop: 8,
+  },
+  quickActionsTitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  quickActionCard: {
+    padding: 14,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 8,
+  },
+  quickActionLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  quickActionDescription: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
   inputContainer: {
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
@@ -680,31 +776,17 @@ const styles = StyleSheet.create({
   },
   inputRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: 8,
-  },
-  micButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F0FDFA',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#CCFBF1',
-  },
-  micButtonActive: {
-    backgroundColor: '#FEE2E2',
-    borderColor: '#FECACA',
   },
   textInput: {
     flex: 1,
-    minHeight: 44,
+    minHeight: 42,
     maxHeight: 100,
     paddingHorizontal: 16,
     paddingVertical: 10,
     backgroundColor: '#F9FAFB',
-    borderRadius: 22,
+    borderRadius: 21,
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#111827',
@@ -712,9 +794,9 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
   },
   sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: '#F0FDFA',
     justifyContent: 'center',
     alignItems: 'center',
@@ -725,20 +807,40 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
     borderColor: '#E5E7EB',
   },
-  stopSpeakingButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    backgroundColor: '#FEE2E2',
-    borderRadius: 12,
-    marginBottom: 8,
+  floatingButtonContainer: {
+    position: 'absolute',
+    width: 64,
+    height: 64,
+    zIndex: 1000,
   },
-  stopSpeakingText: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#DC2626',
+  floatingButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#2D6A6F',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  buttonContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#F59E0B',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
 });
