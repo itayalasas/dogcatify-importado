@@ -301,18 +301,40 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   const toggleExpand = () => {
     console.log('[Dotty] toggleExpand called. Current isExpanded:', isExpanded);
-    const toValue = isExpanded ? 0 : 1;
-    Animated.spring(expandAnim, {
-      toValue,
-      tension: 50,
-      friction: 8,
-      useNativeDriver: false,
-    }).start();
-    setIsExpanded(!isExpanded);
-    console.log('[Dotty] toggleExpand: Setting isExpanded to', !isExpanded);
 
-    if (!isExpanded && !currentSessionId) {
-      createNewSession();
+    if (isExpanded) {
+      // Cerrar: primero animar, luego actualizar estado
+      console.log('[Dotty] Closing: animating to 0');
+      Animated.spring(expandAnim, {
+        toValue: 0,
+        tension: 50,
+        friction: 8,
+        useNativeDriver: false,
+      }).start(() => {
+        console.log('[Dotty] Animation complete, setting isExpanded to false');
+        setIsExpanded(false);
+      });
+    } else {
+      // Abrir: primero actualizar estado, luego animar
+      console.log('[Dotty] Opening: setting isExpanded to true');
+      setIsExpanded(true);
+
+      // Esperar un frame para que React renderice
+      requestAnimationFrame(() => {
+        console.log('[Dotty] Starting animation to 1');
+        Animated.spring(expandAnim, {
+          toValue: 1,
+          tension: 50,
+          friction: 8,
+          useNativeDriver: false,
+        }).start(() => {
+          console.log('[Dotty] Animation complete');
+        });
+      });
+
+      if (!currentSessionId) {
+        createNewSession();
+      }
     }
   };
 
@@ -572,14 +594,18 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   const handleClose = () => {
     console.log('[Dotty] handleClose called');
-    setIsExpanded(false);
     Keyboard.dismiss();
+
+    // Animar primero, luego actualizar estado
     Animated.spring(expandAnim, {
       toValue: 0,
       tension: 50,
       friction: 8,
       useNativeDriver: false,
-    }).start();
+    }).start(() => {
+      console.log('[Dotty] handleClose: Animation complete, setting isExpanded to false');
+      setIsExpanded(false);
+    });
   };
 
   const expandedHeight = expandAnim.interpolate({
@@ -587,12 +613,17 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     outputRange: [0, SCREEN_HEIGHT * 0.75],
   });
 
+  const overlayOpacity = expandAnim.interpolate({
+    inputRange: [0, 0.01, 1],
+    outputRange: [0, 1, 1],
+  });
+
   if (!isDottyEnabled || !currentUser) return null;
 
   return (
     <>
       {isExpanded && (
-        <View style={styles.chatOverlay}>
+        <Animated.View style={[styles.chatOverlay, { opacity: overlayOpacity }]}>
           <TouchableOpacity
             style={styles.overlayTouchable}
             activeOpacity={1}
@@ -743,7 +774,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
             </View>
             </Animated.View>
           </KeyboardAvoidingView>
-        </View>
+        </Animated.View>
       )}
 
       <Animated.View
