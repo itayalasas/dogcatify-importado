@@ -79,6 +79,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const [inputText, setInputText] = useState('');
   const [showQuickActions, setShowQuickActions] = useState(true);
   const [isDottyEnabled, setIsDottyEnabled] = useState(true);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const position = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 90, y: SCREEN_HEIGHT - 300 })).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -95,8 +96,27 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     startPulseAnimation();
     startPawRotation();
 
+    // Listeners para el teclado
+    const keyboardWillShow = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        console.log('[Dotty] Keyboard will show, height:', e.endCoordinates.height);
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+
+    const keyboardWillHide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        console.log('[Dotty] Keyboard will hide');
+        setKeyboardHeight(0);
+      }
+    );
+
     return () => {
       Keyboard.dismiss();
+      keyboardWillShow.remove();
+      keyboardWillHide.remove();
     };
   }, []);
 
@@ -644,11 +664,13 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           >
             <View />
           </TouchableOpacity>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.keyboardAvoidContainer}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-            pointerEvents="box-none"
+          <View
+            style={[
+              styles.keyboardAvoidContainer,
+              {
+                marginBottom: keyboardHeight > 0 ? keyboardHeight - 20 : 0,
+              }
+            ]}
           >
             <Animated.View style={[styles.chatContainer, { height: expandedHeight }]}>
             <View style={styles.chatHeader}>
@@ -786,7 +808,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
               </TouchableOpacity>
             </View>
             </Animated.View>
-          </KeyboardAvoidingView>
+          </View>
         </Animated.View>
         );
       })()}
