@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   TextInput,
   Keyboard,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { X, Send, PawPrint, HelpCircle, ChevronRight, Sparkles, ArrowLeft } from 'lucide-react-native';
 import { supabaseClient } from '@/lib/supabase';
@@ -78,7 +80,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const [showQuickActions, setShowQuickActions] = useState(true);
   const [isDottyEnabled, setIsDottyEnabled] = useState(true);
 
-  const position = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 90, y: SCREEN_HEIGHT - 200 })).current;
+  const position = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 90, y: SCREEN_HEIGHT - 300 })).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const expandAnim = useRef(new Animated.Value(showWelcome ? 1 : 0)).current;
   const scrollViewRef = useRef<ScrollView>(null);
@@ -554,7 +556,11 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   return (
     <>
       {isExpanded && (
-        <View style={styles.chatOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.chatOverlay}
+          keyboardVerticalOffset={0}
+        >
           <Animated.View style={[styles.chatContainer, { height: expandedHeight }]}>
             <View style={styles.chatHeader}>
               <View style={styles.headerLeft}>
@@ -691,7 +697,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
               </TouchableOpacity>
             </View>
           </Animated.View>
-        </View>
+        </KeyboardAvoidingView>
       )}
 
       <Animated.View
@@ -700,10 +706,11 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           {
             left: position.x,
             top: position.y,
+            zIndex: isExpanded ? 9998 : 9999,
           },
         ]}
-        onStartShouldSetResponder={() => true}
-        onMoveShouldSetResponder={() => true}
+        onStartShouldSetResponder={() => !isExpanded}
+        onMoveShouldSetResponder={() => !isExpanded}
         onResponderGrant={onPanResponderGrant}
         onResponderMove={onPanResponderMove}
         onResponderRelease={onPanResponderRelease}
@@ -741,7 +748,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    zIndex: 999,
+    zIndex: 10000,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1010,7 +1017,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 68,
     height: 68,
-    zIndex: 1000,
+    zIndex: 9999,
   },
   floatingButton: {
     width: 68,
