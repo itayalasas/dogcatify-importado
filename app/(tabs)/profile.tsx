@@ -33,6 +33,7 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
   const [userSubscription, setUserSubscription] = useState<any>(null);
+  const [isDottyEnabled, setIsDottyEnabled] = useState(true);
 
   useEffect(() => {
     if (currentUser) {
@@ -40,8 +41,25 @@ export default function Profile() {
       fetchPartnerProfile();
       checkSubscriptionSettings();
       fetchUserSubscription();
+      fetchDottyStatus();
     }
   }, [currentUser?.id, currentUser?.displayName, currentUser?.photoURL]);
+
+  const fetchDottyStatus = async () => {
+    try {
+      const { data } = await supabaseClient
+        .from('profiles')
+        .select('dotty_enabled')
+        .eq('id', currentUser.id)
+        .single();
+
+      if (data) {
+        setIsDottyEnabled(data.dotty_enabled !== false);
+      }
+    } catch (error) {
+      console.error('Error fetching Dotty status:', error);
+    }
+  };
 
   const checkSubscriptionSettings = async () => {
     try {
@@ -330,28 +348,54 @@ export default function Profile() {
 
   const handleToggleDottyAssistant = async () => {
     try {
-      Alert.alert(
-        'Ocultar Asistente Dotty',
-        'Puedes arrastrar a Dotty hacia la parte inferior de la pantalla para ocultarlo, o hacerlo desde aquí. ¿Deseas ocultarlo?',
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          {
-            text: 'Ocultar',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await supabaseClient
-                  .from('profiles')
-                  .update({ dotty_enabled: false })
-                  .eq('id', currentUser.id);
-                Alert.alert('Ocultado', 'Dotty ha sido ocultado. Puedes volver a mostrarlo desde esta opción en tu perfil.');
-              } catch (error) {
-                Alert.alert('Error', 'No se pudo ocultar el asistente');
+      if (isDottyEnabled) {
+        Alert.alert(
+          'Ocultar Asistente Dotty',
+          'Puedes arrastrar a Dotty hacia la parte inferior de la pantalla para ocultarlo, o hacerlo desde aquí. ¿Deseas ocultarlo?',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Ocultar',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await supabaseClient
+                    .from('profiles')
+                    .update({ dotty_enabled: false })
+                    .eq('id', currentUser.id);
+                  setIsDottyEnabled(false);
+                  Alert.alert('Ocultado', 'Dotty ha sido ocultado. Puedes volver a mostrarlo desde esta opción en tu perfil.');
+                } catch (error) {
+                  Alert.alert('Error', 'No se pudo ocultar el asistente');
+                }
               }
             }
-          }
-        ]
-      );
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Mostrar Asistente Dotty',
+          '¿Deseas volver a mostrar a Dotty, tu asistente personal?',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Mostrar',
+              onPress: async () => {
+                try {
+                  await supabaseClient
+                    .from('profiles')
+                    .update({ dotty_enabled: true })
+                    .eq('id', currentUser.id);
+                  setIsDottyEnabled(true);
+                  Alert.alert('Activado', '¡Dotty está de vuelta! Lo verás flotando en la pantalla.');
+                } catch (error) {
+                  Alert.alert('Error', 'No se pudo mostrar el asistente');
+                }
+              }
+            }
+          ]
+        );
+      }
     } catch (error) {
       console.error('Error toggling Dotty:', error);
     }
@@ -675,7 +719,7 @@ export default function Profile() {
               <Text style={styles.menuOptionText}>Asistente Dotty 🐾</Text>
             </View>
             <View style={styles.toggleContainer}>
-              <Text style={styles.toggleStatus}>Visible</Text>
+              <Text style={styles.toggleStatus}>{isDottyEnabled ? 'Visible' : 'Oculto'}</Text>
               <ChevronRight size={16} color="#6B7280" />
             </View>
           </TouchableOpacity>

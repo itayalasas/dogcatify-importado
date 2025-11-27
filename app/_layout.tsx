@@ -14,6 +14,7 @@ import { Platform, Alert, View } from 'react-native';
 import { supabaseClient } from '@/lib/supabase';
 import { SafeAppWrapper } from '../components/SafeAppWrapper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { FloatingVoiceBot } from '../components/FloatingVoiceBot';
 // Global error handler test 1
 if (typeof ErrorUtils !== 'undefined') {
   const originalHandler = ErrorUtils.getGlobalHandler();
@@ -259,6 +260,7 @@ function RootLayout() {
                   <Stack.Screen name="+not-found" />
                 </Stack>
                   </ErrorBoundary>
+                  <FloatingVoiceBot showWelcome={false} />
                   <StatusBar style="auto" />
                 </CartProvider>
               </NotificationProvider>
