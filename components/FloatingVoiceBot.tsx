@@ -142,12 +142,15 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   // Escuchar cambios en tiempo real de la configuración de Dotty
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser?.id) return;
 
     console.log('[Dotty] Setting up real-time subscription for user:', currentUser.id);
 
+    // Usar un canal único por usuario
+    const channelName = `dotty-config-${currentUser.id}`;
+
     const subscription = supabaseClient
-      .channel('dotty-config-changes')
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -163,21 +166,31 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
             console.log('[Dotty] Status changed to:', isEnabled);
             setIsDottyEnabled(isEnabled);
 
-            // Si se deshabilitó y está expandido, cerrarlo
-            if (!isEnabled && isExpanded) {
+            // Si se deshabilitó, cerrar el modal si está abierto
+            if (!isEnabled) {
               console.log('[Dotty] Closing because disabled');
-              handleClose();
+              Keyboard.dismiss();
+              setIsExpanded(false);
+              // Animar el cierre
+              Animated.spring(expandAnim, {
+                toValue: 0,
+                tension: 50,
+                friction: 8,
+                useNativeDriver: false,
+              }).start();
             }
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[Dotty] Subscription status:', status);
+      });
 
     return () => {
       console.log('[Dotty] Cleaning up subscription');
-      subscription.unsubscribe();
+      supabaseClient.removeChannel(subscription);
     };
-  }, [currentUser?.id, isExpanded]);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     if (showWelcome && !currentSessionId) {
@@ -848,6 +861,11 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                   multiline
                   maxLength={500}
                   blurOnSubmit={false}
+                  underlineColorAndroid="transparent"
+                  autoCorrect={true}
+                  autoCapitalize="sentences"
+                  textAlignVertical="center"
+                  selectionColor="#2D6A6F"
                 />
               </View>
               <TouchableOpacity
@@ -1166,13 +1184,15 @@ const styles = StyleSheet.create({
     maxHeight: 100,
     paddingHorizontal: 18,
     paddingVertical: 12,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FFFFFF',
     borderRadius: 22,
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
+    color: '#000000',
     borderWidth: 1.5,
     borderColor: '#E5E7EB',
+    lineHeight: 22,
+    includeFontPadding: false,
   },
   sendButton: {
     width: 44,
