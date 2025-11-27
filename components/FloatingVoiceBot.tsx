@@ -130,13 +130,54 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           .single();
 
         if (data) {
-          setIsDottyEnabled(data.dotty_enabled !== false);
+          const isEnabled = data.dotty_enabled !== false;
+          console.log('[Dotty] Status loaded:', isEnabled);
+          setIsDottyEnabled(isEnabled);
         }
       } catch (error) {
         console.error('Error checking Dotty status:', error);
       }
     }
   };
+
+  // Escuchar cambios en tiempo real de la configuración de Dotty
+  useEffect(() => {
+    if (!currentUser) return;
+
+    console.log('[Dotty] Setting up real-time subscription for user:', currentUser.id);
+
+    const subscription = supabaseClient
+      .channel('dotty-config-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${currentUser.id}`,
+        },
+        (payload) => {
+          console.log('[Dotty] Profile updated:', payload);
+          if (payload.new && 'dotty_enabled' in payload.new) {
+            const isEnabled = payload.new.dotty_enabled !== false;
+            console.log('[Dotty] Status changed to:', isEnabled);
+            setIsDottyEnabled(isEnabled);
+
+            // Si se deshabilitó y está expandido, cerrarlo
+            if (!isEnabled && isExpanded) {
+              console.log('[Dotty] Closing because disabled');
+              handleClose();
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log('[Dotty] Cleaning up subscription');
+      subscription.unsubscribe();
+    };
+  }, [currentUser?.id, isExpanded]);
 
   useEffect(() => {
     if (showWelcome && !currentSessionId) {
