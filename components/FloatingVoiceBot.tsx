@@ -234,8 +234,8 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     const finalX = startPosition.current.x + dx;
     const finalY = startPosition.current.y + dy;
 
-    let boundedX = Math.max(10, Math.min(SCREEN_WIDTH - 78, finalX));
-    let boundedY = Math.max(60, Math.min(SCREEN_HEIGHT - 200, finalY));
+    let boundedX = Math.max(-10, Math.min(SCREEN_WIDTH - 58, finalX));
+    let boundedY = Math.max(40, Math.min(SCREEN_HEIGHT - 100, finalY));
 
     if (boundedY > SCREEN_HEIGHT - 250) {
       handleDismiss();
@@ -556,12 +556,13 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   return (
     <>
       {isExpanded && (
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.chatOverlay}
-          keyboardVerticalOffset={0}
-        >
-          <Animated.View style={[styles.chatContainer, { height: expandedHeight }]}>
+        <View style={styles.chatOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardAvoidContainer}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          >
+            <Animated.View style={[styles.chatContainer, { height: expandedHeight }]}>
             <View style={styles.chatHeader}>
               <View style={styles.headerLeft}>
                 {!showQuickActions && (
@@ -696,8 +697,9 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                 <Send size={18} color={inputText.trim() ? '#FFFFFF' : '#D1D5DB'} />
               </TouchableOpacity>
             </View>
-          </Animated.View>
-        </KeyboardAvoidingView>
+            </Animated.View>
+          </KeyboardAvoidingView>
+        </View>
       )}
 
       <Animated.View
@@ -752,9 +754,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  chatContainer: {
+  keyboardAvoidContainer: {
     width: SCREEN_WIDTH - 24,
     maxWidth: 480,
+    maxHeight: SCREEN_HEIGHT * 0.85,
+  },
+  chatContainer: {
+    flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 28,
     overflow: 'hidden',
@@ -815,10 +821,12 @@ const styles = StyleSheet.create({
   },
   messagesContainer: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
   },
   messagesContent: {
     padding: 20,
     paddingBottom: 24,
+    flexGrow: 1,
   },
   messageBubble: {
     maxWidth: '88%',
