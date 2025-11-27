@@ -945,7 +945,7 @@ export default function Home() {
       )}
 
       {!showOnboarding && currentUser && (
-        <FloatingVoiceBot />
+        <FloatingVoiceBot showWelcome={onboardingChecked} />
       )}
     </SafeAreaView>
   );
