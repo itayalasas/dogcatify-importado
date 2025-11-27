@@ -633,6 +633,16 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     outputRange: [0, SCREEN_HEIGHT * 0.75],
   });
 
+  // Desplazamiento vertical cuando aparece el teclado
+  const modalTranslateY = keyboardHeight > 0 ? -(keyboardHeight / 2) : 0;
+
+  // Log del desplazamiento
+  useEffect(() => {
+    if (keyboardHeight > 0) {
+      console.log('[Dotty] Modal translateY:', modalTranslateY, 'keyboard:', keyboardHeight);
+    }
+  }, [keyboardHeight, modalTranslateY]);
+
   const overlayOpacity = expandAnim.interpolate({
     inputRange: [0, 0.01, 1],
     outputRange: [0, 1, 1],
@@ -664,11 +674,11 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           >
             <View />
           </TouchableOpacity>
-          <View
+          <Animated.View
             style={[
               styles.keyboardAvoidContainer,
               {
-                marginBottom: keyboardHeight > 0 ? keyboardHeight - 20 : 0,
+                transform: [{ translateY: modalTranslateY }],
               }
             ]}
           >
@@ -808,7 +818,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
               </TouchableOpacity>
             </View>
             </Animated.View>
-          </View>
+          </Animated.View>
         </Animated.View>
         );
       })()}
