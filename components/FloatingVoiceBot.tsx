@@ -13,9 +13,8 @@ import {
   PanResponder,
   Keyboard,
 } from 'react-native';
-import { X, Volume2, Send, PawPrint, HelpCircle, ChevronRight } from 'lucide-react-native';
+import { X, Send, PawPrint, HelpCircle, ChevronRight, Sparkles } from 'lucide-react-native';
 import * as Speech from 'expo-speech';
-import { Audio } from 'expo-av';
 import { supabaseClient } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
@@ -29,6 +28,13 @@ interface Message {
   audioUsed: boolean;
   timestamp: Date;
   actionButtons?: ActionButton[];
+  sections?: MessageSection[];
+}
+
+interface MessageSection {
+  title?: string;
+  items: string[];
+  icon?: string;
 }
 
 interface ActionButton {
@@ -45,40 +51,37 @@ interface FloatingVoiceBotProps {
 const quickActions = [
   {
     id: 'add-pet',
-    label: 'Agregar mi primera mascota 🐕',
-    description: 'Te guiaré paso a paso para registrar tu mascota',
+    label: '🐕 Registrar mi primera mascota',
+    description: 'Guía paso a paso para agregar tu mascota',
   },
   {
     id: 'medical-history',
-    label: 'Ver historial médico 📋',
-    description: 'Aprende a usar el historial de salud',
+    label: '📋 Historial médico',
+    description: 'Aprende a gestionar la salud de tu mascota',
   },
   {
     id: 'find-vet',
-    label: 'Encontrar veterinario 🏥',
-    description: 'Busca servicios veterinarios cerca',
+    label: '🏥 Encontrar veterinario',
+    description: 'Servicios veterinarios cerca de ti',
   },
   {
     id: 'explore-app',
-    label: 'Explorar la app 🎯',
-    description: 'Tour completo de funcionalidades',
+    label: '🎯 Explorar funcionalidades',
+    description: 'Tour completo de DogCatiFy',
   },
 ];
 
 export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, showWelcome = false }) => {
   const { currentUser } = useAuth();
   const [isExpanded, setIsExpanded] = useState(showWelcome);
-  const [isListening, setIsListening] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [inputText, setInputText] = useState('');
   const [showQuickActions, setShowQuickActions] = useState(true);
+  const [isDottyEnabled, setIsDottyEnabled] = useState(true);
 
-  const pan = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 90, y: SCREEN_HEIGHT - 180 })).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const pan = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 90, y: SCREEN_HEIGHT - 200 })).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const expandAnim = useRef(new Animated.Value(showWelcome ? 1 : 0)).current;
   const scrollViewRef = useRef<ScrollView>(null);
@@ -86,47 +89,93 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => !isExpanded,
-      onMoveShouldSetPanResponder: () => !isExpanded,
-      onPanResponderGrant: () => {
-        pan.setOffset({
-          x: (pan.x as any)._value,
-          y: (pan.y as any)._value,
-        });
-        pan.setValue({ x: 0, y: 0 });
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5;
       },
-      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], {
-        useNativeDriver: false,
-      }),
-      onPanResponderRelease: (_, gesture) => {
+      onPanResponderGrant: () => {
+        if (isExpanded) return;
+        pan.extractOffset();
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (isExpanded) return;
+        pan.setValue({ x: gestureState.dx, y: gestureState.dy });
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (isExpanded) return;
+
         pan.flattenOffset();
 
-        let finalX = (pan.x as any)._value;
-        let finalY = (pan.y as any)._value;
+        const currentX = (pan.x as any)._value;
+        const currentY = (pan.y as any)._value;
 
-        finalX = Math.max(20, Math.min(SCREEN_WIDTH - 90, finalX));
-        finalY = Math.max(50, Math.min(SCREEN_HEIGHT - 180, finalY));
+        let finalX = currentX;
+        let finalY = currentY;
+
+        finalX = Math.max(10, Math.min(SCREEN_WIDTH - 74, finalX));
+        finalY = Math.max(60, Math.min(SCREEN_HEIGHT - 200, finalY));
+
+        if (finalY > SCREEN_HEIGHT - 250) {
+          checkDismissZone(finalX, finalY);
+        }
 
         Animated.spring(pan, {
           toValue: { x: finalX, y: finalY },
           useNativeDriver: false,
+          friction: 7,
+          tension: 40,
         }).start();
       },
     })
   ).current;
 
+  const checkDismissZone = async (x: number, y: number) => {
+    if (y > SCREEN_HEIGHT - 250) {
+      setIsDottyEnabled(false);
+      if (currentUser) {
+        try {
+          await supabaseClient
+            .from('profiles')
+            .update({ dotty_enabled: false })
+            .eq('id', currentUser.id);
+        } catch (error) {
+          console.error('Error hiding Dotty:', error);
+        }
+      }
+    }
+  };
+
   useEffect(() => {
+    checkDottyStatus();
     startPulseAnimation();
     startPawRotation();
+
     const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {});
     const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {});
 
     return () => {
-      stopSpeaking();
       keyboardDidShowListener.remove();
       keyboardDidHideListener.remove();
     };
   }, []);
+
+  const checkDottyStatus = async () => {
+    if (currentUser) {
+      try {
+        const { data } = await supabaseClient
+          .from('profiles')
+          .select('dotty_enabled')
+          .eq('id', currentUser.id)
+          .single();
+
+        if (data) {
+          setIsDottyEnabled(data.dotty_enabled);
+        }
+      } catch (error) {
+        console.error('Error checking Dotty status:', error);
+      }
+    }
+  };
 
   useEffect(() => {
     if (showWelcome && !currentSessionId) {
@@ -151,7 +200,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     const welcomeMessage: Message = {
       id: Date.now().toString(),
       role: 'assistant',
-      content: '¡Hola! 🐾 Soy Dotty, tu asistente personal en DogCatiFy.\n\nEstoy aquí para guiarte paso a paso. ¿Qué te gustaría hacer?',
+      content: '¡Hola! Soy Dotty, tu asistente personal en DogCatiFy.\n\nEstoy aquí para guiarte en cada paso. ¿En qué puedo ayudarte hoy?',
       audioUsed: false,
       timestamp: new Date(),
     };
@@ -165,13 +214,13 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
-          toValue: 1.15,
-          duration: 1200,
+          toValue: 1.12,
+          duration: 1500,
           useNativeDriver: true,
         }),
         Animated.timing(pulseAnim, {
           toValue: 1,
-          duration: 1200,
+          duration: 1500,
           useNativeDriver: true,
         }),
       ])
@@ -183,12 +232,12 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       Animated.sequence([
         Animated.timing(pawRotation, {
           toValue: 1,
-          duration: 2000,
+          duration: 2500,
           useNativeDriver: true,
         }),
         Animated.timing(pawRotation, {
           toValue: 0,
-          duration: 2000,
+          duration: 2500,
           useNativeDriver: true,
         }),
       ])
@@ -197,7 +246,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   const rotation = pawRotation.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '12deg'],
+    outputRange: ['0deg', '10deg'],
   });
 
   const toggleExpand = () => {
@@ -259,35 +308,32 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       'add-pet': {
         id: Date.now().toString(),
         role: 'action',
-        content: '¡Perfecto! Te voy a guiar para agregar tu primera mascota. Aquí están los pasos:',
+        content: 'Te guiaré para registrar tu primera mascota',
         audioUsed: false,
         timestamp: new Date(),
+        sections: [
+          {
+            title: 'Pasos a seguir',
+            items: [
+              'Navega a la pestaña "Mascotas"',
+              'Toca el botón "+" en la esquina superior',
+              'Completa el formulario con los datos',
+              'Guarda el perfil de tu mascota'
+            ],
+            icon: '📝'
+          }
+        ],
         actionButtons: [
           {
-            label: 'Paso 1: Ir a Mascotas',
+            label: 'Ir a Mascotas →',
             action: () => {
+              router.push('/(tabs)/pets');
               const msg: Message = {
                 id: Date.now().toString(),
                 role: 'assistant',
-                content: '1️⃣ Primero, toca la pestaña "Mascotas" en el menú inferior. Es el segundo ícono con forma de huella 🐾',
+                content: 'Perfecto, ahora busca el botón "+" en la parte superior derecha para agregar tu mascota.',
                 audioUsed: false,
                 timestamp: new Date(),
-                actionButtons: [
-                  {
-                    label: 'Ir a Mascotas ahora →',
-                    action: () => {
-                      router.push('/(tabs)/pets');
-                      const nextMsg: Message = {
-                        id: (Date.now() + 1).toString(),
-                        role: 'assistant',
-                        content: '2️⃣ Ahora, busca el botón "+" o "Agregar Mascota" en la parte superior derecha y tócalo.',
-                        audioUsed: false,
-                        timestamp: new Date(),
-                      };
-                      setMessages(prev => [...prev, nextMsg]);
-                    },
-                  },
-                ],
               };
               setMessages(prev => [...prev, msg]);
             },
@@ -297,25 +343,60 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       'medical-history': {
         id: Date.now().toString(),
         role: 'assistant',
-        content: 'El historial médico te permite:\n\n📋 Registrar vacunas\n💊 Desparasitaciones\n⚠️ Alergias\n🏥 Enfermedades y tratamientos\n⚖️ Seguimiento de peso\n\n¿Sobre qué quieres saber más?',
+        content: 'El historial médico es el corazón de DogCatiFy',
         audioUsed: false,
         timestamp: new Date(),
+        sections: [
+          {
+            title: 'Qué puedes registrar',
+            items: [
+              'Vacunas con recordatorios automáticos',
+              'Desparasitaciones internas y externas',
+              'Alergias e intolerancias',
+              'Enfermedades y tratamientos',
+              'Seguimiento de peso y crecimiento'
+            ],
+            icon: '📋'
+          },
+          {
+            title: 'Beneficios',
+            items: [
+              'Genera PDF del historial completo',
+              'Comparte con veterinarios',
+              'Recordatorios de próximas vacunas',
+              'Todo organizado en un solo lugar'
+            ],
+            icon: '✨'
+          }
+        ],
       },
       'find-vet': {
         id: Date.now().toString(),
         role: 'action',
-        content: 'Para encontrar veterinarios cerca de ti:',
+        content: 'Encuentra servicios profesionales cerca de ti',
         audioUsed: false,
         timestamp: new Date(),
+        sections: [
+          {
+            title: 'Servicios disponibles',
+            items: [
+              'Veterinarias y clínicas',
+              'Peluquerías caninas',
+              'Entrenadores profesionales',
+              'Guarderías y hoteles para mascotas'
+            ],
+            icon: '🏥'
+          }
+        ],
         actionButtons: [
           {
-            label: 'Ir a Servicios →',
+            label: 'Ver Servicios →',
             action: () => {
               router.push('/(tabs)/services');
               const msg: Message = {
                 id: Date.now().toString(),
                 role: 'assistant',
-                content: '¡Perfecto! Ahora puedes ver todos los servicios disponibles cerca de ti. Puedes filtrar por:\n\n🏥 Veterinarias\n✂️ Peluquerías\n🎓 Entrenadores\n🏠 Guarderías',
+                content: 'Aquí puedes explorar todos los servicios. Usa los filtros para encontrar exactamente lo que necesitas.',
                 audioUsed: false,
                 timestamp: new Date(),
               };
@@ -327,9 +408,21 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       'explore-app': {
         id: Date.now().toString(),
         role: 'assistant',
-        content: 'La app tiene 5 secciones principales:\n\n🏠 Inicio: Feed de publicaciones\n🐾 Mascotas: Tus mascotas y su historial\n🛒 Tienda: Productos para mascotas\n🏥 Servicios: Veterinarios y más\n📍 Lugares: Sitios pet-friendly\n\n¿Sobre cuál quieres aprender?',
+        content: 'DogCatiFy es tu compañero integral para el cuidado de mascotas',
         audioUsed: false,
         timestamp: new Date(),
+        sections: [
+          {
+            title: 'Secciones principales',
+            items: [
+              '🏠 Inicio - Red social de mascotas',
+              '🐾 Mascotas - Perfiles e historial médico',
+              '🛒 Tienda - Productos de calidad',
+              '🏥 Servicios - Profesionales certificados',
+              '📍 Lugares - Espacios pet-friendly'
+            ],
+          }
+        ],
       },
     };
 
@@ -412,37 +505,14 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       }
 
       const data = await response.json();
-      return data.response || 'Lo siento, no pude procesar tu mensaje. ¿Podrías intentar de nuevo?';
+      return data.response || 'Lo siento, no pude procesar tu mensaje. ¿Podrías reformularlo?';
     } catch (error) {
       console.error('Error getting AI response:', error);
-      return 'Disculpa, estoy teniendo problemas para responder. Puedes usar las acciones rápidas arriba o preguntarme algo específico. 🐾';
+      return 'Disculpa, estoy teniendo dificultades para responder en este momento. Puedes usar las acciones rápidas o intentar de nuevo en unos segundos.';
     }
-  };
-
-  const speakText = async (text: string) => {
-    try {
-      setIsSpeaking(true);
-      await Speech.speak(text, {
-        language: 'es-ES',
-        pitch: 1.1,
-        rate: 0.9,
-        onDone: () => setIsSpeaking(false),
-        onStopped: () => setIsSpeaking(false),
-        onError: () => setIsSpeaking(false),
-      });
-    } catch (error) {
-      console.error('Error speaking:', error);
-      setIsSpeaking(false);
-    }
-  };
-
-  const stopSpeaking = () => {
-    Speech.stop();
-    setIsSpeaking(false);
   };
 
   const handleClose = () => {
-    stopSpeaking();
     setIsExpanded(false);
     Keyboard.dismiss();
     Animated.spring(expandAnim, {
@@ -455,8 +525,10 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   const expandedHeight = expandAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, SCREEN_HEIGHT * 0.7],
+    outputRange: [0, SCREEN_HEIGHT * 0.75],
   });
+
+  if (!isDottyEnabled) return null;
 
   return (
     <>
@@ -465,16 +537,16 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           <Animated.View style={[styles.chatContainer, { height: expandedHeight }]}>
             <View style={styles.chatHeader}>
               <View style={styles.headerLeft}>
-                <View style={styles.headerIcon}>
-                  <PawPrint size={20} color="#2D6A6F" />
+                <View style={styles.headerIconContainer}>
+                  <PawPrint size={22} color="#2D6A6F" />
                 </View>
                 <View>
-                  <Text style={styles.chatTitle}>Dotty Assistant 🐾</Text>
-                  <Text style={styles.chatSubtitle}>Tu guía paso a paso</Text>
+                  <Text style={styles.chatTitle}>Dotty Assistant</Text>
+                  <Text style={styles.chatSubtitle}>Tu guía personal</Text>
                 </View>
               </View>
               <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-                <X size={22} color="#6B7280" />
+                <X size={20} color="#6B7280" />
               </TouchableOpacity>
             </View>
 
@@ -493,6 +565,12 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                       message.role === 'user' ? styles.userBubble : styles.assistantBubble,
                     ]}
                   >
+                    {message.role !== 'user' && (
+                      <View style={styles.assistantHeader}>
+                        <Sparkles size={14} color="#2D6A6F" />
+                        <Text style={styles.assistantLabel}>Dotty</Text>
+                      </View>
+                    )}
                     <Text
                       style={[
                         styles.messageText,
@@ -501,6 +579,25 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                     >
                       {message.content}
                     </Text>
+                    {message.sections && (
+                      <View style={styles.sectionsContainer}>
+                        {message.sections.map((section, idx) => (
+                          <View key={idx} style={styles.section}>
+                            {section.title && (
+                              <Text style={styles.sectionTitle}>
+                                {section.icon && `${section.icon} `}{section.title}
+                              </Text>
+                            )}
+                            {section.items.map((item, itemIdx) => (
+                              <View key={itemIdx} style={styles.sectionItem}>
+                                <View style={styles.bullet} />
+                                <Text style={styles.sectionItemText}>{item}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        ))}
+                      </View>
+                    )}
                   </View>
                   {message.actionButtons && (
                     <View style={styles.actionButtonsContainer}>
@@ -511,7 +608,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                           style={styles.actionButton}
                         >
                           <Text style={styles.actionButtonText}>{btn.label}</Text>
-                          <ChevronRight size={16} color="#2D6A6F" />
+                          <ChevronRight size={18} color="#2D6A6F" />
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -521,20 +618,23 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
               {isProcessing && (
                 <View style={styles.processingIndicator}>
                   <ActivityIndicator size="small" color="#2D6A6F" />
-                  <Text style={styles.processingText}>Dotty está pensando... 🐾</Text>
+                  <Text style={styles.processingText}>Dotty está pensando...</Text>
                 </View>
               )}
               {showQuickActions && (
                 <View style={styles.quickActionsContainer}>
-                  <Text style={styles.quickActionsTitle}>Acciones rápidas:</Text>
+                  <Text style={styles.quickActionsTitle}>¿Qué te gustaría hacer?</Text>
                   {quickActions.map((action) => (
                     <TouchableOpacity
                       key={action.id}
                       onPress={() => handleQuickAction(action.id)}
                       style={styles.quickActionCard}
                     >
-                      <Text style={styles.quickActionLabel}>{action.label}</Text>
-                      <Text style={styles.quickActionDescription}>{action.description}</Text>
+                      <View style={styles.quickActionContent}>
+                        <Text style={styles.quickActionLabel}>{action.label}</Text>
+                        <Text style={styles.quickActionDescription}>{action.description}</Text>
+                      </View>
+                      <ChevronRight size={20} color="#9CA3AF" />
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -545,7 +645,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
               <View style={styles.inputRow}>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="Pregúntame lo que quieras..."
+                  placeholder="Escribe tu pregunta..."
                   placeholderTextColor="#9CA3AF"
                   value={inputText}
                   onChangeText={setInputText}
@@ -560,7 +660,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                   style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
                   disabled={!inputText.trim()}
                 >
-                  <Send size={18} color={inputText.trim() ? '#2D6A6F' : '#D1D5DB'} />
+                  <Send size={18} color={inputText.trim() ? '#FFFFFF' : '#D1D5DB'} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -582,7 +682,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       >
         <TouchableOpacity
           onPress={toggleExpand}
-          activeOpacity={0.8}
+          activeOpacity={0.9}
           style={styles.floatingButton}
         >
           <Animated.View
@@ -596,11 +696,11 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
               },
             ]}
           >
-            <PawPrint size={28} color="#FFFFFF" strokeWidth={2.5} />
+            <PawPrint size={30} color="#FFFFFF" strokeWidth={2.5} />
           </Animated.View>
           {!isExpanded && (
             <View style={styles.badge}>
-              <HelpCircle size={14} color="#FFFFFF" />
+              <HelpCircle size={16} color="#FFFFFF" />
             </View>
           )}
         </TouchableOpacity>
@@ -616,28 +716,29 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     zIndex: 999,
     justifyContent: 'center',
     alignItems: 'center',
   },
   chatContainer: {
-    width: SCREEN_WIDTH - 32,
+    width: SCREEN_WIDTH - 24,
+    maxWidth: 480,
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    borderRadius: 28,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 16,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 20,
   },
   chatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
     backgroundColor: '#F0FDFA',
@@ -647,28 +748,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  headerIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  headerIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#CCFBF1',
     justifyContent: 'center',
     alignItems: 'center',
   },
   chatTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontFamily: 'Inter-Bold',
     color: '#111827',
   },
   chatSubtitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
   },
   closeButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
@@ -677,14 +778,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   messagesContent: {
-    padding: 16,
+    padding: 20,
     paddingBottom: 24,
   },
   messageBubble: {
-    maxWidth: '85%',
-    padding: 12,
-    borderRadius: 16,
-    marginBottom: 8,
+    maxWidth: '88%',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+    marginBottom: 12,
   },
   userBubble: {
     alignSelf: 'flex-end',
@@ -692,14 +794,25 @@ const styles = StyleSheet.create({
   },
   assistantBubble: {
     alignSelf: 'flex-start',
-    backgroundColor: '#F0FDFA',
+    backgroundColor: '#F9FAFB',
     borderWidth: 1,
-    borderColor: '#CCFBF1',
+    borderColor: '#E5E7EB',
+  },
+  assistantHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  assistantLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#2D6A6F',
   },
   messageText: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: 'Inter-Regular',
-    lineHeight: 20,
+    lineHeight: 22,
   },
   userText: {
     color: '#FFFFFF',
@@ -707,23 +820,61 @@ const styles = StyleSheet.create({
   assistantText: {
     color: '#111827',
   },
-  actionButtonsContainer: {
-    marginBottom: 12,
+  sectionsContainer: {
+    marginTop: 12,
+    gap: 16,
+  },
+  section: {
     gap: 8,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Bold',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  sectionItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingLeft: 8,
+  },
+  bullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#2D6A6F',
+    marginTop: 7,
+  },
+  sectionItemText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#4B5563',
+    lineHeight: 20,
+  },
+  actionButtonsContainer: {
+    marginBottom: 16,
+    gap: 10,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1.5,
+    borderRadius: 16,
+    borderWidth: 2,
     borderColor: '#2D6A6F',
+    shadowColor: '#2D6A6F',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   actionButtonText: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: 'Inter-SemiBold',
     color: '#2D6A6F',
     flex: 1,
@@ -731,100 +882,118 @@ const styles = StyleSheet.create({
   processingIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    padding: 12,
+    gap: 10,
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    marginBottom: 12,
   },
   processingText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
     color: '#6B7280',
-    fontStyle: 'italic',
   },
   quickActionsContainer: {
     marginTop: 8,
   },
   quickActionsTitle: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
-    marginBottom: 12,
+    fontSize: 14,
+    fontFamily: 'Inter-Bold',
+    color: '#374151',
+    marginBottom: 16,
   },
   quickActionCard: {
-    padding: 14,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    marginBottom: 8,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  quickActionContent: {
+    flex: 1,
+    gap: 4,
   },
   quickActionLabel: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
-    marginBottom: 4,
   },
   quickActionDescription: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
   },
   inputContainer: {
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
-    padding: 12,
+    padding: 16,
     backgroundColor: '#FFFFFF',
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 8,
+    gap: 12,
   },
   textInput: {
     flex: 1,
-    minHeight: 42,
+    minHeight: 44,
     maxHeight: 100,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
     backgroundColor: '#F9FAFB',
-    borderRadius: 21,
-    fontSize: 14,
+    borderRadius: 22,
+    fontSize: 15,
     fontFamily: 'Inter-Regular',
     color: '#111827',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
   },
   sendButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#F0FDFA',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#2D6A6F',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#CCFBF1',
+    shadowColor: '#2D6A6F',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   sendButtonDisabled: {
-    backgroundColor: '#F9FAFB',
-    borderColor: '#E5E7EB',
+    backgroundColor: '#D1D5DB',
+    shadowOpacity: 0,
   },
   floatingButtonContainer: {
     position: 'absolute',
-    width: 64,
-    height: 64,
+    width: 68,
+    height: 68,
     zIndex: 1000,
   },
   floatingButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     backgroundColor: '#2D6A6F',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowRadius: 12,
+    elevation: 10,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
   },
   buttonContent: {
     justifyContent: 'center',
@@ -832,15 +1001,20 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
+    top: -2,
+    right: -2,
     backgroundColor: '#F59E0B',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
 });
