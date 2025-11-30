@@ -811,8 +811,11 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   // Animar el desplazamiento vertical cuando aparece el teclado
   useEffect(() => {
-    // Subir el modal más arriba para que el input sea completamente visible
-    const offset = keyboardHeight > 0 ? -(keyboardHeight / 2 + 40) : 0;
+    // Balance perfecto: sube lo suficiente pero mantiene espaciado profesional
+    const TOP_MARGIN = 60; // Margen desde la parte superior
+    const offset = keyboardHeight > 0
+      ? Math.max(-(keyboardHeight / 2.5), -(SCREEN_HEIGHT / 2 - TOP_MARGIN - maxModalHeight / 2))
+      : 0;
 
     Animated.spring(keyboardOffsetAnim, {
       toValue: offset,
@@ -824,9 +827,10 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     console.log('[Dotty] Keyboard visible, adjusting modal:', {
       keyboardHeight,
       maxModalHeight,
-      offset
+      offset,
+      topMargin: TOP_MARGIN
     });
-  }, [keyboardHeight]);
+  }, [keyboardHeight, maxModalHeight]);
 
   const overlayOpacity = expandAnim.interpolate({
     inputRange: [0, 0.01, 1],
