@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -189,8 +189,8 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     })
   ).current;
 
-  // Función para determinar si Dotty debe mostrarse según la ruta actual
-  const shouldShowDotty = (): boolean => {
+  // Calcular si Dotty debe mostrarse (useMemo para que React detecte cambios)
+  const dottyVisible = useMemo(() => {
     // Check 0: Estado cargando
     if (isDottyEnabled === null) {
       console.log('[Dotty] shouldShowDotty: NO - Status not loaded yet (null)');
@@ -246,7 +246,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     });
 
     return true;
-  };
+  }, [isDottyEnabled, currentUser, pathname, segments]);
 
   useEffect(() => {
     loadPosition(); // Cargar posición guardada
@@ -803,23 +803,20 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     return () => expandAnim.removeListener(listenerId);
   }, []);
 
-  // Determinar si Dotty debe mostrarse
-  const dottyVisible = shouldShowDotty();
-
+  // Log de visibilidad
   if (!dottyVisible) {
-    console.log('[Dotty] ❌ NOT VISIBLE - shouldShowDotty returned false');
-  } else {
-    console.log('[Dotty] ✅ VISIBLE - Rendering component', {
-      isExpanded,
-      isDottyEnabled,
-      pathname,
-      currentUser: !!currentUser
-    });
+    console.log('[Dotty] ❌ NOT VISIBLE - dottyVisible is false');
+    return null;
   }
 
-  // Siempre renderizar pero ocultar visualmente si no debe mostrarse
+  console.log('[Dotty] ✅ VISIBLE - Rendering component', {
+    isExpanded,
+    isDottyEnabled,
+    pathname,
+    currentUser: !!currentUser
+  });
+
   return (
-    <View style={!dottyVisible && { display: 'none' }} pointerEvents={!dottyVisible ? 'none' : 'auto'}>
     <>
       {isExpanded && (() => {
         console.log('[Dotty] Rendering modal overlay');
@@ -1019,7 +1016,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
         </View>
       </Animated.View>
     </>
-    </View>
   );
 };
 
