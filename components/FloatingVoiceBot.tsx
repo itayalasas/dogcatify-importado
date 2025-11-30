@@ -91,7 +91,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const expandAnim = useRef(new Animated.Value(showWelcome ? 1 : 0)).current;
   const scrollViewRef = useRef<ScrollView>(null);
   const pawRotation = useRef(new Animated.Value(0)).current;
-  const modalTranslateAnim = useRef(new Animated.Value(0)).current;
 
   const isDragging = useRef(false);
   const startPosition = useRef({ x: 0, y: 0 });
@@ -799,25 +798,26 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     });
   };
 
+  // Calcular altura máxima del modal considerando el teclado
+  const maxModalHeight = keyboardHeight > 0
+    ? SCREEN_HEIGHT - keyboardHeight - 100 // Dejar espacio arriba y para el teclado
+    : SCREEN_HEIGHT * 0.75;
+
   const expandedHeight = expandAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, SCREEN_HEIGHT * 0.75],
+    outputRange: [0, maxModalHeight],
   });
 
-  // Animar desplazamiento vertical cuando aparece el teclado
+  // Log del cambio de altura cuando aparece el teclado
   useEffect(() => {
-    const targetValue = keyboardHeight > 0 ? -(keyboardHeight / 2) : 0;
-
-    Animated.timing(modalTranslateAnim, {
-      toValue: targetValue,
-      duration: 250,
-      useNativeDriver: true,
-    }).start();
-
     if (keyboardHeight > 0) {
-      console.log('[Dotty] Animating modal translateY to:', targetValue, 'keyboard:', keyboardHeight);
+      console.log('[Dotty] Keyboard visible, adjusting modal height:', {
+        keyboardHeight,
+        maxModalHeight,
+        reduction: (SCREEN_HEIGHT * 0.75) - maxModalHeight
+      });
     }
-  }, [keyboardHeight]);
+  }, [keyboardHeight, maxModalHeight]);
 
   const overlayOpacity = expandAnim.interpolate({
     inputRange: [0, 0.01, 1],
@@ -859,12 +859,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
             <View />
           </TouchableOpacity>
           <Animated.View
-            style={[
-              styles.keyboardAvoidContainer,
-              {
-                transform: [{ translateY: modalTranslateAnim }],
-              }
-            ]}
+            style={styles.keyboardAvoidContainer}
           >
             <Animated.View style={[styles.chatContainer, { height: expandedHeight }]}>
             <View style={styles.chatHeader}>
@@ -1140,7 +1135,7 @@ const styles = StyleSheet.create({
   },
   messagesContent: {
     padding: 20,
-    paddingBottom: 80,
+    paddingBottom: 20,
     flexGrow: 1,
   },
   messageBubble: {
