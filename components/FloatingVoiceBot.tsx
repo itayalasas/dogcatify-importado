@@ -811,7 +811,8 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   // Animar el desplazamiento vertical cuando aparece el teclado
   useEffect(() => {
-    const offset = keyboardHeight > 0 ? -(keyboardHeight / 3) : 0;
+    // Subir el modal más arriba para que el input sea completamente visible
+    const offset = keyboardHeight > 0 ? -(keyboardHeight / 2 + 40) : 0;
 
     Animated.spring(keyboardOffsetAnim, {
       toValue: offset,
@@ -1011,8 +1012,9 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                 onPress={handleSendMessage}
                 style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
                 disabled={!inputText.trim()}
+                activeOpacity={0.7}
               >
-                <Send size={18} color={inputText.trim() ? '#FFFFFF' : '#D1D5DB'} />
+                <Send size={20} color={inputText.trim() ? '#FFFFFF' : '#9CA3AF'} strokeWidth={2.5} />
               </TouchableOpacity>
             </View>
             </Animated.View>
@@ -1331,9 +1333,9 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     backgroundColor: '#2D6A6F',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1341,11 +1343,12 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 4,
   },
   sendButtonDisabled: {
-    backgroundColor: '#D1D5DB',
+    backgroundColor: '#E5E7EB',
     shadowOpacity: 0,
+    elevation: 0,
   },
   floatingButtonContainer: {
     position: 'absolute',
