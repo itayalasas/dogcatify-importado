@@ -191,8 +191,17 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   // Función para determinar si Dotty debe mostrarse según la ruta actual
   const shouldShowDotty = (): boolean => {
-    if (!currentUser) return false;
-    if (!isDottyEnabled) return false;
+    // Check 1: Usuario autenticado
+    if (!currentUser) {
+      console.log('[Dotty] shouldShowDotty: NO - No user authenticated');
+      return false;
+    }
+
+    // Check 2: Dotty habilitado por el usuario
+    if (!isDottyEnabled) {
+      console.log('[Dotty] shouldShowDotty: NO - Dotty disabled by user (isDottyEnabled=false)');
+      return false;
+    }
 
     // Rutas donde NO debe aparecer Dotty
     const hiddenRoutes = [
@@ -213,17 +222,24 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     const firstSegment = segments?.[0];
     const isAuthRoute = firstSegment === 'auth';
 
-    console.log('[Dotty] Route check:', {
+    // Check 3: Ruta permitida
+    if (isAuthRoute || isHiddenRoute) {
+      console.log('[Dotty] shouldShowDotty: NO - Hidden route', {
+        pathname: currentPath,
+        isAuthRoute,
+        isHiddenRoute
+      });
+      return false;
+    }
+
+    console.log('[Dotty] shouldShowDotty: YES - All checks passed', {
+      currentUser: !!currentUser,
+      isDottyEnabled,
       pathname: currentPath,
-      segments,
-      firstSegment,
-      isAuthRoute,
-      isHiddenRoute,
-      shouldShow: !isAuthRoute && !isHiddenRoute
+      segments
     });
 
-    // Ocultar en rutas de autenticación
-    return !isAuthRoute && !isHiddenRoute;
+    return true;
   };
 
   useEffect(() => {
@@ -327,6 +343,12 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       supabaseClient.removeChannel(subscription);
     };
   }, [currentUser?.id]);
+
+  // Log cuando cambia isDottyEnabled
+  useEffect(() => {
+    console.log('[Dotty] isDottyEnabled changed to:', isDottyEnabled);
+    console.log('[Dotty] Component will', isDottyEnabled ? 'RENDER' : 'HIDE');
+  }, [isDottyEnabled]);
 
   useEffect(() => {
     if (showWelcome && !currentSessionId) {
@@ -753,12 +775,17 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   // Verificar si Dotty debe mostrarse
   if (!shouldShowDotty()) {
-    console.log('[Dotty] Not showing - check failed');
+    console.log('[Dotty] ❌ NOT RENDERING - shouldShowDotty returned false');
     return null;
   }
 
   // Log cuando el componente se renderiza
-  console.log('[Dotty] Render - isExpanded:', isExpanded, 'isDottyEnabled:', isDottyEnabled, 'pathname:', pathname);
+  console.log('[Dotty] ✅ RENDERING COMPONENT', {
+    isExpanded,
+    isDottyEnabled,
+    pathname,
+    currentUser: !!currentUser
+  });
 
   return (
     <>
