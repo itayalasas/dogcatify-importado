@@ -335,15 +335,20 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           filter: `id=eq.${currentUser.id}`,
         },
         (payload) => {
-          console.log('[Dotty] Profile updated:', payload);
+          console.log('[Dotty] 🔄 Real-time update received:', {
+            event: payload.eventType,
+            old_value: payload.old?.dotty_enabled,
+            new_value: payload.new?.dotty_enabled
+          });
+
           if (payload.new && 'dotty_enabled' in payload.new) {
             const isEnabled = payload.new.dotty_enabled !== false;
-            console.log('[Dotty] Status changed to:', isEnabled);
+            console.log('[Dotty] 🔄 Changing state from', isDottyEnabled, 'to', isEnabled);
             setIsDottyEnabled(isEnabled);
 
             // Si se deshabilitó, cerrar el modal si está abierto
             if (!isEnabled) {
-              console.log('[Dotty] Closing because disabled');
+              console.log('[Dotty] 🚫 Closing because disabled');
               Keyboard.dismiss();
               setIsExpanded(false);
               // Animar el cierre
@@ -353,6 +358,8 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                 friction: 8,
                 useNativeDriver: false,
               }).start();
+            } else {
+              console.log('[Dotty] ✅ Enabled - component should appear now');
             }
           }
         }
@@ -796,21 +803,23 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     return () => expandAnim.removeListener(listenerId);
   }, []);
 
-  // Verificar si Dotty debe mostrarse
-  if (!shouldShowDotty()) {
-    console.log('[Dotty] ❌ NOT RENDERING - shouldShowDotty returned false');
-    return null;
+  // Determinar si Dotty debe mostrarse
+  const dottyVisible = shouldShowDotty();
+
+  if (!dottyVisible) {
+    console.log('[Dotty] ❌ NOT VISIBLE - shouldShowDotty returned false');
+  } else {
+    console.log('[Dotty] ✅ VISIBLE - Rendering component', {
+      isExpanded,
+      isDottyEnabled,
+      pathname,
+      currentUser: !!currentUser
+    });
   }
 
-  // Log cuando el componente se renderiza
-  console.log('[Dotty] ✅ RENDERING COMPONENT', {
-    isExpanded,
-    isDottyEnabled,
-    pathname,
-    currentUser: !!currentUser
-  });
-
+  // Siempre renderizar pero ocultar visualmente si no debe mostrarse
   return (
+    <View style={!dottyVisible && { display: 'none' }} pointerEvents={!dottyVisible ? 'none' : 'auto'}>
     <>
       {isExpanded && (() => {
         console.log('[Dotty] Rendering modal overlay');
@@ -1010,6 +1019,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
         </View>
       </Animated.View>
     </>
+    </View>
   );
 };
 
