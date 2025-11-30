@@ -83,7 +83,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [showQuickActions, setShowQuickActions] = useState(true);
-  const [isDottyEnabled, setIsDottyEnabled] = useState(true);
+  const [isDottyEnabled, setIsDottyEnabled] = useState<boolean | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const position = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 90, y: SCREEN_HEIGHT - 300 })).current;
@@ -191,6 +191,12 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   // Función para determinar si Dotty debe mostrarse según la ruta actual
   const shouldShowDotty = (): boolean => {
+    // Check 0: Estado cargando
+    if (isDottyEnabled === null) {
+      console.log('[Dotty] shouldShowDotty: NO - Status not loaded yet (null)');
+      return false;
+    }
+
     // Check 1: Usuario autenticado
     if (!currentUser) {
       console.log('[Dotty] shouldShowDotty: NO - No user authenticated');
@@ -198,7 +204,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     }
 
     // Check 2: Dotty habilitado por el usuario
-    if (!isDottyEnabled) {
+    if (isDottyEnabled === false) {
       console.log('[Dotty] shouldShowDotty: NO - Dotty disabled by user (isDottyEnabled=false)');
       return false;
     }
@@ -275,20 +281,37 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const checkDottyStatus = async () => {
     if (currentUser) {
       try {
-        const { data } = await supabaseClient
+        console.log('[Dotty] Checking status for user:', currentUser.id);
+        const { data, error } = await supabaseClient
           .from('profiles')
           .select('dotty_enabled')
           .eq('id', currentUser.id)
           .single();
 
+        if (error) {
+          console.error('[Dotty] Error checking status:', error);
+          setIsDottyEnabled(true); // Default to true on error
+          return;
+        }
+
         if (data) {
           const isEnabled = data.dotty_enabled !== false;
-          console.log('[Dotty] Status loaded:', isEnabled);
+          console.log('[Dotty] Status loaded from DB:', {
+            raw_value: data.dotty_enabled,
+            computed_value: isEnabled
+          });
           setIsDottyEnabled(isEnabled);
+        } else {
+          console.log('[Dotty] No data found, defaulting to true');
+          setIsDottyEnabled(true);
         }
       } catch (error) {
-        console.error('Error checking Dotty status:', error);
+        console.error('[Dotty] Exception checking Dotty status:', error);
+        setIsDottyEnabled(true);
       }
+    } else {
+      console.log('[Dotty] No current user, setting to false');
+      setIsDottyEnabled(false);
     }
   };
 
