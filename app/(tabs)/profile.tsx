@@ -374,7 +374,6 @@ export default function Profile() {
 
                   console.log('[Profile] Successfully updated dotty_enabled to false:', data);
                   setIsDottyEnabled(false);
-                  Alert.alert('Ocultado', 'Dotty ha sido ocultado. Puedes volver a mostrarlo desde esta opción en tu perfil.');
                 } catch (error) {
                   console.error('[Profile] Exception updating dotty_enabled:', error);
                   Alert.alert('Error', 'No se pudo ocultar el asistente');
@@ -408,7 +407,6 @@ export default function Profile() {
 
                   console.log('[Profile] Successfully updated dotty_enabled to true:', data);
                   setIsDottyEnabled(true);
-                  Alert.alert('Activado', '¡Dotty está de vuelta! Lo verás flotando en la pantalla.');
                 } catch (error) {
                   console.error('[Profile] Exception updating dotty_enabled:', error);
                   Alert.alert('Error', 'No se pudo mostrar el asistente');
