@@ -572,6 +572,13 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     sendWelcomeMessage();
   };
 
+  // Función para manejar acciones detectadas en las respuestas de la IA
+  const handleAction = (action: string) => {
+    console.log('[Dotty] Handling action:', action);
+    // Reutilizar la lógica de handleQuickAction
+    handleQuickAction(action);
+  };
+
   const handleQuickAction = (actionId: string) => {
     setShowQuickActions(false);
 
@@ -704,6 +711,16 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     }
   };
 
+  // Función para limpiar las acciones del texto mostrado al usuario
+  const cleanResponseText = (text: string): string => {
+    // Elimina todas las ocurrencias de [ACCIÓN: ...] del texto
+    // Soporte para múltiples espacios y líneas vacías resultantes
+    return text
+      .replace(/\[ACCIÓN:\s*[^\]]+\]/gi, '')
+      .replace(/\n{3,}/g, '\n\n') // Elimina líneas vacías múltiples
+      .trim();
+  };
+
   const handleSendMessage = () => {
     if (inputText.trim()) {
       handleUserMessage(inputText.trim(), false);
@@ -732,16 +749,28 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
     const response = await getAIResponse(text);
 
+    // Detectar acciones antes de limpiar el texto
+    const actionMatch = response.match(/\[ACCIÓN:\s*([^\]]+)\]/i);
+    if (actionMatch) {
+      const action = actionMatch[1].trim();
+      console.log('[Dotty] Action detected:', action);
+      handleAction(action);
+    }
+
+    // Limpiar el texto de acciones antes de mostrarlo al usuario
+    const cleanedResponse = cleanResponseText(response);
+
     const assistantMessage: Message = {
       id: (Date.now() + 1).toString(),
       role: 'assistant',
-      content: response,
+      content: cleanedResponse,
       audioUsed: false,
       timestamp: new Date(),
     };
 
     setMessages(prev => [...prev, assistantMessage]);
-    await saveMessage('assistant', response, false);
+    // Guardar la respuesta limpia (sin acciones visibles)
+    await saveMessage('assistant', cleanedResponse, false);
 
     setIsProcessing(false);
   };
