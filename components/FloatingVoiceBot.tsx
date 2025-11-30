@@ -91,6 +91,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const expandAnim = useRef(new Animated.Value(showWelcome ? 1 : 0)).current;
   const scrollViewRef = useRef<ScrollView>(null);
   const pawRotation = useRef(new Animated.Value(0)).current;
+  const keyboardOffsetAnim = useRef(new Animated.Value(0)).current;
 
   const isDragging = useRef(false);
   const startPosition = useRef({ x: 0, y: 0 });
@@ -800,7 +801,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   // Calcular altura máxima del modal considerando el teclado
   const maxModalHeight = keyboardHeight > 0
-    ? SCREEN_HEIGHT - keyboardHeight - 100 // Dejar espacio arriba y para el teclado
+    ? Math.max(400, SCREEN_HEIGHT - keyboardHeight - 60) // Mínimo 400px de altura
     : SCREEN_HEIGHT * 0.75;
 
   const expandedHeight = expandAnim.interpolate({
@@ -808,16 +809,23 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     outputRange: [0, maxModalHeight],
   });
 
-  // Log del cambio de altura cuando aparece el teclado
+  // Animar el desplazamiento vertical cuando aparece el teclado
   useEffect(() => {
-    if (keyboardHeight > 0) {
-      console.log('[Dotty] Keyboard visible, adjusting modal height:', {
-        keyboardHeight,
-        maxModalHeight,
-        reduction: (SCREEN_HEIGHT * 0.75) - maxModalHeight
-      });
-    }
-  }, [keyboardHeight, maxModalHeight]);
+    const offset = keyboardHeight > 0 ? -(keyboardHeight / 3) : 0;
+
+    Animated.spring(keyboardOffsetAnim, {
+      toValue: offset,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 40,
+    }).start();
+
+    console.log('[Dotty] Keyboard visible, adjusting modal:', {
+      keyboardHeight,
+      maxModalHeight,
+      offset
+    });
+  }, [keyboardHeight]);
 
   const overlayOpacity = expandAnim.interpolate({
     inputRange: [0, 0.01, 1],
@@ -859,7 +867,12 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
             <View />
           </TouchableOpacity>
           <Animated.View
-            style={styles.keyboardAvoidContainer}
+            style={[
+              styles.keyboardAvoidContainer,
+              {
+                transform: [{ translateY: keyboardOffsetAnim }],
+              }
+            ]}
           >
             <Animated.View style={[styles.chatContainer, { height: expandedHeight }]}>
             <View style={styles.chatHeader}>
@@ -1066,7 +1079,6 @@ const styles = StyleSheet.create({
   keyboardAvoidContainer: {
     width: SCREEN_WIDTH - 24,
     maxWidth: 480,
-    maxHeight: SCREEN_HEIGHT * 0.85,
     zIndex: 10001,
   },
   chatContainer: {
@@ -1291,12 +1303,14 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     gap: 12,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: '#FFFFFF',
+    minHeight: 70,
   },
   inputWrapper: {
     flex: 1,
