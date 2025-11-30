@@ -91,6 +91,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const expandAnim = useRef(new Animated.Value(showWelcome ? 1 : 0)).current;
   const scrollViewRef = useRef<ScrollView>(null);
   const pawRotation = useRef(new Animated.Value(0)).current;
+  const modalTranslateAnim = useRef(new Animated.Value(0)).current;
 
   const isDragging = useRef(false);
   const startPosition = useRef({ x: 0, y: 0 });
@@ -395,25 +396,9 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     if (messages.length > 0 && scrollViewRef.current) {
       setTimeout(() => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 300);
+      }, 150);
     }
   }, [messages]);
-
-  // Scroll al final cuando aparece el teclado
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      () => {
-        setTimeout(() => {
-          scrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-      }
-    );
-
-    return () => {
-      keyboardDidShowListener.remove();
-    };
-  }, []);
 
   const sendWelcomeMessage = async () => {
     const welcomeMessage: Message = {
@@ -796,15 +781,20 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     outputRange: [0, SCREEN_HEIGHT * 0.75],
   });
 
-  // Desplazamiento vertical cuando aparece el teclado
-  const modalTranslateY = keyboardHeight > 0 ? -(keyboardHeight / 2) : 0;
-
-  // Log del desplazamiento
+  // Animar desplazamiento vertical cuando aparece el teclado
   useEffect(() => {
+    const targetValue = keyboardHeight > 0 ? -(keyboardHeight / 2) : 0;
+
+    Animated.timing(modalTranslateAnim, {
+      toValue: targetValue,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+
     if (keyboardHeight > 0) {
-      console.log('[Dotty] Modal translateY:', modalTranslateY, 'keyboard:', keyboardHeight);
+      console.log('[Dotty] Animating modal translateY to:', targetValue, 'keyboard:', keyboardHeight);
     }
-  }, [keyboardHeight, modalTranslateY]);
+  }, [keyboardHeight]);
 
   const overlayOpacity = expandAnim.interpolate({
     inputRange: [0, 0.01, 1],
@@ -849,7 +839,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
             style={[
               styles.keyboardAvoidContainer,
               {
-                transform: [{ translateY: modalTranslateY }],
+                transform: [{ translateY: modalTranslateAnim }],
               }
             ]}
           >
@@ -874,18 +864,13 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
               </TouchableOpacity>
             </View>
 
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              style={{ flex: 1 }}
-              keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
-            >
             <ScrollView
               ref={scrollViewRef}
               style={styles.messagesContainer}
               contentContainerStyle={styles.messagesContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="interactive"
+              keyboardDismissMode="on-drag"
             >
               {messages.map((message) => (
                 <View key={message.id}>
@@ -970,7 +955,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                 </View>
               )}
             </ScrollView>
-            </KeyboardAvoidingView>
 
             <View style={styles.inputContainer}>
               <View style={styles.inputWrapper}>
@@ -1133,7 +1117,7 @@ const styles = StyleSheet.create({
   },
   messagesContent: {
     padding: 20,
-    paddingBottom: 120,
+    paddingBottom: 80,
     flexGrow: 1,
   },
   messageBubble: {
