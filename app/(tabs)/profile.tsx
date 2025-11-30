@@ -359,13 +359,24 @@ export default function Profile() {
               style: 'destructive',
               onPress: async () => {
                 try {
-                  await supabaseClient
+                  console.log('[Profile] Updating dotty_enabled to false for user:', currentUser.id);
+                  const { data, error } = await supabaseClient
                     .from('profiles')
                     .update({ dotty_enabled: false })
-                    .eq('id', currentUser.id);
+                    .eq('id', currentUser.id)
+                    .select();
+
+                  if (error) {
+                    console.error('[Profile] Error updating dotty_enabled:', error);
+                    Alert.alert('Error', 'No se pudo ocultar el asistente');
+                    return;
+                  }
+
+                  console.log('[Profile] Successfully updated dotty_enabled to false:', data);
                   setIsDottyEnabled(false);
                   Alert.alert('Ocultado', 'Dotty ha sido ocultado. Puedes volver a mostrarlo desde esta opción en tu perfil.');
                 } catch (error) {
+                  console.error('[Profile] Exception updating dotty_enabled:', error);
                   Alert.alert('Error', 'No se pudo ocultar el asistente');
                 }
               }
@@ -382,13 +393,24 @@ export default function Profile() {
               text: 'Mostrar',
               onPress: async () => {
                 try {
-                  await supabaseClient
+                  console.log('[Profile] Updating dotty_enabled to true for user:', currentUser.id);
+                  const { data, error } = await supabaseClient
                     .from('profiles')
                     .update({ dotty_enabled: true })
-                    .eq('id', currentUser.id);
+                    .eq('id', currentUser.id)
+                    .select();
+
+                  if (error) {
+                    console.error('[Profile] Error updating dotty_enabled:', error);
+                    Alert.alert('Error', 'No se pudo mostrar el asistente');
+                    return;
+                  }
+
+                  console.log('[Profile] Successfully updated dotty_enabled to true:', data);
                   setIsDottyEnabled(true);
                   Alert.alert('Activado', '¡Dotty está de vuelta! Lo verás flotando en la pantalla.');
                 } catch (error) {
+                  console.error('[Profile] Exception updating dotty_enabled:', error);
                   Alert.alert('Error', 'No se pudo mostrar el asistente');
                 }
               }
