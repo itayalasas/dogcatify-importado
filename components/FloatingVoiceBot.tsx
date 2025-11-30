@@ -291,27 +291,33 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
         if (error) {
           console.error('[Dotty] Error checking status:', error);
-          setIsDottyEnabled(true); // Default to true on error
+          // En caso de error, mantener null (no mostrar hasta confirmar)
+          setIsDottyEnabled(null);
           return;
         }
 
         if (data) {
+          // Si dotty_enabled es null o undefined, tratar como true (activado por defecto)
+          // Si es explícitamente false, respetar esa configuración
           const isEnabled = data.dotty_enabled !== false;
           console.log('[Dotty] Status loaded from DB:', {
             raw_value: data.dotty_enabled,
-            computed_value: isEnabled
+            computed_value: isEnabled,
+            is_null: data.dotty_enabled === null,
+            is_undefined: data.dotty_enabled === undefined
           });
           setIsDottyEnabled(isEnabled);
         } else {
-          console.log('[Dotty] No data found, defaulting to true');
+          console.log('[Dotty] No profile data found, defaulting to enabled');
           setIsDottyEnabled(true);
         }
       } catch (error) {
         console.error('[Dotty] Exception checking Dotty status:', error);
-        setIsDottyEnabled(true);
+        // En caso de excepción, mantener null (no mostrar hasta confirmar)
+        setIsDottyEnabled(null);
       }
     } else {
-      console.log('[Dotty] No current user, setting to false');
+      console.log('[Dotty] No current user, hiding Dotty');
       setIsDottyEnabled(false);
     }
   };
@@ -343,8 +349,14 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           });
 
           if (payload.new && 'dotty_enabled' in payload.new) {
+            // Si dotty_enabled es null o undefined, tratar como true (activado por defecto)
+            // Si es explícitamente false, respetar esa configuración
             const isEnabled = payload.new.dotty_enabled !== false;
-            console.log('[Dotty] 🔄 Changing state from', isDottyEnabled, 'to', isEnabled);
+            console.log('[Dotty] 🔄 Changing state from', isDottyEnabled, 'to', isEnabled, {
+              raw_value: payload.new.dotty_enabled,
+              is_null: payload.new.dotty_enabled === null,
+              is_false: payload.new.dotty_enabled === false
+            });
             setIsDottyEnabled(isEnabled);
 
             // Si se deshabilitó, cerrar el modal si está abierto
@@ -373,6 +385,17 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       console.log('[Dotty] Cleaning up subscription');
       supabaseClient.removeChannel(subscription);
     };
+  }, [currentUser?.id]);
+
+  // Recargar estado cuando cambia el usuario
+  useEffect(() => {
+    if (currentUser?.id) {
+      console.log('[Dotty] User changed, reloading Dotty status for:', currentUser.id);
+      checkDottyStatus();
+    } else {
+      console.log('[Dotty] No user, hiding Dotty');
+      setIsDottyEnabled(false);
+    }
   }, [currentUser?.id]);
 
   // Log cuando cambia isDottyEnabled
