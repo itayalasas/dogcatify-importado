@@ -12,7 +12,9 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  PanResponder,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { X, Send, PawPrint, CircleHelp as HelpCircle, ChevronRight, Sparkles, ArrowLeft } from 'lucide-react-native';
 import { supabaseClient } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -94,6 +96,99 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const startPosition = useRef({ x: 0, y: 0 });
   const gestureStartTime = useRef(0);
 
+  // Funciones para guardar/cargar posición
+  const savePosition = async (x: number, y: number) => {
+    try {
+      await AsyncStorage.setItem('dotty_position', JSON.stringify({ x, y }));
+      console.log('[Dotty] Position saved:', { x, y });
+    } catch (error) {
+      console.error('[Dotty] Error saving position:', error);
+    }
+  };
+
+  const loadPosition = async () => {
+    try {
+      const saved = await AsyncStorage.getItem('dotty_position');
+      if (saved) {
+        const { x, y } = JSON.parse(saved);
+        console.log('[Dotty] Position loaded:', { x, y });
+        position.setValue({ x, y });
+      }
+    } catch (error) {
+      console.error('[Dotty] Error loading position:', error);
+    }
+  };
+
+  // Crear PanResponder para manejar el arrastre
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => !isExpanded,
+      onMoveShouldSetPanResponder: () => !isExpanded,
+
+      onPanResponderGrant: () => {
+        if (isExpanded) return;
+
+        isDragging.current = true;
+        gestureStartTime.current = Date.now();
+
+        // Obtener posición actual
+        position.stopAnimation((value) => {
+          startPosition.current = { x: value.x, y: value.y };
+          console.log('[Dotty] Drag started at:', value);
+        });
+      },
+
+      onPanResponderMove: (_, gestureState) => {
+        if (isExpanded || !isDragging.current) return;
+
+        const dx = gestureState.dx || 0;
+        const dy = gestureState.dy || 0;
+
+        // Calcular nueva posición
+        let newX = startPosition.current.x + dx;
+        let newY = startPosition.current.y + dy;
+
+        // Límites de la pantalla (dejando espacio para el botón)
+        const buttonSize = 70;
+        const minX = 0;
+        const maxX = SCREEN_WIDTH - buttonSize;
+        const minY = 50; // Dejar espacio para el notch/status bar
+        const maxY = SCREEN_HEIGHT - buttonSize - 100; // Dejar espacio para tabs
+
+        // Aplicar límites
+        newX = Math.max(minX, Math.min(maxX, newX));
+        newY = Math.max(minY, Math.min(maxY, newY));
+
+        position.setValue({ x: newX, y: newY });
+      },
+
+      onPanResponderRelease: (_, gestureState) => {
+        if (isExpanded) return;
+
+        const dragDuration = Date.now() - gestureStartTime.current;
+        const dragDistance = Math.sqrt(
+          Math.pow(gestureState.dx || 0, 2) + Math.pow(gestureState.dy || 0, 2)
+        );
+
+        console.log('[Dotty] Drag ended:', { dragDuration, dragDistance });
+
+        // Si fue un tap rápido (< 200ms y < 10px), expandir
+        if (dragDuration < 200 && dragDistance < 10) {
+          console.log('[Dotty] Tap detected, toggling expand');
+          isDragging.current = false;
+          toggleExpand();
+        } else {
+          // Si fue un drag, guardar la posición
+          position.stopAnimation((value) => {
+            console.log('[Dotty] Final position:', value);
+            savePosition(value.x, value.y);
+          });
+          isDragging.current = false;
+        }
+      },
+    })
+  ).current;
+
   // Función para determinar si Dotty debe mostrarse según la ruta actual
   const shouldShowDotty = (): boolean => {
     if (!currentUser) return false;
@@ -132,6 +227,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   };
 
   useEffect(() => {
+    loadPosition(); // Cargar posición guardada
     checkDottyStatus();
     startPulseAnimation();
     startPawRotation();
@@ -303,101 +399,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     inputRange: [0, 1],
     outputRange: ['0deg', '10deg'],
   });
-
-  const onPanResponderGrant = () => {
-    if (isExpanded) {
-      console.log('[Dotty] Grant blocked: isExpanded=true');
-      return;
-    }
-
-    console.log('[Dotty] Grant: Starting gesture');
-    isDragging.current = false;
-    gestureStartTime.current = Date.now();
-    position.stopAnimation((value) => {
-      startPosition.current = { x: value.x, y: value.y };
-      console.log('[Dotty] Start position:', value);
-    });
-  };
-
-  const onPanResponderMove = (_: any, gestureState: any) => {
-    if (isExpanded || !gestureState) return;
-
-    const dx = gestureState.dx || 0;
-    const dy = gestureState.dy || 0;
-
-    const distanceMoved = Math.sqrt(
-      Math.pow(dx, 2) + Math.pow(dy, 2)
-    );
-
-    if (distanceMoved > 8 && !isDragging.current) {
-      console.log('[Dotty] Move: Drag activated at distance:', distanceMoved);
-      isDragging.current = true;
-    }
-
-    if (isDragging.current) {
-      position.setValue({
-        x: startPosition.current.x + dx,
-        y: startPosition.current.y + dy,
-      });
-    }
-  };
-
-  const onPanResponderRelease = (_: any, gestureState: any) => {
-    if (isExpanded) {
-      console.log('[Dotty] Release blocked: isExpanded=true');
-      return;
-    }
-
-    const gestureDuration = Date.now() - gestureStartTime.current;
-    const dx = gestureState?.dx || 0;
-    const dy = gestureState?.dy || 0;
-    const distanceMoved = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
-
-    console.log('[Dotty] Release:', {
-      isDragging: isDragging.current,
-      distance: distanceMoved,
-      duration: gestureDuration
-    });
-
-    // Si NO se movió mucho Y fue rápido = TAP
-    if (distanceMoved < 8 && gestureDuration < 300) {
-      console.log('[Dotty] Detected TAP - Opening modal');
-      toggleExpand();
-      isDragging.current = false;
-      return;
-    }
-
-    // Si NO se activó el drag, ignorar
-    if (!isDragging.current) {
-      console.log('[Dotty] No drag detected - Ignoring');
-      return;
-    }
-
-    // Es un DRAG válido - mover el ícono
-    console.log('[Dotty] Valid DRAG - Moving icon');
-    const finalX = startPosition.current.x + dx;
-    const finalY = startPosition.current.y + dy;
-
-    let boundedX = Math.max(-10, Math.min(SCREEN_WIDTH - 58, finalX));
-    let boundedY = Math.max(40, Math.min(SCREEN_HEIGHT - 100, finalY));
-
-    if (boundedY > SCREEN_HEIGHT - 250) {
-      console.log('[Dotty] Dismissed - too low');
-      handleDismiss();
-      isDragging.current = false;
-      return;
-    }
-
-    Animated.spring(position, {
-      toValue: { x: boundedX, y: boundedY },
-      useNativeDriver: false,
-      friction: 7,
-      tension: 40,
-    }).start(() => {
-      isDragging.current = false;
-      console.log('[Dotty] Drag complete');
-    });
-  };
 
   const handleDismiss = async () => {
     setIsDottyEnabled(false);
@@ -935,11 +936,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
             zIndex: isExpanded ? 9998 : 9999,
           },
         ]}
-        onStartShouldSetResponder={() => !isExpanded}
-        onMoveShouldSetResponder={() => !isExpanded}
-        onResponderGrant={onPanResponderGrant}
-        onResponderMove={onPanResponderMove}
-        onResponderRelease={onPanResponderRelease}
+        {...panResponder.panHandlers}
       >
         <View style={styles.floatingButton}>
           <Animated.View
