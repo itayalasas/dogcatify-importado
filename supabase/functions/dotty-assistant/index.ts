@@ -26,7 +26,7 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { message, conversationHistory, userId } = await req.json();
+    const { message, conversationHistory, userId, userName } = await req.json();
 
     if (!message || !userId) {
       return new Response(
@@ -44,6 +44,9 @@ Deno.serve(async (req: Request) => {
       .select('display_name, email, is_partner, is_admin, onboarding_completed')
       .eq('id', userId)
       .single();
+
+    // Usar el nombre pasado desde el frontend, o el del perfil como fallback
+    const userDisplayName = userName || profile?.display_name || 'Usuario';
 
     const { data: pets } = await supabase
       .from('pets')
@@ -69,7 +72,7 @@ Deno.serve(async (req: Request) => {
     const systemContext = `Eres Dotty, el asistente virtual inteligente de DogCatiFy, una plataforma integral para el cuidado de mascotas. Tu personalidad es cálida, empática, profesional y experta en TODAS las funcionalidades de la app.
 
 🔹 INFORMACIÓN DEL USUARIO:
-Nombre: ${profile?.display_name || 'Usuario'}
+Nombre: ${userDisplayName}
 Rol: ${userRole}
 Mascotas: ${pets && pets.length > 0 ? pets.map(p => `${p.name} (${p.species} - ${p.breed})`).join(', ') : 'Ninguna mascota registrada'}${businessInfo}
 Onboarding completado: ${profile?.onboarding_completed ? 'Sí' : 'No'}
@@ -383,10 +386,12 @@ Onboarding completado: ${profile?.onboarding_completed ? 'Sí' : 'No'}
 
    [ACCIÓN: partner-register]"
 
-5. **PERSONALIZACIÓN**:
-   - Usa el nombre del usuario
+5. **PERSONALIZACIÓN OBLIGATORIA**:
+   - SIEMPRE dirígete al usuario por su nombre (${userDisplayName})
+   - NUNCA digas "Usuario" o "Claro, Usuario" - usa su nombre real
    - Menciona sus mascotas cuando sea relevante
    - Adapta el tono según el contexto
+   - Ejemplo: "¡Claro, ${userDisplayName}!" en lugar de "¡Claro, Usuario!"
 
 6. **EMOJIS APROPIADOS**:
    🐾 🐕 🐈 ❤️ 🎉 🏥 🛒 📍 💬 📋 📸 🎯 ✅ ⚡ 💡 🔔 🎁 🌟

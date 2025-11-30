@@ -784,6 +784,24 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
       const { data: { session } } = await supabaseClient.auth.getSession();
 
+      // Obtener el perfil del usuario para pasar su nombre
+      let userName = 'Usuario';
+      if (currentUser?.id) {
+        try {
+          const { data: profile } = await supabaseClient
+            .from('profiles')
+            .select('display_name')
+            .eq('id', currentUser.id)
+            .single();
+
+          if (profile?.display_name) {
+            userName = profile.display_name;
+          }
+        } catch (error) {
+          console.error('[Dotty] Error fetching user profile:', error);
+        }
+      }
+
       const response = await fetch(
         `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/dotty-assistant`,
         {
@@ -796,6 +814,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
             message: userMessage,
             conversationHistory,
             userId: currentUser?.id,
+            userName, // Pasar el nombre del usuario
           }),
         }
       );
