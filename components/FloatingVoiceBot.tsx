@@ -16,7 +16,7 @@ import {
 import { X, Send, PawPrint, CircleHelp as HelpCircle, ChevronRight, Sparkles, ArrowLeft } from 'lucide-react-native';
 import { supabaseClient } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { router } from 'expo-router';
+import { router, usePathname, useSegments } from 'expo-router';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -72,6 +72,9 @@ const quickActions = [
 
 export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, showWelcome = false }) => {
   const { currentUser } = useAuth();
+  const pathname = usePathname();
+  const segments = useSegments();
+
   const [isExpanded, setIsExpanded] = useState(showWelcome);
   const [isProcessing, setIsProcessing] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -90,6 +93,43 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const isDragging = useRef(false);
   const startPosition = useRef({ x: 0, y: 0 });
   const gestureStartTime = useRef(0);
+
+  // Función para determinar si Dotty debe mostrarse según la ruta actual
+  const shouldShowDotty = (): boolean => {
+    if (!currentUser) return false;
+    if (!isDottyEnabled) return false;
+
+    // Rutas donde NO debe aparecer Dotty
+    const hiddenRoutes = [
+      'auth/login',
+      'auth/register',
+      'auth/forgot-password',
+      'auth/reset-password',
+      'auth/biometric-setup',
+      'auth/confirm',
+      'auth/callback',
+    ];
+
+    // Verificar si estamos en una ruta oculta
+    const currentPath = pathname || '';
+    const isHiddenRoute = hiddenRoutes.some(route => currentPath.includes(route));
+
+    // También verificar usando segments
+    const firstSegment = segments?.[0];
+    const isAuthRoute = firstSegment === 'auth';
+
+    console.log('[Dotty] Route check:', {
+      pathname: currentPath,
+      segments,
+      firstSegment,
+      isAuthRoute,
+      isHiddenRoute,
+      shouldShow: !isAuthRoute && !isHiddenRoute
+    });
+
+    // Ocultar en rutas de autenticación
+    return !isAuthRoute && !isHiddenRoute;
+  };
 
   useEffect(() => {
     checkDottyStatus();
@@ -710,10 +750,14 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     return () => expandAnim.removeListener(listenerId);
   }, []);
 
-  if (!isDottyEnabled || !currentUser) return null;
+  // Verificar si Dotty debe mostrarse
+  if (!shouldShowDotty()) {
+    console.log('[Dotty] Not showing - check failed');
+    return null;
+  }
 
   // Log cuando el componente se renderiza
-  console.log('[Dotty] Render - isExpanded:', isExpanded, 'isDottyEnabled:', isDottyEnabled);
+  console.log('[Dotty] Render - isExpanded:', isExpanded, 'isDottyEnabled:', isDottyEnabled, 'pathname:', pathname);
 
   return (
     <>
