@@ -395,9 +395,25 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     if (messages.length > 0 && scrollViewRef.current) {
       setTimeout(() => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      }, 300);
     }
   }, [messages]);
+
+  // Scroll al final cuando aparece el teclado
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      () => {
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+    };
+  }, []);
 
   const sendWelcomeMessage = async () => {
     const welcomeMessage: Message = {
@@ -858,12 +874,18 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
               </TouchableOpacity>
             </View>
 
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={{ flex: 1 }}
+              keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+            >
             <ScrollView
               ref={scrollViewRef}
               style={styles.messagesContainer}
               contentContainerStyle={styles.messagesContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
             >
               {messages.map((message) => (
                 <View key={message.id}>
@@ -948,6 +970,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                 </View>
               )}
             </ScrollView>
+            </KeyboardAvoidingView>
 
             <View style={styles.inputContainer}>
               <View style={styles.inputWrapper}>
@@ -1110,7 +1133,7 @@ const styles = StyleSheet.create({
   },
   messagesContent: {
     padding: 20,
-    paddingBottom: 24,
+    paddingBottom: 120,
     flexGrow: 1,
   },
   messageBubble: {
