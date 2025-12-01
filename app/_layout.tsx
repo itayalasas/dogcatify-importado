@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
@@ -10,8 +10,9 @@ import { NotificationProvider } from '../contexts/NotificationContext';
 import { ConfigProvider } from '../contexts/ConfigContext';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
-import { Platform, Alert, View } from 'react-native';
-import { supabaseClient } from '@/lib/supabase';
+import { Platform, Alert, View, Text, ActivityIndicator } from 'react-native';
+import { supabaseClient, initializeSupabase, setupAuthListeners } from '@/lib/supabase';
+import { envConfig } from '@/utils/envConfig';
 import { SafeAppWrapper } from '../components/SafeAppWrapper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { FloatingVoiceBot } from '../components/FloatingVoiceBot';
@@ -49,10 +50,56 @@ global.onunhandledrejection = (event: any) => {
 
 function RootLayout() {
   useFrameworkReady();
+  const [configReady, setConfigReady] = useState(false);
+  const [configError, setConfigError] = useState<string | null>(null);
 
+  // Initialize environment configuration and Supabase
+  useEffect(() => {
+    let mounted = true;
+
+    const initializeApp = async () => {
+      try {
+        console.log('[App] 🚀 Initializing application...');
+
+        // 1. Inicializar configuración de entorno
+        console.log('[App] 📦 Loading environment configuration...');
+        await envConfig.initialize();
+
+        if (!mounted) return;
+
+        // 2. Inicializar Supabase con la configuración cargada
+        console.log('[App] 🔌 Initializing Supabase client...');
+        await initializeSupabase();
+
+        if (!mounted) return;
+
+        // 3. Configurar listeners de auth
+        console.log('[App] 🔐 Setting up auth listeners...');
+        setupAuthListeners();
+
+        if (!mounted) return;
+
+        console.log('[App] ✅ Application initialized successfully');
+        setConfigReady(true);
+      } catch (error: any) {
+        console.error('[App] ❌ Failed to initialize application:', error);
+        if (mounted) {
+          setConfigError(error.message || 'Failed to initialize application');
+        }
+      }
+    };
+
+    initializeApp();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Prevent Supabase from showing automatic modals
   useEffect(() => {
+    if (!configReady) return;
+
     try {
       const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
         (event, session) => {
@@ -68,7 +115,7 @@ function RootLayout() {
     } catch (error) {
       console.error('Error setting up auth listener:', error);
     }
-  }, []);
+  }, [configReady]);
 
   // Handle deep links and universal links
   useEffect(() => {
@@ -155,6 +202,35 @@ function RootLayout() {
 
   // Determine initial route based on platform
   const initialRouteName = Platform.OS === 'web' ? 'web-info' : '(tabs)';
+
+  // Show loading screen while configuration is being loaded
+  if (!configReady && !configError) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2D6A6F' }}>
+        <ActivityIndicator size="large" color="#fff" />
+        <Text style={{ color: '#fff', marginTop: 16, fontSize: 16 }}>
+          Cargando configuración...
+        </Text>
+      </View>
+    );
+  }
+
+  // Show error screen if configuration failed
+  if (configError) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f44336', padding: 20 }}>
+        <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>
+          Error de Configuración
+        </Text>
+        <Text style={{ color: '#fff', fontSize: 14, textAlign: 'center', marginBottom: 24 }}>
+          {configError}
+        </Text>
+        <Text style={{ color: '#fff', fontSize: 12, textAlign: 'center' }}>
+          Por favor, reinicia la aplicación
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

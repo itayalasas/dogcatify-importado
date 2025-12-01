@@ -30,7 +30,11 @@
     "experiments": { "typedRoutes": true },
     "extra": {
       "router": { "origin": false },
-      "eas": { "projectId": "0618d9ae-6714-46bb-adce-f4ee57fff324" }
+      "eas": { "projectId": "0618d9ae-6714-46bb-adce-f4ee57fff324" },
+      "apiGateway": {
+        "url": "https://api.flowbridge.site/functions/v1/api-gateway/a3db1463-6c83-4eb0-bc6e-9ad7db89ea8e",
+        "apiKey": "pub_4382560178cd0284e641e30eef20da87e3abde25937764c2d52e98b77a4d3f57"
+      }
     },
     "ios": {
       "supportsTablet": true,

@@ -1,6 +1,7 @@
 import { supabaseClient } from '@/lib/supabase';
 import { logger } from '@/utils/datadogLogger';
 import { Linking, Platform } from 'react-native';
+import { envConfig } from './envConfig';
 
 /**
  * Mercado Pago OAuth2 Marketplace Implementation
@@ -8,7 +9,7 @@ import { Linking, Platform } from 'react-native';
  */
 
 // Mercado Pago OAuth2 Configuration
-const MP_BASE_URL = process.env.EXPO_PUBLIC_MERCADOPAGO_BASE_URL || 'https://api.mercadopago.com';
+const MP_BASE_URL = envConfig.getOrDefault('EXPO_PUBLIC_MERCADOPAGO_BASE_URL', 'https://api.mercadopago.com');
 const MP_REDIRECT_URI = 'https://dogcatify.com/auth/mercadopago/callback';
 
 // Type Definitions
@@ -408,7 +409,7 @@ export const createPaymentPreference = async (
       },
       auto_return: 'approved',
       external_reference: orderId,
-      notification_url: `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/mercadopago-webhook`,
+      notification_url: `${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/functions/v1/mercadopago-webhook`,
       marketplace: 'DogCatiFy',
       statement_descriptor: 'DOGCATIFY'
     };
@@ -804,7 +805,7 @@ export const createUnifiedPaymentPreference = async (
       },
       auto_return: 'approved',
       external_reference: orderId,
-      notification_url: `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/mercadopago-webhook`,
+      notification_url: `${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/functions/v1/mercadopago-webhook`,
       statement_descriptor: 'DOGCATIFY'
     };
 
@@ -1257,7 +1258,7 @@ export const createServicePaymentPreference = async (
       },
       auto_return: 'approved',
       external_reference: orderId,
-      notification_url: `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/mercadopago-webhook`,
+      notification_url: `${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/functions/v1/mercadopago-webhook`,
       statement_descriptor: 'DOGCATIFY',
       metadata: {
         order_type: 'service_booking',
@@ -1893,7 +1894,7 @@ export const createSimplePaymentPreference = async (
           pending: `dogcatify://payment/pending?external_reference=${paymentData.externalReference}`
         },
         auto_return: 'approved',
-        notification_url: `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/mercadopago-webhook`,
+        notification_url: `${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/functions/v1/mercadopago-webhook`,
         statement_descriptor: 'DOGCATIFY',
         payment_methods: {
           excluded_payment_methods: [],
@@ -2039,7 +2040,7 @@ export const regeneratePaymentLink = async (orderId: string): Promise<{
         },
         auto_return: 'approved',
         external_reference: orderId,
-        notification_url: `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/mercadopago-webhook`,
+        notification_url: `${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/functions/v1/mercadopago-webhook`,
         statement_descriptor: 'DOGCATIFY'
       };
 
