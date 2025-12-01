@@ -740,6 +740,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           console.log('AuthContext - Login successful, setting user:', user.email);
           setCurrentUser(user);
+
+          // IMPORTANTE: Intentar registrar notificaciones push automáticamente después del login
+          // Esto se hace de forma asíncrona para no bloquear el flujo de login
+          setTimeout(async () => {
+            try {
+              console.log('🔔 Auto-registering push notifications after login...');
+              // La función validateAndUpdateTokens se ejecutará automáticamente
+              // cuando NotificationContext detecte que currentUser cambió
+            } catch (notifError) {
+              console.log('⚠️ Could not auto-register notifications:', notifError);
+              // No bloquear el login si falla el registro de notificaciones
+            }
+          }, 1000);
+
           return user;
         } catch (error: any) {
           // Handle case where user exists in auth.users but not in profiles
