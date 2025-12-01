@@ -65,7 +65,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     if (currentUser) {
-      console.log('✅ Usuario logueado, validando tokens...');
+      console.log('✅ Usuario logueado, validando y registrando tokens FCM...');
+      // Ejecutar validación y actualización de tokens
       validateAndUpdateTokens();
     }
   }, [currentUser]);
@@ -532,9 +533,24 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
       }
 
+      // IMPORTANTE: Si el usuario no tiene tokens, intentamos obtenerlos
       if (!storedPushToken && !storedFcmToken && (currentExpoToken || currentFcmToken)) {
         console.log('📝 Usuario no tiene tokens registrados, actualizando...');
         needsUpdate = true;
+      }
+
+      // Si el usuario NO tiene tokens almacenados y NO pudimos obtener tokens actuales,
+      // intentamos registrar las notificaciones por primera vez
+      if (!storedPushToken && !storedFcmToken && !currentExpoToken && !currentFcmToken) {
+        console.log('⚠️ Usuario sin tokens. Intentando registro completo de notificaciones...');
+        try {
+          // Intentar registro completo (esto pedirá permisos si no están otorgados)
+          await registerForPushNotifications();
+          return; // Salir porque registerForPushNotifications ya actualiza la DB
+        } catch (registerError) {
+          console.error('❌ No se pudo registrar notificaciones:', registerError);
+          return;
+        }
       }
 
       if (needsUpdate) {
