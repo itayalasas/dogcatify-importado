@@ -56,6 +56,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       if (isExpoGo) {
         console.log('⚠️ Running in Expo Go - Notifications require native build');
         console.log('💡 Run: eas build --platform android --profile preview');
+        console.log('');
+        console.log('📱 PARA PROBAR NOTIFICACIONES:');
+        console.log('   1. Crear development build: eas build --profile development --platform android');
+        console.log('   2. Instalar la APK en tu dispositivo');
+        console.log('   3. Los FCM tokens se generarán automáticamente al iniciar sesión');
+        console.log('');
       } else if (Platform.OS === 'web') {
         console.log('⚠️ Running on web - Notifications not available');
       } else {
