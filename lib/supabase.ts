@@ -2,16 +2,40 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 import { envConfig } from '@/utils/envConfig';
 
+// Global state que sobrevive al Hot Reload de Metro
+// @ts-ignore
+if (!global.__supabaseClient) {
+  // @ts-ignore
+  global.__supabaseClient = null;
+}
+
 // Supabase configuration - Ahora se carga dinámicamente
 let supabaseUrl: string | undefined;
 let supabaseAnonKey: string | undefined;
-let supabaseClientInstance: SupabaseClient | null = null;
+
+// Usa el global en lugar de una variable local
+function getSupabaseClientInstance(): SupabaseClient | null {
+  // @ts-ignore
+  return global.__supabaseClient;
+}
+
+function setSupabaseClientInstance(client: SupabaseClient | null): void {
+  // @ts-ignore
+  global.__supabaseClient = client;
+}
 
 /**
  * Inicializa el cliente de Supabase con la configuración del API Gateway
  */
 export const initializeSupabase = async (): Promise<void> => {
   try {
+    // Si ya existe un cliente, reutilizarlo
+    const existingClient = getSupabaseClientInstance();
+    if (existingClient) {
+      console.log('[Supabase] ♻️ Reusing existing Supabase client (Hot Reload)');
+      return;
+    }
+
     console.log('[Supabase] 🚀 Initializing Supabase client...');
 
     // Asegurarse de que envConfig esté inicializado
@@ -40,7 +64,7 @@ export const initializeSupabase = async (): Promise<void> => {
     console.log('[Supabase] 🔑 Anon Key (first 50 chars):', supabaseAnonKey.substring(0, 50) + '...');
 
     // Crear cliente de Supabase
-    supabaseClientInstance = createClient(supabaseUrl, supabaseAnonKey, {
+    const newClient = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         autoRefreshToken: true,
         persistSession: true,
@@ -54,6 +78,7 @@ export const initializeSupabase = async (): Promise<void> => {
       },
     });
 
+    setSupabaseClientInstance(newClient);
     console.log('[Supabase] ✅ Supabase client initialized successfully');
   } catch (error) {
     console.error('[Supabase] ❌ Failed to initialize Supabase client:', error);
@@ -66,20 +91,22 @@ export const initializeSupabase = async (): Promise<void> => {
  * IMPORTANTE: Debe llamarse después de initializeSupabase()
  */
 export const getSupabaseClient = (): SupabaseClient => {
-  if (!supabaseClientInstance) {
+  const client = getSupabaseClientInstance();
+  if (!client) {
     throw new Error('Supabase client not initialized. Call initializeSupabase() first.');
   }
-  return supabaseClientInstance;
+  return client;
 };
 
 // Export para compatibilidad con código existente
 export const supabaseClient = new Proxy({} as SupabaseClient, {
   get(target, prop) {
-    if (!supabaseClientInstance) {
+    const client = getSupabaseClientInstance();
+    if (!client) {
       console.warn('[Supabase] ⚠️ Accessing supabaseClient before initialization');
       throw new Error('Supabase client not initialized. Call initializeSupabase() first.');
     }
-    return (supabaseClientInstance as any)[prop];
+    return (client as any)[prop];
   }
 });
 
@@ -87,12 +114,13 @@ export const supabaseClient = new Proxy({} as SupabaseClient, {
  * Configura los listeners de auth después de inicializar Supabase
  */
 export const setupAuthListeners = () => {
-  if (!supabaseClientInstance) {
+  const client = getSupabaseClientInstance();
+  if (!client) {
     console.warn('[Supabase] ⚠️ Cannot setup auth listeners before initialization');
     return;
   }
 
-  supabaseClientInstance.auth.onAuthStateChange((event, session) => {
+  client.auth.onAuthStateChange((event, session) => {
     if (event === 'TOKEN_REFRESHED') {
       console.log('Token refreshed automatically by Supabase');
     } else if (event === 'SIGNED_OUT') {
