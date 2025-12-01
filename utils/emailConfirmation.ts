@@ -1,10 +1,11 @@
 import { supabaseClient } from '../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
+import { envConfig } from './envConfig';
 
-// Get Supabase configuration
-const SUPABASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+// Get Supabase configuration from envConfig
+const SUPABASE_URL = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+const SUPABASE_ANON_KEY = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 
 // Email API Configuration (using Supabase edge function)
 const EMAIL_API_URL = `${SUPABASE_URL}/functions/v1/send-email`;
@@ -25,8 +26,8 @@ export interface EmailConfirmationToken {
  * Get service role client for admin operations
  */
 const getServiceClient = () => {
-  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-  const supabaseServiceKey = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+  const supabaseServiceKey = envConfig.get('EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY');
   
   if (!supabaseServiceKey) {
     console.warn('Service role key not available, using regular client');
@@ -281,12 +282,7 @@ export const completeUserRegistration = async (
  * Generate confirmation URL
  */
 export const generateConfirmationUrl = (token: string, type: 'signup' | 'password_reset' = 'signup'): string => {
-  const baseUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_APP_DOMAIN ||
-                  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_APP_DOMAIN) ||
-                  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_APP_URL) ||
-                  Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_URL?.replace('/v1', '') ||
-                  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SUPABASE_URL?.replace('/v1', '')) ||
-                  'https://app-dogcatify.netlify.app';
+  const baseUrl = envConfig.getOrDefault('EXPO_PUBLIC_APP_DOMAIN', 'https://app-dogcatify.netlify.app');
 
   console.log('🔗 Generating confirmation URL with base:', baseUrl);
   console.log('🔗 Token type:', type);

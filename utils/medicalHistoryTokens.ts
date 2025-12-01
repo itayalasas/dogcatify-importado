@@ -1,4 +1,5 @@
 import { supabaseClient } from '../lib/supabase';
+import { envConfig } from './envConfig';
 
 export interface MedicalHistoryToken {
   id: string;
@@ -223,9 +224,7 @@ export const generateSecureMedicalHistoryUrl = async (
       return { success: false, error: tokenResult.error };
     }
 
-    const appDomain = process.env.EXPO_PUBLIC_APP_DOMAIN || 
-                     process.env.EXPO_PUBLIC_APP_URL || 
-                     'https://app-dogcatify.netlify.app';
+    const appDomain = envConfig.getOrDefault('EXPO_PUBLIC_APP_DOMAIN', 'https://app-dogcatify.netlify.app');
     const secureUrl = `${appDomain}/medical-history/${petId}?token=${tokenResult.token}`;
 
     return {

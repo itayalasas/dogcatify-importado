@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import Constants from 'expo-constants';
+import { envConfig } from './envConfig';
 
 let cachedConfig: Record<string, any> | null = null;
 let lastFetchTime = 0;
@@ -16,15 +17,9 @@ const DEFAULT_CONFIG = {
 };
 
 const fallbackConfig = {
-  email_api_url: Constants.expoConfig?.extra?.EXPO_PUBLIC_EMAIL_API_URL ||
-                 process.env.EXPO_PUBLIC_EMAIL_API_URL ||
-                 DEFAULT_CONFIG.email_api_url,
-  email_api_key: Constants.expoConfig?.extra?.EXPO_PUBLIC_EMAIL_API_KEY ||
-                 process.env.EXPO_PUBLIC_EMAIL_API_KEY ||
-                 DEFAULT_CONFIG.email_api_key,
-  mercadopago_public_key: Constants.expoConfig?.extra?.EXPO_PUBLIC_MERCADOPAGO_PUBLIC_KEY ||
-                          process.env.EXPO_PUBLIC_MERCADOPAGO_PUBLIC_KEY ||
-                          DEFAULT_CONFIG.mercadopago_public_key,
+  email_api_url: envConfig.getOrDefault('EXPO_PUBLIC_EMAIL_API_URL', DEFAULT_CONFIG.email_api_url),
+  email_api_key: envConfig.getOrDefault('EXPO_PUBLIC_EMAIL_API_KEY', DEFAULT_CONFIG.email_api_key),
+  mercadopago_public_key: envConfig.getOrDefault('EXPO_PUBLIC_MERCADOPAGO_PUBLIC_KEY', DEFAULT_CONFIG.mercadopago_public_key),
   app_name: DEFAULT_CONFIG.app_name,
   support_email: DEFAULT_CONFIG.support_email,
   max_file_upload_size: DEFAULT_CONFIG.max_file_upload_size,

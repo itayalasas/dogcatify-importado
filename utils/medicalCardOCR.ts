@@ -1,4 +1,5 @@
 import * as FileSystem from 'expo-file-system';
+import { envConfig } from './envConfig';
 
 /**
  * Extracted medical record information
@@ -74,9 +75,9 @@ export const extractMedicalRecordsFromImage = async (
       throw new Error('La imagen está vacía o no se pudo leer');
     }
 
-    // Get Supabase URL and anon key from environment
-    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-    const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+    // Get Supabase URL and anon key from envConfig
+    const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+    const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 
     if (!supabaseUrl || !supabaseAnonKey) {
       throw new Error('Supabase configuration not found');
