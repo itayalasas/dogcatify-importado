@@ -664,19 +664,6 @@ export default function Profile() {
             </View>
             <ChevronRight size={16} color="#6B7280" />
           </TouchableOpacity>
-
-          {partnerProfile && (
-            <TouchableOpacity 
-              style={styles.menuOption} 
-              onPress={() => router.push('/profile/mercadopago-config')}
-            >
-              <View style={styles.menuOptionLeft}>
-                <CreditCard size={20} color="#6B7280" />
-                <Text style={styles.menuOptionText}>Configurar Mercado Pago</Text>
-              </View>
-              <ChevronRight size={16} color="#6B7280" />
-            </TouchableOpacity>
-          )}
         </Card>
 
         {/* Settings */}
