@@ -12,6 +12,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { supabaseClient } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Card } from '../../../components/ui/Card';
+import { envConfig } from '../../../utils/envConfig';
 import { Button } from '../../../components/ui/Button';
 import { ArrowLeft, Save, Sparkles } from 'lucide-react-native';
 
@@ -228,7 +229,7 @@ export default function PetBehaviorAssessment() {
       }
 
       const response = await fetch(
-        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/generate-behavior-recommendations`,
+        `${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/functions/v1/generate-behavior-recommendations`,
         {
           method: 'POST',
           headers: {

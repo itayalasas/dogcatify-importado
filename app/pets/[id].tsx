@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { extractMedicalRecordsFromImage, ExtractedMedicalRecord } from '../../utils/medicalCardOCR';
+import { envConfig } from '../../utils/envConfig';
 
 export default function PetDetail() {
   const { id, refresh, activeTab: initialTab, permissionLevel } = useLocalSearchParams<{
@@ -269,7 +270,7 @@ export default function PetDetail() {
           if (processedImages.length > 0) {
             processedImages = processedImages.map((img: string) => {
               if (img && img.startsWith('/storage/v1/object/public/')) {
-                const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+                const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL') || '';
                 return `${supabaseUrl}${img}`;
               }
               return img;
@@ -844,7 +845,7 @@ export default function PetDetail() {
       }
       
       // Create URL with token parameter
-      const baseUrl = process.env.EXPO_PUBLIC_APP_DOMAIN || process.env.EXPO_PUBLIC_APP_URL || 'https://app-dogcatify.netlify.app';
+      const baseUrl = envConfig.getOrDefault('EXPO_PUBLIC_APP_DOMAIN', 'https://app-dogcatify.netlify.app');
       const shareUrl = `${baseUrl}/medical-history/${pet.id}?token=${tokenResult.token}`;
       const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(shareUrl)}&format=png&margin=20&ecc=M&color=2D6A6F&bgcolor=FFFFFF`;
       const shortUrl = `dogcatify.com/vet/${tokenResult.token.slice(-8)}`;
@@ -1581,7 +1582,7 @@ export default function PetDetail() {
     // Ensure the image URL is complete
     let breedImageUrl = breedInfoData.image_link;
     if (breedImageUrl && breedImageUrl.startsWith('/storage/v1/object/public/')) {
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+      const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL') || '';
       breedImageUrl = `${supabaseUrl}${breedImageUrl}`;
     }
     

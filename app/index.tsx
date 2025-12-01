@@ -8,6 +8,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { NotificationPermissionPrompt } from '../components/NotificationPermissionPrompt';
 import { supabaseClient } from '../lib/supabase';
+import { envConfig } from '../utils/envConfig';
 
 // Componente wrapper para manejar las vistas de promociones
 const PromotionWrapper = ({ promotion, onPress, onLike }: { promotion: any; onPress: () => void; onLike: (promotionId: string) => void }) => {
@@ -322,8 +323,8 @@ export default function Home() {
         
         console.log('Has access token:', !!accessToken);
         
-        const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-        const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+        const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+        const supabaseKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
         
         const headers = {
           'Content-Type': 'application/json',

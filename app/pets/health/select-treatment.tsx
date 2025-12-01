@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Search, Pill } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { supabaseClient } from '../../../lib/supabase';
+import { envConfig } from '../../../utils/envConfig';
 
 export default function SelectTreatment() {
   const { petId, conditionId, species, illnessName, ageInMonths, weight, returnPath, currentValue, currentCondition, currentSelectedCondition, currentVeterinarian, currentNotes } = useLocalSearchParams<{
@@ -67,8 +68,8 @@ export default function SelectTreatment() {
         }
 
         console.log('No cache found, generating with AI...');
-        const supabaseUrl = Deno.env ? Deno.env.get('SUPABASE_URL') : process.env.EXPO_PUBLIC_SUPABASE_URL;
-        const supabaseAnonKey = Deno.env ? Deno.env.get('SUPABASE_ANON_KEY') : process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+        const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+        const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 
         const response = await fetch(
           `${supabaseUrl}/functions/v1/generate-treatment-recommendations`,

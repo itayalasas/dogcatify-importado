@@ -6,6 +6,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { supabaseClient } from '../../lib/supabase';
+import { envConfig } from '../../utils/envConfig';
 
 export default function ResetPasswordScreen() {
   const params = useLocalSearchParams();
@@ -115,18 +116,18 @@ export default function ResetPasswordScreen() {
       console.log('Calling reset-password function...');
       
       // Call our Edge Function to reset password securely
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
       console.log('Supabase URL:', supabaseUrl);
-      
+
       if (!supabaseUrl) {
         throw new Error('Supabase URL not configured');
       }
-      
+
       const response = await fetch(`${supabaseUrl}/functions/v1/reset-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+          'Authorization': `Bearer ${envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY')}`,
         },
         body: JSON.stringify({
           userId,

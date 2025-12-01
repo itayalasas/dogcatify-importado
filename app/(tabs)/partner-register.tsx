@@ -13,6 +13,7 @@ import { Modal, TextInput } from 'react-native';
 import { supabaseClient } from '../../lib/supabase';
 import { NotificationService } from '@/utils/notifications';
 import { PartnerServiceAgreement } from '../../components/PartnerServiceAgreement';
+import { envConfig } from '../../utils/envConfig';
 
 const replicateMercadoPagoConfig = async (userId: string) => {
   try {
@@ -229,7 +230,7 @@ export default function PartnerRegister() {
 
     try {
       const query = `${calle.trim()}+${numero.trim()}+${selectedDepartment.name}+${selectedCountry.name}`;
-      const nominatimBaseUrl = process.env.EXPO_PUBLIC_NOMINATIM_BASE_URL || 'https://nominatim.openstreetmap.org';
+      const nominatimBaseUrl = envConfig.getOrDefault('EXPO_PUBLIC_NOMINATIM_BASE_URL', 'https://nominatim.openstreetmap.org');
       const searchUrl = `${nominatimBaseUrl}/search?q=${query}&format=json&limit=4&addressdetails=1`;
       
       const response = await fetch(searchUrl, {

@@ -4,6 +4,7 @@ import { TrendingUp, Users, DollarSign, Package, Calendar, Eye, Clock } from 'lu
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { envConfig } from '../../utils/envConfig';
 
 export default function AdminAnalytics() {
   const { currentUser } = useAuth();
@@ -138,10 +139,10 @@ export default function AdminAnalytics() {
         console.log('Trying admin override query...');
         try {
           // Use a more direct approach for admin
-          const adminResult = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/rest/v1/orders?select=*`, {
+          const adminResult = await fetch(`${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/rest/v1/orders?select=*`, {
             headers: {
-              'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
-              'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''}`,
+              'apikey': envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY') || '',
+              'Authorization': `Bearer ${envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY') || ''}`,
               'Content-Type': 'application/json'
             }
           });
