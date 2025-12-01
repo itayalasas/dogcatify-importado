@@ -6,6 +6,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { envConfig } from '../../utils/envConfig';
 
 export default function DeleteAccount() {
   const { currentUser, logout } = useAuth();
@@ -339,12 +340,12 @@ export default function DeleteAccount() {
       
       try {
         // Try to delete from auth.users table
-        const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+        const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
         const response = await fetch(`${supabaseUrl}/functions/v1/delete-user`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+            'Authorization': `Bearer ${envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY')}`,
           },
           body: JSON.stringify({
             userId: currentUser.id

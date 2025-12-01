@@ -10,6 +10,7 @@ import * as FileSystem from 'expo-file-system';
 import { supabaseClient } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { detectPetInVideo, validateVideoDuration } from '../../../utils/petDetection';
+import { envConfig } from '../../../utils/envConfig';
 import { Video } from 'expo-av';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
@@ -158,7 +159,7 @@ export default function AlbumDetail() {
 
             // Process URL if it's a relative path
             if (actualUrl && actualUrl.startsWith('/storage/v1/object/public/')) {
-              const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+              const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL') || '';
               const fullUrl = `${supabaseUrl}${actualUrl}`;
               return isVideo ? `VIDEO:${fullUrl}` : fullUrl;
             }

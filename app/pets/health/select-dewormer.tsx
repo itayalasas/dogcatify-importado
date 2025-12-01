@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Search, Pill, Clock, Shield, TriangleAlert as AlertTriangle } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { supabaseClient } from '../../../lib/supabase';
+import { envConfig } from '../../../utils/envConfig';
 
 export default function SelectDewormer() {
   const { petId, species, breed, ageInMonths, weight, returnPath, currentValue, currentVeterinarian, currentNotes, currentNextDueDate } = useLocalSearchParams<{
@@ -94,8 +95,8 @@ export default function SelectDewormer() {
   const fetchFromAI = async (petBreed: string, petAge: number, petWeight?: number) => {
     try {
       const { data: { session } } = await supabaseClient.auth.getSession();
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+      const anonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 
       const response = await fetch(
         `${supabaseUrl}/functions/v1/generate-dewormer-recommendations`,

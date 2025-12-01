@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { supabaseClient } from '../../lib/supabase';
 import { verifyMedicalHistoryToken } from '../../utils/medicalHistoryTokens';
+import { envConfig } from '../../utils/envConfig';
 
 interface MedicalRecord {
   id: string;
@@ -378,8 +379,8 @@ export default function MedicalHistoryShared() {
       console.log('Loading medical history for web view...');
       
       // Call the Edge Function directly for web access
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+      const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
       const apiUrl = `${supabaseUrl}/functions/v1/medical-history/${id}${token ? `?token=${token}` : ''}`;
       
       console.log('Fetching from Edge Function:', apiUrl);
@@ -491,8 +492,8 @@ export default function MedicalHistoryShared() {
         // Try to fetch data via Edge Function first
         try {
           console.log('=== CALLING EDGE FUNCTION FOR ALL DATA ===');
-          const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-          const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+          const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+          const supabaseKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
           
           const edgeFunctionUrl = `${supabaseUrl}/functions/v1/medical-history-data/${id}?token=${token}`;
           console.log('Edge Function URL:', edgeFunctionUrl);
@@ -667,12 +668,12 @@ export default function MedicalHistoryShared() {
       };
 
       // Call Edge Function to save record
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
       const response = await fetch(`${supabaseUrl}/functions/v1/save-medical-record`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+          'Authorization': `Bearer ${envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY')}`,
         },
         body: JSON.stringify({
           recordData,
@@ -1026,8 +1027,8 @@ export default function MedicalHistoryShared() {
 
   const saveRecord = async (recordData: any) => {
     try {
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+      const supabaseKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
       
       const response = await fetch(`${supabaseUrl}/functions/v1/save-medical-record`, {
         method: 'POST',

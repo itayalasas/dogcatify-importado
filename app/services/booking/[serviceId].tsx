@@ -10,6 +10,7 @@ import { LoadingScreen } from '../../../components/ui/LoadingScreen';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 import { createServiceBookingOrder, openMercadoPagoPayment, isTestEnvironment } from '../../../utils/mercadoPago';
+import { envConfig } from '../../../utils/envConfig';
 
 interface CardType {
   name: string;
@@ -659,8 +660,8 @@ export default function ServiceBooking() {
 
       // Enviar notificación al partner mediante Edge Function
       try {
-        const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-        const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+        const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+        const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 
         await fetch(`${supabaseUrl}/functions/v1/send-notification-fcm-v1`, {
           method: 'POST',

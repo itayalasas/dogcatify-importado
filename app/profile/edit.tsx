@@ -10,6 +10,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import * as ImagePicker from 'expo-image-picker';
 import { supabaseClient } from '../../lib/supabase';
 import { uploadImage } from '../../utils/imageUpload';
+import { envConfig } from '../../utils/envConfig';
 
 export default function EditProfile() {
   const { currentUser, updateCurrentUser } = useAuth();
@@ -207,7 +208,7 @@ export default function EditProfile() {
     try {
       // Construir la query de búsqueda
       const query = `${calle.trim()}+${numero.trim()}+${selectedDepartment.name}+${selectedCountry.name}`;
-      const nominatimBaseUrl = process.env.EXPO_PUBLIC_NOMINATIM_BASE_URL || 'https://nominatim.openstreetmap.org';
+      const nominatimBaseUrl = envConfig.getOrDefault('EXPO_PUBLIC_NOMINATIM_BASE_URL', 'https://nominatim.openstreetmap.org');
       const searchUrl = `${nominatimBaseUrl}/search?q=${query}&format=json&limit=4&addressdetails=1`;
       
       console.log('Geocoding query:', query);

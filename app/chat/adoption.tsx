@@ -5,6 +5,7 @@ import { ArrowLeft, Send, Phone, Heart } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { supabaseClient } from '../../lib/supabase';
+import { envConfig } from '../../utils/envConfig';
 
 interface ChatMessage {
   id: string;
@@ -188,12 +189,12 @@ export default function AdoptionChat() {
 
           if (profileData?.fcm_token) {
             // Use FCM v1 endpoint
-            const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+            const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
             const response = await fetch(`${supabaseUrl}/functions/v1/send-notification-fcm-v1`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+                'Authorization': `Bearer ${envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY')}`,
               },
               body: JSON.stringify({
                 fcmToken: profileData.fcm_token,

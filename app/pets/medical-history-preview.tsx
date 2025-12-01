@@ -5,6 +5,7 @@ import { ArrowLeft, Download, Share2, FileText, Printer } from 'lucide-react-nat
 import { WebView } from 'react-native-webview';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { envConfig } from '../../utils/envConfig';
 
 export default function MedicalHistoryPreview() {
   const { petId, petName, htmlContent } = useLocalSearchParams<{
@@ -50,8 +51,8 @@ export default function MedicalHistoryPreview() {
       params: {
         petId,
         petName,
-        qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`${process.env.EXPO_PUBLIC_APP_DOMAIN || process.env.EXPO_PUBLIC_APP_URL || 'https://app-dogcatify.netlify.app'}/medical-history/${petId}`)}&format=png&margin=20&ecc=M&color=2D6A6F&bgcolor=FFFFFF`,
-        shareUrl: `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/medical-history/${petId}`,
+        qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`${envConfig.getOrDefault('EXPO_PUBLIC_APP_DOMAIN', 'https://app-dogcatify.netlify.app')}/medical-history/${petId}`)}&format=png&margin=20&ecc=M&color=2D6A6F&bgcolor=FFFFFF`,
+        shareUrl: `${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/functions/v1/medical-history/${petId}`,
         shortUrl: `dogcatify.com/vet/${petId.slice(-8)}`
       }
     });

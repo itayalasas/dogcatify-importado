@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { router } from 'expo-router';
 import { Input } from '../../components/ui/Input';
 import { supabaseClient } from '../../lib/supabase';
+import { envConfig } from '../../utils/envConfig';
 
 export default function AdminSettings() {
   const { currentUser, logout } = useAuth();
@@ -313,8 +314,8 @@ export default function AdminSettings() {
   const sendTestEmail = async (email: string): Promise<{success: boolean, error?: string}> => {
     try {
       // Construir la URL de la función de Supabase
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'your-anon-key';
+      const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+      const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY') || 'your-anon-key';
       const apiUrl = `${supabaseUrl}/functions/v1/send-email`;
       
       // Preparar los datos del correo

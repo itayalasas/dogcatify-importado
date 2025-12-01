@@ -1401,7 +1401,7 @@ export const createMarketplacePayment = async (
       application_fee: commissionAmount, // Commission for marketplace
       collector_id: parseInt(partnerConfig.user_id), // Partner's MP user ID
       binary_mode: true,
-      notification_url: `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/mercadopago-webhook`
+      notification_url: `${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/functions/v1/mercadopago-webhook`
     };
 
     console.log('Creating marketplace payment:', {

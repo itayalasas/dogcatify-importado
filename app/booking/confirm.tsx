@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ActivityIndicator, Image } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { CheckCircle, XCircle, Calendar, Clock } from 'lucide-react-native';
 import { Button } from '../../components/ui/Button';
+import { envConfig } from '../../utils/envConfig';
 
 interface BookingData {
   order_id: string;
@@ -32,7 +33,7 @@ export default function ConfirmBooking() {
   const confirmBooking = async (tokenHash: string) => {
     try {
       const response = await fetch(
-        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/confirm-booking?token=${tokenHash}`,
+        `${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/functions/v1/confirm-booking?token=${tokenHash}`,
         {
           method: 'GET',
           headers: {
