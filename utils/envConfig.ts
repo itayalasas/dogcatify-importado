@@ -29,14 +29,30 @@ interface ApiGatewayResponse {
   updated_at: string;
 }
 
+// Global state que sobrevive al Hot Reload de Metro
+// @ts-ignore
+if (!global.__envConfig) {
+  // @ts-ignore
+  global.__envConfig = null;
+}
+// @ts-ignore
+if (!global.__envInitialized) {
+  // @ts-ignore
+  global.__envInitialized = false;
+}
+// @ts-ignore
+if (!global.__envLoading) {
+  // @ts-ignore
+  global.__envLoading = false;
+}
+
 class EnvConfigService {
   private static instance: EnvConfigService;
-  private config: EnvironmentVariables | null = null;
-  private loading: boolean = false;
-  private initialized: boolean = false;
-  private initPromise: Promise<void> | null = null;
 
-  private constructor() {}
+  private constructor() {
+    // @ts-ignore
+    console.log('[EnvConfig] 🏗️ Constructor - Global state initialized:', global.__envInitialized);
+  }
 
   public static getInstance(): EnvConfigService {
     if (!EnvConfigService.instance) {
@@ -44,6 +60,38 @@ class EnvConfigService {
     }
     return EnvConfigService.instance;
   }
+
+  private get config(): EnvironmentVariables | null {
+    // @ts-ignore
+    return global.__envConfig;
+  }
+
+  private set config(value: EnvironmentVariables | null) {
+    // @ts-ignore
+    global.__envConfig = value;
+  }
+
+  private get initialized(): boolean {
+    // @ts-ignore
+    return global.__envInitialized;
+  }
+
+  private set initialized(value: boolean) {
+    // @ts-ignore
+    global.__envInitialized = value;
+  }
+
+  private get loading(): boolean {
+    // @ts-ignore
+    return global.__envLoading;
+  }
+
+  private set loading(value: boolean) {
+    // @ts-ignore
+    global.__envLoading = value;
+  }
+
+  private initPromise: Promise<void> | null = null;
 
   /**
    * Inicializa la configuración cargándola desde el API Gateway
