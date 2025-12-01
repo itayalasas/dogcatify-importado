@@ -235,52 +235,69 @@ const getMarketplaceAccessToken = async (): Promise<string> => {
 
 /**
  * Get partner's Mercado Pago configuration
+ * UPDATED: Now uses the centralized admin Mercado Pago configuration
  */
 export const getPartnerMercadoPagoConfig = async (partnerId: string) => {
   try {
-    logger.debug('Getting MP config for partner', { partnerId });
-    
-    const { data, error } = await supabaseClient
+    logger.debug('Getting MP config for partner (using admin config)', { partnerId });
+
+    // 1. Get partner data for commission and business info
+    const { data: partnerData, error: partnerError } = await supabaseClient
       .from('partners')
-      .select('*')
+      .select('business_name, commission_percentage, iva_rate, iva_included_in_price')
       .eq('id', partnerId)
       .single();
 
-    if (error) throw error;
+    if (partnerError) throw partnerError;
 
-    logger.debug('Partner data found', { hasData: !!data });
+    logger.debug('Partner data found', {
+      business_name: partnerData?.business_name,
+      commission_percentage: partnerData?.commission_percentage
+    });
 
-    if (!data?.mercadopago_connected || !data?.mercadopago_config) {
-      logger.debug('Partner MP status', {
-        mercadopago_connected: data?.mercadopago_connected,
-        has_config: !!data?.mercadopago_config,
-        has_access_token: !!data?.mercadopago_config?.access_token
+    // 2. Get admin Mercado Pago configuration (centralized)
+    const { data: adminConfig, error: adminError } = await supabaseClient
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'mercadopago_config')
+      .single();
+
+    if (adminError || !adminConfig?.value) {
+      logger.error('Admin MP config not found', adminError as Error);
+      throw new Error('Configuración de pago inválida: La cuenta de Mercado Pago del administrador no está configurada');
+    }
+
+    // 3. Validate admin has MP configured
+    if (!adminConfig.value.is_connected || !adminConfig.value.access_token) {
+      logger.error('Admin MP not connected', {
+        is_connected: adminConfig.value.is_connected,
+        has_access_token: !!adminConfig.value.access_token
       });
-      throw new Error(`Partner "${data?.business_name || partnerId}" no tiene Mercado Pago configurado`);
+      throw new Error('Configuración de pago inválida: La cuenta de Mercado Pago del administrador no está conectada');
     }
 
-    // Verificar que tenga access_token
-    if (!data.mercadopago_config.access_token) {
-      throw new Error(`Partner "${data.business_name}" no tiene access_token configurado`);
-    }
-
+    // 4. Return combined configuration (admin MP credentials + partner business info)
     const returnConfig = {
-      ...data.mercadopago_config,
-      commission_percentage: data.commission_percentage || 5.0,
-      business_name: data.business_name,
-      iva_rate: data.iva_rate != null ? parseFloat(data.iva_rate.toString()) : 22.0,
-      iva_included_in_price: data.iva_included_in_price !== false,
-      // Para configuraciones manuales, usar el partner_id como user_id si no existe
-      user_id: data.mercadopago_config.user_id || data.mercadopago_config.account_id || partnerId
+      access_token: adminConfig.value.access_token,
+      public_key: adminConfig.value.public_key,
+      is_test_mode: adminConfig.value.is_test_mode || false,
+      is_oauth: false, // Admin config is always manual
+      connected_at: adminConfig.value.connected_at,
+      commission_percentage: partnerData.commission_percentage || 5.0,
+      business_name: partnerData.business_name,
+      iva_rate: partnerData.iva_rate != null ? parseFloat(partnerData.iva_rate.toString()) : 22.0,
+      iva_included_in_price: partnerData.iva_included_in_price !== false,
+      user_id: adminConfig.value.account_id || 'admin',
+      account_id: adminConfig.value.account_id
     };
 
-    logger.info('MP config returned', {
+    logger.info('MP config returned (using admin credentials)', {
       business_name: returnConfig.business_name,
       access_token_prefix: returnConfig.access_token?.substring(0, 12) + '...',
       public_key_prefix: returnConfig.public_key?.substring(0, 12) + '...',
       is_test_mode: returnConfig.is_test_mode,
-      is_oauth: returnConfig.is_oauth,
-      connected_at: returnConfig.connected_at
+      commission_percentage: returnConfig.commission_percentage,
+      source: 'admin_centralized'
     });
 
     return returnConfig;
