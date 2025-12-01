@@ -1,8 +1,9 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { logger } from './datadogLogger';
+import { envConfig } from './envConfig';
 
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+const SUPABASE_URL = envConfig.get('EXPO_PUBLIC_SUPABASE_URL') || '';
+const SUPABASE_ANON_KEY = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY') || '';
 
 /**
  * Cliente de Supabase con tracking automático en Datadog

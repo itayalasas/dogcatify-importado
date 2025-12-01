@@ -1,3 +1,5 @@
+import { envConfig } from './envConfig';
+
 /**
  * Generate QR code for medical history sharing
  */
@@ -36,9 +38,7 @@ export const generateVeterinaryQRCode = async (
  * Create shareable medical history URL for veterinarians using Edge Function
  */
 export const createVeterinaryShareUrl = (petId: string, token?: string): string => {
-  const appDomain = process.env.EXPO_PUBLIC_APP_DOMAIN || 
-                   process.env.EXPO_PUBLIC_APP_URL || 
-                   'https://app-dogcatify.netlify.app';
+  const appDomain = envConfig.getOrDefault('EXPO_PUBLIC_APP_DOMAIN', 'https://app-dogcatify.netlify.app');
   
   if (token) {
     return `${appDomain}/medical-history/${petId}?token=${token}`;
