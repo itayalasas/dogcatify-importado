@@ -213,9 +213,12 @@ class EnvConfigService {
   public get(key: string): string | undefined {
     if (!this.initialized || !this.config) {
       console.warn(`[EnvConfig] ⚠️ Trying to get '${key}' before initialization`);
+      console.warn(`[EnvConfig]    Initialized: ${this.initialized}, Config exists: ${!!this.config}`);
       return undefined;
     }
-    return this.config[key];
+    const value = this.config[key];
+    console.log(`[EnvConfig] 📖 Getting '${key}': ${value ? (value.substring(0, 50) + '...') : 'UNDEFINED'}`);
+    return value;
   }
 
   /**
@@ -237,6 +240,21 @@ class EnvConfigService {
    */
   public getAll(): EnvironmentVariables | null {
     return this.config;
+  }
+
+  /**
+   * Limpia la caché de configuración
+   */
+  public async clearCache(): Promise<void> {
+    try {
+      console.log('[EnvConfig] 🗑️ Clearing cache...');
+      await AsyncStorage.removeItem('@env_config');
+      this.config = null;
+      this.initialized = false;
+      console.log('[EnvConfig] ✅ Cache cleared');
+    } catch (error) {
+      console.error('[EnvConfig] ❌ Error clearing cache:', error);
+    }
   }
 
   /**
