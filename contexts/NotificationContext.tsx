@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { useAuth } from './AuthContext';
 import { supabaseClient } from '../lib/supabase';
+import { envConfig } from '@/utils/envConfig';
 
 // Only import and configure notifications if not in Expo Go
 const isExpoGo = Constants.appOwnership === 'expo';
@@ -367,12 +368,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       console.log('Body:', body);
 
       // Call FCM v1 Edge Function
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+      const anonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+
+      if (!supabaseUrl || !anonKey) {
+        console.error('❌ Missing Supabase configuration');
+        return;
+      }
+
       const response = await fetch(`${supabaseUrl}/functions/v1/send-notification-fcm-v1`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+          'Authorization': `Bearer ${anonKey}`,
         },
         body: JSON.stringify({
           fcmToken: profile.fcm_token,

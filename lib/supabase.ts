@@ -1,35 +1,97 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
+import { envConfig } from '@/utils/envConfig';
 
-// Supabase configuration
-export const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-export const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+// Supabase configuration - Ahora se carga dinámicamente
+let supabaseUrl: string | undefined;
+let supabaseAnonKey: string | undefined;
+let supabaseClientInstance: SupabaseClient | null = null;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables. Please check your .env file.');
-}
+/**
+ * Inicializa el cliente de Supabase con la configuración del API Gateway
+ */
+export const initializeSupabase = async (): Promise<void> => {
+  try {
+    console.log('[Supabase] 🚀 Initializing Supabase client...');
 
-export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-    flowType: 'pkce',
-  },
-  global: {
-    headers: {
-      'X-Client-Info': 'dogcatify-mobile',
-    },
-  },
-});
+    // Asegurarse de que envConfig esté inicializado
+    if (!envConfig.isInitialized()) {
+      console.log('[Supabase] ⏳ Waiting for envConfig initialization...');
+      await envConfig.initialize();
+    }
 
-supabaseClient.auth.onAuthStateChange((event, session) => {
-  if (event === 'TOKEN_REFRESHED') {
-    console.log('Token refreshed automatically by Supabase');
-  } else if (event === 'SIGNED_OUT') {
-    console.log('User signed out');
+    // Obtener configuración
+    supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+    supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error('Missing Supabase environment variables from API Gateway');
+    }
+
+    console.log('[Supabase] 🔗 Supabase URL:', supabaseUrl);
+    console.log('[Supabase] 🔑 Anon Key:', supabaseAnonKey.substring(0, 20) + '...');
+
+    // Crear cliente de Supabase
+    supabaseClientInstance = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+        flowType: 'pkce',
+      },
+      global: {
+        headers: {
+          'X-Client-Info': 'dogcatify-mobile',
+        },
+      },
+    });
+
+    console.log('[Supabase] ✅ Supabase client initialized successfully');
+  } catch (error) {
+    console.error('[Supabase] ❌ Failed to initialize Supabase client:', error);
+    throw error;
+  }
+};
+
+/**
+ * Obtiene el cliente de Supabase
+ * IMPORTANTE: Debe llamarse después de initializeSupabase()
+ */
+export const getSupabaseClient = (): SupabaseClient => {
+  if (!supabaseClientInstance) {
+    throw new Error('Supabase client not initialized. Call initializeSupabase() first.');
+  }
+  return supabaseClientInstance;
+};
+
+// Export para compatibilidad con código existente
+export const supabaseClient = new Proxy({} as SupabaseClient, {
+  get(target, prop) {
+    if (!supabaseClientInstance) {
+      console.warn('[Supabase] ⚠️ Accessing supabaseClient before initialization');
+      throw new Error('Supabase client not initialized. Call initializeSupabase() first.');
+    }
+    return (supabaseClientInstance as any)[prop];
   }
 });
+
+/**
+ * Configura los listeners de auth después de inicializar Supabase
+ */
+export const setupAuthListeners = () => {
+  if (!supabaseClientInstance) {
+    console.warn('[Supabase] ⚠️ Cannot setup auth listeners before initialization');
+    return;
+  }
+
+  supabaseClientInstance.auth.onAuthStateChange((event, session) => {
+    if (event === 'TOKEN_REFRESHED') {
+      console.log('Token refreshed automatically by Supabase');
+    } else if (event === 'SIGNED_OUT') {
+      console.log('User signed out');
+    }
+  });
+};
 
 // Add global error handler for API calls
 const originalFrom = supabaseClient.from;
