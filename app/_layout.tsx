@@ -203,18 +203,6 @@ function RootLayout() {
   // Determine initial route based on platform
   const initialRouteName = Platform.OS === 'web' ? 'web-info' : '(tabs)';
 
-  // Show loading screen while configuration is being loaded
-  if (!configReady && !configError) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2D6A6F' }}>
-        <ActivityIndicator size="large" color="#fff" />
-        <Text style={{ color: '#fff', marginTop: 16, fontSize: 16 }}>
-          Cargando configuración...
-        </Text>
-      </View>
-    );
-  }
-
   // Show error screen if configuration failed
   if (configError) {
     return (
@@ -227,6 +215,18 @@ function RootLayout() {
         </Text>
         <Text style={{ color: '#fff', fontSize: 12, textAlign: 'center' }}>
           Por favor, reinicia la aplicación
+        </Text>
+      </View>
+    );
+  }
+
+  // Show loading screen while configuration is being loaded - only render providers after config is ready
+  if (!configReady) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2D6A6F' }}>
+        <ActivityIndicator size="large" color="#fff" />
+        <Text style={{ color: '#fff', marginTop: 16, fontSize: 16 }}>
+          Cargando configuración...
         </Text>
       </View>
     );
