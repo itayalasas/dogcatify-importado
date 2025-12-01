@@ -24,12 +24,20 @@ export const initializeSupabase = async (): Promise<void> => {
     supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
     supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 
+    console.log('[Supabase] 🔗 Raw Supabase URL from config:', supabaseUrl);
+    console.log('[Supabase] 🔑 Raw Anon Key from config:', supabaseAnonKey);
+    console.log('[Supabase] 📊 URL type:', typeof supabaseUrl, 'length:', supabaseUrl?.length);
+    console.log('[Supabase] 📊 Key type:', typeof supabaseAnonKey, 'length:', supabaseAnonKey?.length);
+
     if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('[Supabase] ❌ Missing variables:');
+      console.error('  - URL:', supabaseUrl ? 'Present' : 'MISSING');
+      console.error('  - Key:', supabaseAnonKey ? 'Present' : 'MISSING');
       throw new Error('Missing Supabase environment variables from API Gateway');
     }
 
     console.log('[Supabase] 🔗 Supabase URL:', supabaseUrl);
-    console.log('[Supabase] 🔑 Anon Key:', supabaseAnonKey.substring(0, 20) + '...');
+    console.log('[Supabase] 🔑 Anon Key (first 50 chars):', supabaseAnonKey.substring(0, 50) + '...');
 
     // Crear cliente de Supabase
     supabaseClientInstance = createClient(supabaseUrl, supabaseAnonKey, {
