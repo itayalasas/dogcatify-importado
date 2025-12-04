@@ -187,7 +187,7 @@ export const DottyAssistant: React.FC<DottyAssistantProps> = ({
   const progress = ((currentMessageIndex + 1) / messages.length) * 100;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} pointerEvents="box-none">
       <Animated.View
         style={[
           styles.overlay,
@@ -195,6 +195,7 @@ export const DottyAssistant: React.FC<DottyAssistantProps> = ({
             opacity: overlayOpacity,
           },
         ]}
+        pointerEvents="auto"
       />
 
       <Animated.View
@@ -204,6 +205,7 @@ export const DottyAssistant: React.FC<DottyAssistantProps> = ({
             transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
           },
         ]}
+        pointerEvents="auto"
       >
         <TouchableOpacity
           style={styles.skipButton}
