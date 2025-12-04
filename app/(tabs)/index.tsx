@@ -770,15 +770,7 @@ export default function Home() {
         }
       }
     } catch (error) {
-    try {
-      // Faster refresh - load in parallel
-      await Promise.all([
-        fetchPosts(),
-        fetchPromotions()
-      ]);
-    } catch (error) {
-      console.error('Error refreshing feed:', error);
-    }
+      console.error('Error handling promotion press:', error);
     }
   };
 
