@@ -124,51 +124,43 @@ class EnvConfigService {
     try {
       console.log('[EnvConfig] 🚀 Initializing environment configuration...');
 
-      // Obtener configuración del API Gateway desde app.json
-      const apiGatewayConfig = Constants.expoConfig?.extra?.apiGateway;
-
-      if (!apiGatewayConfig?.url || !apiGatewayConfig?.apiKey) {
-        throw new Error('API Gateway configuration not found in app.json');
-      }
-
-      console.log('[EnvConfig] 🔗 API Gateway URL:', apiGatewayConfig.url);
-
       // Intentar cargar desde caché primero
       const cachedConfig = await this._loadFromCache();
       if (cachedConfig) {
         this.config = cachedConfig;
         console.log('[EnvConfig] 📦 Loaded from cache');
-
-        // Actualizar en background
-        this._fetchAndCacheConfig(apiGatewayConfig.url, apiGatewayConfig.apiKey)
-          .catch(error => console.warn('[EnvConfig] ⚠️ Background update failed:', error));
-
         this.initialized = true;
         return;
       }
 
-      // Si no hay caché, cargar desde el API
-      console.log('[EnvConfig] 🌐 Fetching from API Gateway...');
-      const config = await this._fetchAndCacheConfig(apiGatewayConfig.url, apiGatewayConfig.apiKey);
+      // Intentar usar variables de entorno directamente
+      console.log('[EnvConfig] 🔄 Loading from process.env...');
+      const envVars = this._loadFromProcessEnv();
 
-      this.config = config;
-      this.initialized = true;
+      if (envVars) {
+        this.config = envVars;
+        this.initialized = true;
+        // Guardar en caché
+        await this._saveToCache(envVars);
+        console.log('[EnvConfig] ✅ Configuration loaded from process.env');
+        return;
+      }
 
-      console.log('[EnvConfig] ✅ Configuration loaded successfully');
-      console.log('[EnvConfig] 📊 Total variables:', Object.keys(config).length);
+      // Si process.env falla, intentar API Gateway como fallback
+      const apiGatewayConfig = Constants.expoConfig?.extra?.apiGateway;
+      if (apiGatewayConfig?.url && apiGatewayConfig?.apiKey) {
+        console.log('[EnvConfig] 🌐 Attempting API Gateway fallback...');
+        const config = await this._fetchAndCacheConfig(apiGatewayConfig.url, apiGatewayConfig.apiKey);
+        this.config = config;
+        this.initialized = true;
+        console.log('[EnvConfig] ✅ Configuration loaded from API Gateway');
+        return;
+      }
+
+      throw new Error('No configuration source available');
     } catch (error) {
       console.error('[EnvConfig] ❌ Failed to load configuration:', error);
-
-      // Intentar usar variables de entorno como fallback
-      console.log('[EnvConfig] 🔄 Attempting to use process.env as fallback...');
-      this.config = this._loadFromProcessEnv();
-      this.initialized = true;
-
-      if (this.config) {
-        console.log('[EnvConfig] ✅ Fallback to process.env successful');
-      } else {
-        throw new Error('Failed to load configuration from API Gateway and no fallback available');
-      }
+      throw error;
     }
   }
 
