@@ -113,8 +113,8 @@ export const NotificationPermissionPrompt: React.FC = () => {
       animationType="fade"
       onRequestClose={handleDismiss}
     >
-      <View style={styles.overlay}>
-        <Card style={styles.promptCard}>
+      <View style={styles.overlay} pointerEvents="box-none">
+        <Card style={styles.promptCard} pointerEvents="auto">
           <TouchableOpacity style={styles.closeButton} onPress={handleDismiss}>
             <X size={20} color="#6B7280" />
           </TouchableOpacity>

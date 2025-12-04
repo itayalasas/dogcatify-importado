@@ -886,8 +886,6 @@ export default function Home() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <NotificationPermissionPrompt />
-      <LocationPermissionPrompt />
       {__DEV__ && <NotificationDebugInfo />}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>DogCatiFy</Text>
