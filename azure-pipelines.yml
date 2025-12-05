@@ -36,6 +36,10 @@ steps:
       cd android
       ./gradlew bundleRelease
     displayName: 'Construir Android App Bundle (bundleRelease)'
+    env:
+      ANDROID_HOME: /home/azureuser/android-sdk
+      ANDROID_SDK_ROOT: /home/azureuser/android-sdk
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
 
   # 6. Publicar el artefacto (AAB) en Azure DevOps
   - task: PublishBuildArtifacts@1
