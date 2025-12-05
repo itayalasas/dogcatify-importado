@@ -1,0 +1,40 @@
+trigger:
+  - main   # o la rama que uses
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  NODE_VERSION: '18.x'
+
+steps:
+  # 1. Instalar Node.js
+  - task: NodeTool@0
+    inputs:
+      versionSpec: '$(NODE_VERSION)'
+    displayName: 'Instalar Node.js'
+
+  # 2. Instalar dependencias del proyecto
+  - script: |
+      npm install
+    displayName: 'Instalar dependencias (npm install)'
+
+  # 3. Generar código nativo de Android si es proyecto Expo managed
+  #    Si ya tienes carpeta android lista, IGUAL puede dejarse, no hace daño.
+  - script: |
+      npx expo prebuild --platform android --non-interactive
+    displayName: 'Expo prebuild Android'
+
+  # 4. Construir App Bundle de Android (AAB)
+  - script: |
+      cd android
+      ./gradlew bundleRelease
+    displayName: 'Construir Android App Bundle (bundleRelease)'
+
+  # 5. Publicar el artefacto (AAB) en Azure DevOps
+  - task: PublishBuildArtifacts@1
+    inputs:
+      pathToPublish: 'android/app/build/outputs/bundle/release'
+      artifactName: 'android-app'
+      publishLocation: 'Container'
+    displayName: 'Publicar artefacto Android'
