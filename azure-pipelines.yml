@@ -1,7 +1,6 @@
 trigger:
   - main   # o la rama que uses
 
-# Usar tu agente self-hosted en lugar de ubuntu-latest
 pool:
   name: 'Default'
   demands:
@@ -23,18 +22,22 @@ steps:
     displayName: 'Instalar dependencias (npm install)'
 
   # 3. Generar código nativo de Android si es proyecto Expo managed
-  #    Si ya tienes carpeta android lista, IGUAL puede dejarse, no hace daño.
   - script: |
       npx expo prebuild --platform android --non-interactive
     displayName: 'Expo prebuild Android'
 
-  # 4. Construir App Bundle de Android (AAB)
+  # 4. Dar permisos de ejecución a gradlew
+  - script: |
+      chmod +x android/gradlew
+    displayName: 'Dar permisos a gradlew'
+
+  # 5. Construir App Bundle de Android (AAB)
   - script: |
       cd android
       ./gradlew bundleRelease
     displayName: 'Construir Android App Bundle (bundleRelease)'
 
-  # 5. Publicar el artefacto (AAB) en Azure DevOps
+  # 6. Publicar el artefacto (AAB) en Azure DevOps
   - task: PublishBuildArtifacts@1
     inputs:
       pathToPublish: 'android/app/build/outputs/bundle/release'
