@@ -1,8 +1,11 @@
 trigger:
   - main   # o la rama que uses
 
+# Usar tu agente self-hosted en lugar de ubuntu-latest
 pool:
-  vmImage: 'ubuntu-latest'
+  name: 'Default'
+  demands:
+    - Agent.Name -equals dogcatify-androide
 
 variables:
   NODE_VERSION: '18.x'
