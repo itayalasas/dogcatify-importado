@@ -895,7 +895,10 @@ export default function Home() {
         renderItem={renderFeedItem}
         keyExtractor={(item, index) => `${item.type}-${item.data.id}-${index}`}
         style={styles.content}
+        contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        scrollEnabled={true}
+        nestedScrollEnabled={true}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -962,6 +965,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  contentContainer: {
+    flexGrow: 1,
   },
   loadingContainer: {
     flex: 1,

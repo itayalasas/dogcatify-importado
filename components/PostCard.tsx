@@ -42,6 +42,7 @@ const ZoomableImage = ({ uri, style }: { uri: string; style?: any }) => {
   const panGesture = Gesture.Pan()
     .enabled(false)
     .manualActivation(true)
+    .enableTrackpadTwoFingerGesture(true)
     .onTouchesDown((e) => {
       if (savedScale.value > 1) {
         panGesture.activate();
@@ -57,6 +58,11 @@ const ZoomableImage = ({ uri, style }: { uri: string; style?: any }) => {
       if (savedScale.value > 1) {
         savedTranslateX.value = translateX.value;
         savedTranslateY.value = translateY.value;
+      }
+    })
+    .onFinalize(() => {
+      if (savedScale.value <= 1) {
+        panGesture.enabled(false);
       }
     });
 
@@ -76,7 +82,7 @@ const ZoomableImage = ({ uri, style }: { uri: string; style?: any }) => {
       }
     });
 
-  const composedGesture = Gesture.Race(
+  const composedGesture = Gesture.Exclusive(
     doubleTapGesture,
     Gesture.Simultaneous(pinchGesture, panGesture)
   );
@@ -893,6 +899,8 @@ const PostCard: React.FC<PostCardProps> = ({
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
+              scrollEnabled={true}
+              directionalLockEnabled={true}
               onMomentumScrollEnd={(e) => {
                 const contentOffset = e.nativeEvent.contentOffset;
                 const viewSize = e.nativeEvent.layoutMeasurement;

@@ -204,7 +204,7 @@ export const DottyAssistant: React.FC<DottyAssistantProps> = ({
               opacity: overlayOpacity,
             },
           ]}
-          pointerEvents="auto"
+          pointerEvents="none"
         />
       )}
 
