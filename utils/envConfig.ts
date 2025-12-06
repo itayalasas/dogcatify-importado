@@ -124,6 +124,11 @@ class EnvConfigService {
     try {
       console.log('[EnvConfig] 🚀 Initializing environment configuration...');
 
+      // Detectar si es un build de producción (APK/AAB) o desarrollo (expo dev)
+      const isProduction = Constants.executionEnvironment === 'standalone' || Constants.executionEnvironment === 'storeClient';
+      console.log('[EnvConfig] 🏗️ Execution environment:', Constants.executionEnvironment);
+      console.log('[EnvConfig] 📱 Is production build:', isProduction);
+
       // 1. Intentar cargar desde caché primero (más rápido)
       const cachedConfig = await this._loadFromCache();
       if (cachedConfig) {
@@ -133,20 +138,29 @@ class EnvConfigService {
         return;
       }
 
-      // 2. Intentar usar variables de entorno directamente
-      console.log('[EnvConfig] 🔄 Loading from process.env...');
-      const envVars = this._loadFromProcessEnv();
+      // 2. En DESARROLLO LOCAL (expo dev): usar variables de entorno del .env
+      if (!isProduction) {
+        console.log('[EnvConfig] 🔧 Development mode: Loading from process.env...');
+        const envVars = this._loadFromProcessEnv();
 
-      if (envVars) {
-        this.config = envVars;
-        this.initialized = true;
-        // Guardar en caché
-        await this._saveToCache(envVars);
-        console.log('[EnvConfig] ✅ Configuration loaded from process.env');
-        return;
+        if (envVars) {
+          this.config = envVars;
+          this.initialized = true;
+          // Guardar en caché
+          await this._saveToCache(envVars);
+          console.log('[EnvConfig] ✅ Configuration loaded from process.env (development)');
+          return;
+        }
+
+        throw new Error(
+          'Modo desarrollo: No se encontraron variables en process.env.\n' +
+          'Asegúrate de tener un archivo .env con las variables necesarias.'
+        );
       }
 
-      // 3. Para APKs compilados, usar API Gateway
+      // 3. En PRODUCCIÓN (APK/AAB): SOLO usar API Gateway
+      console.log('[EnvConfig] 🏭 Production mode: Using API Gateway ONLY');
+
       const apiGatewayConfig = Constants.expoConfig?.extra?.apiGateway;
       console.log('[EnvConfig] 🔍 API Gateway config:', {
         hasUrl: !!apiGatewayConfig?.url,
@@ -154,48 +168,28 @@ class EnvConfigService {
         url: apiGatewayConfig?.url,
       });
 
-      if (apiGatewayConfig?.url && apiGatewayConfig?.apiKey) {
-        try {
-          console.log('[EnvConfig] 🌐 Loading from API Gateway...');
-          const config = await this._fetchAndCacheConfig(apiGatewayConfig.url, apiGatewayConfig.apiKey);
-          this.config = config;
-          this.initialized = true;
-          console.log('[EnvConfig] ✅ Configuration loaded from API Gateway');
-          return;
-        } catch (apiError: any) {
-          console.error('[EnvConfig] ⚠️ API Gateway failed:', apiError.message);
-          console.log('[EnvConfig] 🆘 Falling back to hardcoded configuration');
-
-          // 4. Si API Gateway falla, usar hardcoded fallback
-          const fallbackConfig = this._getHardcodedFallback();
-          this.config = fallbackConfig;
-          this.initialized = true;
-
-          // Guardar en caché para próximas veces
-          await this._saveToCache(fallbackConfig);
-
-          console.log('[EnvConfig] ✅ Configuration loaded from hardcoded fallback');
-          return;
-        }
+      if (!apiGatewayConfig?.url || !apiGatewayConfig?.apiKey) {
+        throw new Error(
+          'Build de producción requiere configuración de API Gateway.\n' +
+          'Verifica que app.json tenga la configuración correcta en extra.apiGateway'
+        );
       }
 
-      // 5. Si no hay API Gateway configurado, usar hardcoded fallback
-      console.warn('[EnvConfig] ⚠️ No API Gateway configured, using hardcoded fallback');
-      const fallbackConfig = this._getHardcodedFallback();
-      this.config = fallbackConfig;
+      console.log('[EnvConfig] 🌐 Loading from API Gateway...');
+      const config = await this._fetchAndCacheConfig(apiGatewayConfig.url, apiGatewayConfig.apiKey);
+      this.config = config;
       this.initialized = true;
+      console.log('[EnvConfig] ✅ Configuration loaded from API Gateway');
 
-      // Guardar en caché
-      await this._saveToCache(fallbackConfig);
+    } catch (error: any) {
+      console.error('[EnvConfig] ❌ Failed to load configuration:', error);
+      console.error('[EnvConfig] ❌ Error message:', error.message);
 
-      console.log('[EnvConfig] ✅ Configuration loaded from hardcoded fallback');
-    } catch (error) {
-      console.error('[EnvConfig] ❌ Critical error during initialization:', error);
-
-      // Último recurso: usar hardcoded fallback incluso si hay error
-      console.log('[EnvConfig] 🆘 Using hardcoded fallback as last resort');
-      this.config = this._getHardcodedFallback();
-      this.initialized = true;
+      // NO usar fallback - la app debe fallar claramente si no puede cargar configuración
+      throw new Error(
+        error.message ||
+        'No se pudo cargar la configuración. Verifica tu conexión a internet e intenta nuevamente.'
+      );
     }
   }
 
@@ -360,34 +354,6 @@ class EnvConfigService {
     return null;
   }
 
-  /**
-   * Variables de producción embebidas como último fallback
-   * Estas se usan SOLO si todo lo demás falla
-   */
-  private _getHardcodedFallback(): EnvironmentVariables {
-    console.log('[EnvConfig] 🆘 Using hardcoded fallback configuration');
-    console.warn('[EnvConfig] ⚠️ This should only happen if API Gateway and cache both failed');
-
-    return {
-      EXPO_PUBLIC_SUPABASE_URL: 'https://hpvzjuionqvgxlvhyqgz.supabase.co',
-      EXPO_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwdnpqdWlvbnF2Z3hsdmh5cWd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxMTcyOTMsImV4cCI6MjA3OTY5MzI5M30.IJq_nhk4S7hFwZskDTIut7Qfe8k4a5DHChEOP3-Zg9k',
-      EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwdnpqdWlvbnF2Z3hsdmh5cWd6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDExNzI5MywiZXhwIjoyMDc5NjkzMjkzfQ.10BnGYY1A8HKpFM59m4MOkOnZoYvSzac45cP3A2_t2c',
-      EXPO_ROUTER_APP_ROOT: 'app',
-      EXPO_PUBLIC_PROJECT_ID: 'gfazxronwllqcswdaimh',
-      EXPO_PUBLIC_PRIVACY_POLICY_URL: 'https://dogcatify.com/privacidad',
-      EXPO_PUBLIC_TERMS_OF_SERVICE_URL: 'https://dogcatify.com/terminos',
-      EXPO_PUBLIC_APP_DOMAIN: 'https://dogcatify.com',
-      EXPO_PUBLIC_NOMINATIM_BASE_URL: 'https://nominatim.openstreetmap.org',
-      EXPO_PUBLIC_GOOGLE_MAPS_API_KEY: 'tu_api_key_aqui',
-      FIREBASE_PRIVATE_KEY_ID: '6c256092339bc53b9ba2f05b395386e5803f8ee6',
-      FIREBASE_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDe/WH3rqCtEYVX\nrIv5baxF9GkGr0yRaKxVYA==\n-----END PRIVATE KEY-----',
-      FIREBASE_CLIENT_EMAIL: 'firebase-adminsdk-fbsvc340@app-mascota-7db30.iam.gserviceaccount.com',
-      FIREBASE_CLIENT_ID: '109374673320703954244',
-      FIREBASE_CLIENT_CERT_URL: 'https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc340%40app-mascota-7db30.iam.gserviceaccount.com',
-      EXPO_PUBLIC_EMAIL_API_URL: 'https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/send-email',
-      EXPO_PUBLIC_EMAIL_API_KEY: 'sk_bcaca188c1b16345e4d10adf403eb4e9e98d3fa9ff04ba053d7416fe302b7dee',
-    };
-  }
 
   /**
    * Obtiene una variable de configuración
