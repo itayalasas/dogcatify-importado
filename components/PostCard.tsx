@@ -11,7 +11,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withSpring, runOnJS } from 
 const { width } = Dimensions.get('window');
 const STATUS_BAR_HEIGHT = Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0;
 
-const ZoomableImage = ({ uri, style }: { uri: string; style?: any }) => {
+const ZoomableImage = ({ uri, style, onDoubleTap }: { uri: string; style?: any; onDoubleTap?: () => void }) => {
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const translateX = useSharedValue(0);
@@ -69,16 +69,9 @@ const ZoomableImage = ({ uri, style }: { uri: string; style?: any }) => {
   const doubleTapGesture = Gesture.Tap()
     .numberOfTaps(2)
     .onEnd(() => {
-      if (scale.value > 1) {
-        scale.value = withSpring(1);
-        savedScale.value = 1;
-        translateX.value = withSpring(0);
-        translateY.value = withSpring(0);
-        savedTranslateX.value = 0;
-        savedTranslateY.value = 0;
-      } else {
-        scale.value = withSpring(2);
-        savedScale.value = 2;
+      // Trigger like on double tap
+      if (onDoubleTap) {
+        runOnJS(onDoubleTap)();
       }
     });
 
@@ -234,7 +227,6 @@ const PostCard: React.FC<PostCardProps> = ({
   const [newComment, setNewComment] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
   const [replyTo, setReplyTo] = useState<any>(null);
-  const [doubleTapTimer, setDoubleTapTimer] = useState<NodeJS.Timeout | null>(null);
   const [showLikeAnimation, setShowLikeAnimation] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [playingVideos, setPlayingVideos] = useState<{[key: number]: boolean}>({});
@@ -785,23 +777,6 @@ const PostCard: React.FC<PostCardProps> = ({
     }
   }, [videoSpeeds]);
 
-  const handleImagePress = () => {
-    if (doubleTapTimer) {
-      // This is a double tap
-      clearTimeout(doubleTapTimer);
-      setDoubleTapTimer(null);
-      handleDoubleTap();
-    } else {
-      // This might be a single tap or the first tap of a double tap
-      const timer = setTimeout(() => {
-        // This was a single tap
-        setDoubleTapTimer(null);
-        // Do nothing on single tap
-      }, 300);
-      setDoubleTapTimer(timer as unknown as NodeJS.Timeout);
-    }
-  };
-
   const handleNextImage = () => {
     if (post.albumImages && post.albumImages.length > 0) {
       setCurrentImageIndex((prevIndex) => 
@@ -881,7 +856,11 @@ const PostCard: React.FC<PostCardProps> = ({
               />
             ) : (
               <View>
-                <ZoomableImage uri={post.imageURL} style={styles.singleImage} />
+                <ZoomableImage
+                  uri={post.imageURL}
+                  style={styles.singleImage}
+                  onDoubleTap={handleDoubleTap}
+                />
                 {showLikeAnimation && (
                   <View style={styles.likeAnimationContainer}>
                     <Heart size={80} color="#FFFFFF" fill="#FFFFFF" />
@@ -953,7 +932,11 @@ const PostCard: React.FC<PostCardProps> = ({
                       )
                     ) : (
                       <View>
-                        <ZoomableImage uri={cleanUrl} style={styles.albumMainImage} />
+                        <ZoomableImage
+                          uri={cleanUrl}
+                          style={styles.albumMainImage}
+                          onDoubleTap={handleDoubleTap}
+                        />
                       </View>
                     )}
                     {showLikeAnimation && currentImageIndex === index && (
