@@ -124,7 +124,7 @@ class EnvConfigService {
     try {
       console.log('[EnvConfig] 🚀 Initializing environment configuration...');
 
-      // Intentar cargar desde caché primero
+      // 1. Intentar cargar desde caché primero (más rápido)
       const cachedConfig = await this._loadFromCache();
       if (cachedConfig) {
         this.config = cachedConfig;
@@ -133,7 +133,7 @@ class EnvConfigService {
         return;
       }
 
-      // Intentar usar variables de entorno directamente
+      // 2. Intentar usar variables de entorno directamente
       console.log('[EnvConfig] 🔄 Loading from process.env...');
       const envVars = this._loadFromProcessEnv();
 
@@ -146,7 +146,7 @@ class EnvConfigService {
         return;
       }
 
-      // Para APKs compilados, usar API Gateway
+      // 3. Para APKs compilados, usar API Gateway
       const apiGatewayConfig = Constants.expoConfig?.extra?.apiGateway;
       console.log('[EnvConfig] 🔍 API Gateway config:', {
         hasUrl: !!apiGatewayConfig?.url,
@@ -155,92 +155,158 @@ class EnvConfigService {
       });
 
       if (apiGatewayConfig?.url && apiGatewayConfig?.apiKey) {
-        console.log('[EnvConfig] 🌐 Loading from API Gateway...');
-        const config = await this._fetchAndCacheConfig(apiGatewayConfig.url, apiGatewayConfig.apiKey);
-        this.config = config;
-        this.initialized = true;
-        console.log('[EnvConfig] ✅ Configuration loaded from API Gateway');
-        return;
+        try {
+          console.log('[EnvConfig] 🌐 Loading from API Gateway...');
+          const config = await this._fetchAndCacheConfig(apiGatewayConfig.url, apiGatewayConfig.apiKey);
+          this.config = config;
+          this.initialized = true;
+          console.log('[EnvConfig] ✅ Configuration loaded from API Gateway');
+          return;
+        } catch (apiError: any) {
+          console.error('[EnvConfig] ⚠️ API Gateway failed:', apiError.message);
+          console.log('[EnvConfig] 🆘 Falling back to hardcoded configuration');
+
+          // 4. Si API Gateway falla, usar hardcoded fallback
+          const fallbackConfig = this._getHardcodedFallback();
+          this.config = fallbackConfig;
+          this.initialized = true;
+
+          // Guardar en caché para próximas veces
+          await this._saveToCache(fallbackConfig);
+
+          console.log('[EnvConfig] ✅ Configuration loaded from hardcoded fallback');
+          return;
+        }
       }
 
-      throw new Error('No configuration source available. API Gateway not configured.');
+      // 5. Si no hay API Gateway configurado, usar hardcoded fallback
+      console.warn('[EnvConfig] ⚠️ No API Gateway configured, using hardcoded fallback');
+      const fallbackConfig = this._getHardcodedFallback();
+      this.config = fallbackConfig;
+      this.initialized = true;
+
+      // Guardar en caché
+      await this._saveToCache(fallbackConfig);
+
+      console.log('[EnvConfig] ✅ Configuration loaded from hardcoded fallback');
     } catch (error) {
-      console.error('[EnvConfig] ❌ Failed to load configuration:', error);
-      throw error;
+      console.error('[EnvConfig] ❌ Critical error during initialization:', error);
+
+      // Último recurso: usar hardcoded fallback incluso si hay error
+      console.log('[EnvConfig] 🆘 Using hardcoded fallback as last resort');
+      this.config = this._getHardcodedFallback();
+      this.initialized = true;
     }
   }
 
   private async _fetchAndCacheConfig(url: string, apiKey: string): Promise<EnvironmentVariables> {
-    try {
-      console.log('[EnvConfig] 📡 Fetching from API Gateway...');
-      console.log('[EnvConfig]    URL:', url);
-      console.log('[EnvConfig]    API Key (first 20 chars):', apiKey.substring(0, 20) + '...');
+    const MAX_RETRIES = 3;
+    const TIMEOUT_MS = 60000; // 60 segundos para conexiones móviles lentas
 
-      // Agregar timeout de 30 segundos para redes lentas
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        console.error('[EnvConfig] ⏱️ API Gateway request timeout after 30 seconds');
-        controller.abort();
-      }, 30000);
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        console.log(`[EnvConfig] 📡 Fetching from API Gateway (attempt ${attempt}/${MAX_RETRIES})...`);
+        console.log('[EnvConfig]    URL:', url);
+        console.log('[EnvConfig]    API Key (first 20 chars):', apiKey.substring(0, 20) + '...');
 
-      const fetchPromise = fetch(url, {
-        method: 'GET',
-        headers: {
-          'X-Integration-Key': apiKey,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        signal: controller.signal,
-      });
+        // Timeout de 60 segundos para redes lentas
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          console.error(`[EnvConfig] ⏱️ API Gateway request timeout after ${TIMEOUT_MS}ms (attempt ${attempt})`);
+          controller.abort();
+        }, TIMEOUT_MS);
 
-      console.log('[EnvConfig] ⏳ Waiting for API Gateway response...');
-      const response = await fetchPromise;
-      clearTimeout(timeoutId);
+        const fetchPromise = fetch(url, {
+          method: 'GET',
+          headers: {
+            'X-Integration-Key': apiKey,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          signal: controller.signal,
+        });
 
-      console.log('[EnvConfig] 📨 Response received:', {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok,
-      });
+        console.log('[EnvConfig] ⏳ Waiting for API Gateway response...');
+        const response = await fetchPromise;
+        clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[EnvConfig] ❌ API Gateway error response:', errorText);
-        throw new Error(`API Gateway returned ${response.status}: ${response.statusText}`);
+        console.log('[EnvConfig] 📨 Response received:', {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[EnvConfig] ❌ API Gateway error response:', errorText);
+
+          // Si es un error 4xx, no reintentar (error del cliente)
+          if (response.status >= 400 && response.status < 500) {
+            throw new Error(`API Gateway returned ${response.status}: ${response.statusText}`);
+          }
+
+          // Si es 5xx, reintentar
+          throw new Error(`Server error ${response.status}, retrying...`);
+        }
+
+        const data: ApiGatewayResponse = await response.json();
+        console.log('[EnvConfig] 📦 Received data keys:', Object.keys(data));
+
+        if (!data.variables) {
+          console.error('[EnvConfig] ❌ Invalid response structure');
+          throw new Error('Invalid API Gateway response: missing variables');
+        }
+
+        console.log('[EnvConfig] ✅ Variables received:', Object.keys(data.variables));
+
+        // Guardar en caché
+        await this._saveToCache(data.variables);
+
+        console.log('[EnvConfig] 💾 Configuration cached successfully');
+
+        return data.variables;
+      } catch (error: any) {
+        const isLastAttempt = attempt === MAX_RETRIES;
+
+        if (error.name === 'AbortError') {
+          console.error(`[EnvConfig] ❌ Request timeout (attempt ${attempt}/${MAX_RETRIES})`);
+
+          if (!isLastAttempt) {
+            console.log(`[EnvConfig] 🔄 Retrying in 2 seconds...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            continue;
+          }
+
+          throw new Error('La conexión es muy lenta. Por favor, verifica tu conexión a internet y reintenta.');
+        }
+
+        console.error(`[EnvConfig] ❌ Error fetching from API Gateway (attempt ${attempt}/${MAX_RETRIES}):`);
+        console.error('[EnvConfig]    Type:', error.constructor.name);
+        console.error('[EnvConfig]    Message:', error.message);
+
+        if (error.message?.includes('Network request failed')) {
+          if (!isLastAttempt) {
+            console.log(`[EnvConfig] 🔄 Retrying in 2 seconds...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            continue;
+          }
+
+          throw new Error('No se pudo conectar al servidor. Verifica tu conexión a internet.');
+        }
+
+        // Si es el último intento, lanzar el error
+        if (isLastAttempt) {
+          throw error;
+        }
+
+        // Esperar antes de reintentar
+        console.log(`[EnvConfig] 🔄 Retrying in 2 seconds...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
-
-      const data: ApiGatewayResponse = await response.json();
-      console.log('[EnvConfig] 📦 Received data keys:', Object.keys(data));
-
-      if (!data.variables) {
-        console.error('[EnvConfig] ❌ Invalid response structure');
-        throw new Error('Invalid API Gateway response: missing variables');
-      }
-
-      console.log('[EnvConfig] ✅ Variables received:', Object.keys(data.variables));
-
-      // Guardar en caché
-      await this._saveToCache(data.variables);
-
-      console.log('[EnvConfig] 💾 Configuration cached successfully');
-
-      return data.variables;
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
-        console.error('[EnvConfig] ❌ Request timeout');
-        throw new Error('API Gateway request timeout. Check your internet connection.');
-      }
-
-      console.error('[EnvConfig] ❌ Error fetching from API Gateway:');
-      console.error('[EnvConfig]    Type:', error.constructor.name);
-      console.error('[EnvConfig]    Message:', error.message);
-
-      if (error.message?.includes('Network request failed')) {
-        throw new Error('Network error: Cannot reach API Gateway. Check your internet connection.');
-      }
-
-      throw error;
     }
+
+    // Este código nunca debería ejecutarse, pero TypeScript lo requiere
+    throw new Error('Failed to fetch configuration after all retries');
   }
 
   private async _loadFromCache(): Promise<EnvironmentVariables | null> {
@@ -292,6 +358,35 @@ class EnvConfigService {
       console.warn('[EnvConfig] ⚠️ Error loading from process.env:', error);
     }
     return null;
+  }
+
+  /**
+   * Variables de producción embebidas como último fallback
+   * Estas se usan SOLO si todo lo demás falla
+   */
+  private _getHardcodedFallback(): EnvironmentVariables {
+    console.log('[EnvConfig] 🆘 Using hardcoded fallback configuration');
+    console.warn('[EnvConfig] ⚠️ This should only happen if API Gateway and cache both failed');
+
+    return {
+      EXPO_PUBLIC_SUPABASE_URL: 'https://hpvzjuionqvgxlvhyqgz.supabase.co',
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwdnpqdWlvbnF2Z3hsdmh5cWd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxMTcyOTMsImV4cCI6MjA3OTY5MzI5M30.IJq_nhk4S7hFwZskDTIut7Qfe8k4a5DHChEOP3-Zg9k',
+      EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwdnpqdWlvbnF2Z3hsdmh5cWd6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDExNzI5MywiZXhwIjoyMDc5NjkzMjkzfQ.10BnGYY1A8HKpFM59m4MOkOnZoYvSzac45cP3A2_t2c',
+      EXPO_ROUTER_APP_ROOT: 'app',
+      EXPO_PUBLIC_PROJECT_ID: 'gfazxronwllqcswdaimh',
+      EXPO_PUBLIC_PRIVACY_POLICY_URL: 'https://dogcatify.com/privacidad',
+      EXPO_PUBLIC_TERMS_OF_SERVICE_URL: 'https://dogcatify.com/terminos',
+      EXPO_PUBLIC_APP_DOMAIN: 'https://dogcatify.com',
+      EXPO_PUBLIC_NOMINATIM_BASE_URL: 'https://nominatim.openstreetmap.org',
+      EXPO_PUBLIC_GOOGLE_MAPS_API_KEY: 'tu_api_key_aqui',
+      FIREBASE_PRIVATE_KEY_ID: '6c256092339bc53b9ba2f05b395386e5803f8ee6',
+      FIREBASE_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDe/WH3rqCtEYVX\nrIv5baxF9GkGr0yRaKxVYA==\n-----END PRIVATE KEY-----',
+      FIREBASE_CLIENT_EMAIL: 'firebase-adminsdk-fbsvc340@app-mascota-7db30.iam.gserviceaccount.com',
+      FIREBASE_CLIENT_ID: '109374673320703954244',
+      FIREBASE_CLIENT_CERT_URL: 'https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc340%40app-mascota-7db30.iam.gserviceaccount.com',
+      EXPO_PUBLIC_EMAIL_API_URL: 'https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/send-email',
+      EXPO_PUBLIC_EMAIL_API_KEY: 'sk_bcaca188c1b16345e4d10adf403eb4e9e98d3fa9ff04ba053d7416fe302b7dee',
+    };
   }
 
   /**
