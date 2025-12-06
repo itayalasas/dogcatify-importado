@@ -146,10 +146,16 @@ class EnvConfigService {
         return;
       }
 
-      // Si process.env falla, intentar API Gateway como fallback
+      // Para APKs compilados, usar API Gateway
       const apiGatewayConfig = Constants.expoConfig?.extra?.apiGateway;
+      console.log('[EnvConfig] 🔍 API Gateway config:', {
+        hasUrl: !!apiGatewayConfig?.url,
+        hasApiKey: !!apiGatewayConfig?.apiKey,
+        url: apiGatewayConfig?.url,
+      });
+
       if (apiGatewayConfig?.url && apiGatewayConfig?.apiKey) {
-        console.log('[EnvConfig] 🌐 Attempting API Gateway fallback...');
+        console.log('[EnvConfig] 🌐 Loading from API Gateway...');
         const config = await this._fetchAndCacheConfig(apiGatewayConfig.url, apiGatewayConfig.apiKey);
         this.config = config;
         this.initialized = true;
@@ -157,7 +163,7 @@ class EnvConfigService {
         return;
       }
 
-      throw new Error('No configuration source available');
+      throw new Error('No configuration source available. API Gateway not configured.');
     } catch (error) {
       console.error('[EnvConfig] ❌ Failed to load configuration:', error);
       throw error;
@@ -166,23 +172,52 @@ class EnvConfigService {
 
   private async _fetchAndCacheConfig(url: string, apiKey: string): Promise<EnvironmentVariables> {
     try {
-      const response = await fetch(url, {
+      console.log('[EnvConfig] 📡 Fetching from API Gateway...');
+      console.log('[EnvConfig]    URL:', url);
+      console.log('[EnvConfig]    API Key (first 20 chars):', apiKey.substring(0, 20) + '...');
+
+      // Agregar timeout de 30 segundos para redes lentas
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.error('[EnvConfig] ⏱️ API Gateway request timeout after 30 seconds');
+        controller.abort();
+      }, 30000);
+
+      const fetchPromise = fetch(url, {
         method: 'GET',
         headers: {
           'X-Integration-Key': apiKey,
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
+        signal: controller.signal,
+      });
+
+      console.log('[EnvConfig] ⏳ Waiting for API Gateway response...');
+      const response = await fetchPromise;
+      clearTimeout(timeoutId);
+
+      console.log('[EnvConfig] 📨 Response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[EnvConfig] ❌ API Gateway error response:', errorText);
         throw new Error(`API Gateway returned ${response.status}: ${response.statusText}`);
       }
 
       const data: ApiGatewayResponse = await response.json();
+      console.log('[EnvConfig] 📦 Received data keys:', Object.keys(data));
 
       if (!data.variables) {
+        console.error('[EnvConfig] ❌ Invalid response structure');
         throw new Error('Invalid API Gateway response: missing variables');
       }
+
+      console.log('[EnvConfig] ✅ Variables received:', Object.keys(data.variables));
 
       // Guardar en caché
       await this._saveToCache(data.variables);
@@ -190,8 +225,20 @@ class EnvConfigService {
       console.log('[EnvConfig] 💾 Configuration cached successfully');
 
       return data.variables;
-    } catch (error) {
-      console.error('[EnvConfig] ❌ Error fetching from API Gateway:', error);
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.error('[EnvConfig] ❌ Request timeout');
+        throw new Error('API Gateway request timeout. Check your internet connection.');
+      }
+
+      console.error('[EnvConfig] ❌ Error fetching from API Gateway:');
+      console.error('[EnvConfig]    Type:', error.constructor.name);
+      console.error('[EnvConfig]    Message:', error.message);
+
+      if (error.message?.includes('Network request failed')) {
+        throw new Error('Network error: Cannot reach API Gateway. Check your internet connection.');
+      }
+
       throw error;
     }
   }
