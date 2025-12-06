@@ -886,7 +886,6 @@ export default function Home() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {__DEV__ && <NotificationDebugInfo />}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>DogCatiFy</Text>
       </View>
@@ -909,7 +908,12 @@ export default function Home() {
         onEndReachedThreshold={0.3}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
-        ListHeaderComponent={listHeader}
+        ListHeaderComponent={() => (
+          <>
+            {__DEV__ && <NotificationDebugInfo />}
+            {listHeader}
+          </>
+        )}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmpty}
         initialNumToRender={INITIAL_LOAD}
