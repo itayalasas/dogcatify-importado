@@ -42,12 +42,12 @@ steps:
 
   # 6. Copiar el keystore a una carpeta conocida dentro del agente
   # 6  Copiar el keystore a una carpeta conocida
-- script: |
-    echo "System.DefaultWorkingDirectory = $SYSTEM_DEFAULTWORKINGDIRECTORY"
-    echo "Keystore descargado en        = $DOWNLOAD_KEYSTORE_PATH"
+  - script: |
+      echo "System.DefaultWorkingDirectory = $SYSTEM_DEFAULTWORKINGDIRECTORY"
+      echo "Keystore descargado en        = $DOWNLOAD_KEYSTORE_PATH"
 
-    mkdir -p "$SYSTEM_DEFAULTWORKINGDIRECTORY/android_keystore"
-    cp "$DOWNLOAD_KEYSTORE_PATH" "$SYSTEM_DEFAULTWORKINGDIRECTORY/android_keystore/release.jks"
+      mkdir -p "$SYSTEM_DEFAULTWORKINGDIRECTORY/android_keystore"
+      cp "$DOWNLOAD_KEYSTORE_PATH" "$SYSTEM_DEFAULTWORKINGDIRECTORY/android_keystore/release.jks"
   displayName: 'Copiar keystore para el build'
   env:
     SYSTEM_DEFAULTWORKINGDIRECTORY: $(System.DefaultWorkingDirectory)
