@@ -41,11 +41,18 @@ steps:
     displayName: 'Descargar keystore desde Secure Files'
 
   # 6. Copiar el keystore a una carpeta conocida dentro del agente
-  - script: |
-      echo "System.DefaultWorkingDirectory = $(System.DefaultWorkingDirectory)"
-      mkdir -p $(System.DefaultWorkingDirectory)/android_keystore
-      cp "$(downloadKeystore.secureFilePath)" "$(System.DefaultWorkingDirectory)/android_keystore/release.jks"
-    displayName: 'Copiar keystore para el build'
+  # 6  Copiar el keystore a una carpeta conocida
+- script: |
+    echo "System.DefaultWorkingDirectory = $SYSTEM_DEFAULTWORKINGDIRECTORY"
+    echo "Keystore descargado en        = $DOWNLOAD_KEYSTORE_PATH"
+
+    mkdir -p "$SYSTEM_DEFAULTWORKINGDIRECTORY/android_keystore"
+    cp "$DOWNLOAD_KEYSTORE_PATH" "$SYSTEM_DEFAULTWORKINGDIRECTORY/android_keystore/release.jks"
+  displayName: 'Copiar keystore para el build'
+  env:
+    SYSTEM_DEFAULTWORKINGDIRECTORY: $(System.DefaultWorkingDirectory)
+    DOWNLOAD_KEYSTORE_PATH: $(downloadKeystore.secureFilePath)
+
 
   # 7. Construir AAB firmado
   - script: |
