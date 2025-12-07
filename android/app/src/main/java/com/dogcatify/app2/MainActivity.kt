@@ -1,4 +1,4 @@
-package com.dogcatify.app
+package com.dogcatify.app2
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
