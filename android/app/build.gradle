@@ -4,9 +4,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.dogcatify.app'
+    namespace 'com.dogcatify.app2'
     defaultConfig {
-        applicationId 'com.dogcatify.app'
+        applicationId 'com.dogcatify.app2'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 9
