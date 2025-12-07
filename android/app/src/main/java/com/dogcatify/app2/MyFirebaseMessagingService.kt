@@ -1,4 +1,4 @@
-package com.dogcatify.app
+package com.dogcatify.app2
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
