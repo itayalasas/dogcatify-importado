@@ -195,28 +195,30 @@ export const DottyAssistant: React.FC<DottyAssistantProps> = ({
   const progress = ((currentMessageIndex + 1) / messages.length) * 100;
 
   return (
-    <View style={styles.container} pointerEvents="box-none">
+    <>
       {isAnimatingIn && (
-        <Animated.View
-          style={[
-            styles.overlay,
-            {
-              opacity: overlayOpacity,
-            },
-          ]}
-          pointerEvents="none"
-        />
+        <View style={styles.overlayContainer} pointerEvents="none">
+          <Animated.View
+            style={[
+              styles.overlay,
+              {
+                opacity: overlayOpacity,
+              },
+            ]}
+          />
+        </View>
       )}
 
-      <Animated.View
-        style={[
-          styles.content,
-          {
-            transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
-          },
-        ]}
-        pointerEvents="auto"
-      >
+      <View style={styles.modalContainer} pointerEvents="box-none">
+        <Animated.View
+          style={[
+            styles.content,
+            {
+              transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
+            },
+          ]}
+          pointerEvents="auto"
+        >
         <TouchableOpacity
           style={styles.skipButton}
           onPress={handleSkip}
@@ -280,13 +282,19 @@ export const DottyAssistant: React.FC<DottyAssistantProps> = ({
           </Text>
           <ChevronRight size={20} color="#FFFFFF" />
         </TouchableOpacity>
-      </Animated.View>
-    </View>
+        </Animated.View>
+      </View>
+    </>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  overlayContainer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 9998,
+    elevation: 9998,
+  },
+  modalContainer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 9999,
     elevation: 9999,
