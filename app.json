@@ -2,7 +2,7 @@
   "expo": {
     "name": "DogCatiFy",
     "slug": "dogcatify",
-    "version": "15.0.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "dogcatify",
@@ -39,7 +39,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.dogcatify.app2",
-      "buildNumber": "15",
+      "buildNumber": "1",
       "associatedDomains": [
         "applinks:app-dogcatify.netlify.app"
       ],
@@ -54,7 +54,7 @@
     },
     "android": {
       "package": "com.dogcatify.app2",
-      "versionCode": 15,
+      "versionCode": 1,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
@@ -94,7 +94,7 @@
         "babel": { "include": ["@expo/vector-icons"] }
       }
     },
-    "runtimeVersion": "15.0.0",
+    "runtimeVersion": "1.0.0",
     "owner": "pedro.ayala",
     "updates": {
       "url": "https://u.expo.dev/0618d9ae-6714-46bb-adce-f4ee57fff324"
