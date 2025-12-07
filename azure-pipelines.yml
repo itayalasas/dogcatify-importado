@@ -1,5 +1,5 @@
 trigger:
-  - main   # o la rama que uses
+  - main
 
 pool:
   name: 'Default'
@@ -7,45 +7,44 @@ pool:
     - Agent.Name -equals dogcatify-androide
 
 variables:
-  - group: Android-Release-Keys   # si usaste variable group (sino quita esta línea)
+  - group: Android-Release-Keys
   NODE_VERSION: '18.x'
 
 steps:
-  # 1. Instalar Node.js
+  # 1️⃣ Instalar Node.js
   - task: NodeTool@0
     inputs:
       versionSpec: '$(NODE_VERSION)'
     displayName: 'Instalar Node.js'
 
-  # 2. Instalar dependencias del proyecto
+  # 2️⃣ Instalar dependencias
   - script: |
       npm install
     displayName: 'Instalar dependencias (npm install)'
 
-  # 3. Expo prebuild Android
+  # 3️⃣ Expo prebuild Android
   - script: |
       npx expo prebuild --platform android --non-interactive
     displayName: 'Expo prebuild Android'
 
-  # 4. Dar permisos de ejecución a gradlew
+  # 4️⃣ Permisos a gradlew
   - script: |
       chmod +x android/gradlew
     displayName: 'Dar permisos a gradlew'
 
-  # 5. Descargar el keystore seguro desde Library -> Secure files
+  # 5️⃣ Descargar el keystore desde Secure Files
   - task: DownloadSecureFile@1
     name: downloadKeystore
     inputs:
-      secureFile: 'dogcatify-release.jks'   # 👈 nombre EXACTO del secure file
+      secureFile: 'dogcatify-release.jks'
 
-  # 6. Copiar el keystore a una ruta conocida
+  # 6️⃣ Copiar el keystore a una carpeta conocida
   - script: |
-      echo "Preparando keystore..."
       mkdir -p $(System.DefaultWorkingDirectory)/android_keystore
       cp $(downloadKeystore.secureFilePath) $(System.DefaultWorkingDirectory)/android_keystore/release.jks
     displayName: 'Copiar keystore para el build'
 
-  # 7. Construir App Bundle de Android (AAB)
+  # 7️⃣ Construir AAB firmado
   - script: |
       cd android
       ./gradlew bundleRelease
@@ -59,7 +58,7 @@ steps:
       ANDROID_KEY_ALIAS: '$(ANDROID_KEY_ALIAS)'
       ANDROID_KEY_PASSWORD: '$(ANDROID_KEY_PASSWORD)'
 
-  # 8. Publicar el artefacto (AAB) en Azure DevOps
+  # 8️⃣ Publicar artefacto en Azure
   - task: PublishBuildArtifacts@1
     inputs:
       pathToPublish: 'android/app/build/outputs/bundle/release'
