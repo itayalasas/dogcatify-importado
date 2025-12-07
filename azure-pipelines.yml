@@ -8,6 +8,7 @@ pool:
 
 variables:
   - group: android-signing
+
   NODE_VERSION: '18.x'
 
 steps:
