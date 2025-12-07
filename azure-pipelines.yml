@@ -8,8 +8,8 @@ pool:
 
 variables:
   - group: android-signing
-
-  NODE_VERSION: '18.x'
+  - name: NODE_VERSION
+    value: '18.x'
 
 steps:
   # 1️⃣ Instalar Node.js
