@@ -10,13 +10,13 @@ import { NotificationProvider } from '../contexts/NotificationContext';
 import { ConfigProvider } from '../contexts/ConfigContext';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
-import { Platform, Alert, View, Text, ActivityIndicator } from 'react-native';
+import { Platform, Alert, View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { supabaseClient, initializeSupabase, setupAuthListeners } from '@/lib/supabase';
 import { envConfig } from '@/utils/envConfig';
 import { SafeAppWrapper } from '../components/SafeAppWrapper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { FloatingVoiceBot } from '../components/FloatingVoiceBot';
-// Global error handler test 1
+// Global error handler test
 if (typeof ErrorUtils !== 'undefined') {
   const originalHandler = ErrorUtils.getGlobalHandler();
   ErrorUtils.setGlobalHandler((error, isFatal) => {
@@ -203,19 +203,54 @@ function RootLayout() {
   // Determine initial route based on platform
   const initialRouteName = Platform.OS === 'web' ? 'web-info' : '(tabs)';
 
+  // Retry function
+  const retryConfiguration = async () => {
+    setConfigError(null);
+    setConfigReady(false);
+
+    try {
+      console.log('[App] 🔄 Retrying configuration...');
+      await envConfig.reload();
+      setConfigReady(true);
+      console.log('[App] ✅ Configuration retry successful');
+    } catch (error: any) {
+      console.error('[App] ❌ Configuration retry failed:', error);
+      setConfigError(error.message || 'Failed to initialize application');
+    }
+  };
+
   // Show error screen if configuration failed
   if (configError) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f44336', padding: 20 }}>
-        <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>
-          Error de Configuración
-        </Text>
-        <Text style={{ color: '#fff', fontSize: 14, textAlign: 'center', marginBottom: 24 }}>
-          {configError}
-        </Text>
-        <Text style={{ color: '#fff', fontSize: 12, textAlign: 'center' }}>
-          Por favor, reinicia la aplicación
-        </Text>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2D6A6F', padding: 20 }}>
+        <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, maxWidth: 400, width: '100%', alignItems: 'center' }}>
+          <Text style={{ fontSize: 24, marginBottom: 8 }}>⚠️</Text>
+          <Text style={{ color: '#333', fontSize: 18, fontWeight: 'bold', marginBottom: 12, textAlign: 'center' }}>
+            Error de Conexión
+          </Text>
+          <Text style={{ color: '#666', fontSize: 14, textAlign: 'center', marginBottom: 24, lineHeight: 20 }}>
+            {configError}
+          </Text>
+          <View style={{ width: '100%', gap: 12 }}>
+            <TouchableOpacity
+              onPress={retryConfiguration}
+              style={{
+                backgroundColor: '#2D6A6F',
+                paddingVertical: 14,
+                paddingHorizontal: 24,
+                borderRadius: 8,
+                alignItems: 'center'
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>
+                Reintentar
+              </Text>
+            </TouchableOpacity>
+            <Text style={{ color: '#999', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
+              Asegúrate de tener una conexión estable a internet
+            </Text>
+          </View>
+        </View>
       </View>
     );
   }
@@ -223,11 +258,19 @@ function RootLayout() {
   // Show loading screen while configuration is being loaded - only render providers after config is ready
   if (!configReady) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2D6A6F' }}>
-        <ActivityIndicator size="large" color="#fff" />
-        <Text style={{ color: '#fff', marginTop: 16, fontSize: 16 }}>
-          Cargando configuración...
-        </Text>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2D6A6F', padding: 20 }}>
+        <View style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: 16, padding: 32, alignItems: 'center', maxWidth: 300 }}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={{ color: '#fff', marginTop: 20, fontSize: 18, fontWeight: '600', textAlign: 'center' }}>
+            Cargando configuración...
+          </Text>
+          <Text style={{ color: 'rgba(255, 255, 255, 0.7)', marginTop: 12, fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
+            Conectando con el servidor
+          </Text>
+          <Text style={{ color: 'rgba(255, 255, 255, 0.5)', marginTop: 16, fontSize: 12, textAlign: 'center' }}>
+            Esto puede tardar hasta un minuto en conexiones lentas
+          </Text>
+        </View>
       </View>
     );
   }

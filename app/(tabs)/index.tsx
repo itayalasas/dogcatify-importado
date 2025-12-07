@@ -886,7 +886,6 @@ export default function Home() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {__DEV__ && <NotificationDebugInfo />}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>DogCatiFy</Text>
       </View>
@@ -896,7 +895,10 @@ export default function Home() {
         renderItem={renderFeedItem}
         keyExtractor={(item, index) => `${item.type}-${item.data.id}-${index}`}
         style={styles.content}
+        contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        scrollEnabled={true}
+        nestedScrollEnabled={true}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -909,7 +911,12 @@ export default function Home() {
         onEndReachedThreshold={0.3}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
-        ListHeaderComponent={listHeader}
+        ListHeaderComponent={() => (
+          <>
+            {__DEV__ && <NotificationDebugInfo />}
+            {listHeader}
+          </>
+        )}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmpty}
         initialNumToRender={INITIAL_LOAD}
@@ -958,6 +965,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  contentContainer: {
+    flexGrow: 1,
   },
   loadingContainer: {
     flex: 1,

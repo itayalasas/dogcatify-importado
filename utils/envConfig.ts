@@ -124,7 +124,12 @@ class EnvConfigService {
     try {
       console.log('[EnvConfig] 🚀 Initializing environment configuration...');
 
-      // Intentar cargar desde caché primero
+      // Detectar si es un build de producción (APK/AAB) o desarrollo (expo dev)
+      const isProduction = Constants.executionEnvironment === 'standalone' || Constants.executionEnvironment === 'storeClient';
+      console.log('[EnvConfig] 🏗️ Execution environment:', Constants.executionEnvironment);
+      console.log('[EnvConfig] 📱 Is production build:', isProduction);
+
+      // 1. Intentar cargar desde caché primero (más rápido)
       const cachedConfig = await this._loadFromCache();
       if (cachedConfig) {
         this.config = cachedConfig;
@@ -133,67 +138,169 @@ class EnvConfigService {
         return;
       }
 
-      // Intentar usar variables de entorno directamente
-      console.log('[EnvConfig] 🔄 Loading from process.env...');
-      const envVars = this._loadFromProcessEnv();
+      // 2. En DESARROLLO LOCAL (expo dev): usar variables de entorno del .env
+      if (!isProduction) {
+        console.log('[EnvConfig] 🔧 Development mode: Loading from process.env...');
+        const envVars = this._loadFromProcessEnv();
 
-      if (envVars) {
-        this.config = envVars;
-        this.initialized = true;
-        // Guardar en caché
-        await this._saveToCache(envVars);
-        console.log('[EnvConfig] ✅ Configuration loaded from process.env');
-        return;
+        if (envVars) {
+          this.config = envVars;
+          this.initialized = true;
+          // Guardar en caché
+          await this._saveToCache(envVars);
+          console.log('[EnvConfig] ✅ Configuration loaded from process.env (development)');
+          return;
+        }
+
+        throw new Error(
+          'Modo desarrollo: No se encontraron variables en process.env.\n' +
+          'Asegúrate de tener un archivo .env con las variables necesarias.'
+        );
       }
 
-      // Si process.env falla, intentar API Gateway como fallback
+      // 3. En PRODUCCIÓN (APK/AAB): SOLO usar API Gateway
+      console.log('[EnvConfig] 🏭 Production mode: Using API Gateway ONLY');
+
       const apiGatewayConfig = Constants.expoConfig?.extra?.apiGateway;
-      if (apiGatewayConfig?.url && apiGatewayConfig?.apiKey) {
-        console.log('[EnvConfig] 🌐 Attempting API Gateway fallback...');
-        const config = await this._fetchAndCacheConfig(apiGatewayConfig.url, apiGatewayConfig.apiKey);
-        this.config = config;
-        this.initialized = true;
-        console.log('[EnvConfig] ✅ Configuration loaded from API Gateway');
-        return;
+      console.log('[EnvConfig] 🔍 API Gateway config:', {
+        hasUrl: !!apiGatewayConfig?.url,
+        hasApiKey: !!apiGatewayConfig?.apiKey,
+        url: apiGatewayConfig?.url,
+      });
+
+      if (!apiGatewayConfig?.url || !apiGatewayConfig?.apiKey) {
+        throw new Error(
+          'Build de producción requiere configuración de API Gateway.\n' +
+          'Verifica que app.json tenga la configuración correcta en extra.apiGateway'
+        );
       }
 
-      throw new Error('No configuration source available');
-    } catch (error) {
+      console.log('[EnvConfig] 🌐 Loading from API Gateway...');
+      const config = await this._fetchAndCacheConfig(apiGatewayConfig.url, apiGatewayConfig.apiKey);
+      this.config = config;
+      this.initialized = true;
+      console.log('[EnvConfig] ✅ Configuration loaded from API Gateway');
+
+    } catch (error: any) {
       console.error('[EnvConfig] ❌ Failed to load configuration:', error);
-      throw error;
+      console.error('[EnvConfig] ❌ Error message:', error.message);
+
+      // NO usar fallback - la app debe fallar claramente si no puede cargar configuración
+      throw new Error(
+        error.message ||
+        'No se pudo cargar la configuración. Verifica tu conexión a internet e intenta nuevamente.'
+      );
     }
   }
 
   private async _fetchAndCacheConfig(url: string, apiKey: string): Promise<EnvironmentVariables> {
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'X-Integration-Key': apiKey,
-          'Content-Type': 'application/json',
-        },
-      });
+    const MAX_RETRIES = 3;
+    const TIMEOUT_MS = 60000; // 60 segundos para conexiones móviles lentas
 
-      if (!response.ok) {
-        throw new Error(`API Gateway returned ${response.status}: ${response.statusText}`);
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        console.log(`[EnvConfig] 📡 Fetching from API Gateway (attempt ${attempt}/${MAX_RETRIES})...`);
+        console.log('[EnvConfig]    URL:', url);
+        console.log('[EnvConfig]    API Key (first 20 chars):', apiKey.substring(0, 20) + '...');
+
+        // Timeout de 60 segundos para redes lentas
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          console.error(`[EnvConfig] ⏱️ API Gateway request timeout after ${TIMEOUT_MS}ms (attempt ${attempt})`);
+          controller.abort();
+        }, TIMEOUT_MS);
+
+        const fetchPromise = fetch(url, {
+          method: 'GET',
+          headers: {
+            'X-Integration-Key': apiKey,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          signal: controller.signal,
+        });
+
+        console.log('[EnvConfig] ⏳ Waiting for API Gateway response...');
+        const response = await fetchPromise;
+        clearTimeout(timeoutId);
+
+        console.log('[EnvConfig] 📨 Response received:', {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[EnvConfig] ❌ API Gateway error response:', errorText);
+
+          // Si es un error 4xx, no reintentar (error del cliente)
+          if (response.status >= 400 && response.status < 500) {
+            throw new Error(`API Gateway returned ${response.status}: ${response.statusText}`);
+          }
+
+          // Si es 5xx, reintentar
+          throw new Error(`Server error ${response.status}, retrying...`);
+        }
+
+        const data: ApiGatewayResponse = await response.json();
+        console.log('[EnvConfig] 📦 Received data keys:', Object.keys(data));
+
+        if (!data.variables) {
+          console.error('[EnvConfig] ❌ Invalid response structure');
+          throw new Error('Invalid API Gateway response: missing variables');
+        }
+
+        console.log('[EnvConfig] ✅ Variables received:', Object.keys(data.variables));
+
+        // Guardar en caché
+        await this._saveToCache(data.variables);
+
+        console.log('[EnvConfig] 💾 Configuration cached successfully');
+
+        return data.variables;
+      } catch (error: any) {
+        const isLastAttempt = attempt === MAX_RETRIES;
+
+        if (error.name === 'AbortError') {
+          console.error(`[EnvConfig] ❌ Request timeout (attempt ${attempt}/${MAX_RETRIES})`);
+
+          if (!isLastAttempt) {
+            console.log(`[EnvConfig] 🔄 Retrying in 2 seconds...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            continue;
+          }
+
+          throw new Error('La conexión es muy lenta. Por favor, verifica tu conexión a internet y reintenta.');
+        }
+
+        console.error(`[EnvConfig] ❌ Error fetching from API Gateway (attempt ${attempt}/${MAX_RETRIES}):`);
+        console.error('[EnvConfig]    Type:', error.constructor.name);
+        console.error('[EnvConfig]    Message:', error.message);
+
+        if (error.message?.includes('Network request failed')) {
+          if (!isLastAttempt) {
+            console.log(`[EnvConfig] 🔄 Retrying in 2 seconds...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            continue;
+          }
+
+          throw new Error('No se pudo conectar al servidor. Verifica tu conexión a internet.');
+        }
+
+        // Si es el último intento, lanzar el error
+        if (isLastAttempt) {
+          throw error;
+        }
+
+        // Esperar antes de reintentar
+        console.log(`[EnvConfig] 🔄 Retrying in 2 seconds...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
-
-      const data: ApiGatewayResponse = await response.json();
-
-      if (!data.variables) {
-        throw new Error('Invalid API Gateway response: missing variables');
-      }
-
-      // Guardar en caché
-      await this._saveToCache(data.variables);
-
-      console.log('[EnvConfig] 💾 Configuration cached successfully');
-
-      return data.variables;
-    } catch (error) {
-      console.error('[EnvConfig] ❌ Error fetching from API Gateway:', error);
-      throw error;
     }
+
+    // Este código nunca debería ejecutarse, pero TypeScript lo requiere
+    throw new Error('Failed to fetch configuration after all retries');
   }
 
   private async _loadFromCache(): Promise<EnvironmentVariables | null> {
@@ -246,6 +353,7 @@ class EnvConfigService {
     }
     return null;
   }
+
 
   /**
    * Obtiene una variable de configuración
