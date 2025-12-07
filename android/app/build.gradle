@@ -1,10 +1,57 @@
+apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+
+// Copiar google-services.json desde la raíz si existe
+def rootGoogleServices = new File(projectDir.getParentFile().getParentFile(), 'google-services.json')
+def appGoogleServices = new File(projectDir, 'google-services.json')
+if (rootGoogleServices.exists() && !appGoogleServices.exists()) {
+    println "📋 Copiando google-services.json desde la raíz..."
+    java.nio.file.Files.copy(rootGoogleServices.toPath(), appGoogleServices.toPath())
+}
+
+apply plugin: "com.google.gms.google-services"
+
+def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+
+/**
+ * Config de React Native / Expo
+ */
+react {
+    entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "android", "absolute"].execute(null, rootDir).text.trim())
+    reactNativeDir = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
+    hermesCommand = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath() + "/sdks/hermesc/%OS-BIN%/hermesc"
+    codegenDir = new File(["node", "--print", "require.resolve('@react-native/codegen/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
+
+    enableBundleCompression = (findProperty('android.enableBundleCompression') ?: false).toBoolean()
+    cliFile = new File(["node", "--print", "require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })"].execute(null, rootDir).text.trim())
+    bundleCommand = "export:embed"
+
+    autolinkLibrariesWithApp()
+}
+
+/**
+ * Flag para minify en release
+ */
+def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBuilds') ?: false).toBoolean()
+
+/**
+ * JavaScriptCore flavor
+ */
+def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
+
+/**
+ * CONFIGURACIÓN ANDROID
+ */
 android {
     ndkVersion rootProject.ext.ndkVersion
 
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
+    // 🔹 NUEVO NOMBRE DE PAQUETE
     namespace 'com.dogcatify.app2'
+
     defaultConfig {
         applicationId 'com.dogcatify.app2'
         minSdkVersion rootProject.ext.minSdkVersion
@@ -16,7 +63,7 @@ android {
     }
 
     signingConfigs {
-        // sigue igual para debug local
+        // Debug local
         debug {
             storeFile file('debug.keystore')
             storePassword 'android'
@@ -24,13 +71,14 @@ android {
             keyPassword 'android'
         }
 
-        // NUEVO: firma de release usando variables de entorno (desde Azure DevOps)
+        // Release: usa variables de entorno (Azure DevOps)
         release {
             def keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
             if (keystorePath) {
+                println "🔑 Usando keystore de entorno: $keystorePath"
                 storeFile file(keystorePath)
             } else {
-                // fallback para builds locales si no tienes env vars
+                println "⚠️ ANDROID_KEYSTORE_PATH no está definido, usando debug.keystore como fallback"
                 storeFile file('debug.keystore')
             }
 
@@ -45,7 +93,7 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            // ahora usamos la config de release
+            // 🔹 Ahora usamos la firma de release
             signingConfig signingConfigs.release
 
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
@@ -63,7 +111,62 @@ android {
             useLegacyPackaging enableLegacyPackaging.toBoolean()
         }
     }
+
     androidResources {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
+    }
+}
+
+/**
+ * Aplicar valores estáticos desde gradle.properties a android.packagingOptions
+ */
+["pickFirsts", "excludes", "merges", "doNotStrip"].each { prop ->
+    def options = (findProperty("android.packagingOptions.$prop") ?: "").split(",")
+    for (i in 0..<options.size()) options[i] = options[i].trim()
+    options -= ""
+
+    if (options.length > 0) {
+        println "android.packagingOptions.$prop += $options ($options.length)"
+        options.each {
+            android.packagingOptions[prop] += it
+        }
+    }
+}
+
+dependencies {
+    // React Native
+    implementation("com.facebook.react:react-android")
+
+    // Firebase
+    implementation platform('com.google.firebase:firebase-bom:32.7.0')
+    implementation 'com.google.firebase:firebase-messaging'
+
+    def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
+    def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";
+    def isWebpAnimatedEnabled = (findProperty('expo.webp.animated') ?: "") == "true";
+
+    if (isGifEnabled) {
+        implementation("com.facebook.fresco:animated-gif:${expoLibs.versions.fresco.get()}")
+    }
+
+    if (isWebpEnabled) {
+        implementation("com.facebook.fresco:webpsupport:${expoLibs.versions.fresco.get()}")
+        if (isWebpAnimatedEnabled) {
+            implementation("com.facebook.fresco:animated-webp:${expoLibs.versions.fresco.get()}")
+        }
+    }
+
+    if (hermesEnabled.toBoolean()) {
+        implementation("com.facebook.react:hermes-android")
+    } else {
+        implementation jscFlavor
+    }
+}
+
+// Deshabilitar subida de sourcemaps de Datadog
+tasks.configureEach { task ->
+    if (task.name.contains('uploadReleaseSourcemaps') || task.name.contains('uploadDebugSourcemaps')) {
+        task.enabled = false
+        println "⏭️  Saltando tarea de DataDog sourcemaps: ${task.name} (deshabilitada para evitar errores de build)"
     }
 }
