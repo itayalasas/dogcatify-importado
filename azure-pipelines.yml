@@ -7,7 +7,7 @@ pool:
     - Agent.Name -equals dogcatify-androide
 
 variables:
-  - group: Android-Release-Keys
+  - group: android-signing
   NODE_VERSION: '18.x'
 
 steps:
