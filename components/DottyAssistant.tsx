@@ -35,6 +35,7 @@ export const DottyAssistant: React.FC<DottyAssistantProps> = ({
 }) => {
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
   const [isVisible, setIsVisible] = useState(true);
+  const [isAnimatingIn, setIsAnimatingIn] = useState(false);
 
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
@@ -44,6 +45,7 @@ export const DottyAssistant: React.FC<DottyAssistantProps> = ({
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    setIsAnimatingIn(true);
     animateIn();
     startDottyAnimations();
   }, []);
@@ -73,10 +75,16 @@ export const DottyAssistant: React.FC<DottyAssistantProps> = ({
         friction: 7,
         useNativeDriver: true,
       }),
-    ]).start();
+    ]).start(() => {
+      // Mantener el overlay activo mientras el modal está visible
+      // isAnimatingIn permanece true mientras showOnboarding sea true
+    });
   };
 
   const animateOut = (callback: () => void) => {
+    // Inmediatamente deshabilitar el overlay para permitir interacción
+    setIsAnimatingIn(false);
+
     Animated.parallel([
       Animated.timing(overlayOpacity, {
         toValue: 0,
@@ -188,15 +196,17 @@ export const DottyAssistant: React.FC<DottyAssistantProps> = ({
 
   return (
     <View style={styles.container} pointerEvents="box-none">
-      <Animated.View
-        style={[
-          styles.overlay,
-          {
-            opacity: overlayOpacity,
-          },
-        ]}
-        pointerEvents="auto"
-      />
+      {isAnimatingIn && (
+        <Animated.View
+          style={[
+            styles.overlay,
+            {
+              opacity: overlayOpacity,
+            },
+          ]}
+          pointerEvents="none"
+        />
+      )}
 
       <Animated.View
         style={[
