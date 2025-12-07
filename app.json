@@ -38,7 +38,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.dogcatify.app",
+      "bundleIdentifier": "com.dogcatify.app2",
       "buildNumber": "15",
       "associatedDomains": [
         "applinks:app-dogcatify.netlify.app"
@@ -53,7 +53,7 @@
       }
     },
     "android": {
-      "package": "com.dogcatify.app",
+      "package": "com.dogcatify.app2",
       "versionCode": 15,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
