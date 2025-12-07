@@ -47,7 +47,7 @@ steps:
       mkdir -p "$(System.DefaultWorkingDirectory)/android_keystore"
       cp "$(downloadKeystore.secureFilePath)" \
       "$(System.DefaultWorkingDirectory)/android_keystore/release.jks"
-  displayName: 'Copiar keystore para el build'
+    displayName: 'Copiar keystore para el build'
 
   # 7️⃣ Construir AAB firmado
   - script: |
