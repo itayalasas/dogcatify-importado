@@ -7,6 +7,7 @@ pool:
     - Agent.Name -equals dogcatify-androide
 
 variables:
+  - group: Android-Release-Keys   # si usaste variable group (sino quita esta línea)
   NODE_VERSION: '18.x'
 
 steps:
@@ -21,7 +22,7 @@ steps:
       npm install
     displayName: 'Instalar dependencias (npm install)'
 
-  # 3. Generar código nativo de Android si es proyecto Expo managed
+  # 3. Expo prebuild Android
   - script: |
       npx expo prebuild --platform android --non-interactive
     displayName: 'Expo prebuild Android'
@@ -31,7 +32,20 @@ steps:
       chmod +x android/gradlew
     displayName: 'Dar permisos a gradlew'
 
-  # 5. Construir App Bundle de Android (AAB)
+  # 5. Descargar el keystore seguro desde Library -> Secure files
+  - task: DownloadSecureFile@1
+    name: downloadKeystore
+    inputs:
+      secureFile: 'dogcatify-release.jks'   # 👈 nombre EXACTO del secure file
+
+  # 6. Copiar el keystore a una ruta conocida
+  - script: |
+      echo "Preparando keystore..."
+      mkdir -p $(System.DefaultWorkingDirectory)/android_keystore
+      cp $(downloadKeystore.secureFilePath) $(System.DefaultWorkingDirectory)/android_keystore/release.jks
+    displayName: 'Copiar keystore para el build'
+
+  # 7. Construir App Bundle de Android (AAB)
   - script: |
       cd android
       ./gradlew bundleRelease
@@ -40,8 +54,12 @@ steps:
       ANDROID_HOME: /home/azureuser/android-sdk
       ANDROID_SDK_ROOT: /home/azureuser/android-sdk
       JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      ANDROID_KEYSTORE_PATH: '$(System.DefaultWorkingDirectory)/android_keystore/release.jks'
+      ANDROID_KEYSTORE_PASSWORD: '$(ANDROID_KEYSTORE_PASSWORD)'
+      ANDROID_KEY_ALIAS: '$(ANDROID_KEY_ALIAS)'
+      ANDROID_KEY_PASSWORD: '$(ANDROID_KEY_PASSWORD)'
 
-  # 6. Publicar el artefacto (AAB) en Azure DevOps
+  # 8. Publicar el artefacto (AAB) en Azure DevOps
   - task: PublishBuildArtifacts@1
     inputs:
       pathToPublish: 'android/app/build/outputs/bundle/release'
