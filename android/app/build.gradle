@@ -49,15 +49,28 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    // 🔹 NUEVO NOMBRE DE PAQUETE
+    // 🔹 Nombre de paquete NUEVO
     namespace 'com.dogcatify.app2'
 
     defaultConfig {
         applicationId 'com.dogcatify.app2'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 9
-        versionName "9.0.0"
+
+        // 🔢 VERSIONADO DINÁMICO (para CI / pipelines)
+        // 1️⃣ Busca en propiedades de Gradle: -PVERSION_CODE, -PVERSION_NAME
+        // 2️⃣ Si no hay, busca en variables de entorno: VERSION_CODE, VERSION_NAME
+        // 3️⃣ Si tampoco hay, usa los valores locales por defecto (9, "9.0.0")
+        def vcProp = project.findProperty("VERSION_CODE") ?: System.getenv("VERSION_CODE")
+        def vnProp = project.findProperty("VERSION_NAME") ?: System.getenv("VERSION_NAME")
+
+        def vc = (vcProp != null ? vcProp.toInteger() : 9)
+        def vn = (vnProp ?: "9.0.0")
+
+        versionCode vc
+        versionName vn
+
+        println "📦 Usando versionCode=${vc}  versionName=${vn}"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
