@@ -1,5 +1,5 @@
 trigger:
-  - main   # o la rama que uses
+  - main              # rama que dispara el pipeline
 
 pool:
   name: 'Default'
@@ -7,47 +7,51 @@ pool:
     - Agent.Name -equals dogcatify-androide
 
 variables:
-  - group: android-signing          # 👈 tu Variable Group con las 4 vars secretas
+  # 🔐 variables secretas del keystore (ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD)
+  - group: android-signing
+
+  # versión de Node
   - name: NODE_VERSION
     value: '18.x'
 
+  # ⬆️ versionCode incremental (1, 2, 3, ...)
   - name: ANDROID_VERSION_CODE
     value: $[counter('android_version', 1)]
-  # si quieres, versionName basado en el build
+
+  # versionName: puedes cambiar el formato si quieres
   - name: ANDROID_VERSION_NAME
     value: '1.0.$(Build.BuildId)'
 
 steps:
-  # 1. Instalar Node.js
+  # 1) Instalar Node.js
   - task: NodeTool@0
     inputs:
       versionSpec: '$(NODE_VERSION)'
     displayName: 'Instalar Node.js'
 
-  # 2. Instalar dependencias del proyecto
+  # 2) Instalar dependencias del proyecto
   - script: |
       npm install
     displayName: 'Instalar dependencias (npm install)'
 
-  # 3. Generar código nativo de Android si es proyecto Expo managed
+  # 3) Expo prebuild Android (si es proyecto managed)
   - script: |
       npx expo prebuild --platform android --non-interactive
     displayName: 'Expo prebuild Android'
 
-  # 4. Dar permisos de ejecución a gradlew
+  # 4) Dar permisos de ejecución a gradlew
   - script: |
       chmod +x android/gradlew
     displayName: 'Dar permisos a gradlew'
 
-  # 5. Descargar el keystore desde Secure Files
+  # 5) Descargar el keystore desde Secure Files
   - task: DownloadSecureFile@1
     name: downloadKeystore
     inputs:
       secureFile: 'dogcatify-release.jks'   # 👈 nombre EXACTO en Secure Files
     displayName: 'Descargar keystore desde Secure Files'
 
-  # 6. Copiar el keystore a una carpeta conocida dentro del agente
-  # 6  Copiar el keystore a una carpeta conocida
+  # 6) Copiar el keystore a una carpeta conocida dentro del agente
   - script: |
       echo "System.DefaultWorkingDirectory = $SYSTEM_DEFAULTWORKINGDIRECTORY"
       echo "Keystore descargado en        = $DOWNLOAD_KEYSTORE_PATH"
@@ -56,25 +60,29 @@ steps:
       cp "$DOWNLOAD_KEYSTORE_PATH" "$SYSTEM_DEFAULTWORKINGDIRECTORY/android_keystore/release.jks"
     displayName: 'Copiar keystore para el build'
     env:
-       SYSTEM_DEFAULTWORKINGDIRECTORY: $(System.DefaultWorkingDirectory)
-       DOWNLOAD_KEYSTORE_PATH: $(downloadKeystore.secureFilePath)
+      SYSTEM_DEFAULTWORKINGDIRECTORY: $(System.DefaultWorkingDirectory)
+      DOWNLOAD_KEYSTORE_PATH: $(downloadKeystore.secureFilePath)
 
-
-  # 7. Construir AAB firmado
+  # 7) Construir AAB firmado (enviando VERSION_CODE / VERSION_NAME a Gradle)
   - script: |
       cd android
-      ./gradlew bundleRelease
+      ./gradlew \
+        bundleRelease \
+        -PVERSION_CODE=$(ANDROID_VERSION_CODE) \
+        -PVERSION_NAME=$(ANDROID_VERSION_NAME)
     displayName: 'Construir Android App Bundle (bundleRelease)'
     env:
       ANDROID_HOME: /home/azureuser/android-sdk
       ANDROID_SDK_ROOT: /home/azureuser/android-sdk
       JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
-      ANDROID_KEYSTORE_PATH: '$(System.DefaultWorkingDirectory)/android_keystore/release.jks'
-      ANDROID_KEYSTORE_PASSWORD: '$(ANDROID_KEYSTORE_PASSWORD)'
-      ANDROID_KEY_ALIAS: '$(ANDROID_KEY_ALIAS)'
-      ANDROID_KEY_PASSWORD: '$(ANDROID_KEY_PASSWORD)'
 
-  # 8. Publicar el artefacto (AAB)
+      # ruta del keystore copiado en el paso anterior
+      ANDROID_KEYSTORE_PATH: $(System.DefaultWorkingDirectory)/android_keystore/release.jks
+      ANDROID_KEYSTORE_PASSWORD: $(ANDROID_KEYSTORE_PASSWORD)
+      ANDROID_KEY_ALIAS: $(ANDROID_KEY_ALIAS)
+      ANDROID_KEY_PASSWORD: $(ANDROID_KEY_PASSWORD)
+
+  # 8) Publicar el artefacto (AAB)
   - task: PublishBuildArtifacts@1
     inputs:
       pathToPublish: 'android/app/build/outputs/bundle/release'
