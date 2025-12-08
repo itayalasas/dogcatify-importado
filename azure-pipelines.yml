@@ -16,7 +16,7 @@ variables:
 
   # ⬆️ versionCode incremental (1, 2, 3, ...)
   - name: ANDROID_VERSION_CODE
-    value: $[counter('android_version', 1)]
+    value: $[counter('android_version', 15)]
 
   # versionName: puedes cambiar el formato si quieres
   - name: ANDROID_VERSION_NAME
