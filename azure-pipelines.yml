@@ -11,6 +11,12 @@ variables:
   - name: NODE_VERSION
     value: '18.x'
 
+  - name: ANDROID_VERSION_CODE
+    value: $[counter('android_version', 1)]
+  # si quieres, versionName basado en el build
+  - name: ANDROID_VERSION_NAME
+    value: '1.0.$(Build.BuildId)'
+
 steps:
   # 1. Instalar Node.js
   - task: NodeTool@0
