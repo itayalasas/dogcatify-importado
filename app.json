@@ -1,4 +1,4 @@
-{ 
+{
   "expo": {
     "name": "DogCatiFy",
     "slug": "dogcatify",
@@ -7,13 +7,19 @@
     "icon": "./assets/images/icon.png",
     "scheme": "dogcatify",
     "userInterfaceStyle": "automatic",
-    "platforms": ["ios", "android", "web"],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "plugins": [
       "expo-router",
       [
@@ -22,15 +28,25 @@
           "icon": "./assets/images/logo-transp.png",
           "color": "#2D6A6F",
           "sounds": [],
-          "android": { "useNextNotificationsApi": true }
+          "android": {
+            "useNextNotificationsApi": true
+          }
         }
       ],
-      "expo-updates"
+      "expo-updates",
+      "expo-secure-store",
+      "expo-web-browser"
     ],
-    "experiments": { "typedRoutes": true },
+    "experiments": {
+      "typedRoutes": true
+    },
     "extra": {
-      "router": { "origin": false },
-      "eas": { "projectId": "0618d9ae-6714-46bb-adce-f4ee57fff324" },
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "0618d9ae-6714-46bb-adce-f4ee57fff324"
+      },
       "apiGateway": {
         "url": "https://api.flowbridge.site/functions/v1/api-gateway/a3db1463-6c83-4eb0-bc6e-9ad7db89ea8e",
         "apiKey": "pub_4382560178cd0284e641e30eef20da87e3abde25937764c2d52e98b77a4d3f57"
@@ -77,12 +93,30 @@
           "action": "VIEW",
           "autoVerify": true,
           "data": [
-            { "scheme": "dogcatify", "host": "*" },
-            { "scheme": "https", "host": "app-dogcatify.netlify.app", "pathPrefix": "/album" },
-            { "scheme": "https", "host": "app-dogcatify.netlify.app", "pathPrefix": "/post" },
-            { "scheme": "https", "host": "app-dogcatify.netlify.app", "pathPrefix": "/share" }
+            {
+              "scheme": "dogcatify",
+              "host": "*"
+            },
+            {
+              "scheme": "https",
+              "host": "app-dogcatify.netlify.app",
+              "pathPrefix": "/album"
+            },
+            {
+              "scheme": "https",
+              "host": "app-dogcatify.netlify.app",
+              "pathPrefix": "/post"
+            },
+            {
+              "scheme": "https",
+              "host": "app-dogcatify.netlify.app",
+              "pathPrefix": "/share"
+            }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -91,7 +125,11 @@
       "bundler": "metro",
       "output": "static",
       "build": {
-        "babel": { "include": ["@expo/vector-icons"] }
+        "babel": {
+          "include": [
+            "@expo/vector-icons"
+          ]
+        }
       }
     },
     "runtimeVersion": "1.0.0",
