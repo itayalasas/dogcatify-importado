@@ -10,12 +10,14 @@ import { NotificationProvider } from '../contexts/NotificationContext';
 import { ConfigProvider } from '../contexts/ConfigContext';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
-import { Platform, Alert, View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { Platform, Alert, View, Text, ActivityIndicator, TouchableOpacity, Animated, Image, Dimensions } from 'react-native';
 import { supabaseClient, initializeSupabase, setupAuthListeners } from '@/lib/supabase';
 import { envConfig } from '@/utils/envConfig';
 import { SafeAppWrapper } from '../components/SafeAppWrapper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { FloatingVoiceBot } from '../components/FloatingVoiceBot';
+
+const { width } = Dimensions.get('window');
 // Global error handler test
 if (typeof ErrorUtils !== 'undefined') {
   const originalHandler = ErrorUtils.getGlobalHandler();
@@ -52,6 +54,41 @@ function RootLayout() {
   useFrameworkReady();
   const [configReady, setConfigReady] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
+  const logoScale = new Animated.Value(0.8);
+  const logoOpacity = new Animated.Value(0);
+  const pulseAnim = new Animated.Value(1);
+
+  // Logo animation
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(logoOpacity, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.spring(logoScale, {
+        toValue: 1,
+        tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.05,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
 
   // Initialize environment configuration and Supabase
   useEffect(() => {
@@ -222,35 +259,105 @@ function RootLayout() {
   // Show error screen if configuration failed
   if (configError) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2D6A6F', padding: 20 }}>
-        <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, maxWidth: 400, width: '100%', alignItems: 'center' }}>
-          <Text style={{ fontSize: 24, marginBottom: 8 }}>⚠️</Text>
-          <Text style={{ color: '#333', fontSize: 18, fontWeight: 'bold', marginBottom: 12, textAlign: 'center' }}>
+      <View style={{
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#2D6A6F',
+        padding: 20,
+      }}>
+        <Animated.View
+          style={{
+            backgroundColor: '#fff',
+            borderRadius: 20,
+            padding: 32,
+            maxWidth: 400,
+            width: '90%',
+            alignItems: 'center',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            elevation: 8,
+            opacity: logoOpacity,
+            transform: [{ scale: logoScale }],
+          }}
+        >
+          <View style={{
+            width: 80,
+            height: 80,
+            borderRadius: 40,
+            backgroundColor: '#FEF3CD',
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginBottom: 20,
+          }}>
+            <Text style={{ fontSize: 40 }}>⚠️</Text>
+          </View>
+
+          <Text style={{
+            color: '#1F2937',
+            fontSize: 22,
+            fontWeight: '700',
+            marginBottom: 12,
+            textAlign: 'center',
+          }}>
             Error de Conexión
           </Text>
-          <Text style={{ color: '#666', fontSize: 14, textAlign: 'center', marginBottom: 24, lineHeight: 20 }}>
+
+          <Text style={{
+            color: '#6B7280',
+            fontSize: 15,
+            textAlign: 'center',
+            marginBottom: 28,
+            lineHeight: 22,
+          }}>
             {configError}
           </Text>
-          <View style={{ width: '100%', gap: 12 }}>
-            <TouchableOpacity
-              onPress={retryConfiguration}
-              style={{
-                backgroundColor: '#2D6A6F',
-                paddingVertical: 14,
-                paddingHorizontal: 24,
-                borderRadius: 8,
-                alignItems: 'center'
-              }}
-            >
-              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>
-                Reintentar
-              </Text>
-            </TouchableOpacity>
-            <Text style={{ color: '#999', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
+
+          <TouchableOpacity
+            onPress={retryConfiguration}
+            style={{
+              backgroundColor: '#2D6A6F',
+              paddingVertical: 16,
+              paddingHorizontal: 32,
+              borderRadius: 12,
+              width: '100%',
+              alignItems: 'center',
+              shadowColor: '#2D6A6F',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.3,
+              shadowRadius: 4,
+              elevation: 4,
+            }}
+          >
+            <Text style={{
+              color: '#fff',
+              fontSize: 16,
+              fontWeight: '600',
+              letterSpacing: 0.5,
+            }}>
+              Reintentar Conexión
+            </Text>
+          </TouchableOpacity>
+
+          <View style={{
+            marginTop: 24,
+            paddingTop: 20,
+            borderTopWidth: 1,
+            borderTopColor: '#E5E7EB',
+            width: '100%',
+          }}>
+            <Text style={{
+              color: '#9CA3AF',
+              fontSize: 13,
+              textAlign: 'center',
+              lineHeight: 18,
+            }}>
               Asegúrate de tener una conexión estable a internet
             </Text>
           </View>
-        </View>
+        </Animated.View>
       </View>
     );
   }
@@ -258,17 +365,106 @@ function RootLayout() {
   // Show loading screen while configuration is being loaded - only render providers after config is ready
   if (!configReady) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2D6A6F', padding: 20 }}>
-        <View style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: 16, padding: 32, alignItems: 'center', maxWidth: 300 }}>
-          <ActivityIndicator size="large" color="#fff" />
-          <Text style={{ color: '#fff', marginTop: 20, fontSize: 18, fontWeight: '600', textAlign: 'center' }}>
-            Cargando configuración...
-          </Text>
-          <Text style={{ color: 'rgba(255, 255, 255, 0.7)', marginTop: 12, fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
-            Conectando con el servidor
-          </Text>
-          <Text style={{ color: 'rgba(255, 255, 255, 0.5)', marginTop: 16, fontSize: 12, textAlign: 'center' }}>
-            Esto puede tardar hasta un minuto en conexiones lentas
+      <View style={{
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#2D6A6F',
+      }}>
+        <Animated.View
+          style={{
+            alignItems: 'center',
+            opacity: logoOpacity,
+            transform: [{ scale: logoScale }],
+          }}
+        >
+          <Animated.View
+            style={{
+              transform: [{ scale: pulseAnim }],
+              marginBottom: 40,
+            }}
+          >
+            <Image
+              source={require('../assets/images/logo-transp.png')}
+              style={{
+                width: Math.min(width * 0.5, 200),
+                height: Math.min(width * 0.5, 200),
+              }}
+              resizeMode="contain"
+            />
+          </Animated.View>
+
+          <View style={{
+            alignItems: 'center',
+            paddingHorizontal: 40,
+          }}>
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginBottom: 16,
+            }}>
+              <ActivityIndicator size="small" color="#fff" style={{ marginRight: 12 }} />
+              <Text style={{
+                color: '#fff',
+                fontSize: 18,
+                fontWeight: '600',
+                letterSpacing: 0.5,
+              }}>
+                Iniciando DogCatiFy
+              </Text>
+            </View>
+
+            <View style={{
+              height: 4,
+              width: 200,
+              backgroundColor: 'rgba(255, 255, 255, 0.2)',
+              borderRadius: 2,
+              overflow: 'hidden',
+              marginBottom: 20,
+            }}>
+              <Animated.View
+                style={{
+                  height: '100%',
+                  width: '70%',
+                  backgroundColor: '#fff',
+                  borderRadius: 2,
+                }}
+              />
+            </View>
+
+            <Text style={{
+              color: 'rgba(255, 255, 255, 0.85)',
+              fontSize: 15,
+              textAlign: 'center',
+              marginBottom: 8,
+              fontWeight: '500',
+            }}>
+              Conectando con el servidor
+            </Text>
+
+            <Text style={{
+              color: 'rgba(255, 255, 255, 0.6)',
+              fontSize: 13,
+              textAlign: 'center',
+              lineHeight: 18,
+            }}>
+              Cargando tu experiencia personalizada
+            </Text>
+          </View>
+        </Animated.View>
+
+        <View style={{
+          position: 'absolute',
+          bottom: 40,
+          alignItems: 'center',
+        }}>
+          <Text style={{
+            color: 'rgba(255, 255, 255, 0.4)',
+            fontSize: 11,
+            textAlign: 'center',
+            fontWeight: '500',
+          }}>
+            Powered by FlowBridge API
           </Text>
         </View>
       </View>
