@@ -123,11 +123,7 @@ class EnvConfigService {
   private async _loadConfig(): Promise<void> {
     try {
       console.log('[EnvConfig] 🚀 Initializing environment configuration...');
-
-      // Detectar si es un build de producción (APK/AAB) o desarrollo (expo dev)
-      const isProduction = Constants.executionEnvironment === 'standalone' || Constants.executionEnvironment === 'storeClient';
       console.log('[EnvConfig] 🏗️ Execution environment:', Constants.executionEnvironment);
-      console.log('[EnvConfig] 📱 Is production build:', isProduction);
 
       // 1. Intentar cargar desde caché primero (más rápido)
       const cachedConfig = await this._loadFromCache();
@@ -138,29 +134,7 @@ class EnvConfigService {
         return;
       }
 
-      // 2. En DESARROLLO LOCAL (expo dev): usar variables de entorno del .env
-      if (!isProduction) {
-        console.log('[EnvConfig] 🔧 Development mode: Loading from process.env...');
-        const envVars = this._loadFromProcessEnv();
-
-        if (envVars) {
-          this.config = envVars;
-          this.initialized = true;
-          // Guardar en caché
-          await this._saveToCache(envVars);
-          console.log('[EnvConfig] ✅ Configuration loaded from process.env (development)');
-          return;
-        }
-
-        throw new Error(
-          'Modo desarrollo: No se encontraron variables en process.env.\n' +
-          'Asegúrate de tener un archivo .env con las variables necesarias.'
-        );
-      }
-
-      // 3. En PRODUCCIÓN (APK/AAB): SOLO usar API Gateway
-      console.log('[EnvConfig] 🏭 Production mode: Using API Gateway ONLY');
-
+      // 2. SIEMPRE intentar API Gateway primero si está configurado
       const apiGatewayConfig = Constants.expoConfig?.extra?.apiGateway;
       console.log('[EnvConfig] 🔍 API Gateway config:', {
         hasUrl: !!apiGatewayConfig?.url,
@@ -168,28 +142,51 @@ class EnvConfigService {
         url: apiGatewayConfig?.url,
       });
 
-      if (!apiGatewayConfig?.url || !apiGatewayConfig?.apiKey) {
-        throw new Error(
-          'Build de producción requiere configuración de API Gateway.\n' +
-          'Verifica que app.json tenga la configuración correcta en extra.apiGateway'
-        );
+      if (apiGatewayConfig?.url && apiGatewayConfig?.apiKey) {
+        console.log('[EnvConfig] 🌐 API Gateway configured, loading from server...');
+        try {
+          const config = await this._fetchAndCacheConfig(apiGatewayConfig.url, apiGatewayConfig.apiKey);
+          this.config = config;
+          this.initialized = true;
+          console.log('[EnvConfig] ✅ Configuration loaded from API Gateway');
+          return;
+        } catch (apiError: any) {
+          console.error('[EnvConfig] ❌ Failed to load from API Gateway:', apiError.message);
+
+          // Si el API Gateway falla, lanzar error inmediatamente
+          // No usar process.env como fallback porque esto es producción
+          throw new Error(
+            'No se pudo cargar la configuración desde el servidor.\n' +
+            'Verifica tu conexión a internet e intenta nuevamente.'
+          );
+        }
       }
 
-      console.log('[EnvConfig] 🌐 Loading from API Gateway...');
-      const config = await this._fetchAndCacheConfig(apiGatewayConfig.url, apiGatewayConfig.apiKey);
-      this.config = config;
-      this.initialized = true;
-      console.log('[EnvConfig] ✅ Configuration loaded from API Gateway');
+      // 3. Si NO hay API Gateway configurado, intentar process.env (solo para desarrollo local)
+      console.log('[EnvConfig] 🔧 No API Gateway configured, trying process.env (development mode)...');
+      const envVars = this._loadFromProcessEnv();
+
+      if (envVars) {
+        this.config = envVars;
+        this.initialized = true;
+        await this._saveToCache(envVars);
+        console.log('[EnvConfig] ✅ Configuration loaded from process.env (development)');
+        return;
+      }
+
+      // 4. Si llegamos aquí, no hay configuración disponible
+      throw new Error(
+        'No se encontró configuración disponible.\n\n' +
+        'Builds de producción: Asegúrate de que app.json tenga configurado el API Gateway.\n\n' +
+        'Desarrollo local: Asegúrate de tener un archivo .env con las variables necesarias.'
+      );
 
     } catch (error: any) {
       console.error('[EnvConfig] ❌ Failed to load configuration:', error);
       console.error('[EnvConfig] ❌ Error message:', error.message);
 
       // NO usar fallback - la app debe fallar claramente si no puede cargar configuración
-      throw new Error(
-        error.message ||
-        'No se pudo cargar la configuración. Verifica tu conexión a internet e intenta nuevamente.'
-      );
+      throw error;
     }
   }
 
