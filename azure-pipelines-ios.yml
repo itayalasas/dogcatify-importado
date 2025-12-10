@@ -2,10 +2,9 @@ trigger:
   - main
 
 pool:
-  # Si usas agente propio, poné el nombre del pool donde está el Mac
-  name: 'MacPool'      # o 'Default' si ahí vive el agente macOS
-  # si usas Microsoft-hosted:
-  # vmImage: 'macOS-13'
+  name: 'Default'
+  demands:
+    - Agent.Name -equals dogcatify-mac
 
 variables:
   - group: ios-signing       # 🔐 Variable Group con contraseñas / IDs
