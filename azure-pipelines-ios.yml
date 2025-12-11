@@ -42,12 +42,6 @@ steps:
     inputs:
       secureFile: 'DogCatiFy_AppStore.mobileprovision'
 
-- script: |
-    security unlock-keychain -p "$(IOS_KEYCHAIN_PASSWORD)" ~/Library/Keychains/build.keychain-db
-    security set-keychain-settings ~/Library/Keychains/build.keychain-db
-  displayName: "Desbloquear llavero"
-
-
   - script: |
       mkdir -p $HOME/certs
       mkdir -p $HOME/profiles
