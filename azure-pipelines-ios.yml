@@ -10,6 +10,10 @@ variables:
   - group: ios-signing
   - name: NODE_VERSION
     value: '18.x'
+  - name: IOS_WORKSPACE
+    value: 'dogcatify.xcworkspace'      # o el nombre real del .xcworkspace
+  - name: IOS_SCHEME
+    value: 'DogCatiFy'  
 
 steps:
   # 1. Node
