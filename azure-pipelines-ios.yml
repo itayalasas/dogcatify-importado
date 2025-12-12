@@ -7,108 +7,127 @@ pool:
     - Agent.Name -equals dogcatify-mac
 
 variables:
-  - group: ios-signing              # IOS_P12_PASSWORD, etc.
+  - group: ios-signing          # IOS_BUNDLE_ID, IOS_EXPORT_METHOD, IOS_P12_PASSWORD, IOS_TEAM_ID, MAC_KEYCHAIN_PASSWORD
   - name: NODE_VERSION
     value: '18.x'
-
-  # Por ahora estas dos sólo las documentamos (están hardcodeadas abajo)
   - name: IOS_WORKSPACE
-    value: 'DogCatiFy.xcworkspace'  # nombre EXACTO del .xcworkspace
-
+    value: 'DogCatiFy.xcworkspace'     # nombre del workspace en /ios
   - name: IOS_SCHEME
-    value: 'DogCatiFy'              # nombre EXACTO del Scheme en Xcode
+    value: 'DogCatiFy'                 # scheme de Xcode
 
 steps:
-  # 1. Instalar Node.js
+  # 1. Node
   - task: NodeTool@0
     inputs:
       versionSpec: '$(NODE_VERSION)'
     displayName: 'Instalar Node.js'
 
-  # 2. Instalar dependencias npm + CocoaPods
+  # 2. Dependencias JS + Pods
   - script: |
-      echo "== Instalar dependencias npm =="
+      set -e
       npm install
-
-      echo "== Instalar CocoaPods =="
       cd ios
       pod install
-    displayName: 'Instalar dependencias iOS (npm + pods)'
+    displayName: 'Instalar dependencias iOS (npm + CocoaPods)'
 
-  # 3. Descargar certificado (.p12)
+  # 3. Descargar certificado (.p12) y provisioning (.mobileprovision)
   - task: DownloadSecureFile@1
     name: iosCert
     inputs:
       secureFile: 'dogcatify-ios.p12'
-    displayName: 'Descargar certificado iOS (.p12)'
+    displayName: 'Descargar certificado .p12'
 
-  # 4. Descargar provisioning profile (.mobileprovision)
   - task: DownloadSecureFile@1
     name: iosProfile
     inputs:
       secureFile: 'DogCatiFy_AppStore.mobileprovision'
-    displayName: 'Descargar provisioning profile (.mobileprovision)'
+    displayName: 'Descargar provisioning profile'
 
-  # 5. Importar cert y copiar profile a la carpeta que Xcode espera
+  # 4. Importar certificado y registrar provisioning profile
   - script: |
-      echo "== Preparar certificado y provisioning profile =="
+      set -e
 
       CERT_PATH="$(iosCert.secureFilePath)"
       PROFILE_PATH="$(iosProfile.secureFilePath)"
 
-      echo "Certificado descargado en: $CERT_PATH"
-      echo "Profile descargado en     : $PROFILE_PATH"
-
-      # Importar el .p12 al llavero de login
+      echo ">>> Importando certificado en login.keychain-db"
       security import "$CERT_PATH" \
-        -k ~/Library/Keychains/login.keychain-db \
-        -P "$(IOS_P12_PASSWORD)" \
-        -A
+        -k "$HOME/Library/Keychains/login.keychain-db" \
+        -P "$IOS_P12_PASSWORD" \
+        -T /usr/bin/codesign \
+        -T /usr/bin/security
 
-      # Carpeta donde Xcode busca los provisioning profiles
-      PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-      mkdir -p "$PROFILES_DIR"
+      echo ">>> Ajustando permisos del llavero para codesign"
+      security set-key-partition-list \
+        -S apple-tool:,apple: \
+        -s \
+        -k "$MAC_KEYCHAIN_PASSWORD" \
+        "$HOME/Library/Keychains/login.keychain-db"
 
-      # Copiar el profile allí
-      cp "$PROFILE_PATH" "$PROFILES_DIR/DogCatiFy_AppStore.mobileprovision"
+      echo ">>> Instalando provisioning profile"
+      UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< \
+        "$(security cms -D -i "$PROFILE_PATH")")
 
-      echo "Profiles en $PROFILES_DIR:"
-      ls "$PROFILES_DIR"
+      mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+      cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
+
+      echo "Profile copiado como $UUID.mobileprovision"
     displayName: 'Preparar certificados iOS'
     env:
       IOS_P12_PASSWORD: $(IOS_P12_PASSWORD)
+      MAC_KEYCHAIN_PASSWORD: $(MAC_KEYCHAIN_PASSWORD)
 
-  # 6. Compilar y exportar el .ipa
+  # 5. Crear exportOptions.plist para la exportación del .ipa
+  - script: |
+      set -e
+      cat <<EOF > ios/exportOptions.plist
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key>
+  <string>$(IOS_EXPORT_METHOD)</string>
+  <key>teamID</key>
+  <string>$(IOS_TEAM_ID)</string>
+  <key>signingStyle</key>
+  <string>manual</string>
+  <key>provisioningProfiles</key>
+  <dict>
+    <key>$(IOS_BUNDLE_ID)</key>
+    <string>DogCatiFy_AppStore</string>
+  </dict>
+</dict>
+</plist>
+EOF
+      echo "exportOptions.plist generado en ios/exportOptions.plist"
+    displayName: 'Crear exportOptions.plist'
+
+  # 6. Compilar y archivar, luego exportar .ipa
   - script: |
       set -e
       cd ios
 
-      WORKSPACE="DogCatiFy.xcworkspace"
-      SCHEME="DogCatiFy"
-
-      ARCHIVE_PATH="$PWD/build/DogCatiFy.xcarchive"
-      EXPORT_PATH="$PWD/build/export"
-
-      echo "== Archive con xcodebuild =="
+      echo ">>> Archivando proyecto con xcodebuild"
       xcodebuild \
-        -workspace "$WORKSPACE" \
-        -scheme "$SCHEME" \
+        -workspace "$(IOS_WORKSPACE)" \
+        -scheme "$(IOS_SCHEME)" \
         -configuration Release \
-        -archivePath "$ARCHIVE_PATH" \
-        archive \
-        -allowProvisioningUpdates
+        -archivePath build/DogCatiFy.xcarchive \
+        DEVELOPMENT_TEAM="$(IOS_TEAM_ID)" \
+        PRODUCT_BUNDLE_IDENTIFIER="$(IOS_BUNDLE_ID)" \
+        PROVISIONING_PROFILE_SPECIFIER="DogCatiFy_AppStore" \
+        archive
 
-      echo "== Export .ipa =="
+      echo ">>> Exportando .ipa"
       xcodebuild \
         -exportArchive \
-        -archivePath "$ARCHIVE_PATH" \
-        -exportPath "$EXPORT_PATH" \
-        -exportOptionsPlist exportOptions.plist \
-        -allowProvisioningUpdates
-
-      echo "Contenido de $EXPORT_PATH:"
-      ls -R "$EXPORT_PATH"
+        -archivePath build/DogCatiFy.xcarchive \
+        -exportPath build/export \
+        -exportOptionsPlist exportOptions.plist
     displayName: 'Compilar y exportar .ipa'
+    env:
+      IOS_TEAM_ID: $(IOS_TEAM_ID)
+      IOS_BUNDLE_ID: $(IOS_BUNDLE_ID)
 
   # 7. Publicar artefacto (.ipa)
   - task: PublishBuildArtifacts@1
