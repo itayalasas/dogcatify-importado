@@ -132,38 +132,3 @@ steps:
     artifactName: 'ios-app'
     publishLocation: 'Container'
   displayName: 'Publicar artefacto iOS'
-
-  # 6. Compilar y archivar, luego exportar .ipa
-  - script: |
-      set -e
-      cd ios
-
-      echo ">>> Archivando proyecto con xcodebuild"
-      xcodebuild \
-        -workspace "$(IOS_WORKSPACE)" \
-        -scheme "$(IOS_SCHEME)" \
-        -configuration Release \
-        -archivePath build/DogCatiFy.xcarchive \
-        DEVELOPMENT_TEAM="$(IOS_TEAM_ID)" \
-        PRODUCT_BUNDLE_IDENTIFIER="$(IOS_BUNDLE_ID)" \
-        PROVISIONING_PROFILE_SPECIFIER="DogCatiFy_AppStore" \
-        archive
-
-      echo ">>> Exportando .ipa"
-      xcodebuild \
-        -exportArchive \
-        -archivePath build/DogCatiFy.xcarchive \
-        -exportPath build/export \
-        -exportOptionsPlist exportOptions.plist
-    displayName: 'Compilar y exportar .ipa'
-    env:
-      IOS_TEAM_ID: $(IOS_TEAM_ID)
-      IOS_BUNDLE_ID: $(IOS_BUNDLE_ID)
-
-  # 7. Publicar artefacto (.ipa)
-  - task: PublishBuildArtifacts@1
-    inputs:
-      pathToPublish: 'ios/build/export'
-      artifactName: 'ios-app'
-      publishLocation: 'Container'
-    displayName: 'Publicar artefacto iOS'
