@@ -7,17 +7,16 @@ pool:
     - Agent.Name -equals dogcatify-mac
 
 variables:
-  - group: ios-signing
-
+  - group: ios-signing              # IOS_P12_PASSWORD, etc.
   - name: NODE_VERSION
     value: '18.x'
 
-  # Deben coincidir EXACTAMENTE con lo que ves en Xcode
+  # Por ahora estas dos sólo las documentamos (están hardcodeadas abajo)
   - name: IOS_WORKSPACE
-    value: 'DogCatiFy.xcworkspace'   # nombre del .xcworkspace
+    value: 'DogCatiFy.xcworkspace'  # nombre EXACTO del .xcworkspace
 
   - name: IOS_SCHEME
-    value: 'DogCatiFy'               # nombre del Scheme
+    value: 'DogCatiFy'              # nombre EXACTO del Scheme en Xcode
 
 steps:
   # 1. Instalar Node.js
@@ -26,95 +25,92 @@ steps:
       versionSpec: '$(NODE_VERSION)'
     displayName: 'Instalar Node.js'
 
-  # 2. Dependencias (npm + CocoaPods)
+  # 2. Instalar dependencias npm + CocoaPods
   - script: |
-      set -e
-      echo "Instalando dependencias npm..."
+      echo "== Instalar dependencias npm =="
       npm install
 
-      echo "Instalando pods..."
+      echo "== Instalar CocoaPods =="
       cd ios
       pod install
-    displayName: 'Instalar dependencias iOS'
+    displayName: 'Instalar dependencias iOS (npm + pods)'
 
-  # 3. Descargar certificado (.p12) y provisioning profile
+  # 3. Descargar certificado (.p12)
   - task: DownloadSecureFile@1
     name: iosCert
     inputs:
       secureFile: 'dogcatify-ios.p12'
-    displayName: 'Descargar certificado .p12'
+    displayName: 'Descargar certificado iOS (.p12)'
 
+  # 4. Descargar provisioning profile (.mobileprovision)
   - task: DownloadSecureFile@1
     name: iosProfile
     inputs:
       secureFile: 'DogCatiFy_AppStore.mobileprovision'
-    displayName: 'Descargar provisioning profile'
+    displayName: 'Descargar provisioning profile (.mobileprovision)'
 
-  # 4. Importar certificado en el llavero y copiar provisioning profile
+  # 5. Importar cert y copiar profile a la carpeta que Xcode espera
   - script: |
-      set -e
+      echo "== Preparar certificado y provisioning profile =="
 
-      echo "Preparando carpetas..."
-      mkdir -p "$HOME/certs"
-      mkdir -p "$HOME/profiles"
+      CERT_PATH="$(iosCert.secureFilePath)"
+      PROFILE_PATH="$(iosProfile.secureFilePath)"
 
-      echo "Copiando archivos seguros..."
-      cp "$(iosCert.secureFilePath)" "$HOME/certs/dogcatify-ios.p12"
-      cp "$(iosProfile.secureFilePath)" "$HOME/profiles/DogCatiFy_AppStore.mobileprovision"
+      echo "Certificado descargado en: $CERT_PATH"
+      echo "Profile descargado en     : $PROFILE_PATH"
 
-      KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
+      # Importar el .p12 al llavero de login
+      security import "$CERT_PATH" \
+        -k ~/Library/Keychains/login.keychain-db \
+        -P "$(IOS_P12_PASSWORD)" \
+        -A
 
-      echo "Desbloqueando keychain: $KEYCHAIN"
-      security unlock-keychain -p "$MAC_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+      # Carpeta donde Xcode busca los provisioning profiles
+      PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+      mkdir -p "$PROFILES_DIR"
 
-      echo "Importando certificado en el keychain..."
-      security import "$HOME/certs/dogcatify-ios.p12" \
-        -k "$KEYCHAIN" \
-        -P "$IOS_P12_PASSWORD" \
-        -T /usr/bin/codesign
+      # Copiar el profile allí
+      cp "$PROFILE_PATH" "$PROFILES_DIR/DogCatiFy_AppStore.mobileprovision"
 
-      echo "Instalando provisioning profile..."
-      mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-      cp "$HOME/profiles/DogCatiFy_AppStore.mobileprovision" \
-         "$HOME/Library/MobileDevice/Provisioning Profiles/"
-
-      echo "Certificados y profile preparados correctamente."
+      echo "Profiles en $PROFILES_DIR:"
+      ls "$PROFILES_DIR"
     displayName: 'Preparar certificados iOS'
     env:
       IOS_P12_PASSWORD: $(IOS_P12_PASSWORD)
-      MAC_KEYCHAIN_PASSWORD: $(MAC_KEYCHAIN_PASSWORD)
 
-  # 5. Compilar y exportar .ipa
+  # 6. Compilar y exportar el .ipa
   - script: |
       set -e
       cd ios
 
-      echo "Archivando proyecto con xcodebuild..."
-      xcodebuild \
-        -workspace "$(IOS_WORKSPACE)" \
-        -scheme "$(IOS_SCHEME)" \
-        -configuration Release \
-        -archivePath build/DogCatiFy.xcarchive \
-        archive \
-        DEVELOPMENT_TEAM="$(IOS_TEAM_ID)" \
-        PRODUCT_BUNDLE_IDENTIFIER="$(IOS_BUNDLE_ID)"
+      WORKSPACE="DogCatiFy.xcworkspace"
+      SCHEME="DogCatiFy"
 
-      echo "Exportando .ipa..."
+      ARCHIVE_PATH="$PWD/build/DogCatiFy.xcarchive"
+      EXPORT_PATH="$PWD/build/export"
+
+      echo "== Archive con xcodebuild =="
+      xcodebuild \
+        -workspace "$WORKSPACE" \
+        -scheme "$SCHEME" \
+        -configuration Release \
+        -archivePath "$ARCHIVE_PATH" \
+        archive \
+        -allowProvisioningUpdates
+
+      echo "== Export .ipa =="
       xcodebuild \
         -exportArchive \
-        -archivePath build/DogCatiFy.xcarchive \
-        -exportPath build/export \
-        -exportOptionsPlist exportOptions.plist
+        -archivePath "$ARCHIVE_PATH" \
+        -exportPath "$EXPORT_PATH" \
+        -exportOptionsPlist exportOptions.plist \
+        -allowProvisioningUpdates
 
-      echo "Build iOS finalizada."
+      echo "Contenido de $EXPORT_PATH:"
+      ls -R "$EXPORT_PATH"
     displayName: 'Compilar y exportar .ipa'
-    env:
-      IOS_WORKSPACE: $(IOS_WORKSPACE)
-      IOS_SCHEME: $(IOS_SCHEME)
-      IOS_BUNDLE_ID: $(IOS_BUNDLE_ID)
-      IOS_TEAM_ID: $(IOS_TEAM_ID)
 
-  # 6. Publicar artefacto (.ipa)
+  # 7. Publicar artefacto (.ipa)
   - task: PublishBuildArtifacts@1
     inputs:
       pathToPublish: 'ios/build/export'
