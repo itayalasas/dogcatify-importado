@@ -78,29 +78,60 @@ steps:
       MAC_KEYCHAIN_PASSWORD: $(MAC_KEYCHAIN_PASSWORD)
 
   # 5. Crear exportOptions.plist para la exportación del .ipa
-  - script: |
-      set -e
-      cat <<EOF > ios/exportOptions.plist
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>method</key>
-  <string>$(IOS_EXPORT_METHOD)</string>
-  <key>teamID</key>
-  <string>$(IOS_TEAM_ID)</string>
-  <key>signingStyle</key>
-  <string>manual</string>
-  <key>provisioningProfiles</key>
-  <dict>
-    <key>$(IOS_BUNDLE_ID)</key>
-    <string>DogCatiFy_AppStore</string>
-  </dict>
-</dict>
-</plist>
-EOF
-      echo "exportOptions.plist generado en ios/exportOptions.plist"
-    displayName: 'Crear exportOptions.plist'
+- script: |
+    set -e
+
+    # Crear el directorio por si no existe
+    mkdir -p ios
+
+    cat <<EOF > ios/exportOptions.plist
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+      <dict>
+        <key>method</key>
+        <string>$(IOS_EXPORT_METHOD)</string>
+        <key>teamID</key>
+        <string>$(IOS_TEAM_ID)</string>
+        <key>signingStyle</key>
+        <string>manual</string>
+        <key>provisioningProfiles</key>
+        <dict>
+          <key>$(IOS_BUNDLE_ID)</key>
+          <string>DogCatiFy_AppStore</string>
+        </dict>
+      </dict>
+    </plist>
+    EOF
+  displayName: 'Crear exportOptions.plist para exportar el .ipa'
+
+# 6. Compilar y exportar .ipa
+- script: |
+    cd ios
+
+    xcodebuild \
+      -workspace DogCatiFy.xcworkspace \
+      -scheme DogCatiFy \
+      -configuration Release \
+      -archivePath build/DogCatiFy.xcarchive \
+      archive \
+      DEVELOPMENT_TEAM=$(IOS_TEAM_ID) \
+      PRODUCT_BUNDLE_IDENTIFIER=$(IOS_BUNDLE_ID)
+
+    xcodebuild \
+      -exportArchive \
+      -archivePath build/DogCatiFy.xcarchive \
+      -exportPath build/export \
+      -exportOptionsPlist exportOptions.plist
+  displayName: 'Compilar y exportar .ipa'
+
+# 7. Publicar artefacto
+- task: PublishBuildArtifacts@1
+  inputs:
+    pathToPublish: 'ios/build/export'
+    artifactName: 'ios-app'
+    publishLocation: 'Container'
+  displayName: 'Publicar artefacto iOS'
 
   # 6. Compilar y archivar, luego exportar .ipa
   - script: |
