@@ -7,22 +7,18 @@ pool:
     - Agent.Name -equals dogcatify-mac
 
 variables:
-  - group: ios-signing          # IOS_BUNDLE_ID, IOS_EXPORT_METHOD, IOS_P12_PASSWORD, IOS_TEAM_ID, MAC_KEYCHAIN_PASSWORD
+  - group: ios-signing
   - name: NODE_VERSION
     value: '18.x'
-  - name: IOS_WORKSPACE
-    value: 'DogCatiFy.xcworkspace'     # nombre del workspace en /ios
-  - name: IOS_SCHEME
-    value: 'DogCatiFy'                 # scheme de Xcode
 
 steps:
-  # 1. Node
+  # 1) Instalar Node.js
   - task: NodeTool@0
     inputs:
       versionSpec: '$(NODE_VERSION)'
     displayName: 'Instalar Node.js'
 
-  # 2. Dependencias JS + Pods
+  # 2) npm install + CocoaPods
   - script: |
       set -e
       npm install
@@ -30,7 +26,7 @@ steps:
       pod install
     displayName: 'Instalar dependencias iOS (npm + CocoaPods)'
 
-  # 3. Descargar certificado (.p12) y provisioning (.mobileprovision)
+  # 3) Descargar certificado y provisioning profile
   - task: DownloadSecureFile@1
     name: iosCert
     inputs:
@@ -43,92 +39,96 @@ steps:
       secureFile: 'DogCatiFy_AppStore.mobileprovision'
     displayName: 'Descargar provisioning profile'
 
-  # 4. Importar certificado y registrar provisioning profile
+  # 4) Importar .p12 en el llavero e instalar el profile
   - script: |
       set -e
 
       CERT_PATH="$(iosCert.secureFilePath)"
       PROFILE_PATH="$(iosProfile.secureFilePath)"
 
-      echo ">>> Importando certificado en login.keychain-db"
-      security import "$CERT_PATH" \
-        -k "$HOME/Library/Keychains/login.keychain-db" \
-        -P "$IOS_P12_PASSWORD" \
-        -T /usr/bin/codesign \
-        -T /usr/bin/security
+      echo "CERT_PATH=$CERT_PATH"
+      echo "PROFILE_PATH=$PROFILE_PATH"
 
-      echo ">>> Ajustando permisos del llavero para codesign"
-      security set-key-partition-list \
-        -S apple-tool:,apple: \
-        -s \
-        -k "$MAC_KEYCHAIN_PASSWORD" \
-        "$HOME/Library/Keychains/login.keychain-db"
+      # Crear / usar llavero de build
+      security create-keychain -p "$(MAC_KEYCHAIN_PASSWORD)" build.keychain || true
+      security default-keychain -s build.keychain
+      security unlock-keychain -p "$(MAC_KEYCHAIN_PASSWORD)" build.keychain
 
-      echo ">>> Instalando provisioning profile"
-      UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< \
-        "$(security cms -D -i "$PROFILE_PATH")")
+      # Importar certificado .p12
+      security import "$CERT_PATH" -k build.keychain -P "$(IOS_P12_PASSWORD)" -A
+      security set-key-partition-list -S apple-tool:,apple: -s -k "$(MAC_KEYCHAIN_PASSWORD)" build.keychain
 
+      # Instalar provisioning profile
+      UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin <<< "$(security cms -D -i "$PROFILE_PATH")")
       mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
       cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
 
-      echo "Profile copiado como $UUID.mobileprovision"
+      echo "Profile instalado como $UUID.mobileprovision"
     displayName: 'Preparar certificados iOS'
     env:
       IOS_P12_PASSWORD: $(IOS_P12_PASSWORD)
       MAC_KEYCHAIN_PASSWORD: $(MAC_KEYCHAIN_PASSWORD)
 
-  # 5. Crear exportOptions.plist para la exportación del .ipa
-- script: |
-    set -e
+  # 5) Crear exportOptions.plist usando las variables del grupo
+  - script: |
+      set -e
+      cd ios
 
-    # Crear el directorio por si no existe
-    mkdir -p ios
-
-    cat <<EOF > ios/exportOptions.plist
-    <?xml version="1.0" encoding="UTF-8"?>
-    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-    <plist version="1.0">
-      <dict>
-        <key>method</key>
-        <string>$(IOS_EXPORT_METHOD)</string>
-        <key>teamID</key>
-        <string>$(IOS_TEAM_ID)</string>
-        <key>signingStyle</key>
-        <string>manual</string>
-        <key>provisioningProfiles</key>
+      cat <<EOF > exportOptions.plist
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+      <plist version="1.0">
         <dict>
-          <key>$(IOS_BUNDLE_ID)</key>
-          <string>DogCatiFy_AppStore</string>
+          <key>method</key>
+          <string>$(IOS_EXPORT_METHOD)</string>
+
+          <key>teamID</key>
+          <string>$(IOS_TEAM_ID)</string>
+
+          <key>signingStyle</key>
+          <string>manual</string>
+
+          <key>provisioningProfiles</key>
+          <dict>
+            <key>$(IOS_BUNDLE_ID)</key>
+            <string>DogCatiFy_AppStore</string>
+          </dict>
         </dict>
-      </dict>
-    </plist>
-    EOF
-  displayName: 'Crear exportOptions.plist para exportar el .ipa'
+      </plist>
+      EOF
+    displayName: 'Crear exportOptions.plist'
 
-# 6. Compilar y exportar .ipa
-- script: |
-    cd ios
+  # 6) Compilar y exportar el .ipa
+  - script: |
+      set -e
+      cd ios
 
-    xcodebuild \
-      -workspace DogCatiFy.xcworkspace \
-      -scheme DogCatiFy \
-      -configuration Release \
-      -archivePath build/DogCatiFy.xcarchive \
-      archive \
-      DEVELOPMENT_TEAM=$(IOS_TEAM_ID) \
-      PRODUCT_BUNDLE_IDENTIFIER=$(IOS_BUNDLE_ID)
+      ARCHIVE_PATH="$PWD/build/DogCatiFy.xcarchive"
+      EXPORT_PATH="$PWD/build/export"
 
-    xcodebuild \
-      -exportArchive \
-      -archivePath build/DogCatiFy.xcarchive \
-      -exportPath build/export \
-      -exportOptionsPlist exportOptions.plist
-  displayName: 'Compilar y exportar .ipa'
+      xcodebuild \
+        -workspace DogCatiFy.xcworkspace \
+        -scheme DogCatiFy \
+        -configuration Release \
+        -archivePath "$ARCHIVE_PATH" \
+        DEVELOPMENT_TEAM="$(IOS_TEAM_ID)" \
+        PRODUCT_BUNDLE_IDENTIFIER="$(IOS_BUNDLE_ID)" \
+        archive
 
-# 7. Publicar artefacto
-- task: PublishBuildArtifacts@1
-  inputs:
-    pathToPublish: 'ios/build/export'
-    artifactName: 'ios-app'
-    publishLocation: 'Container'
-  displayName: 'Publicar artefacto iOS'
+      xcodebuild \
+        -exportArchive \
+        -archivePath "$ARCHIVE_PATH" \
+        -exportPath "$EXPORT_PATH" \
+        -exportOptionsPlist exportOptions.plist
+    displayName: 'Compilar y exportar .ipa'
+    env:
+      IOS_BUNDLE_ID: $(IOS_BUNDLE_ID)
+      IOS_TEAM_ID: $(IOS_TEAM_ID)
+
+  # 7) Publicar artefacto .ipa
+  - task: PublishBuildArtifacts@1
+    inputs:
+      pathToPublish: 'ios/build/export'
+      artifactName: 'ios-app'
+      publishLocation: 'Container'
+    displayName: 'Publicar artefacto iOS'
