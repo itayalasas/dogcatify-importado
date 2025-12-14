@@ -1,5 +1,8 @@
 trigger:
-  - dev
+  branches:
+    include:
+      - main
+      - dev
 
 pool:
   name: 'Default'
@@ -12,208 +15,197 @@ variables:
   - name: NODE_VERSION
     value: '18.x'
 
-  # Deben coincidir con lo que existe en ios/
+  # Deben coincidir con Xcode
   - name: IOS_WORKSPACE
-    value: 'DogCatiFy.xcworkspace'   # si tu workspace real es dogcatify.xcworkspace, cámbialo
+    value: 'DogCatiFy.xcworkspace'   # <-- si tu workspace real es dogcatify.xcworkspace, cámbialo
+
   - name: IOS_SCHEME
-    value: 'DogCatiFy'
+    value: 'DogCatiFy'               # <-- tu scheme (según tu screenshot)
+
+  # Nombre EXACTO del provisioning profile (Name del .mobileprovision)
+  - name: EXPORT_PROFILE_NAME
+    value: 'DogCatiFy_AppStore'
 
 steps:
   - checkout: self
     clean: true
+    fetchDepth: 1
 
-  # 1) Node
   - task: NodeTool@0
     inputs:
       versionSpec: '$(NODE_VERSION)'
     displayName: 'Instalar Node.js'
-    timeoutInMinutes: 10
 
   - script: |
       set -e
       node -v
       npm -v
-    displayName: 'Ver versiones Node/NPM'
+    displayName: 'Ver versiones'
 
-  # 2) Instalar deps JS
   - script: |
       set -e
       npm ci
-    displayName: 'Instalar dependencias JS (npm ci)'
-    timeoutInMinutes: 20
+    displayName: 'Instalar dependencias (npm ci)'
 
-  # 3) Si NO existe ios/ (Expo managed), lo generamos. Si ya existe, lo saltamos.
+  # Si tu repo YA tiene carpeta ios/ commiteada, podés borrar este paso.
   - script: |
       set -e
-      if [ ! -d "ios" ]; then
-        echo "No existe carpeta ios/. Ejecutando prebuild..."
-        npx expo prebuild --platform ios --non-interactive
-      else
-        echo "Carpeta ios/ ya existe. Saltando prebuild."
-      fi
-    displayName: 'Expo prebuild iOS (solo si falta ios/)'
-    timeoutInMinutes: 20
+      npx expo --version
+      npx expo prebuild --platform ios --non-interactive
+    displayName: 'Expo prebuild iOS'
 
-  # 4) CocoaPods
   - script: |
       set -e
       cd ios
+      pod --version
       pod install --repo-update
-    displayName: 'Instalar CocoaPods (pod install)'
-    timeoutInMinutes: 30
+    displayName: 'Instalar CocoaPods'
 
-  # 5) Descargar secure files
+  # Secure files (Library > Secure files)
   - task: DownloadSecureFile@1
-    name: p12file
+    name: iosCert
     inputs:
       secureFile: 'dogcatify-ios.p12'
-    displayName: 'Descargar certificado (.p12)'
+    displayName: 'Descargar .p12'
 
   - task: DownloadSecureFile@1
-    name: provfile
+    name: iosProfile
     inputs:
       secureFile: 'DogCatiFy_AppStore.mobileprovision'
-    displayName: 'Descargar provisioning profile (.mobileprovision)'
+    displayName: 'Descargar provisioning profile'
 
-  # 6) Keychain temporal + importar cert + instalar provisioning profile
+  # Keychain + importar p12 + instalar .mobileprovision (robusto)
   - script: |
       set -euo pipefail
 
-      CERT_PATH="$(p12file.secureFilePath)"
-      PROFILE_PATH="$(provfile.secureFilePath)"
+      CERT_PATH="$(iosCert.secureFilePath)"
+      PROFILE_PATH="$(iosProfile.secureFilePath)"
 
       echo "CERT_PATH=$CERT_PATH"
       echo "PROFILE_PATH=$PROFILE_PATH"
 
-      KEYCHAIN_PATH="$HOME/Library/Keychains/ios-build.keychain-db"
-      KEYCHAIN_PWD="$(MAC_KEYCHAIN_PASSWORD)"
+      KEYCHAIN_NAME="build.keychain"
+      KEYCHAIN_PATH="$HOME/Library/Keychains/$KEYCHAIN_NAME-db"
 
-      # Si existía de corridas anteriores, lo borramos
-      security delete-keychain "$KEYCHAIN_PATH" || true
+      # Si existía de otra corrida, lo borramos para evitar “already exists”
+      if security list-keychains | grep -q "$KEYCHAIN_NAME"; then
+        echo "El keychain $KEYCHAIN_NAME ya existe -> lo elimino"
+        security delete-keychain "$KEYCHAIN_NAME" || true
+      fi
 
-      # Crear y usar keychain temporal
-      security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
-      security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-      security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+      echo "Creando keychain..."
+      security create-keychain -p "$MAC_KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
 
-      # Que el sistema lo vea para codesign
-      security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
-      security default-keychain -s "$KEYCHAIN_PATH"
+      # Mantenerlo desbloqueado durante la build (6 horas)
+      security set-keychain-settings -lut 21600 "$KEYCHAIN_NAME"
+      security unlock-keychain -p "$MAC_KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
 
-      # Importar .p12 (SIN openssl)
-      security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$(IOS_P12_PASSWORD)" -A
-      security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+      # Asegurar que el sistema lo vea en el search list
+      security list-keychains -d user -s "$KEYCHAIN_NAME" login.keychain-db
+      security default-keychain -s "$KEYCHAIN_NAME"
 
-      # Instalar provisioning profile en la ruta estándar
+      echo "Importando .p12..."
+      security import "$CERT_PATH" -k "$KEYCHAIN_NAME" -P "$IOS_P12_PASSWORD" -A
+
+      # Permisos para codesign (evita prompts)
+      security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MAC_KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+
+      echo "Instalando provisioning profile..."
       mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
 
-      UUID=$(/usr/bin/security cms -D -i "$PROFILE_PATH" | /usr/libexec/PlistBuddy -c 'Print :UUID' /dev/stdin)
-      NAME=$(/usr/bin/security cms -D -i "$PROFILE_PATH" | /usr/libexec/PlistBuddy -c 'Print :Name' /dev/stdin)
+      # Convertimos a plist en archivo y extraemos UUID de forma estable
+      security cms -D -i "$PROFILE_PATH" > /tmp/profile.plist
+      UUID=$(/usr/bin/plutil -extract UUID raw -o - /tmp/profile.plist)
 
-      echo "Provisioning UUID: $UUID"
-      echo "Provisioning Name: $NAME"
+      if [ -z "$UUID" ]; then
+        echo "ERROR: No pude extraer UUID del provisioning profile."
+        exit 1
+      fi
 
       cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
+      echo "Provisioning instalado como: $UUID.mobileprovision"
 
-      # Validación rápida: que el profile aplique al bundle id
-      APP_ID=$(/usr/bin/security cms -D -i "$PROFILE_PATH" | /usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' /dev/stdin)
-      echo "Profile application-identifier: $APP_ID"
-      echo "Bundle esperado: $(IOS_BUNDLE_ID)"
+      echo "Identidades disponibles:"
+      security find-identity -v -p codesigning "$KEYCHAIN_NAME" || true
 
-      # Guardar name para pasos siguientes
-      echo "##vso[task.setvariable variable=PROFILE_NAME]$NAME"
-      echo "##vso[task.setvariable variable=KEYCHAIN_PATH]$KEYCHAIN_PATH"
     displayName: 'Keychain + importar .p12 + instalar .mobileprovision'
     env:
       IOS_P12_PASSWORD: $(IOS_P12_PASSWORD)
       MAC_KEYCHAIN_PASSWORD: $(MAC_KEYCHAIN_PASSWORD)
-      IOS_BUNDLE_ID: $(IOS_BUNDLE_ID)
-    timeoutInMinutes: 10
 
-  # 7) Crear exportOptions.plist (sin romper YAML)
+  # Crear exportOptions.plist (sin romper el YAML)
   - script: |
       set -euo pipefail
 
-      cat > ios/exportOptions.plist <<'EOF'
+      cat > ios/exportOptions.plist <<EOF
       <?xml version="1.0" encoding="UTF-8"?>
       <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
       <plist version="1.0">
       <dict>
         <key>method</key>
-        <string>app-store</string>
-        <key>signingStyle</key>
-        <string>manual</string>
+        <string>$(IOS_EXPORT_METHOD)</string>
+
         <key>teamID</key>
         <string>$(IOS_TEAM_ID)</string>
+
+        <key>signingStyle</key>
+        <string>manual</string>
+
         <key>provisioningProfiles</key>
         <dict>
           <key>$(IOS_BUNDLE_ID)</key>
-          <string>$(PROFILE_NAME)</string>
+          <string>$(EXPORT_PROFILE_NAME)</string>
         </dict>
-        <key>stripSwiftSymbols</key>
-        <true/>
-        <key>compileBitcode</key>
-        <false/>
       </dict>
       </plist>
       EOF
 
       echo "exportOptions.plist creado:"
-      plutil -p ios/exportOptions.plist
+      cat ios/exportOptions.plist
     displayName: 'Crear exportOptions.plist'
-    env:
-      IOS_TEAM_ID: $(IOS_TEAM_ID)
-      IOS_BUNDLE_ID: $(IOS_BUNDLE_ID)
 
-  # 8) Listar schemes (para confirmar que CI ve el scheme shared)
+  # (Opcional) listar schemes para verificar nombre exacto
   - script: |
       set -e
       cd ios
       xcodebuild -list -workspace "$(IOS_WORKSPACE)"
-    displayName: 'Listar schemes del workspace (debug)'
-    timeoutInMinutes: 5
+    displayName: 'Listar schemes del workspace'
 
-  # 9) Archive + Export IPA
   - script: |
       set -euo pipefail
       cd ios
 
-      ARCHIVE_PATH="$PWD/build/DogCatiFy.xcarchive"
+      ARCHIVE_PATH="$PWD/build/$(IOS_SCHEME).xcarchive"
       EXPORT_PATH="$PWD/build/export"
 
-      rm -rf "$PWD/build"
-      mkdir -p "$EXPORT_PATH"
+      # Limpieza
+      rm -rf "$PWD/build" || true
 
-      echo "Usando keychain: $(KEYCHAIN_PATH)"
-      security show-keychain-info "$(KEYCHAIN_PATH)" || true
-
+      echo "Archivando..."
       xcodebuild \
         -workspace "$(IOS_WORKSPACE)" \
         -scheme "$(IOS_SCHEME)" \
         -configuration Release \
-        -archivePath "$ARCHIVE_PATH" \
         -sdk iphoneos \
+        -destination "generic/platform=iOS" \
+        -archivePath "$ARCHIVE_PATH" \
         CODE_SIGN_STYLE=Manual \
         DEVELOPMENT_TEAM="$(IOS_TEAM_ID)" \
         PRODUCT_BUNDLE_IDENTIFIER="$(IOS_BUNDLE_ID)" \
-        PROVISIONING_PROFILE_SPECIFIER="$(PROFILE_NAME)" \
+        PROVISIONING_PROFILE_SPECIFIER="$(EXPORT_PROFILE_NAME)" \
         archive
 
+      echo "Exportando .ipa..."
       xcodebuild \
         -exportArchive \
         -archivePath "$ARCHIVE_PATH" \
         -exportPath "$EXPORT_PATH" \
         -exportOptionsPlist "$PWD/exportOptions.plist"
 
-      echo "Contenido export:"
+      echo "Export final:"
       ls -la "$EXPORT_PATH"
     displayName: 'Compilar y exportar .ipa'
-    env:
-      IOS_TEAM_ID: $(IOS_TEAM_ID)
-      IOS_BUNDLE_ID: $(IOS_BUNDLE_ID)
-    timeoutInMinutes: 60
 
-  # 10) Publicar artefacto
   - task: PublishBuildArtifacts@1
     inputs:
       pathToPublish: 'ios/build/export'
