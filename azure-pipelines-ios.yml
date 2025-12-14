@@ -1,5 +1,5 @@
 trigger:
-  - main   # o la rama que quieras usar como disparador
+  - dev          # o main, según la rama que uses
 
 pool:
   name: 'Default'
@@ -7,17 +7,9 @@ pool:
     - Agent.Name -equals dogcatify-mac
 
 variables:
-  - group: ios-signing
-
+  - group: ios-signing        # IOS_BUNDLE_ID, IOS_EXPORT_METHOD, IOS_P12_PASSWORD, IOS_TEAM_ID
   - name: NODE_VERSION
     value: '18.x'
-
-  # Deben coincidir EXACTAMENTE con lo que tienes en Xcode
-  - name: IOS_WORKSPACE
-    value: 'DogCatiFy.xcworkspace'
-
-  - name: IOS_SCHEME
-    value: 'DogCatiFy'
 
 steps:
   # 1. Instalar Node.js
@@ -26,20 +18,20 @@ steps:
       versionSpec: '$(NODE_VERSION)'
     displayName: 'Instalar Node.js'
 
-  # 2. Instalar dependencias JS + Pods
+  # 2. Instalar dependencias (npm + CocoaPods)
   - script: |
       set -e
       npm install
       cd ios
       pod install
-    displayName: 'Instalar dependencias iOS (npm + CocoaPods)'
+    displayName: 'Instalar dependencias iOS'
 
-  # 3. Descargar certificado .p12 y provisioning profile desde Secure Files
+  # 3. Descargar certificado y provisioning profile desde Secure Files
   - task: DownloadSecureFile@1
     name: iosCert
     inputs:
       secureFile: 'dogcatify-ios.p12'
-    displayName: 'Descargar certificado iOS (.p12)'
+    displayName: 'Descargar certificado .p12'
 
   - task: DownloadSecureFile@1
     name: iosProfile
@@ -47,32 +39,29 @@ steps:
       secureFile: 'DogCatiFy_AppStore.mobileprovision'
     displayName: 'Descargar provisioning profile'
 
-  # 4. Preparar certificados iOS (SIN llavero custom)
+  # 4. Importar certificado y copiar profile al sitio que usa Xcode
   - script: |
       set -e
 
       CERT_PATH="$(iosCert.secureFilePath)"
       PROFILE_PATH="$(iosProfile.secureFilePath)"
 
-      echo "Certificado: $CERT_PATH"
-      echo "Provisioning profile: $PROFILE_PATH"
+      echo "📄 Certificado: $CERT_PATH"
+      echo "📄 Provisioning profile: $PROFILE_PATH"
 
-      echo "🔐 Importando .p12 en login.keychain..."
+      echo "🔑 Importando .p12 en el llavero de login…"
       security import "$CERT_PATH" \
-        -k "$HOME/Library/Keychains/login.keychain-db" \
         -P "$IOS_P12_PASSWORD" \
-        -T /usr/bin/codesign
+        -A \
+        -k "$HOME/Library/Keychains/login.keychain-db"
 
-      echo "📄 Obteniendo UUID del provisioning profile..."
+      echo "📦 Instalando provisioning profile…"
       UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' /dev/stdin <<< "$(security cms -D -i "$PROFILE_PATH")")
-      echo "UUID detectado: $UUID"
 
-      echo "📥 Instalando provisioning profile..."
-      DEST_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-      mkdir -p "$DEST_DIR"
-      cp "$PROFILE_PATH" "$DEST_DIR/$UUID.mobileprovision"
+      mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+      cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
 
-      echo "✅ Certificado y profile instalados."
+      echo "✅ Profile instalado como $UUID.mobileprovision"
     displayName: 'Preparar certificados iOS'
     env:
       IOS_P12_PASSWORD: $(IOS_P12_PASSWORD)
@@ -86,59 +75,60 @@ steps:
       <?xml version="1.0" encoding="UTF-8"?>
       <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
       <plist version="1.0">
-      <dict>
-        <key>method</key>
-        <string>$(IOS_EXPORT_METHOD)</string>
-        <key>teamID</key>
-        <string>$(IOS_TEAM_ID)</string>
-        <key>signingStyle</key>
-        <string>manual</string>
-        <key>provisioningProfiles</key>
         <dict>
-          <key>$(IOS_BUNDLE_ID)</key>
-          <string>DogCatiFy_AppStore</string>
+          <key>method</key>
+          <string>$IOS_EXPORT_METHOD</string>
+          <key>teamID</key>
+          <string>$IOS_TEAM_ID</string>
+          <key>signingStyle</key>
+          <string>manual</string>
+          <key>provisioningProfiles</key>
+          <dict>
+            <key>$IOS_BUNDLE_ID</key>
+            <string>DogCatiFy_AppStore</string>
+          </dict>
         </dict>
-      </dict>
       </plist>
       EOF
 
-      echo "✅ exportOptions.plist generado:"
-      cat exportOptions.plist
+      echo "✅ exportOptions.plist generado"
     displayName: 'Crear exportOptions.plist'
     env:
       IOS_EXPORT_METHOD: $(IOS_EXPORT_METHOD)
       IOS_TEAM_ID: $(IOS_TEAM_ID)
       IOS_BUNDLE_ID: $(IOS_BUNDLE_ID)
 
-  # 6. Compilar y exportar .ipa
+  # 6. Compilar y archivar (.xcarchive) y luego exportar .ipa
   - script: |
       set -e
       cd ios
 
-      echo "🏗  Archivando proyecto iOS..."
+      echo "🏗  Archivando con workspace DogCatiFy.xcworkspace y scheme DogCatiFy…"
+
       xcodebuild \
-        -workspace "$(IOS_WORKSPACE)" \
-        -scheme "$(IOS_SCHEME)" \
+        -workspace DogCatiFy.xcworkspace \
+        -scheme DogCatiFy \
         -configuration Release \
         -archivePath build/DogCatiFy.xcarchive \
-        DEVELOPMENT_TEAM="$(IOS_TEAM_ID)" \
-        PRODUCT_BUNDLE_IDENTIFIER="$(IOS_BUNDLE_ID)" \
-        archive
+        archive \
+        DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+        PRODUCT_BUNDLE_IDENTIFIER="$IOS_BUNDLE_ID"
 
-      echo "📦 Exportando .ipa..."
+      echo "📦 Exportando .ipa…"
+
       xcodebuild \
         -exportArchive \
         -archivePath build/DogCatiFy.xcarchive \
         -exportPath build/export \
         -exportOptionsPlist exportOptions.plist
 
-      echo "✅ Build iOS finalizado. Archivos en ios/build/export"
+      echo "✅ IPA generado en ios/build/export"
     displayName: 'Compilar y exportar .ipa'
     env:
-      IOS_BUNDLE_ID: $(IOS_BUNDLE_ID)
       IOS_TEAM_ID: $(IOS_TEAM_ID)
+      IOS_BUNDLE_ID: $(IOS_BUNDLE_ID)
 
-  # 7. Publicar artefacto (.ipa)
+  # 7. Publicar el artefacto (.ipa) en Azure DevOps
   - task: PublishBuildArtifacts@1
     inputs:
       pathToPublish: 'ios/build/export'
