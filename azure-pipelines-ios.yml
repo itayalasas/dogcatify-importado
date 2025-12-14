@@ -11,133 +11,221 @@ variables:
 
   - name: NODE_VERSION
     value: '18.x'
+
   - name: IOS_SCHEME
     value: 'DogCatiFy'
+
   - name: IOS_CONFIGURATION
     value: 'Release'
+
   - name: KEYCHAIN_NAME
     value: 'build.keychain'
 
 steps:
-# ---------------------------
-# Checkout
-# ---------------------------
-- checkout: self
-  clean: true
-  fetchDepth: 0
+  - checkout: self
+    clean: true
+    fetchDepth: 0
 
-# ---------------------------
-# Node
-# ---------------------------
-- task: NodeTool@0
-  inputs:
-    versionSpec: '$(NODE_VERSION)'
-  displayName: 'Instalar Node.js'
+  - task: NodeTool@0
+    displayName: 'Instalar Node.js'
+    inputs:
+      versionSpec: '$(NODE_VERSION)'
 
-- script: |
-    node -v
-    npm -v
-  displayName: 'Ver versiones Node/NPM'
+  - script: |
+      set -e
+      node -v
+      npm -v
+    displayName: 'Ver versiones Node/NPM'
 
-# ---------------------------
-# Dependencias JS
-# ---------------------------
-- script: |
-    npm ci
-  displayName: 'Instalar dependencias JS'
+  - script: |
+      set -e
+      npm ci
+    displayName: 'Instalar dependencias (npm ci)'
 
-# ---------------------------
-# Expo prebuild (NATIVO)
-# ---------------------------
-- script: |
-    npx expo prebuild -p ios --no-install --clean
-  displayName: 'Expo prebuild iOS (NATIVO, sin Expo Dev)'
+  # Si no existe ios/, lo genera (nativo). Si existe, NO lo regenera.
+  - script: |
+      set -e
+      if [ ! -d "ios" ]; then
+        echo "No existe carpeta ios/, ejecutando prebuild..."
+        npx expo prebuild -p ios --no-install
+      else
+        echo "Existe carpeta ios/, saltando expo prebuild."
+      fi
+    displayName: 'Expo prebuild iOS (si aplica)'
 
-# ---------------------------
-# CocoaPods
-# ---------------------------
-- script: |
-    cd ios
-    pod deintegrate
-    pod install
-  displayName: 'Instalar CocoaPods (limpio)'
+  - script: |
+      set -e
+      cd ios
+      pod install
+    displayName: 'Instalar CocoaPods'
 
-# ---------------------------
-# Certificados
-# ---------------------------
-- task: DownloadSecureFile@1
-  name: iosCert
-  inputs:
-    secureFile: 'dogcatify-ios.p12'
+  # ---- Secure files ----
+  - task: DownloadSecureFile@1
+    name: iosCert
+    displayName: 'Descargar .p12'
+    inputs:
+      secureFile: 'dogcatify-ios.p12'
 
-- task: DownloadSecureFile@1
-  name: iosProfile
-  inputs:
-    secureFile: 'DogCatiFy_AppStore.mobileprovision'
+  - task: DownloadSecureFile@1
+    name: iosProfile
+    displayName: 'Descargar provisioning profile'
+    inputs:
+      secureFile: 'DogCatiFy_AppStore.mobileprovision'
 
-# ---------------------------
-# Keychain + Provisioning
-# ---------------------------
-- script: |
-    security delete-keychain $(KEYCHAIN_NAME) || true
-    security create-keychain -p "$(MAC_KEYCHAIN_PASSWORD)" $(KEYCHAIN_NAME)
-    security unlock-keychain -p "$(MAC_KEYCHAIN_PASSWORD)" $(KEYCHAIN_NAME)
-    security list-keychains -s $(KEYCHAIN_NAME)
+  # ---- Keychain + importar .p12 + instalar profile ----
+  - script: |
+      set -e
 
-    security import $(iosCert.secureFilePath) \
-      -k $(KEYCHAIN_NAME) \
-      -P "$(IOS_P12_PASSWORD)" \
-      -A
+      CERT_PATH="$(iosCert.secureFilePath)"
+      PROFILE_PATH="$(iosProfile.secureFilePath)"
 
-    security set-key-partition-list -S apple-tool:,apple: \
-      -s -k "$(MAC_KEYCHAIN_PASSWORD)" $(KEYCHAIN_NAME)
+      echo "CERT_PATH=$CERT_PATH"
+      echo "PROFILE_PATH=$PROFILE_PATH"
 
-    UUID=$(security cms -D -i $(iosProfile.secureFilePath) | plutil -extract UUID raw -o - -)
-    mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-    cp $(iosProfile.secureFilePath) "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
-  env:
-    IOS_P12_PASSWORD: $(IOS_P12_PASSWORD)
-    MAC_KEYCHAIN_PASSWORD: $(MAC_KEYCHAIN_PASSWORD)
-  displayName: 'Configurar keychain y provisioning'
+      security delete-keychain "$(KEYCHAIN_NAME)" || true
 
-# ---------------------------
-# ARCHIVE NATIVO (CLAVE)
-# ---------------------------
-- script: |
-    set -e
+      security create-keychain -p "$(MAC_KEYCHAIN_PASSWORD)" "$(KEYCHAIN_NAME)"
+      security set-keychain-settings -t 3600 -l "$(KEYCHAIN_NAME)"
+      security unlock-keychain -p "$(MAC_KEYCHAIN_PASSWORD)" "$(KEYCHAIN_NAME)"
 
-    WS=$(find ios -name "*.xcworkspace" | head -n 1)
+      security list-keychains -d user -s "$(KEYCHAIN_NAME)" login.keychain-db
+      security default-keychain -s "$(KEYCHAIN_NAME)"
 
-    xcodebuild archive \
-      -workspace "$WS" \
-      -scheme "$(IOS_SCHEME)" \
-      -configuration Release \
-      -sdk iphoneos \
-      -destination "generic/platform=iOS" \
-      -archivePath "$(Build.ArtifactStagingDirectory)/DogCatiFy.xcarchive" \
-      CODE_SIGN_STYLE=Manual \
-      CODE_SIGNING_ALLOWED=YES \
-      DEVELOPMENT_TEAM="$(IOS_TEAM_ID)" \
-      PRODUCT_BUNDLE_IDENTIFIER="$(IOS_BUNDLE_ID)" \
-      PROVISIONING_PROFILE_SPECIFIER="DogCatiFy_AppStore" \
-      ONLY_ACTIVE_ARCH=NO \
-      | tee archive.log
-  displayName: 'Archive iOS (NATIVO)'
+      security import "$CERT_PATH" -k "$(KEYCHAIN_NAME)" -P "$(IOS_P12_PASSWORD)" -A -T /usr/bin/codesign -T /usr/bin/security
+      security set-key-partition-list -S apple-tool:,apple: -s -k "$(MAC_KEYCHAIN_PASSWORD)" "$(KEYCHAIN_NAME)"
 
-# ---------------------------
-# Export IPA
-# ---------------------------
-- script: |
-    xcodebuild -exportArchive \
-      -archivePath "$(Build.ArtifactStagingDirectory)/DogCatiFy.xcarchive" \
-      -exportPath "$(Build.ArtifactStagingDirectory)/export" \
-      -exportOptionsPlist ios/exportOptions.plist
-  displayName: 'Export IPA'
+      UUID=$(/usr/bin/security cms -D -i "$PROFILE_PATH" | /usr/bin/plutil -extract UUID raw -o - -)
+      echo "Provisioning UUID: $UUID"
 
-# ---------------------------
-# Artefactos
-# ---------------------------
-- task: PublishBuildArtifacts@1
-  inputs:
-    pathToPublish: '$(Build.ArtifactStagingDirectory)/export'
-    artifactName: 'ios-ipa'
+      mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+      cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
+
+      echo "OK: keychain + p12 + provisioning instalados"
+    displayName: 'Keychain + importar .p12 + instalar .mobileprovision'
+    env:
+      IOS_P12_PASSWORD: $(IOS_P12_PASSWORD)
+      MAC_KEYCHAIN_PASSWORD: $(MAC_KEYCHAIN_PASSWORD)
+
+  # ---- Detectar workspace real ----
+  - script: |
+      set -e
+      WS=$(find ios -maxdepth 3 -name "*.xcworkspace" -print | head -n 1)
+      if [ -z "$WS" ]; then
+        echo "ERROR: No encontré .xcworkspace dentro de /ios"
+        exit 1
+      fi
+
+      echo "Workspace encontrado: $WS"
+      echo "##vso[task.setvariable variable=IOS_WORKSPACE]$WS"
+
+      echo "Listando schemes:"
+      xcodebuild -list -workspace "$WS"
+    displayName: 'Detectar workspace + listar schemes'
+
+  # ---- Crear exportOptions.plist en STAGING (ruta segura) ----
+  - script: |
+      set -e
+
+      EXPORT_PLIST="$(Build.ArtifactStagingDirectory)/exportOptions.plist"
+
+      cat > "$EXPORT_PLIST" <<EOF
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+      <plist version="1.0">
+      <dict>
+        <key>method</key>
+        <string>$(IOS_EXPORT_METHOD)</string>
+
+        <key>teamID</key>
+        <string>$(IOS_TEAM_ID)</string>
+
+        <key>signingStyle</key>
+        <string>manual</string>
+
+        <key>provisioningProfiles</key>
+        <dict>
+          <key>$(IOS_BUNDLE_ID)</key>
+          <string>DogCatiFy_AppStore</string>
+        </dict>
+      </dict>
+      </plist>
+      EOF
+
+      echo "Export plist creado en: $EXPORT_PLIST"
+      ls -la "$(Build.ArtifactStagingDirectory)"
+      plutil -p "$EXPORT_PLIST" || cat "$EXPORT_PLIST"
+
+      echo "##vso[task.setvariable variable=EXPORT_PLIST]$EXPORT_PLIST"
+    displayName: 'Crear exportOptions.plist (staging)'
+
+  # ---- ARCHIVE ----
+  - script: |
+      set -euo pipefail
+
+      ARCHIVE_PATH="$(Build.ArtifactStagingDirectory)/$(IOS_SCHEME).xcarchive"
+      LOG_ARCHIVE="$(Build.ArtifactStagingDirectory)/xcodebuild-archive.log"
+
+      echo "Workspace: $(IOS_WORKSPACE)"
+      echo "Scheme:    $(IOS_SCHEME)"
+      echo "Archive:   $ARCHIVE_PATH"
+
+      xcodebuild \
+        -workspace "$(IOS_WORKSPACE)" \
+        -scheme "$(IOS_SCHEME)" \
+        -configuration "$(IOS_CONFIGURATION)" \
+        -sdk iphoneos \
+        -destination "generic/platform=iOS" \
+        -archivePath "$ARCHIVE_PATH" \
+        CODE_SIGN_STYLE=Manual \
+        DEVELOPMENT_TEAM="$(IOS_TEAM_ID)" \
+        PRODUCT_BUNDLE_IDENTIFIER="$(IOS_BUNDLE_ID)" \
+        PROVISIONING_PROFILE_SPECIFIER="DogCatiFy_AppStore" \
+        clean archive | tee "$LOG_ARCHIVE"
+
+      echo "##vso[task.setvariable variable=ARCHIVE_PATH]$ARCHIVE_PATH"
+    displayName: 'Archive iOS (NATIVO)'
+
+  # ---- EXPORT IPA (con ruta absoluta al plist) ----
+  - script: |
+      set -euo pipefail
+
+      EXPORT_PATH="$(Build.ArtifactStagingDirectory)/export"
+      LOG_EXPORT="$(Build.ArtifactStagingDirectory)/xcodebuild-export.log"
+
+      echo "Archive path: $(ARCHIVE_PATH)"
+      echo "Export path:  $EXPORT_PATH"
+      echo "Plist path:   $(EXPORT_PLIST)"
+
+      # Validaciones para evitar el error "no such file"
+      test -f "$(EXPORT_PLIST)" || (echo "ERROR: no existe EXPORT_PLIST en $(EXPORT_PLIST)" && exit 1)
+      test -d "$(ARCHIVE_PATH)" || (echo "ERROR: no existe ARCHIVE_PATH en $(ARCHIVE_PATH)" && exit 1)
+
+      mkdir -p "$EXPORT_PATH"
+
+      xcodebuild \
+        -exportArchive \
+        -archivePath "$(ARCHIVE_PATH)" \
+        -exportPath "$EXPORT_PATH" \
+        -exportOptionsPlist "$(EXPORT_PLIST)" | tee "$LOG_EXPORT"
+
+      echo "Contenido export:"
+      ls -la "$EXPORT_PATH"
+
+      echo "IPA encontrado:"
+      find "$EXPORT_PATH" -maxdepth 2 -name "*.ipa" -print
+    displayName: 'Export IPA'
+
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publicar artefacto iOS'
+    inputs:
+      pathToPublish: '$(Build.ArtifactStagingDirectory)/export'
+      artifactName: 'ios-ipa'
+      publishLocation: 'Container'
+
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publicar logs'
+    condition: succeededOrFailed()
+    inputs:
+      pathToPublish: '$(Build.ArtifactStagingDirectory)'
+      artifactName: 'ios-build-logs'
+      publishLocation: 'Container'
