@@ -8,144 +8,145 @@ pool:
 
 variables:
   - group: ios-signing
-
   - name: NODE_VERSION
     value: '18.x'
 
-  # Cambiá a false si ya tenés ios/ commiteado
-  - name: RUN_PREBUILD
-    value: 'true'
-
-  # AJUSTA estos 2 si tu workspace/scheme se llaman distinto
-  - name: IOS_WORKSPACE
-    value: 'DogCatiFy.xcworkspace'
-  - name: IOS_SCHEME
-    value: 'DogCatiFy'
-
 steps:
-  - checkout: self
-    clean: true
+# -----------------------
+# 1. Checkout
+# -----------------------
+- checkout: self
+  clean: true
 
-  # Node (si en tu Mac ya está instalado y esto se cuelga, podés quitar este task)
-  - task: NodeTool@0
-    inputs:
-      versionSpec: '$(NODE_VERSION)'
-    displayName: 'Instalar Node.js'
+# -----------------------
+# 2. Node
+# -----------------------
+- task: NodeTool@0
+  inputs:
+    versionSpec: '$(NODE_VERSION)'
+  displayName: 'Instalar Node.js'
 
-  - script: |
-      node -v
-      npm -v
-    displayName: 'Ver versiones'
+# -----------------------
+# 3. Dependencias JS
+# -----------------------
+- script: |
+    npm install
+  displayName: 'Instalar dependencias JS'
 
-  - script: |
-      npm ci
-    displayName: 'Instalar dependencias (npm ci)'
+# -----------------------
+# 4. Prebuild iOS (Expo → nativo)
+# -----------------------
+- script: |
+    npx expo prebuild --platform ios --non-interactive
+  displayName: 'Expo prebuild iOS'
 
-  # Prebuild SOLO si no tenés ios/ en el repo
-  - script: |
-      if [ "$(RUN_PREBUILD)" = "true" ]; then
-        echo "Ejecutando prebuild iOS..."
-        npx expo prebuild --platform ios --non-interactive
-      else
-        echo "RUN_PREBUILD=false, saltando prebuild."
-      fi
-    displayName: 'Expo prebuild iOS (opcional)'
+# -----------------------
+# 5. CocoaPods
+# -----------------------
+- script: |
+    cd ios
+    pod install
+  displayName: 'Instalar CocoaPods'
 
-  - script: |
-      cd ios
-      pod install
-    displayName: 'Instalar CocoaPods'
+# -----------------------
+# 6. Descargar certificado y profile
+# -----------------------
+- task: DownloadSecureFile@1
+  name: iosCert
+  inputs:
+    secureFile: 'dogcatify-ios.p12'
 
-  # 1) Descargar e instalar Certificado (P12) en keychain temporal (SIN popups)
-  - task: DownloadSecureFile@1
-    name: iosP12
-    inputs:
-      secureFile: 'dogcatify-ios.p12'
-    displayName: 'Descargar .p12'
+- task: DownloadSecureFile@1
+  name: iosProfile
+  inputs:
+    secureFile: 'DogCatiFy_AppStore.mobileprovision'
 
-  - task: InstallAppleCertificate@2
-    displayName: 'Instalar certificado Apple (.p12)'
-    inputs:
-      certSecureFile: 'dogcatify-ios.p12'
-      certPwd: '$(IOS_P12_PASSWORD)'
-      keychain: 'temp'
+# -----------------------
+# 7. Importar certificado (SIN InstallAppleCertificate)
+# -----------------------
+- script: |
+    echo "Importando certificado en login.keychain"
 
-  # 2) Descargar e instalar Provisioning Profile
-  - task: DownloadSecureFile@1
-    name: iosProv
-    inputs:
-      secureFile: 'DogCatiFy_AppStore.mobileprovision'
-    displayName: 'Descargar provisioning profile'
+    security unlock-keychain -p "" ~/Library/Keychains/login.keychain-db || true
 
-  - task: InstallAppleProvisioningProfile@1
-    name: installProv
-    displayName: 'Instalar provisioning profile'
-    inputs:
-      provisioningProfileLocation: 'secureFiles'
-      provProfileSecureFile: 'DogCatiFy_AppStore.mobileprovision'
+    security import "$(iosCert.secureFilePath)" \
+      -k ~/Library/Keychains/login.keychain-db \
+      -P "$(IOS_P12_PASSWORD)" \
+      -T /usr/bin/codesign \
+      -T /usr/bin/security \
+      -A
 
-  # (Opcional) Debug: listar schemes para confirmar
-  - script: |
-      cd ios
-      xcodebuild -list -workspace "$(IOS_WORKSPACE)"
-    displayName: 'Listar schemes del workspace'
+    security set-key-partition-list \
+      -S apple-tool:,apple: \
+      -s \
+      -k "" \
+      ~/Library/Keychains/login.keychain-db
+  displayName: 'Importar certificado iOS'
 
-  # 3) Crear exportOptions.plist (bien indentado, sin romper YAML)
-  - script: |
-      cat > ios/exportOptions.plist <<EOF
-      <?xml version="1.0" encoding="UTF-8"?>
-      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-      <plist version="1.0">
+# -----------------------
+# 8. Instalar provisioning profile
+# -----------------------
+- script: |
+    mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+    UUID=$(grep -aA1 UUID "$(iosProfile.secureFilePath)" | grep -o "[-A-F0-9]\{36\}")
+    cp "$(iosProfile.secureFilePath)" \
+       ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+  displayName: 'Instalar provisioning profile'
+
+# -----------------------
+# 9. Crear exportOptions.plist
+# -----------------------
+- script: |
+    cat <<EOF > ios/exportOptions.plist
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+    <dict>
+      <key>method</key>
+      <string>$(IOS_EXPORT_METHOD)</string>
+      <key>teamID</key>
+      <string>$(IOS_TEAM_ID)</string>
+      <key>signingStyle</key>
+      <string>manual</string>
+      <key>provisioningProfiles</key>
       <dict>
-        <key>method</key>
-        <string>$(IOS_EXPORT_METHOD)</string>
-        <key>teamID</key>
-        <string>$(IOS_TEAM_ID)</string>
-        <key>signingStyle</key>
-        <string>manual</string>
-        <key>provisioningProfiles</key>
-        <dict>
-          <key>$(IOS_BUNDLE_ID)</key>
-          <string>DogCatiFy_AppStore</string>
-        </dict>
+        <key>$(IOS_BUNDLE_ID)</key>
+        <string>DogCatiFy_AppStore</string>
       </dict>
-      </plist>
-      EOF
+    </dict>
+    </plist>
+    EOF
+  displayName: 'Crear exportOptions.plist'
 
-      echo "exportOptions.plist creado en ios/exportOptions.plist"
-    displayName: 'Crear exportOptions.plist'
+# -----------------------
+# 10. Build y export IPA
+# -----------------------
+- script: |
+    cd ios
 
-  # 4) Build IPA (Archive + Export)
-  - script: |
-      set -e
-      cd ios
+    xcodebuild \
+      -workspace DogCatiFy.xcworkspace \
+      -scheme DogCatiFy \
+      -configuration Release \
+      -archivePath build/DogCatiFy.xcarchive \
+      CODE_SIGN_STYLE=Manual \
+      DEVELOPMENT_TEAM=$(IOS_TEAM_ID) \
+      PRODUCT_BUNDLE_IDENTIFIER=$(IOS_BUNDLE_ID) \
+      archive
 
-      ARCHIVE_PATH="$PWD/build/$(IOS_SCHEME).xcarchive"
-      EXPORT_PATH="$PWD/build/export"
+    xcodebuild \
+      -exportArchive \
+      -archivePath build/DogCatiFy.xcarchive \
+      -exportPath build/export \
+      -exportOptionsPlist exportOptions.plist
+  displayName: 'Compilar y exportar .ipa'
 
-      xcodebuild \
-        -workspace "$(IOS_WORKSPACE)" \
-        -scheme "$(IOS_SCHEME)" \
-        -configuration Release \
-        -archivePath "$ARCHIVE_PATH" \
-        archive \
-        DEVELOPMENT_TEAM="$(IOS_TEAM_ID)" \
-        PRODUCT_BUNDLE_IDENTIFIER="$(IOS_BUNDLE_ID)" \
-        CODE_SIGN_STYLE=Manual \
-        PROVISIONING_PROFILE_SPECIFIER="DogCatiFy_AppStore"
-
-      xcodebuild \
-        -exportArchive \
-        -archivePath "$ARCHIVE_PATH" \
-        -exportPath "$EXPORT_PATH" \
-        -exportOptionsPlist "$PWD/../exportOptions.plist"
-
-      ls -la "$EXPORT_PATH"
-    displayName: 'Compilar y exportar .ipa'
-
-  - task: PublishBuildArtifacts@1
-    inputs:
-      pathToPublish: 'ios/build/export'
-      artifactName: 'ios-app'
-      publishLocation: 'Container'
-    displayName: 'Publicar artefacto iOS'
+# -----------------------
+# 11. Publicar artefacto
+# -----------------------
+- task: PublishBuildArtifacts@1
+  inputs:
+    pathToPublish: 'ios/build/export'
+    artifactName: 'ios-app'
+    publishLocation: 'Container'
+  displayName: 'Publicar artefacto iOS'
