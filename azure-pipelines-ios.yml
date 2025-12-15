@@ -59,15 +59,6 @@ steps:
       pod install
     displayName: 'Instalar CocoaPods'
 
-  # (Opcional) xcpretty para logs legibles - con timeout para que no se quede colgado
-  - script: |
-      set -e
-      echo "Instalando xcpretty..."
-      sudo gem install xcpretty --no-document
-      xcpretty --version
-    displayName: 'Instalar xcpretty (logs legibles)'
-    timeoutInMinutes: 10
-
   # Secure files
   - task: DownloadSecureFile@1
     name: iosCert
