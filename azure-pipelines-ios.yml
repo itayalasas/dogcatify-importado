@@ -25,8 +25,7 @@ variables:
   - name: IOS_EXPORT_METHOD
     value: 'app-store'
 
-  # Nombre del profile (tiene que coincidir con el "Name" dentro del .mobileprovision)
-  # Si en tu variable group ya existe IOS_PROFILE_NAME, podés borrar esta sección.
+  # Debe coincidir con el "Name" dentro del .mobileprovision
   - name: IOS_PROFILE_NAME
     value: 'DogCatiFy_AppStore'
 
@@ -51,8 +50,6 @@ steps:
       npm ci
     displayName: 'Instalar dependencias (npm ci)'
 
-  # (Opcional) si querés SIEMPRE nativo limpio:
-  # borra ios/ y lo regenera. Si preferís mantener ios/ commiteado, dejalo como está.
   - script: |
       set -e
       if [ ! -d "ios" ]; then
@@ -102,7 +99,9 @@ steps:
 
       echo "Importando P12..."
       security import "$CERT_PATH" -k "$(KEYCHAIN_NAME)" -P "$(IOS_P12_PASSWORD)" -A -T /usr/bin/codesign -T /usr/bin/security
-      security set-key-partition-list -S apple-tool:,apple: -s -k "$(MAC_KEYCHAIN_PASSWORD)" "$(KEYCHAIN_NAME)"
+
+      # Importante para que codesign pueda usar la key en CI
+      security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$(MAC_KEYCHAIN_PASSWORD)" "$(KEYCHAIN_NAME)"
 
       echo "Identidades codesign:"
       security find-identity -v -p codesigning "$(KEYCHAIN_NAME)" || true
@@ -125,6 +124,22 @@ steps:
     env:
       IOS_P12_PASSWORD: $(IOS_P12_PASSWORD)
       MAC_KEYCHAIN_PASSWORD: $(MAC_KEYCHAIN_PASSWORD)
+
+  # ---- Diagnóstico: listar profiles instalados + sus nombres ----
+  - script: |
+      set -e
+      echo "Profiles instalados:"
+      ls -la "$HOME/Library/MobileDevice/Provisioning Profiles" || true
+
+      echo "Listado UUID => Name:"
+      for f in "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision; do
+        NAME=$(/usr/bin/security cms -D -i "$f" | /usr/bin/plutil -extract Name raw -o - - 2>/dev/null || true)
+        UUID=$(/usr/bin/security cms -D -i "$f" | /usr/bin/plutil -extract UUID raw -o - - 2>/dev/null || true)
+        if [ -n "$NAME" ]; then
+          echo "$UUID => $NAME"
+        fi
+      done
+    displayName: 'Diagnóstico: provisioning profiles instalados'
 
   # ---- Detectar workspace real + listar schemes ----
   - script: |
@@ -172,7 +187,7 @@ steps:
       echo "##vso[task.setvariable variable=EXPORT_OPTIONS_PLIST]$EXPORT_PLIST"
     displayName: 'Crear exportOptions.plist (absoluto)'
 
-  # ---- ARCHIVE NATIVO (forzando Apple Distribution) ----
+  # ---- ARCHIVE NATIVO (SIN overrides con [sdk=...], evita el bug) ----
   - script: |
       set -euo pipefail
 
@@ -198,9 +213,7 @@ steps:
         DEVELOPMENT_TEAM="$(IOS_TEAM_ID)" \
         PRODUCT_BUNDLE_IDENTIFIER="$(IOS_BUNDLE_ID)" \
         PROVISIONING_PROFILE_SPECIFIER="$(IOS_PROFILE_NAME)" \
-        "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]=$(IOS_PROFILE_NAME)" \
         CODE_SIGN_IDENTITY="Apple Distribution" \
-        "CODE_SIGN_IDENTITY[sdk=iphoneos*]=Apple Distribution" \
         clean archive | tee "$LOG_ARCHIVE"
     displayName: 'Archive iOS (NATIVO)'
 
