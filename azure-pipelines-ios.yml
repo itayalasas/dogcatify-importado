@@ -21,6 +21,15 @@ variables:
   - name: KEYCHAIN_NAME
     value: 'build.keychain'
 
+  # Defaults (por si no los tenés en el Variable Group)
+  - name: IOS_EXPORT_METHOD
+    value: 'app-store'
+
+  # Nombre del profile (tiene que coincidir con el "Name" dentro del .mobileprovision)
+  # Si en tu variable group ya existe IOS_PROFILE_NAME, podés borrar esta sección.
+  - name: IOS_PROFILE_NAME
+    value: 'DogCatiFy_AppStore'
+
 steps:
   - checkout: self
     clean: true
@@ -42,7 +51,8 @@ steps:
       npm ci
     displayName: 'Instalar dependencias (npm ci)'
 
-  # Genera ios/ nativo si no existe
+  # (Opcional) si querés SIEMPRE nativo limpio:
+  # borra ios/ y lo regenera. Si preferís mantener ios/ commiteado, dejalo como está.
   - script: |
       set -e
       if [ ! -d "ios" ]; then
@@ -59,38 +69,30 @@ steps:
       pod install
     displayName: 'Instalar CocoaPods'
 
-  # ---- Secure files ----
+  # ---- Secure files (NOMBRES EXACTOS según tu Library) ----
   - task: DownloadSecureFile@1
-    name: iosDistCert
-    displayName: 'Descargar .p12 (Apple Distribution)'
+    name: iosCert
+    displayName: 'Descargar certificado .p12'
     inputs:
-      secureFile: 'dogcatify-dist.p12'
-
-  # (Opcional) si querés importar también Apple Development
-  # - task: DownloadSecureFile@1
-  #   name: iosDevCert
-  #   displayName: 'Descargar .p12 (Apple Development)'
-  #   inputs:
-  #     secureFile: 'dogcatify-dev.p12'
+      secureFile: 'dogcatify-ios.p12'
 
   - task: DownloadSecureFile@1
     name: iosProfile
-    displayName: 'Descargar provisioning profile (AppStore)'
+    displayName: 'Descargar provisioning profile'
     inputs:
       secureFile: 'DogCatiFy_AppStore.mobileprovision'
 
-  # ---- Keychain + importar certs + instalar provisioning ----
+  # ---- Keychain + importar .p12 + instalar .mobileprovision ----
   - script: |
       set -e
 
-      CERT_DIST_PATH="$(iosDistCert.secureFilePath)"
+      CERT_PATH="$(iosCert.secureFilePath)"
       PROFILE_PATH="$(iosProfile.secureFilePath)"
 
-      echo "CERT_DIST_PATH=$CERT_DIST_PATH"
+      echo "CERT_PATH=$CERT_PATH"
       echo "PROFILE_PATH=$PROFILE_PATH"
 
       security delete-keychain "$(KEYCHAIN_NAME)" || true
-
       security create-keychain -p "$(MAC_KEYCHAIN_PASSWORD)" "$(KEYCHAIN_NAME)"
       security set-keychain-settings -t 3600 -l "$(KEYCHAIN_NAME)"
       security unlock-keychain -p "$(MAC_KEYCHAIN_PASSWORD)" "$(KEYCHAIN_NAME)"
@@ -98,36 +100,33 @@ steps:
       security list-keychains -d user -s "$(KEYCHAIN_NAME)" login.keychain-db
       security default-keychain -s "$(KEYCHAIN_NAME)"
 
-      echo "Importando Apple Distribution..."
-      security import "$CERT_DIST_PATH" -k "$(KEYCHAIN_NAME)" -P "$(IOS_P12_PASSWORD)" -A -T /usr/bin/codesign -T /usr/bin/security
+      echo "Importando P12..."
+      security import "$CERT_PATH" -k "$(KEYCHAIN_NAME)" -P "$(IOS_P12_PASSWORD)" -A -T /usr/bin/codesign -T /usr/bin/security
       security set-key-partition-list -S apple-tool:,apple: -s -k "$(MAC_KEYCHAIN_PASSWORD)" "$(KEYCHAIN_NAME)"
 
-      # (Opcional) Importar Apple Development si lo necesitás
-      # CERT_DEV_PATH="$(iosDevCert.secureFilePath)"
-      # echo "Importando Apple Development..."
-      # security import "$CERT_DEV_PATH" -k "$(KEYCHAIN_NAME)" -P "$(IOS_DEV_P12_PASSWORD)" -A -T /usr/bin/codesign -T /usr/bin/security
-
-      echo "Identidades disponibles:"
+      echo "Identidades codesign:"
       security find-identity -v -p codesigning "$(KEYCHAIN_NAME)" || true
 
       UUID=$(/usr/bin/security cms -D -i "$PROFILE_PATH" | /usr/bin/plutil -extract UUID raw -o - -)
       NAME=$(/usr/bin/security cms -D -i "$PROFILE_PATH" | /usr/bin/plutil -extract Name raw -o - -)
-      echo "Provisioning Name: $NAME"
-      echo "Provisioning UUID: $UUID"
+      TEAM=$(/usr/bin/security cms -D -i "$PROFILE_PATH" | /usr/bin/plutil -extract TeamIdentifier.0 raw -o - -)
+
+      echo "Profile Name: $NAME"
+      echo "Profile UUID: $UUID"
+      echo "Profile Team: $TEAM"
 
       mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
       cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
 
-      echo "Chequear entitlements del profile (Associated Domains):"
+      echo "Entitlements del profile (para ver Associated Domains):"
       /usr/bin/security cms -D -i "$PROFILE_PATH" > /tmp/profile.plist
-      /usr/bin/plutil -extract Entitlements xml1 -o - /tmp/profile.plist | head -n 120 || true
-    displayName: 'Keychain + importar certs + instalar provisioning'
+      /usr/bin/plutil -extract Entitlements xml1 -o - /tmp/profile.plist | head -n 160 || true
+    displayName: 'Keychain + importar .p12 + instalar .mobileprovision'
     env:
       IOS_P12_PASSWORD: $(IOS_P12_PASSWORD)
-      IOS_DEV_P12_PASSWORD: $(IOS_DEV_P12_PASSWORD)
       MAC_KEYCHAIN_PASSWORD: $(MAC_KEYCHAIN_PASSWORD)
 
-  # ---- Detectar workspace/scheme (nativo) ----
+  # ---- Detectar workspace real + listar schemes ----
   - script: |
       set -e
       WS=$(find ios -maxdepth 3 -name "*.xcworkspace" -print | head -n 1)
@@ -135,14 +134,15 @@ steps:
         echo "ERROR: No encontré .xcworkspace dentro de ios/"
         exit 1
       fi
-      echo "Workspace: $WS"
+
+      echo "Workspace encontrado: $WS"
       echo "##vso[task.setvariable variable=IOS_WORKSPACE]$WS"
 
       echo "Schemes:"
       xcodebuild -list -workspace "$WS"
     displayName: 'Detectar workspace + listar schemes'
 
-  # ---- Crear exportOptions.plist (ruta ABSOLUTA) ----
+  # ---- exportOptions.plist (RUTA ABSOLUTA) ----
   - script: |
       set -e
       EXPORT_PLIST="$(Build.SourcesDirectory)/ios/exportOptions.plist"
@@ -154,13 +154,10 @@ steps:
       <dict>
         <key>method</key>
         <string>$(IOS_EXPORT_METHOD)</string>
-
         <key>teamID</key>
         <string>$(IOS_TEAM_ID)</string>
-
         <key>signingStyle</key>
         <string>manual</string>
-
         <key>provisioningProfiles</key>
         <dict>
           <key>$(IOS_BUNDLE_ID)</key>
@@ -170,25 +167,25 @@ steps:
       </plist>
       EOF
 
-      echo "Export plist en: $EXPORT_PLIST"
+      echo "Export plist: $EXPORT_PLIST"
       plutil -p "$EXPORT_PLIST" || cat "$EXPORT_PLIST"
       echo "##vso[task.setvariable variable=EXPORT_OPTIONS_PLIST]$EXPORT_PLIST"
     displayName: 'Crear exportOptions.plist (absoluto)'
 
-  # ---- ARCHIVE (forzando Apple Distribution) ----
+  # ---- ARCHIVE NATIVO (forzando Apple Distribution) ----
   - script: |
       set -euo pipefail
 
       ARCHIVE_PATH="$(Build.ArtifactStagingDirectory)/$(IOS_SCHEME).xcarchive"
       LOG_ARCHIVE="$(Build.ArtifactStagingDirectory)/xcodebuild-archive.log"
 
-      echo "Archiving..."
       echo "Workspace: $(IOS_WORKSPACE)"
-      echo "Scheme: $(IOS_SCHEME)"
-      echo "Bundle: $(IOS_BUNDLE_ID)"
-      echo "Team: $(IOS_TEAM_ID)"
-      echo "Profile: $(IOS_PROFILE_NAME)"
-      echo "ArchivePath: $ARCHIVE_PATH"
+      echo "Scheme:    $(IOS_SCHEME)"
+      echo "Config:    $(IOS_CONFIGURATION)"
+      echo "Team:      $(IOS_TEAM_ID)"
+      echo "BundleId:  $(IOS_BUNDLE_ID)"
+      echo "Profile:   $(IOS_PROFILE_NAME)"
+      echo "Archive:   $ARCHIVE_PATH"
 
       xcodebuild \
         -workspace "$(IOS_WORKSPACE)" \
@@ -201,7 +198,9 @@ steps:
         DEVELOPMENT_TEAM="$(IOS_TEAM_ID)" \
         PRODUCT_BUNDLE_IDENTIFIER="$(IOS_BUNDLE_ID)" \
         PROVISIONING_PROFILE_SPECIFIER="$(IOS_PROFILE_NAME)" \
+        "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]=$(IOS_PROFILE_NAME)" \
         CODE_SIGN_IDENTITY="Apple Distribution" \
+        "CODE_SIGN_IDENTITY[sdk=iphoneos*]=Apple Distribution" \
         clean archive | tee "$LOG_ARCHIVE"
     displayName: 'Archive iOS (NATIVO)'
 
@@ -224,7 +223,7 @@ steps:
         -exportPath "$EXPORT_PATH" \
         -exportOptionsPlist "$(EXPORT_OPTIONS_PLIST)" | tee "$LOG_EXPORT"
 
-      echo "IPA generado:"
+      echo "IPA:"
       find "$EXPORT_PATH" -maxdepth 2 -name "*.ipa" -print
     displayName: 'Export IPA'
 
