@@ -11,20 +11,31 @@ variables:
 
   - name: NODE_VERSION
     value: '18.x'
+
   - name: IOS_SCHEME
     value: 'DogCatiFy'
+
   - name: IOS_CONFIGURATION
     value: 'Release'
+
   - name: KEYCHAIN_NAME
     value: 'build.keychain'
 
-  # ✅ Xcode nuevo: usar app-store-connect (no "app-store")
+  # IMPORTANTE: Apple recomienda "app-store-connect" (evita warning deprecation)
   - name: IOS_EXPORT_METHOD
     value: 'app-store-connect'
 
-  # Debe coincidir con el Name del provisioning profile
+  # Debe coincidir con el "Name" dentro del .mobileprovision
   - name: IOS_PROFILE_NAME
     value: 'DogCatiFy_AppStore'
+
+  # Versión visible al usuario (la cambiás cuando quieras)
+  - name: IOS_MARKETING_VERSION
+    value: '1.0.0'
+
+  # Build incremental automático (siempre sube, nunca se repite)
+  - name: IOS_BUILD_NUMBER
+    value: $(Build.BuildId)
 
 steps:
   - checkout: self
@@ -63,7 +74,23 @@ steps:
       pod install
     displayName: 'Instalar CocoaPods'
 
-  # Secure files
+  # --- Setear versión y build incremental (antes de compilar) ---
+  - script: |
+      set -e
+      echo "Seteando versioning iOS..."
+      echo "Marketing Version: $(IOS_MARKETING_VERSION)"
+      echo "Build Number:      $(IOS_BUILD_NUMBER)"
+
+      # OJO: Esto inyecta en build time (lo más confiable en CI)
+      # También intentamos agvtool por si tu proyecto lo soporta
+      cd ios
+      xcrun agvtool new-marketing-version "$(IOS_MARKETING_VERSION)" || true
+      xcrun agvtool new-version -all "$(IOS_BUILD_NUMBER)" || true
+
+      echo "OK versioning"
+    displayName: 'Set iOS Version + Build (auto incremental)'
+
+  # --- Secure files ---
   - task: DownloadSecureFile@1
     name: iosCert
     displayName: 'Descargar certificado .p12'
@@ -76,7 +103,7 @@ steps:
     inputs:
       secureFile: 'DogCatiFy_AppStore.mobileprovision'
 
-  # Keychain + Import P12 + Install profile
+  # --- Keychain + Import P12 + Install profile ---
   - script: |
       set -e
 
@@ -124,11 +151,10 @@ steps:
       IOS_P12_PASSWORD: $(IOS_P12_PASSWORD)
       MAC_KEYCHAIN_PASSWORD: $(MAC_KEYCHAIN_PASSWORD)
 
-  # Check Associated Domains (robusto, sin plutil -extract para esa key)
+  # --- Check Associated Domains (robusto) ---
   - script: |
       set -e
       echo "Validando entitlement Associated Domains en el provisioning profile..."
-      echo "Mostrando entitlements del profile:"
       /usr/bin/plutil -p "$(Build.ArtifactStagingDirectory)/profile.plist" | sed -n '/"Entitlements" => {/,/}/p' | head -n 220 || true
 
       if /usr/bin/plutil -p "$(Build.ArtifactStagingDirectory)/profile.plist" | grep -q 'com.apple.developer.associated-domains'; then
@@ -137,9 +163,9 @@ steps:
         echo "❌ NO: profile no incluye com.apple.developer.associated-domains"
         exit 1
       fi
-    displayName: 'Check: Associated Domains en profile (robusto)'
+    displayName: 'Check: Associated Domains en profile'
 
-  # Detect workspace + list schemes
+  # --- Detect workspace + list schemes ---
   - script: |
       set -e
       WS=$(find ios -maxdepth 3 -name "*.xcworkspace" -print | head -n 1)
@@ -155,7 +181,7 @@ steps:
       xcodebuild -list -workspace "$WS"
     displayName: 'Detectar workspace + listar schemes'
 
-  # Build settings diagnóstico (signing)
+  # --- Build settings diagnóstico (signing) ---
   - script: |
       set -e
       echo "Build settings (signing) para verificar CODE_SIGN / BUNDLE..."
@@ -163,7 +189,7 @@ steps:
         -workspace "$(IOS_WORKSPACE)" \
         -scheme "$(IOS_SCHEME)" \
         -configuration "$(IOS_CONFIGURATION)" \
-        | egrep -i "PRODUCT_BUNDLE_IDENTIFIER|DEVELOPMENT_TEAM|CODE_SIGN|PROVISIONING_PROFILE|ENTITLEMENTS|SIGNING" \
+        | egrep -i "PRODUCT_BUNDLE_IDENTIFIER|DEVELOPMENT_TEAM|CODE_SIGN|PROVISIONING_PROFILE|ENTITLEMENTS|SIGNING|MARKETING_VERSION|CURRENT_PROJECT_VERSION" \
         | tee "$(Build.ArtifactStagingDirectory)/build-settings-signing.txt" || true
 
       echo "CODE_SIGN_ENTITLEMENTS (si existe):"
@@ -182,7 +208,7 @@ steps:
       fi
     displayName: 'Diagnóstico: build settings + entitlements del target'
 
-  # ✅ exportOptions.plist (actualizado para Xcode nuevo)
+  # --- exportOptions.plist ---
   - script: |
       set -e
       EXPORT_PLIST="$(Build.SourcesDirectory)/ios/exportOptions.plist"
@@ -193,19 +219,11 @@ steps:
       <plist version="1.0">
       <dict>
         <key>method</key>
-        <string>app-store-connect</string>
+        <string>$(IOS_EXPORT_METHOD)</string>
         <key>teamID</key>
         <string>$(IOS_TEAM_ID)</string>
-
         <key>signingStyle</key>
         <string>manual</string>
-
-        <key>stripSwiftSymbols</key>
-        <true/>
-
-        <key>compileBitcode</key>
-        <false/>
-
         <key>provisioningProfiles</key>
         <dict>
           <key>$(IOS_BUNDLE_ID)</key>
@@ -218,9 +236,9 @@ steps:
       echo "Export plist: $EXPORT_PLIST"
       plutil -p "$EXPORT_PLIST" || cat "$EXPORT_PLIST"
       echo "##vso[task.setvariable variable=EXPORT_OPTIONS_PLIST]$EXPORT_PLIST"
-    displayName: 'Crear exportOptions.plist'
+    displayName: 'Crear exportOptions.plist (absoluto)'
 
-  # ARCHIVE NATIVO (diagnóstico fuerte)
+  # --- ARCHIVE NATIVO (diagnóstico fuerte) ---
   - script: |
       set -euo pipefail
 
@@ -236,16 +254,11 @@ steps:
       echo "BundleId:  $(IOS_BUNDLE_ID)"
       echo "Profile:   $(IOS_PROFILE_NAME)"
       echo "Archive:   $ARCHIVE_PATH"
+      echo "Version:   $(IOS_MARKETING_VERSION)"
+      echo "Build:     $(IOS_BUILD_NUMBER)"
 
       rm -rf "$DERIVED"
       mkdir -p "$DERIVED"
-
-      echo "== Build settings (signing) resumen =="
-      xcodebuild -showBuildSettings \
-        -workspace "$(IOS_WORKSPACE)" \
-        -scheme "$(IOS_SCHEME)" \
-        -configuration "$(IOS_CONFIGURATION)" | \
-        egrep -i "PRODUCT_BUNDLE_IDENTIFIER|DEVELOPMENT_TEAM|PROVISIONING_PROFILE|CODE_SIGN|SIGNING" || true
 
       set +e
       xcodebuild \
@@ -263,7 +276,9 @@ steps:
         PRODUCT_BUNDLE_IDENTIFIER="$(IOS_BUNDLE_ID)" \
         PROVISIONING_PROFILE_SPECIFIER="$(IOS_PROFILE_NAME)" \
         CODE_SIGN_IDENTITY="Apple Distribution" \
-        clean archive 2>&1 | tee "$LOG_ARCHIVE" | xcpretty
+        MARKETING_VERSION="$(IOS_MARKETING_VERSION)" \
+        CURRENT_PROJECT_VERSION="$(IOS_BUILD_NUMBER)" \
+        clean archive 2>&1 | tee "$LOG_ARCHIVE"
       RC=${PIPESTATUS[0]}
       set -e
 
@@ -273,13 +288,10 @@ steps:
       echo "== Buscando errores típicos =="
       egrep -n "error:|No profiles|provisioning|CodeSign|Signing|requires a development team|exportArchive" "$LOG_ARCHIVE" | tail -n 120 || true
 
-      echo "== xcresult (si existe) =="
-      find "$DERIVED" -name "*.xcresult" -maxdepth 6 -print || true
-
       exit $RC
-    displayName: 'Archive iOS (NATIVO) - diagnóstico fuerte'
+    displayName: 'Archive iOS (NATIVO)'
 
-  # Extraer xcresult a json si existe
+  # --- Extraer xcresult a json si existe ---
   - script: |
       set -e
       DERIVED="$(Build.ArtifactStagingDirectory)/DerivedData"
@@ -294,7 +306,7 @@ steps:
     displayName: 'Extraer xcresult (si existe)'
     condition: succeededOrFailed()
 
-  # EXPORT IPA (sin overrides extra de firma)
+  # --- EXPORT IPA (sin xcpretty para no fallar si no está instalado) ---
   - script: |
       set -euo pipefail
 
@@ -313,7 +325,7 @@ steps:
         -archivePath "$ARCHIVE_PATH" \
         -exportPath "$EXPORT_PATH" \
         -exportOptionsPlist "$(EXPORT_OPTIONS_PLIST)" 2>&1 \
-        | tee "$LOG_EXPORT" | xcpretty
+        | tee "$LOG_EXPORT"
       RC=${PIPESTATUS[0]}
       set -e
 
