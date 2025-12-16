@@ -36,24 +36,21 @@ export default function SelectCondition() {
   const fetchConditions = async () => {
     try {
       const petBreed = breed || 'Genérico';
-      const petAge = ageInMonths ? parseInt(ageInMonths) : 24; // Default 2 años si no hay edad
-      const petWeight = weight ? parseFloat(weight) : undefined;
 
-      const cacheKey = `${species}_${petBreed}_${petAge}_${petWeight || 'any'}`;
-      console.log('Checking AI cache for illnesses:', cacheKey);
+      console.log(`Searching cache for ${species} - ${petBreed}`);
 
       const { data: cachedData, error: cacheError } = await supabaseClient
         .from('illnesses_ai_cache')
         .select('*')
         .eq('species', species)
         .eq('breed', petBreed)
-        .eq('age_in_months', petAge)
-        .eq('cache_key', cacheKey)
         .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (cachedData && cachedData.illnesses) {
-        console.log('Using cached illness data');
+        console.log('✓ Using cached illness data for', petBreed);
         const illnesses = typeof cachedData.illnesses === 'string'
           ? JSON.parse(cachedData.illnesses)
           : cachedData.illnesses;
@@ -63,9 +60,12 @@ export default function SelectCondition() {
         return;
       }
 
-      console.log('No cache found, generating with AI...');
+      console.log('⚠ No cache found, generating with AI...');
       const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
       const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+
+      const petAge = ageInMonths ? parseInt(ageInMonths) : 24;
+      const petWeight = weight ? parseFloat(weight) : undefined;
 
       const response = await fetch(
         `${supabaseUrl}/functions/v1/generate-illness-recommendations`,
@@ -91,8 +91,9 @@ export default function SelectCondition() {
       }
 
       const { illnesses } = await response.json();
-      console.log(`Generated ${illnesses.length} illness recommendations`);
+      console.log(`✓ Generated ${illnesses.length} illness recommendations via AI`);
 
+      const cacheKey = `${species}_${petBreed}_general`;
       await supabaseClient
         .from('illnesses_ai_cache')
         .insert({
@@ -104,6 +105,7 @@ export default function SelectCondition() {
           cache_key: cacheKey
         });
 
+      console.log('✓ Saved to cache for future use');
       setConditions(illnesses);
       setFilteredConditions(illnesses);
     } catch (error) {
