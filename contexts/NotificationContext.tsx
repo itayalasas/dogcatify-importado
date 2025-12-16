@@ -73,8 +73,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     if (currentUser) {
       console.log('✅ Usuario logueado, validando y registrando tokens FCM...');
-      // Ejecutar validación y actualización de tokens
-      validateAndUpdateTokens();
+      // Ejecutar validación y actualización de tokens de forma asíncrona
+      (async () => {
+        try {
+          await validateAndUpdateTokens();
+        } catch (error) {
+          console.error('Error al validar tokens:', error);
+        }
+      })();
     }
   }, [currentUser]);
 
@@ -494,6 +500,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       if (status !== 'granted') {
         console.log('⚠️ Permisos de notificación no otorgados');
+
+        // Si el usuario tiene tokens almacenados, los limpiamos porque los permisos fueron revocados
         if (storedPushToken || storedFcmToken) {
           console.log('Limpiando tokens almacenados (permisos revocados)');
           await supabaseClient
@@ -507,6 +515,18 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
           setExpoPushToken(null);
           setNotificationsEnabled(false);
+        } else {
+          // Si el usuario NO tiene tokens almacenados, significa que nunca se registraron notificaciones
+          // Intentamos registrarlas automáticamente (esto pedirá permisos)
+          console.log('📱 Usuario sin tokens. Intentando registro automático de notificaciones...');
+          try {
+            await registerForPushNotifications();
+            console.log('✅ Registro automático de notificaciones completado');
+            return; // Salir porque registerForPushNotifications ya actualiza la DB
+          } catch (registerError) {
+            console.log('⚠️ Usuario rechazó permisos o error en registro:', registerError);
+            // No es crítico, el usuario puede activar notificaciones después desde configuración
+          }
         }
         return;
       }
