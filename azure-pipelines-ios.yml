@@ -17,8 +17,12 @@ variables:
     value: 'Release'
   - name: KEYCHAIN_NAME
     value: 'build.keychain'
+
+  # ✅ Xcode nuevo: usar app-store-connect (no "app-store")
   - name: IOS_EXPORT_METHOD
-    value: 'app-store'
+    value: 'app-store-connect'
+
+  # Debe coincidir con el Name del provisioning profile
   - name: IOS_PROFILE_NAME
     value: 'DogCatiFy_AppStore'
 
@@ -178,7 +182,7 @@ steps:
       fi
     displayName: 'Diagnóstico: build settings + entitlements del target'
 
-  # exportOptions.plist
+  # ✅ exportOptions.plist (actualizado para Xcode nuevo)
   - script: |
       set -e
       EXPORT_PLIST="$(Build.SourcesDirectory)/ios/exportOptions.plist"
@@ -189,11 +193,19 @@ steps:
       <plist version="1.0">
       <dict>
         <key>method</key>
-        <string>$(IOS_EXPORT_METHOD)</string>
+        <string>app-store-connect</string>
         <key>teamID</key>
         <string>$(IOS_TEAM_ID)</string>
+
         <key>signingStyle</key>
         <string>manual</string>
+
+        <key>stripSwiftSymbols</key>
+        <true/>
+
+        <key>compileBitcode</key>
+        <false/>
+
         <key>provisioningProfiles</key>
         <dict>
           <key>$(IOS_BUNDLE_ID)</key>
@@ -206,7 +218,7 @@ steps:
       echo "Export plist: $EXPORT_PLIST"
       plutil -p "$EXPORT_PLIST" || cat "$EXPORT_PLIST"
       echo "##vso[task.setvariable variable=EXPORT_OPTIONS_PLIST]$EXPORT_PLIST"
-    displayName: 'Crear exportOptions.plist (absoluto)'
+    displayName: 'Crear exportOptions.plist'
 
   # ARCHIVE NATIVO (diagnóstico fuerte)
   - script: |
@@ -267,7 +279,7 @@ steps:
       exit $RC
     displayName: 'Archive iOS (NATIVO) - diagnóstico fuerte'
 
-  # Extraer xcresult a json si existe (útil para ver issues exactos)
+  # Extraer xcresult a json si existe
   - script: |
       set -e
       DERIVED="$(Build.ArtifactStagingDirectory)/DerivedData"
@@ -282,7 +294,7 @@ steps:
     displayName: 'Extraer xcresult (si existe)'
     condition: succeededOrFailed()
 
-  # EXPORT IPA
+  # EXPORT IPA (sin overrides extra de firma)
   - script: |
       set -euo pipefail
 
@@ -319,4 +331,12 @@ steps:
     inputs:
       pathToPublish: '$(Build.ArtifactStagingDirectory)/export'
       artifactName: 'ios-ipa'
+      publishLocation: 'Container'
+
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publicar logs xcodebuild'
+    condition: succeededOrFailed()
+    inputs:
+      pathToPublish: '$(Build.ArtifactStagingDirectory)'
+      artifactName: 'ios-build-logs'
       publishLocation: 'Container'
