@@ -39,148 +39,77 @@ export default function SelectAllergy() {
 
   const fetchAllergies = async () => {
     try {
-      const petBreed = breed || '';
-      const petAge = ageInMonths ? parseInt(ageInMonths) : undefined;
+      const petBreed = breed || 'Genérico';
+
+      console.log(`Searching cache for ${species} - ${petBreed}`);
+
+      const { data: cachedData, error: cacheError } = await supabaseClient
+        .from('allergies_ai_cache')
+        .select('*')
+        .eq('species', species)
+        .eq('breed', petBreed)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cachedData && cachedData.allergies) {
+        console.log('✓ Using cached allergy data for', petBreed);
+        const cachedAllergies = typeof cachedData.allergies === 'string'
+          ? JSON.parse(cachedData.allergies)
+          : cachedData.allergies;
+        setAllergies(cachedAllergies);
+        setFilteredAllergies(cachedAllergies);
+        setLoading(false);
+        return;
+      }
+
+      console.log('⚠ No cache found, generating with AI...');
+      const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+      const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+
+      const petAge = ageInMonths ? parseInt(ageInMonths) : 24;
       const petWeight = weight ? parseFloat(weight) : undefined;
 
-      if (petBreed && petAge) {
-        const cacheKey = `${species}_${petBreed}_${petAge}_${petWeight || 'any'}`;
-        console.log('Checking AI cache for allergies:', cacheKey);
-
-        const { data: cachedData, error: cacheError } = await supabaseClient
-          .from('allergies_ai_cache')
-          .select('*')
-          .eq('species', species)
-          .eq('breed', petBreed)
-          .eq('age_in_months', petAge)
-          .eq('cache_key', cacheKey)
-          .gt('expires_at', new Date().toISOString())
-          .maybeSingle();
-
-        if (cachedData && cachedData.allergies) {
-          console.log('Using cached allergy data');
-          const cachedAllergies = typeof cachedData.allergies === 'string'
-            ? JSON.parse(cachedData.allergies)
-            : cachedData.allergies;
-          setAllergies(cachedAllergies);
-          setFilteredAllergies(cachedAllergies);
-          setLoading(false);
-          return;
-        }
-
-        console.log('No cache found, generating with AI...');
-        const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
-        const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
-
-        const response = await fetch(
-          `${supabaseUrl}/functions/v1/generate-allergy-recommendations`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseAnonKey}`,
-            },
-            body: JSON.stringify({
-              species,
-              breed: petBreed,
-              ageInMonths: petAge,
-              weight: petWeight
-            })
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error('Error generating allergy recommendations');
-        }
-
-        const { allergies: aiAllergies } = await response.json();
-        console.log(`Generated ${aiAllergies.length} allergy recommendations`);
-
-        await supabaseClient
-          .from('allergies_ai_cache')
-          .insert({
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/generate-allergy-recommendations`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+          },
+          body: JSON.stringify({
             species,
             breed: petBreed,
-            age_in_months: petAge,
-            weight: petWeight,
-            allergies: aiAllergies,
-            cache_key: cacheKey
-          });
-
-        setAllergies(aiAllergies);
-        setFilteredAllergies(aiAllergies);
-      } else {
-        console.log('Missing breed or age, using generic allergies...');
-
-        const genericBreed = 'Común/ Doméstico/ Mestizo';
-        const genericAge = 24;
-        const cacheKey = `${species}_${genericBreed}_${genericAge}_any`;
-
-        console.log('Checking AI cache for generic allergies:', cacheKey);
-
-        const { data: cachedData, error: cacheError } = await supabaseClient
-          .from('allergies_ai_cache')
-          .select('*')
-          .eq('species', species)
-          .eq('breed', genericBreed)
-          .eq('age_in_months', genericAge)
-          .eq('cache_key', cacheKey)
-          .gt('expires_at', new Date().toISOString())
-          .maybeSingle();
-
-        if (cachedData && cachedData.allergies) {
-          console.log('Using cached generic allergy data');
-          const cachedAllergies = typeof cachedData.allergies === 'string'
-            ? JSON.parse(cachedData.allergies)
-            : cachedData.allergies;
-          setAllergies(cachedAllergies);
-          setFilteredAllergies(cachedAllergies);
-          setLoading(false);
-          return;
+            ageInMonths: petAge,
+            weight: petWeight
+          })
         }
+      );
 
-        console.log('No cache found, generating generic allergies with AI...');
-        const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
-        const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
-
-        const response = await fetch(
-          `${supabaseUrl}/functions/v1/generate-allergy-recommendations`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseAnonKey}`,
-            },
-            body: JSON.stringify({
-              species,
-              breed: genericBreed,
-              ageInMonths: genericAge,
-              weight: undefined
-            })
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error('Error generating allergy recommendations');
-        }
-
-        const { allergies: aiAllergies } = await response.json();
-        console.log(`Generated ${aiAllergies.length} generic allergy recommendations`);
-
-        await supabaseClient
-          .from('allergies_ai_cache')
-          .insert({
-            species,
-            breed: genericBreed,
-            age_in_months: genericAge,
-            weight: null,
-            allergies: aiAllergies,
-            cache_key: cacheKey
-          });
-
-        setAllergies(aiAllergies);
-        setFilteredAllergies(aiAllergies);
+      if (!response.ok) {
+        throw new Error('Error generating allergy recommendations');
       }
+
+      const { allergies: aiAllergies } = await response.json();
+      console.log(`✓ Generated ${aiAllergies.length} allergy recommendations via AI`);
+
+      const cacheKey = `${species}_${petBreed}_general`;
+      await supabaseClient
+        .from('allergies_ai_cache')
+        .insert({
+          species,
+          breed: petBreed,
+          age_in_months: petAge,
+          weight: petWeight,
+          allergies: aiAllergies,
+          cache_key: cacheKey
+        });
+
+      console.log('✓ Saved to cache for future use');
+      setAllergies(aiAllergies);
+      setFilteredAllergies(aiAllergies);
     } catch (error) {
       console.error('Error fetching allergies:', error);
     } finally {
