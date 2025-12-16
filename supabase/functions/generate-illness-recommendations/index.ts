@@ -77,7 +77,7 @@ Incluye tanto enfermedades comunes como enfermedades específicas de la raza.
 
 Responde SOLO con un array JSON válido, sin texto adicional.`;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const openAIResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${openAIKey}`,
@@ -100,13 +100,13 @@ Responde SOLO con un array JSON válido, sin texto adicional.`;
       }),
     });
 
-    if (!response.ok) {
-      const errorData = await response.text();
+    if (!openAIResponse.ok) {
+      const errorData = await openAIResponse.text();
       console.error("OpenAI API error:", errorData);
-      throw new Error(`OpenAI API error: ${response.status}`);
+      throw new Error(`OpenAI API error: ${openAIResponse.status}`);
     }
 
-    const data = await response.json();
+    const data = await openAIResponse.json();
     const content = data.choices[0]?.message?.content;
 
     if (!content) {
