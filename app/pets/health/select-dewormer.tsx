@@ -35,57 +35,50 @@ export default function SelectDewormer() {
 
   const fetchDewormers = async () => {
     try {
-      const petBreed = breed || '';
-      const petAge = ageInMonths ? parseInt(ageInMonths) : undefined;
+      const petBreed = breed || 'Genérico';
+      const petAge = ageInMonths ? parseInt(ageInMonths) : 24;
       const petWeight = weight ? parseFloat(weight) : undefined;
 
-      if (petBreed && petAge) {
-        const cacheKey = `${species}_${petBreed}_${petAge}_${petWeight || 'any'}`;
-        console.log('Checking AI cache for:', cacheKey);
+      console.log(`Searching cache for ${species} - ${petBreed}`);
 
-        const { data: cachedData, error: cacheError } = await supabaseClient
-          .from('dewormers_ai_cache')
-          .select('*')
-          .eq('species', species)
-          .eq('breed', petBreed)
-          .eq('age_in_months', petAge)
-          .gte('expires_at', new Date().toISOString())
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+      const { data: cachedData, error: cacheError } = await supabaseClient
+        .from('dewormers_ai_cache')
+        .select('*')
+        .eq('species', species)
+        .eq('breed', petBreed)
+        .gte('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-        if (cachedData && !cacheError) {
-          console.log('Using cached recommendations');
-          const cachedDewormers = cachedData.recommendations.dewormers.map((d: any) => ({
-            id: `ai_${d.name.toLowerCase().replace(/\s+/g, '_')}`,
-            name: d.name,
-            brand: d.brand,
-            active_ingredient: d.activeIngredient,
-            administration_method: d.administrationMethod,
-            parasite_types: d.parasiteTypes,
-            frequency: d.frequency,
-            age_recommendation: d.ageRecommendation,
-            weight_range: d.weightRange,
-            prescription_required: d.prescriptionRequired,
-            common_side_effects: d.commonSideEffects,
-            notes: d.notes,
-            is_recommended: d.isRecommended,
-            priority: d.priority,
-            species: [species],
-            is_active: true
-          }));
-          setDewormers(cachedDewormers);
-          setFilteredDewormers(cachedDewormers);
-          setLoading(false);
-          return;
-        }
-
-        console.log('No cache found, fetching recommendations...');
-        await fetchFromAI(petBreed, petAge, petWeight);
-      } else {
-        console.log('Missing breed or age, using fallback catalog');
-        await fetchFromCatalog();
+      if (cachedData && !cacheError) {
+        console.log('✓ Using cached dewormer data for', petBreed);
+        const cachedDewormers = cachedData.recommendations.dewormers.map((d: any) => ({
+          id: `ai_${d.name.toLowerCase().replace(/\s+/g, '_')}`,
+          name: d.name,
+          brand: d.brand,
+          active_ingredient: d.activeIngredient,
+          administration_method: d.administrationMethod,
+          parasite_types: d.parasiteTypes,
+          frequency: d.frequency,
+          age_recommendation: d.ageRecommendation,
+          weight_range: d.weightRange,
+          prescription_required: d.prescriptionRequired,
+          common_side_effects: d.commonSideEffects,
+          notes: d.notes,
+          is_recommended: d.isRecommended,
+          priority: d.priority,
+          species: [species],
+          is_active: true
+        }));
+        setDewormers(cachedDewormers);
+        setFilteredDewormers(cachedDewormers);
+        setLoading(false);
+        return;
       }
+
+      console.log('⚠ No cache found, generating with AI...');
+      await fetchFromAI(petBreed, petAge, petWeight);
     } catch (error) {
       console.error('Error fetching dewormers:', error);
       await fetchFromCatalog();
@@ -143,6 +136,9 @@ export default function SelectDewormer() {
       setDewormers(aiDewormers);
       setFilteredDewormers(aiDewormers);
 
+      console.log(`✓ Generated ${aiDewormers.length} dewormer recommendations via AI`);
+
+      const cacheKey = `${species}_${petBreed}_general`;
       const { error: cacheError } = await supabaseClient
         .from('dewormers_ai_cache')
         .insert({
@@ -151,13 +147,14 @@ export default function SelectDewormer() {
           age_in_months: petAge,
           weight: petWeight,
           recommendations: result,
+          cache_key: cacheKey,
           expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
         });
 
       if (cacheError) {
         console.warn('Could not cache AI recommendations:', cacheError);
       } else {
-        console.log('AI recommendations cached successfully');
+        console.log('✓ Saved to cache for future use');
       }
 
     } catch (error) {
