@@ -35,88 +35,77 @@ export default function SelectCondition() {
 
   const fetchConditions = async () => {
     try {
-      const petBreed = breed || '';
-      const petAge = ageInMonths ? parseInt(ageInMonths) : undefined;
+      const petBreed = breed || 'Genérico';
+      const petAge = ageInMonths ? parseInt(ageInMonths) : 24; // Default 2 años si no hay edad
       const petWeight = weight ? parseFloat(weight) : undefined;
 
-      if (petBreed && petAge) {
-        const cacheKey = `${species}_${petBreed}_${petAge}_${petWeight || 'any'}`;
-        console.log('Checking AI cache for illnesses:', cacheKey);
+      const cacheKey = `${species}_${petBreed}_${petAge}_${petWeight || 'any'}`;
+      console.log('Checking AI cache for illnesses:', cacheKey);
 
-        const { data: cachedData, error: cacheError } = await supabaseClient
-          .from('illnesses_ai_cache')
-          .select('*')
-          .eq('species', species)
-          .eq('breed', petBreed)
-          .eq('age_in_months', petAge)
-          .eq('cache_key', cacheKey)
-          .gt('expires_at', new Date().toISOString())
-          .maybeSingle();
+      const { data: cachedData, error: cacheError } = await supabaseClient
+        .from('illnesses_ai_cache')
+        .select('*')
+        .eq('species', species)
+        .eq('breed', petBreed)
+        .eq('age_in_months', petAge)
+        .eq('cache_key', cacheKey)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
 
-        if (cachedData && cachedData.illnesses) {
-          console.log('Using cached illness data');
-          const illnesses = typeof cachedData.illnesses === 'string'
-            ? JSON.parse(cachedData.illnesses)
-            : cachedData.illnesses;
-          setConditions(illnesses);
-          setFilteredConditions(illnesses);
-          setLoading(false);
-          return;
-        }
-
-        console.log('No cache found, generating with AI...');
-        const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
-        const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
-
-        const response = await fetch(
-          `${supabaseUrl}/functions/v1/generate-illness-recommendations`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseAnonKey}`,
-            },
-            body: JSON.stringify({
-              species,
-              breed: petBreed,
-              ageInMonths: petAge,
-              weight: petWeight
-            })
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error('Error generating illness recommendations');
-        }
-
-        const { illnesses } = await response.json();
-        console.log(`Generated ${illnesses.length} illness recommendations`);
-
-        await supabaseClient
-          .from('illnesses_ai_cache')
-          .insert({
-            species,
-            breed: petBreed,
-            age_in_months: petAge,
-            weight: petWeight,
-            illnesses: illnesses,
-            cache_key: cacheKey
-          });
-
+      if (cachedData && cachedData.illnesses) {
+        console.log('Using cached illness data');
+        const illnesses = typeof cachedData.illnesses === 'string'
+          ? JSON.parse(cachedData.illnesses)
+          : cachedData.illnesses;
         setConditions(illnesses);
         setFilteredConditions(illnesses);
-      } else {
-        const { data, error } = await supabaseClient
-          .from('medical_conditions')
-          .select('*')
-          .eq('is_active', true)
-          .in('species', [species, 'both'])
-          .order('name', { ascending: true });
-
-        if (error) throw error;
-        setConditions(data || []);
-        setFilteredConditions(data || []);
+        setLoading(false);
+        return;
       }
+
+      console.log('No cache found, generating with AI...');
+      const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+      const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/generate-illness-recommendations`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+          },
+          body: JSON.stringify({
+            species,
+            breed: petBreed,
+            ageInMonths: petAge,
+            weight: petWeight
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error('Error generating illness recommendations');
+      }
+
+      const { illnesses } = await response.json();
+      console.log(`Generated ${illnesses.length} illness recommendations`);
+
+      await supabaseClient
+        .from('illnesses_ai_cache')
+        .insert({
+          species,
+          breed: petBreed,
+          age_in_months: petAge,
+          weight: petWeight,
+          illnesses: illnesses,
+          cache_key: cacheKey
+        });
+
+      setConditions(illnesses);
+      setFilteredConditions(illnesses);
     } catch (error) {
       console.error('Error fetching conditions:', error);
     } finally {
