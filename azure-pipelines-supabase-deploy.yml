@@ -8,13 +8,13 @@ pr: none
 resources:
   pipelines:
     - pipeline: android
-      source: DogCatiFy-Android     # <-- CAMBIAR por el nombre REAL del pipeline Android
+      source: azure-pipelines     # <-- CAMBIAR por el nombre REAL del pipeline Android
       trigger:
         branches:
           include:
             - main
     - pipeline: ios
-      source: DogCatiFy-iOS         # <-- CAMBIAR por el nombre REAL del pipeline iOS
+      source: azure-pipelines-ios         # <-- CAMBIAR por el nombre REAL del pipeline iOS
       trigger:
         branches:
           include:
