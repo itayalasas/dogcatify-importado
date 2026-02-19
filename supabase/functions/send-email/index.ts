@@ -15,6 +15,7 @@ interface EmailRequest {
   template_name?: string;
   recipient_email?: string;
   data?: any;
+  [key: string]: any; // Permitir campos adicionales dinámicos
 }
 
 Deno.serve(async (req: Request) => {
@@ -28,9 +29,16 @@ Deno.serve(async (req: Request) => {
   try {
     const body: EmailRequest = await req.json();
 
-    console.log('Received email request:', {
+    console.log('═══════════════════════════════════════════════════');
+    console.log('📨 RECEIVED EMAIL REQUEST - FULL BODY:');
+    console.log(JSON.stringify(body, null, 2));
+    console.log('═══════════════════════════════════════════════════');
+
+    console.log('Received email request summary:', {
       template_name: body.template_name,
       recipient_email: body.recipient_email,
+      order_id: body.order_id,
+      wait_for_invoice: body.wait_for_invoice,
       has_data: !!body.data,
     });
 
@@ -66,20 +74,31 @@ Deno.serve(async (req: Request) => {
     if (body.template_name && body.recipient_email) {
       console.log(`Forwarding template email: ${body.template_name} to ${body.recipient_email}`);
 
-      const payload = {
+      // Construir payload con todos los campos del body (genérico)
+      const payload: any = {
         template_name: body.template_name,
         recipient_email: body.recipient_email,
         data: body.data || {},
       };
 
+      // Incluir cualquier otro campo adicional que venga en el body
+      Object.keys(body).forEach(key => {
+        if (!['template_name', 'recipient_email', 'data'].includes(key)) {
+          payload[key] = body[key];
+        }
+      });
+
       console.log('Sending to external API:', emailApiUrl);
-      console.log('Payload:', JSON.stringify(payload, null, 2));
+      console.log('═══════════════════════════════════════════════════');
+      console.log('📤 SENDING TO EXTERNAL API - FULL PAYLOAD:');
+      console.log(JSON.stringify(payload, null, 2));
+      console.log('═══════════════════════════════════════════════════');
 
       const response = await fetch(emailApiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': emailApiKey,
+          'X-Integration-Key': emailApiKey,
         },
         body: JSON.stringify(payload),
       });

@@ -5,6 +5,7 @@ import { CircleX as XCircle, RefreshCw } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { supabaseClient } from '@/lib/supabase';
+import { logResourceAction } from '../../services/auditService';
 
 export default function PaymentFailure() {
   const { order_id, type } = useLocalSearchParams<{
@@ -38,6 +39,7 @@ export default function PaymentFailure() {
         console.error('Error fetching order:', fetchError);
         setOrderDetails({
           id: order_id || '#failed',
+          orderNumber: '#failed',
           total: '$0',
           status: 'Fallido',
           isBooking: type === 'booking'
@@ -50,6 +52,7 @@ export default function PaymentFailure() {
         console.log('Order not found:', order_id);
         setOrderDetails({
           id: order_id || '#failed',
+          orderNumber: '#failed',
           total: '$0',
           status: 'Fallido',
           isBooking: type === 'booking'
@@ -125,15 +128,38 @@ export default function PaymentFailure() {
 
       setOrderDetails({
         id: order_id,
+        orderNumber: order.order_number || `#${order_id.slice(-6)}`,
         total: formatCurrency(order.total_amount || 0),
         status: 'Fallido',
         isBooking: type === 'booking' || !!order.booking_id,
         partnerName: order.partners?.business_name
       });
+      
+      // Registrar pago fallido en auditoría
+      await logResourceAction('PAYMENT_FAILED', 'payment', order_id, {
+        success: false,
+        error_message: 'User cancelled or payment declined',
+        resource_id: order_id,
+        details: {
+          order_id: order_id,
+          order_number: order.order_number,
+          amount: order.total_amount,
+          payment_method: order.payment_method,
+          order_type: order.order_type,
+          partner_id: order.partner_id,
+          partner_name: order.partners?.business_name,
+          customer_id: order.customer_id,
+          reason: 'User cancelled or payment declined',
+          status_before_cancel: order.status,
+          created_at: order.created_at
+        }
+      }).catch(err => console.error('Error logging payment failure audit:', err));
+      
     } catch (error) {
       console.error('Error in cancelFailedOrder:', error);
       setOrderDetails({
         id: order_id || '#failed',
+        orderNumber: '#failed',
         total: '$0',
         status: 'Fallido',
         isBooking: type === 'booking'
@@ -191,7 +217,7 @@ export default function PaymentFailure() {
             <Text style={styles.detailLabel}>
               {orderDetails?.isBooking ? 'Número de reserva:' : 'Número de pedido:'}
             </Text>
-            <Text style={styles.detailValue}>{orderDetails?.id}</Text>
+            <Text style={styles.detailValue}>{orderDetails?.orderNumber || orderDetails?.id}</Text>
           </View>
           
           <View style={styles.detailRow}>

@@ -27,6 +27,34 @@ export default function OrderDetail() {
     }
     
     fetchOrderDetails();
+
+    // Suscripción en tiempo real para actualizar el pedido cuando cambie el estado
+    const orderSubscription = supabaseClient
+      .channel(`order_${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: `id=eq.${id}`
+        },
+        (payload) => {
+          console.log('📦 Order detail updated in real-time:', payload.new);
+          // Actualizar el pedido en el estado local
+          setOrder((prevOrder: any) => ({
+            ...prevOrder,
+            status: payload.new.status,
+            updatedAt: new Date(payload.new.updated_at)
+          }));
+        }
+      )
+      .subscribe();
+
+    // Cleanup: desuscribirse cuando el componente se desmonte
+    return () => {
+      orderSubscription.unsubscribe();
+    };
   }, [currentUser, id]);
 
   const fetchOrderDetails = async () => {
@@ -43,6 +71,7 @@ export default function OrderDetail() {
       if (data) {
         setOrder({
           id: data.id,
+          orderNumber: data.order_number,
           partnerId: data.partner_id,
           customerId: data.customer_id,
           items: data.items || [],
@@ -108,7 +137,7 @@ export default function OrderDetail() {
   const handleContactSupport = () => {
     Alert.alert(
       'Contactar Soporte',
-      `Pedido #${order.id.slice(-6)}\n\nPuedes contactarnos por:\n\n📧 Email: soporte@dogcatify.com\n📱 WhatsApp: +54 11 1234-5678`,
+      `Pedido ${order.orderNumber || `#${order.id.slice(-6)}`}\n\nPuedes contactarnos por:\n\n📧 Email: soporte@dogcatify.com\n📱 WhatsApp: +54 11 1234-5678`,
       [{ text: 'Entendido' }]
     );
   };
@@ -150,7 +179,7 @@ export default function OrderDetail() {
         {/* Order Status */}
         <Card style={styles.statusCard}>
           <View style={styles.statusHeader}>
-            <Text style={styles.orderNumber}>Pedido #{order.id.slice(-6)}</Text>
+            <Text style={styles.orderNumber}>Pedido {order.orderNumber || `#${order.id.slice(-6)}`}</Text>
             <View style={[
               styles.statusBadge,
               { backgroundColor: getStatusColor(order.status) }

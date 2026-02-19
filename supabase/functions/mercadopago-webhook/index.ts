@@ -169,6 +169,10 @@ serve(async (req: Request) => {
 
       if (topicFromUrl === 'payment') {
         await processPaymentNotification(supabase, normalizedNotification as WebhookNotification);
+      } else if (topicFromUrl === 'merchant_order') {
+        await processMerchantOrderNotification(supabase, normalizedNotification as WebhookNotification);
+      } else {
+        console.warn(`Unknown URL param topic: ${topicFromUrl}`);
       }
 
       return new Response(
@@ -519,7 +523,88 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
 
 async function processMerchantOrderNotification(supabase: any, notification: WebhookNotification) {
   try {
-    console.log('Processing merchant order notification:', notification.data.id);
+    const merchantOrderId = notification.data?.id;
+    console.log('Processing merchant order notification:', merchantOrderId);
+
+    if (!merchantOrderId) {
+      console.error('❌ merchant_order notification without data.id');
+      return;
+    }
+
+    const { data: adminConfig } = await supabase
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'mercadopago_config')
+      .maybeSingle();
+
+    const tokenCandidates: string[] = [];
+
+    if (adminConfig?.value?.access_token) {
+      tokenCandidates.push(adminConfig.value.access_token);
+    }
+
+    const { data: partners } = await supabase
+      .from('partners')
+      .select('mercadopago_config')
+      .not('mercadopago_config', 'is', null);
+
+    for (const partner of partners || []) {
+      const token = partner?.mercadopago_config?.access_token;
+      if (token && !tokenCandidates.includes(token)) {
+        tokenCandidates.push(token);
+      }
+    }
+
+    if (tokenCandidates.length === 0) {
+      console.error('❌ No Mercado Pago access tokens available to process merchant_order');
+      return;
+    }
+
+    let merchantOrderData: any = null;
+    for (const token of tokenCandidates) {
+      const response = await fetch(`https://api.mercadopago.com/merchant_orders/${merchantOrderId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+      });
+
+      if (response.ok) {
+        merchantOrderData = await response.json();
+        console.log('✅ merchant_order fetched from MP API');
+        break;
+      }
+    }
+
+    if (!merchantOrderData) {
+      console.error(`❌ Could not fetch merchant_order ${merchantOrderId} with available credentials`);
+      return;
+    }
+
+    const payments = merchantOrderData.payments || [];
+    if (payments.length === 0) {
+      console.warn(`⚠️ merchant_order ${merchantOrderId} has no payments yet`);
+      return;
+    }
+
+    const approvedPayment = payments.find((payment: any) => payment.status === 'approved');
+    const selectedPayment = approvedPayment || payments[0];
+
+    if (!selectedPayment?.id) {
+      console.warn(`⚠️ merchant_order ${merchantOrderId} has payments without id`);
+      return;
+    }
+
+    console.log(`🔁 Converting merchant_order to payment notification using payment ${selectedPayment.id}`);
+
+    await processPaymentNotification(supabase, {
+      ...notification,
+      type: 'payment',
+      action: 'payment.updated',
+      data: {
+        id: String(selectedPayment.id)
+      }
+    } as WebhookNotification);
   } catch (error) {
     console.error('Error processing merchant order notification:', error);
     throw error;

@@ -1,0 +1,125 @@
+# azure-pipelines-supabase-deploy.yml
+# Deploy de Supabase: migraciones + edge functions + secrets
+# Se ejecuta cuando termina Android y/o iOS (pipeline completion trigger)
+
+trigger: none
+pr: none
+
+resources:
+  pipelines:
+    - pipeline: android
+      source: DogCatiFy-Android     # <-- CAMBIAR por el nombre REAL del pipeline Android
+      trigger:
+        branches:
+          include:
+            - main
+    - pipeline: ios
+      source: DogCatiFy-iOS         # <-- CAMBIAR por el nombre REAL del pipeline iOS
+      trigger:
+        branches:
+          include:
+            - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: supabase-prod  # <-- tu Variable Group (SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF, SUPABASE_DB_PASSWORD, y tus secrets)
+
+stages:
+- stage: DeploySupabase
+  displayName: 'Deploy Supabase (DB + Functions + Secrets)'
+  jobs:
+  - job: deploy
+    displayName: 'Deploy'
+    steps:
+    - checkout: self
+      clean: true
+      fetchDepth: 0
+
+    - script: |
+        set -e
+        npm i -g supabase@latest
+        supabase --version
+      displayName: 'Install Supabase CLI'
+
+    - script: |
+        set -e
+        supabase login --token "$SUPABASE_ACCESS_TOKEN"
+        supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+        echo "== DB push (migrations) =="
+        supabase db push --password "$SUPABASE_DB_PASSWORD"
+
+        echo "== Deploy Edge Functions =="
+        if [ -d "supabase/functions" ]; then
+          for d in supabase/functions/*; do
+            if [ -d "$d" ]; then
+              fn=$(basename "$d")
+              echo "Deploy function: $fn"
+              supabase functions deploy "$fn"
+            fi
+          done
+        else
+          echo "No existe supabase/functions, salto deploy."
+        fi
+
+        echo "== Set Edge Function Secrets =="
+        supabase secrets set \
+          SUPABASE_URL="$SUPABASE_URL" \
+          SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+          SUPABASE_SERVICE_ROLE_KEY="$SUPABASE_SERVICE_ROLE_KEY" \
+          SUPABASE_DB_URL="$SUPABASE_DB_URL" \
+          EMAIL_API_URL="$EMAIL_API_URL" \
+          EMAIL_API_KEY="$EMAIL_API_KEY" \
+          OPENAI_API_KEY="$OPENAI_API_KEY" \
+          ACCOUNTING_EMPRESA_ID="$ACCOUNTING_EMPRESA_ID" \
+          ACCOUNTING_API_KEY="$ACCOUNTING_API_KEY" \
+          ACCOUNTING_WEBHOOK_URL="$ACCOUNTING_WEBHOOK_URL" \
+          FIREBASE_PRIVATE_KEY_ID="$FIREBASE_PRIVATE_KEY_ID" \
+          FIREBASE_CLIENT_CERT_URL="$FIREBASE_CLIENT_CERT_URL" \
+          FIREBASE_CLIENT_EMAIL="$FIREBASE_CLIENT_EMAIL" \
+          FIREBASE_CLIENT_ID="$FIREBASE_CLIENT_ID" \
+          FIREBASE_PRIVATE_KEY="$FIREBASE_PRIVATE_KEY" \
+          MERCADOPAGO_WEBHOOK_SECRET="$MERCADOPAGO_WEBHOOK_SECRET" \
+          INVOICE_API_URL="$INVOICE_API_URL" \
+          INVOICE_API_KEY="$INVOICE_API_KEY" \
+          DGI_PDF_EMAIL_URL="$DGI_PDF_EMAIL_URL" \
+          DGI_PDF_EMAIL_KEY="$DGI_PDF_EMAIL_KEY" \
+          CRON_SECRET="$CRON_SECRET"
+
+        echo "✅ Deploy Supabase OK"
+      displayName: 'Deploy (db push + functions + secrets)'
+      env:
+        SUPABASE_ACCESS_TOKEN: $(SUPABASE_ACCESS_TOKEN)
+        SUPABASE_PROJECT_REF: $(SUPABASE_PROJECT_REF)
+        SUPABASE_DB_PASSWORD: $(SUPABASE_DB_PASSWORD)
+
+        SUPABASE_URL: $(SUPABASE_URL)
+        SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
+        SUPABASE_SERVICE_ROLE_KEY: $(SUPABASE_SERVICE_ROLE_KEY)
+        SUPABASE_DB_URL: $(SUPABASE_DB_URL)
+
+        EMAIL_API_URL: $(EMAIL_API_URL)
+        EMAIL_API_KEY: $(EMAIL_API_KEY)
+        OPENAI_API_KEY: $(OPENAI_API_KEY)
+
+        ACCOUNTING_EMPRESA_ID: $(ACCOUNTING_EMPRESA_ID)
+        ACCOUNTING_API_KEY: $(ACCOUNTING_API_KEY)
+        ACCOUNTING_WEBHOOK_URL: $(ACCOUNTING_WEBHOOK_URL)
+
+        FIREBASE_PRIVATE_KEY_ID: $(FIREBASE_PRIVATE_KEY_ID)
+        FIREBASE_CLIENT_CERT_URL: $(FIREBASE_CLIENT_CERT_URL)
+        FIREBASE_CLIENT_EMAIL: $(FIREBASE_CLIENT_EMAIL)
+        FIREBASE_CLIENT_ID: $(FIREBASE_CLIENT_ID)
+        FIREBASE_PRIVATE_KEY: $(FIREBASE_PRIVATE_KEY)
+
+        MERCADOPAGO_WEBHOOK_SECRET: $(MERCADOPAGO_WEBHOOK_SECRET)
+
+        INVOICE_API_URL: $(INVOICE_API_URL)
+        INVOICE_API_KEY: $(INVOICE_API_KEY)
+
+        DGI_PDF_EMAIL_URL: $(DGI_PDF_EMAIL_URL)
+        DGI_PDF_EMAIL_KEY: $(DGI_PDF_EMAIL_KEY)
+
+        CRON_SECRET: $(CRON_SECRET)

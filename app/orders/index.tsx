@@ -22,6 +22,40 @@ export default function MyOrders() {
     }
     
     fetchOrders();
+
+    // Suscripción en tiempo real para actualizar pedidos cuando cambie el estado
+    const ordersSubscription = supabaseClient
+      .channel('customer_orders')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: `customer_id=eq.${currentUser.id}`
+        },
+        (payload) => {
+          console.log('📦 Order updated in real-time:', payload.new);
+          // Actualizar el pedido en el estado local
+          setOrders(prevOrders =>
+            prevOrders.map(order =>
+              order.id === payload.new.id
+                ? {
+                    ...order,
+                    status: payload.new.status,
+                    updatedAt: new Date(payload.new.updated_at)
+                  }
+                : order
+            )
+          );
+        }
+      )
+      .subscribe();
+
+    // Cleanup: desuscribirse cuando el componente se desmonte
+    return () => {
+      ordersSubscription.unsubscribe();
+    };
   }, [currentUser]);
 
   const fetchOrders = async () => {
@@ -38,6 +72,7 @@ export default function MyOrders() {
       
       const ordersData = data?.map(order => ({
         id: order.id,
+        orderNumber: order.order_number || `#${order.id.slice(-6)}`,
         partnerId: order.partner_id,
         customerId: order.customer_id,
         items: order.items || [],
@@ -218,7 +253,7 @@ export default function MyOrders() {
     <Card key={order.id} style={styles.orderCard}>
       <View style={styles.orderHeader}>
         <View style={styles.orderInfo}>
-          <Text style={styles.orderNumber}>Pedido #{order.id.slice(-6)}</Text>
+          <Text style={styles.orderNumber}>Pedido {order.orderNumber}</Text>
           <Text style={styles.orderDate}>
             {order.createdAt.toLocaleDateString()}
           </Text>

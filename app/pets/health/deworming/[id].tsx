@@ -319,11 +319,10 @@ export default function AddDeworming() {
 
   const formatDate = (date: Date | null) => {
     if (!date) return '';
-    return date.toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
   };
 
   const onApplicationDateChange = (event: any, selectedDate?: Date) => {
@@ -552,8 +551,11 @@ export default function AddDeworming() {
 
     if (record.applicationDate) {
       try {
-        const [day, month, year] = record.applicationDate.split('/');
-        setApplicationDate(new Date(parseInt(year), parseInt(month) - 1, parseInt(day)));
+        const parsedDate = parseOCRDate(record.applicationDate);
+        if (parsedDate) {
+          setApplicationDate(parsedDate);
+          console.log('Parsed application date:', formatDate(parsedDate), 'from', record.applicationDate);
+        }
       } catch (dateError) {
         console.error('Error parsing application date:', dateError);
       }
@@ -561,8 +563,11 @@ export default function AddDeworming() {
 
     if (record.nextDueDate) {
       try {
-        const [day, month, year] = record.nextDueDate.split('/');
-        setNextDueDate(new Date(parseInt(year), parseInt(month) - 1, parseInt(day)));
+        const parsedDate = parseOCRDate(record.nextDueDate);
+        if (parsedDate) {
+          setNextDueDate(parsedDate);
+          console.log('Parsed next due date:', formatDate(parsedDate), 'from', record.nextDueDate);
+        }
       } catch (dateError) {
         console.error('Error parsing next due date:', dateError);
       }
@@ -574,6 +579,47 @@ export default function AddDeworming() {
 
     if (record.notes) {
       setNotes(record.notes);
+    }
+  };
+
+  const parseOCRDate = (dateStr: string): Date | null => {
+    if (!dateStr) return null;
+
+    try {
+      // Format: DD/MM/YYYY or DD/MM/YY
+      const parts = dateStr.split('/');
+      if (parts.length !== 3) return null;
+
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10);
+      let year = parseInt(parts[2], 10);
+
+      // Handle 2-digit years
+      if (year < 100) {
+        // Si el año es menor a 50, asumimos 2000+
+        // Si el año es 50 o mayor, asumimos 1900+
+        year = year < 50 ? 2000 + year : 1900 + year;
+      }
+
+      // Validate date components
+      if (day < 1 || day > 31 || month < 1 || month > 12 || year < 1900 || year > 2100) {
+        console.error('Invalid date components:', { day, month, year });
+        return null;
+      }
+
+      // Create date (month is 0-indexed in JavaScript Date)
+      const date = new Date(year, month - 1, day);
+      
+      // Verify the date is valid (handles cases like Feb 30)
+      if (date.getDate() !== day || date.getMonth() !== month - 1 || date.getFullYear() !== year) {
+        console.error('Date validation failed:', { input: dateStr, parsed: date });
+        return null;
+      }
+
+      return date;
+    } catch (error) {
+      console.error('Error parsing OCR date:', dateStr, error);
+      return null;
     }
   };
 

@@ -25,7 +25,11 @@ interface CartContextType {
   updateQuantity: (itemId: string, quantity: number, maxStock?: number) => void;
   clearCart: () => void;
   getCartTotal: () => number;
+  getCartSubtotalWithoutTax: () => number;
+  getCartTaxAmount: () => number;
   getCartCount: () => number;
+  getCartOriginalTotal: () => number;
+  getCartDiscountAmount: () => number;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -203,11 +207,50 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const getCartTotal = () => {
+    // Total CON IVA incluido (lo que el usuario paga)
     return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
+  };
+
+  const getCartSubtotalWithoutTax = () => {
+    // Subtotal SIN IVA (base imponible)
+    // Los precios YA incluyen IVA, así que desglosamos
+    return cart.reduce((subtotal, item) => {
+      const taxRate = (item.iva_rate || 22) / 100; // Default 22%
+      const priceWithTax = item.price * item.quantity;
+      const priceWithoutTax = priceWithTax / (1 + taxRate);
+      return subtotal + priceWithoutTax;
+    }, 0);
+  };
+
+  const getCartTaxAmount = () => {
+    // Monto total de IVA
+    const total = getCartTotal();
+    const subtotal = getCartSubtotalWithoutTax();
+    return total - subtotal;
   };
 
   const getCartCount = () => {
     return cart.reduce((count, item) => count + item.quantity, 0);
+  };
+
+  const getCartOriginalTotal = () => {
+    // Total ANTES de descuentos (con IVA incluido)
+    return cart.reduce((total, item) => {
+      const originalPrice = item.original_price || item.price;
+      return total + (originalPrice * item.quantity);
+    }, 0);
+  };
+
+  const getCartDiscountAmount = () => {
+    // Monto total de descuentos aplicados
+    return cart.reduce((discount, item) => {
+      if (item.discount_percentage > 0 && item.original_price) {
+        const originalPrice = item.original_price * item.quantity;
+        const discountedPrice = item.price * item.quantity;
+        return discount + (originalPrice - discountedPrice);
+      }
+      return discount;
+    }, 0);
   };
 
   return (
@@ -218,7 +261,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updateQuantity,
       clearCart,
       getCartTotal,
-      getCartCount
+      getCartSubtotalWithoutTax,
+      getCartTaxAmount,
+      getCartCount,
+      getCartOriginalTotal,
+      getCartDiscountAmount
     }}>
       {children}
     </CartContext.Provider>

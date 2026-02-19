@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Platform, Share, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Platform, Share, ActivityIndicator, KeyboardAvoidingView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Camera, Upload, X, Share2, Video as VideoIcon, Play } from 'lucide-react-native';
 import { Input } from '../../../../components/ui/Input';
@@ -11,6 +11,7 @@ import { supabaseClient } from '../../../../lib/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { detectPetInImage, validateImagesForPets, detectPetInVideo, validateVideoDuration } from '../../../../utils/petDetection';
 import { uploadImage } from '../../../../utils/imageUpload';
+import { logResourceAction } from '../../../../services/auditService';
 
 export default function AddPhoto() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -435,7 +436,9 @@ export default function AddPhoto() {
           description: photoDescription.trim() || '',
           images: mediaUrls,
           is_shared: isShared
-        });
+        })
+        .select('id')
+        .single();
 
       console.log('Album save result:', albumResult);
       if (albumResult.error) {
@@ -444,6 +447,25 @@ export default function AddPhoto() {
       }
       
       console.log('Album saved successfully');
+      
+      // Registrar creación de álbum en auditoría
+      if (albumResult.data) {
+        await logResourceAction('ALBUM_CREATE', 'album', albumResult.data.id, {
+          success: true,
+          details: {
+            pet_id: id,
+            album_id: albumResult.data.id,
+            title: photoTitle.trim() || 'Álbum sin título',
+            description: photoDescription.trim() || '',
+            media_count: mediaUrls.length,
+            images_count: selectedImages.length,
+            videos_count: selectedVideos.length,
+            is_shared: isShared,
+            user_id: currentUser.id,
+            user_email: currentUser.email
+          }
+        }).catch(err => console.warn('Error logging ALBUM_CREATE:', err));
+      }
 
       // If user wants to share as post, create a post
       if (isShared) {
@@ -585,8 +607,18 @@ export default function AddPhoto() {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Card style={styles.formCard}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView 
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.scrollContent}
+        >
+          <Card style={styles.formCard}>
           <Text style={styles.sectionTitle}>📸 Seleccionar Fotos</Text>
 
           <View style={styles.photoActions}>
@@ -710,6 +742,7 @@ export default function AddPhoto() {
           />
         </Card>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -741,8 +774,14 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 40,
   },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
   content: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 40,
   },
   formCard: {
     margin: 20,
