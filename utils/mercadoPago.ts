@@ -2,6 +2,7 @@ import { supabaseClient } from '@/lib/supabase';
 import { logger } from '@/utils/datadogLogger';
 import { Linking, Platform } from 'react-native';
 import { envConfig } from './envConfig';
+import { logResourceAction, logError } from '../services/auditService';
 
 /**
  * Mercado Pago OAuth2 Marketplace Implementation
@@ -473,7 +474,18 @@ interface IVACalculation {
 const calculateIVA = (cartItems: any[], partner: any): IVACalculation => {
   // Get IVA configuration from partner (default 0% if not set)
   const ivaRate = partner.iva_rate || 0;
-  const ivaIncluded = partner.iva_included_in_price || false;
+  // DEFAULT TO TRUE for Uruguay - most prices include IVA
+  // If partner.iva_included_in_price is explicitly false, it will be false
+  // If it's null/undefined, we default to true
+  const ivaIncluded = partner.iva_included_in_price !== false;
+
+  console.log('🔍 calculateIVA - Partner IVA Config:', {
+    partner_id: partner.id,
+    partner_business_name: partner.business_name,
+    iva_rate: ivaRate,
+    iva_included_in_price_raw: partner.iva_included_in_price,
+    ivaIncluded_computed: ivaIncluded
+  });
 
   // Calculate items subtotal (sum of all items)
   const itemsTotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -534,13 +546,15 @@ export const createMultiPartnerOrder = async (
     // Calculate totals for the unified order (including shipping)
     const totalAmount = ivaCalculation.totalAmount + totalShippingCost;
 
-    console.log('Unified order totals:', {
-      subtotal: ivaCalculation.subtotal,
+    console.log('🔍 DEBUG IVA Calculation:', {
+      cartItems: cartItems.map(i => ({ name: i.name, price: i.price, quantity: i.quantity, total: i.price * i.quantity })),
+      ivaIncluded: ivaCalculation.ivaIncluded,
       ivaRate: ivaCalculation.ivaRate,
-      ivaAmount: ivaCalculation.ivaAmount,
-      itemsTotal: ivaCalculation.totalAmount,
+      calculatedSubtotal: ivaCalculation.subtotal,
+      calculatedIvaAmount: ivaCalculation.ivaAmount,
+      calculatedTotalAmount: ivaCalculation.totalAmount,
       shippingCost: totalShippingCost,
-      totalAmount
+      FINAL_totalAmount: totalAmount
     });
 
     // Calculate commission using partner's configured percentage
@@ -586,6 +600,14 @@ export const createMultiPartnerOrder = async (
     });
 
     // Prepare order data
+    console.log('🔍 DEBUG Order Data BEFORE saving:', {
+      subtotal: ivaCalculation.subtotal,
+      iva_amount: ivaCalculation.ivaAmount,
+      shipping_cost: totalShippingCost,
+      total_amount: totalAmount,
+      verification: `${ivaCalculation.subtotal} + ${ivaCalculation.ivaAmount} + ${totalShippingCost} = ${ivaCalculation.subtotal + ivaCalculation.ivaAmount + totalShippingCost}`
+    });
+
     const orderData = {
       partner_id: primaryPartnerId,
       customer_id: customerInfo.id,
@@ -604,6 +626,7 @@ export const createMultiPartnerOrder = async (
       partner_amount: partnerAmount,
       shipping_address: shippingAddress,
       payment_method: 'mercadopago',
+      payment_status: 'pending',
       status: 'pending',
       order_type: 'product_purchase',
       created_at: new Date().toISOString(),
@@ -670,23 +693,56 @@ export const createMultiPartnerOrder = async (
     };
 
     // Create a single payment preference for the unified order
-    const preference = await createUnifiedPaymentPreference(
-      orderIdForPayment,
-      cartItems,
-      customerInfo,
-      primaryPartnerConfig,
-      totalAmount,
-      totalShippingCost,
-      shippingAddress
-    );
+    let preference: any;
+    try {
+      preference = await createUnifiedPaymentPreference(
+        orderIdForPayment,
+        cartItems,
+        customerInfo,
+        primaryPartnerConfig,
+        totalAmount,
+        totalShippingCost,
+        shippingAddress
+      );
+    } catch (preferenceError) {
+      console.error('Error creating payment preference for unified order, rolling back order:', preferenceError);
+
+      const { error: rollbackError } = await supabaseClient
+        .from('orders')
+        .delete()
+        .eq('id', orderIdForPayment);
+
+      if (rollbackError) {
+        console.error('Error rolling back unified order after preference failure:', rollbackError);
+      }
+
+      throw preferenceError;
+    }
+
+    const isTestMode = primaryPartnerConfig.access_token?.startsWith('TEST-');
+    const paymentUrl = isTestMode
+      ? (preference.sandbox_init_point || preference.init_point)
+      : preference.init_point;
+
+    const { error: updateOrderError } = await supabaseClient
+      .from('orders')
+      .update({
+        payment_preference_id: preference.id,
+        payment_status: 'pending',
+        last_payment_url: paymentUrl || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', orderIdForPayment);
+
+    if (updateOrderError) {
+      console.error('Error updating order with payment preference data:', updateOrderError);
+      throw updateOrderError;
+    }
 
     console.log('Unified payment preference created:', preference.id);
 
     const orders = [unifiedOrder];
     const paymentPreferences = [preference];
-
-    // Detect if we're in test mode (only by token prefix)
-    const isTestMode = primaryPartnerConfig.access_token?.startsWith('TEST-');
 
     console.log('Multi-partner order completed:', {
       isTestMode,
@@ -1121,6 +1177,28 @@ export const createServiceBookingOrder = async (bookingData: {
     
     console.log('Order created with ID:', insertedOrder.id);
 
+    // Registrar creación del booking en auditoría
+    await logResourceAction('BOOKING_CREATE', 'booking', insertedBooking.id, {
+      success: true,
+      user_email: completeCustomerInfo.email,
+      details: {
+        service_name: bookingData.serviceName,
+        service_id: bookingData.serviceId,
+        partner_name: bookingData.partnerName,
+        partner_id: bookingData.partnerId,
+        pet_name: bookingData.petName,
+        pet_id: bookingData.petId,
+        customer_name: completeCustomerInfo.name,
+        customer_email: completeCustomerInfo.email,
+        date: bookingData.date.toISOString(),
+        time: bookingData.time,
+        amount: bookingData.totalAmount,
+        commission: commissionAmount,
+        partner_amount: partnerAmount,
+        order_id: insertedOrder.id
+      }
+    }).catch(err => console.error('Error logging booking audit:', err));
+
     // PASO 7: CREAR PREFERENCIA DE PAGO EN MERCADO PAGO
     console.log('⚠️ STEP 7: Creating payment preference...');
     let preference;
@@ -1176,6 +1254,20 @@ export const createServiceBookingOrder = async (bookingData: {
     };
   } catch (error) {
     console.error('Error creating service booking order:', error);
+    
+    // Registrar error en auditoría
+    await logError(error, {
+      action: 'BOOKING_CREATE',
+      resource_type: 'booking',
+      details: {
+        service_id: bookingData.serviceId,
+        partner_id: bookingData.partnerId,
+        pet_id: bookingData.petId,
+        amount: bookingData.totalAmount,
+        platform: Platform.OS
+      }
+    }).catch(err => console.error('Error logging booking error audit:', err));
+    
     return {
       success: false,
       error: error.message || 'Error desconocido'

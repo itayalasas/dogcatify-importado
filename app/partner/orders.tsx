@@ -83,6 +83,7 @@ export default function PartnerOrders() {
         
         const ordersData = data.map(order => ({
           id: order.id,
+          orderNumber: order.order_number,
           ...order,
           partnerId: order.partner_id,
           customerId: order.customer_id,
@@ -230,7 +231,7 @@ export default function PartnerOrders() {
     <Card key={order.id} style={styles.orderCard}>
       <View style={styles.orderHeader}>
         <View style={styles.orderInfo}>
-          <Text style={styles.orderNumber}>Pedido #{order.id.slice(-6)}</Text>
+          <Text style={styles.orderNumber}>Pedido {order.orderNumber || `#${order.id.slice(-6)}`}</Text>
           <Text style={styles.customerName}>Cliente</Text>
         </View>
         <View style={[

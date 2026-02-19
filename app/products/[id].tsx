@@ -647,10 +647,10 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   errorContainer: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    paddingVertical: 40,
+    paddingHorizontal: 20,
   },
   errorText: {
     fontSize: 16,

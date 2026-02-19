@@ -8,8 +8,8 @@ const SUPABASE_URL = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
 const SUPABASE_ANON_KEY = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 
 // Email API Configuration (using Supabase edge function)
-const EMAIL_API_URL = `${SUPABASE_URL}/functions/v1/send-email`;
-const EMAIL_API_KEY = SUPABASE_ANON_KEY;
+const EMAIL_API_URL = `https://hpvzjuionqvgxlvhyqgz.supabase.co/functions/v1/send-email`;
+const EMAIL_API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwdnpqdWlvbnF2Z3hsdmh5cWd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxMTcyOTMsImV4cCI6MjA3OTY5MzI5M30.IJq_nhk4S7hFwZskDTIut7Qfe8k4a5DHChEOP3-Zg9k';
 
 export interface EmailConfirmationToken {
   id: string;
@@ -282,7 +282,7 @@ export const completeUserRegistration = async (
  * Generate confirmation URL
  */
 export const generateConfirmationUrl = (token: string, type: 'signup' | 'password_reset' = 'signup'): string => {
-  const baseUrl = envConfig.getOrDefault('EXPO_PUBLIC_APP_DOMAIN', 'https://app-dogcatify.netlify.app');
+  const baseUrl = envConfig.getOrDefault('EXPO_PUBLIC_APP_DOMAIN', 'https://app.dogcatify.com');
 
   console.log('🔗 Generating confirmation URL with base:', baseUrl);
   console.log('🔗 Token type:', type);
@@ -311,10 +311,10 @@ const sendEmailViaSupabase = async (
   console.log('📧 Data:', JSON.stringify(data, null, 2));
 
   try {
-    if (!EMAIL_API_URL || !EMAIL_API_KEY) {
+    /*if (!EMAIL_API_URL || !EMAIL_API_KEY) {
       console.error('❌ Email API configuration missing!');
       return { success: false, error: 'Email API configuration missing' };
-    }
+    }*/
 
     const emailPayload = {
       template_name: templateName,

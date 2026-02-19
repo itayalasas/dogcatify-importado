@@ -6,6 +6,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { supabaseClient } from '@/lib/supabase';
 import { useCart } from '../../contexts/CartContext';
+import { logResourceAction } from '../../services/auditService';
 
 export default function PaymentSuccess() {
   const { order_id, type, payment_id } = useLocalSearchParams<{
@@ -62,7 +63,7 @@ export default function PaymentSuccess() {
       // Format order details for display
       const formattedOrder = {
         id: order.id,
-        displayId: `#${order.id.slice(-6)}`,
+        displayId: order.order_number || `#${order.id.slice(-6)}`,
         total: new Intl.NumberFormat('es-UY', {
           style: 'currency',
           currency: 'UYU',
@@ -78,6 +79,26 @@ export default function PaymentSuccess() {
       };
 
       setOrderDetails(formattedOrder);
+      
+      // Registrar pago exitoso en auditoría
+      await logResourceAction('PAYMENT_SUCCESS', 'payment', order.id, {
+        success: true,
+        resource_id: order.id,
+        details: {
+          order_id: order.id,
+          order_number: order.order_number,
+          amount: order.total_amount,
+          payment_method: order.payment_method,
+          order_type: order.order_type,
+          partner_id: order.partner_id,
+          partner_name: order.partner_name,
+          customer_id: order.customer_id,
+          service_name: order.service_name,
+          items_count: order.items?.length || 0,
+          created_at: order.created_at
+        }
+      }).catch(err => console.error('Error logging payment audit:', err));
+      
       setLoading(false);
     } catch (err: any) {
       console.error('Error loading order details:', err);

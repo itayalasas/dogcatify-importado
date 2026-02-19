@@ -311,24 +311,44 @@ export default function ServiceDetail() {
   const fetchUserPets = async () => {
     setLoadingPets(true);
     try {
-      const { data: petsData, error } = await supabaseClient
+      // Fetch owned pets
+      const { data: ownedPets, error: ownedError } = await supabaseClient
         .from('pets')
         .select('*')
         .eq('owner_id', currentUser!.id);
 
-      if (error) {
-        console.error('Error fetching pets:', error);
-        setLoadingPets(false);
-        return;
+      if (ownedError) {
+        console.error('Error fetching owned pets:', ownedError);
       }
 
+      // Fetch shared pets (accepted shares)
+      const { data: sharedPetsData, error: sharedError } = await supabaseClient
+        .from('pet_shares')
+        .select(`
+          pet_id,
+          permission_level,
+          pets (*)
+        `)
+        .eq('shared_with_user_id', currentUser!.id)
+        .eq('status', 'accepted');
+
+      if (sharedError) {
+        console.error('Error fetching shared pets:', sharedError);
+      }
+
+      // Combine owned and shared pets
+      const sharedPets = sharedPetsData?.map(share => share.pets).filter(Boolean) || [];
+      const allPets = [...(ownedPets || []), ...sharedPets];
+
       // Filter by pet type on the client side if it's a boarding service
-      let filteredPets = petsData || [];
+      let filteredPets = allPets;
       if (service?.petType && service.petType !== 'both') {
         filteredPets = filteredPets.filter(pet => pet.species === service.petType);
       }
 
-      console.log('Fetched pets:', petsData?.length || 0);
+      console.log('Fetched owned pets:', ownedPets?.length || 0);
+      console.log('Fetched shared pets:', sharedPets.length);
+      console.log('Total pets:', allPets.length);
       console.log('Service pet type:', service?.petType);
       console.log('Filtered pets:', filteredPets.length);
 

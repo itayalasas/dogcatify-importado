@@ -13,7 +13,7 @@ import { supabaseClient } from '../../lib/supabase';
 
 export default function Cart() {
   const { currentUser } = useAuth();
-  const { cart, updateQuantity, removeFromCart, clearCart, getCartTotal } = useCart();
+  const { cart, updateQuantity, removeFromCart, clearCart, getCartTotal, getCartSubtotalWithoutTax, getCartTaxAmount, getCartOriginalTotal, getCartDiscountAmount } = useCart();
   const [loading, setLoading] = useState(false);
   const [loadingAddress, setLoadingAddress] = useState(true);
   const [useNewAddress, setUseNewAddress] = useState(false);
@@ -639,10 +639,38 @@ export default function Cart() {
             <Card style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Resumen del Pedido</Text>
               
+              {/* Mostrar descuento si existe alguno en el carrito */}
+              {getCartDiscountAmount() > 0 && (
+                <>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Subtotal Original</Text>
+                    <Text style={styles.summaryValue}>
+                      {formatCurrency(getCartOriginalTotal())}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.summaryRow}>
+                    <Text style={[styles.summaryLabel, { color: '#10B981' }]}>Descuento</Text>
+                    <Text style={[styles.summaryValue, { color: '#10B981' }]}>
+                      -{formatCurrency(getCartDiscountAmount())}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.divider} />
+                </>
+              )}
+              
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Subtotal</Text>
+                <Text style={styles.summaryLabel}>Subtotal (sin IVA)</Text>
                 <Text style={styles.summaryValue}>
-                  {formatCurrency(getCartTotal())}
+                  {formatCurrency(getCartSubtotalWithoutTax())}
+                </Text>
+              </View>
+              
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>IVA (22%)</Text>
+                <Text style={styles.summaryValue}>
+                  {formatCurrency(getCartTaxAmount())}
                 </Text>
               </View>
               

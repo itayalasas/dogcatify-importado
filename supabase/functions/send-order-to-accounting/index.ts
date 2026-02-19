@@ -32,8 +32,8 @@ async function sendToAccounting(
     }
 
     // Calcular totales
-    const subtotal = parseFloat(orderData.subtotal) || 0;
-    const ivaAmount = parseFloat(orderData.iva_amount) || 0;
+    // IMPORTANTE: Los precios en el sistema YA INCLUYEN IVA
+    // total_amount es lo que el cliente paga (precio con IVA incluido)
     const total = parseFloat(orderData.total_amount) || 0;
     let totalDiscount = 0; // Acumulador de descuentos
 
@@ -71,18 +71,25 @@ async function sendToAccounting(
         const finalPrice = parseFloat(item.price) || 0;
         const discountPercentage = parseFloat(item.discount_percentage) || 0;
 
-        // Calcular subtotal (precio original * cantidad)
+        // Los precios YA INCLUYEN IVA
+        // itemTotal = precio final con IVA * cantidad
+        const itemTotal = finalPrice * quantity;
+        
+        // Calcular subtotal original (precio original con IVA * cantidad)
         const itemSubtotal = originalPrice * quantity;
 
         // Calcular descuento en valor absoluto
-        const discountAmount = itemSubtotal - (finalPrice * quantity);
+        const discountAmount = itemSubtotal - itemTotal;
 
-        // Calcular total después del descuento
-        const itemTotal = finalPrice * quantity;
-
-        // Obtener información del IVA
-        const taxRate = parseFloat(item.iva_rate) / 100 || 0.22; // Default 22%
-        const taxAmount = parseFloat(item.iva_amount) || 0;
+        // Obtener tasa de IVA (default 22%)
+        const taxRate = parseFloat(item.iva_rate) / 100 || 0.22;
+        
+        // Descomponer el precio que ya incluye IVA:
+        // itemTotal = base + (base * taxRate)
+        // itemTotal = base * (1 + taxRate)
+        // base = itemTotal / (1 + taxRate)
+        const itemBase = itemTotal / (1 + taxRate);
+        const taxAmount = itemTotal - itemBase;
 
         // Acumular descuento total
         totalDiscount += discountAmount;
@@ -104,13 +111,14 @@ async function sendToAccounting(
           sku: codigo,
           name: item.name || item.title || "Producto",
           quantity: quantity,
-          unit_price: Number(originalPrice.toFixed(2)),
-          subtotal: Number(itemSubtotal.toFixed(2)),
+          unit_price: Number(originalPrice.toFixed(2)), // Precio unitario CON IVA
+          subtotal: Number(itemSubtotal.toFixed(2)), // Subtotal CON IVA
           discount: Number(discountAmount.toFixed(2)),
           discount_percentage: Number(discountPercentage.toFixed(3)),
-          total: Number(itemTotal.toFixed(2)),
+          total: Number(itemTotal.toFixed(2)), // Total CON IVA
           tax_rate: Number(taxRate.toFixed(2)),
-          tax_amount: Number(taxAmount.toFixed(2)),
+          tax_amount: Number(taxAmount.toFixed(2)), // IVA desglosado
+          base_amount: Number(itemBase.toFixed(2)), // Base imponible SIN IVA
           partner: {
             partner_id: partnerInfo.id,
             name: partnerInfo.business_name,
@@ -123,6 +131,26 @@ async function sendToAccounting(
       }
     }
 
+    // Calcular totales consolidados
+    // NOTA: Todos los precios YA INCLUYEN IVA
+    const totalBase = items.reduce((sum, item) => sum + item.base_amount, 0);
+    const totalTax = items.reduce((sum, item) => sum + item.tax_amount, 0);
+    const totalBeforeDiscount = items.reduce((sum, item) => sum + item.subtotal, 0);
+    
+    // IMPORTANTE: Cuando prices_include_tax = true, el total debe ser la suma de items.total
+    // NO usar orderData.total_amount porque puede estar incorrecto en la DB
+    const totalFromItems = items.reduce((sum, item) => sum + item.total, 0);
+    
+    // Verificación: totalFromItems debe ser igual a totalBase + totalTax
+    const calculatedTotal = totalBase + totalTax;
+    if (Math.abs(totalFromItems - calculatedTotal) > 0.01) {
+      console.log('⚠️  WARNING: Total mismatch!', {
+        totalFromItems,
+        calculatedTotal: totalBase + totalTax,
+        difference: totalFromItems - calculatedTotal
+      });
+    }
+
     // Construir el payload
     const payload = {
       event: "order.created",
@@ -131,16 +159,18 @@ async function sendToAccounting(
       items: items,
       order: {
         order_id: orderData.id,
-        order_number: orderData.order_number || `ORD-${orderData.id.substring(0, 8)}`,
+        order_number: orderData.order_number || `#${orderData.id.slice(-6)}`, // Usar order_number de la BD o últimos 6 caracteres del UUID como fallback
         created_at: orderData.created_at,
         status: orderData.status,
-        subtotal: Number((subtotal + totalDiscount).toFixed(2)), // Subtotal antes de descuentos
+        subtotal: Number(totalBase.toFixed(2)), // Subtotal SIN IVA (base imponible)
         discount: Number(totalDiscount.toFixed(2)),
-        tax: Number(ivaAmount.toFixed(2)),
-        total: Number(total.toFixed(2)),
+        base_amount: Number(totalBase.toFixed(2)), // Base imponible (sin IVA) - mismo que subtotal
+        tax: Number(totalTax.toFixed(2)), // IVA desglosado
+        total: Number(totalFromItems.toFixed(2)), // ✅ Usar suma de items.total (CON IVA)
         currency: "UYU",
         payment_method: orderData.payment_method || "unknown",
-        payment_status: orderData.payment_status || "paid"
+        payment_status: orderData.payment_status || "paid",
+        prices_include_tax: true // Indicador importante para el sistema contable
       },
       customer: {
         customer_id: customerData.id,

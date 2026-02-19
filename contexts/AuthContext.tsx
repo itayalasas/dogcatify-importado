@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { supabaseClient, getUserProfile, updateUserProfile, signIn as supabaseSignIn, signUp as supabaseSignUp, signOut as supabaseSignOut, setTokenExpirationCallback } from '../lib/supabase';
 import { User } from '../types';
 import { logger } from '@/utils/datadogLogger';
+import { logAction, logError } from '../services/auditService';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -622,13 +623,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('AuthContext - Attempting login with Supabase for:', email);
 
+      // Registrar intento de login
+      await logAction('LOGIN_ATTEMPT', {
+        success: true,
+        user_email: email,
+        resource_type: 'user',
+        details: { email, method: 'email_password' }
+      });
+
       const { data, error } = await supabaseClient.auth.signInWithPassword({
         email,
         password
       });
       
       if (error) {
-        console.error('AuthContext - Login error:', error.message); 
+        console.error('AuthContext - Login error:', error.message);
+        
+        // Registrar fallo de login
+        await logAction('LOGIN_FAILED', {
+          success: false,
+          user_email: email,  // Importante: pasar email aunque no esté autenticado
+          error_message: error.message,
+          resource_type: 'user',
+          details: { 
+            email, 
+            reason: error.message,
+            method: 'email_password',
+            error_code: error.code || 'unknown'
+          }
+        });
         
         // Handle specific session errors
         if (error.message?.includes('session_not_found') || error.message?.includes('JWT')) {
@@ -741,6 +764,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.log('AuthContext - Login successful, setting user:', user.email);
           setCurrentUser(user);
 
+          // Registrar login exitoso
+          await logAction('LOGIN', {
+            success: true,
+            resource_type: 'user',
+            resource_id: user.id,
+            details: { 
+              email: user.email,
+              method: 'email_password',
+              is_owner: user.isOwner,
+              is_partner: user.isPartner,
+              display_name: user.displayName
+            }
+          });
+
           // IMPORTANTE: Intentar registrar notificaciones push automáticamente después del login
           // Esto se hace de forma asíncrona para no bloquear el flujo de login
           setTimeout(async () => {
@@ -788,6 +825,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     try {
       logger.info('User logging out', { userId: currentUser?.id });
+
+      // Registrar logout
+      if (currentUser?.id) {
+        await logAction('LOGOUT', {
+          success: true,
+          resource_type: 'user',
+          resource_id: currentUser.id,
+          details: { 
+            email: currentUser.email,
+            display_name: currentUser.displayName
+          }
+        });
+      }
 
       // Limpiar tokens de notificación del usuario que cierra sesión
       if (currentUser?.id) {
