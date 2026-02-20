@@ -492,6 +492,7 @@ function RootLayout() {
                   <Stack.Screen name="auth/confirm" />
                   <Stack.Screen name="auth/biometric-setup" />
                   <Stack.Screen name="auth/mercadopago/callback" />
+                  <Stack.Screen name="promotion-approval" />
                   <Stack.Screen name="legal/privacy-policy" />
                   <Stack.Screen name="legal/terms-of-service" />
                   <Stack.Screen name="pets/add" />
