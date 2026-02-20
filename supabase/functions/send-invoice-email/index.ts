@@ -88,6 +88,11 @@ Deno.serve(async (req: Request) => {
         }
       });
 
+      if (body.template_name === 'promotion_send') {
+        payload.wait_for_invoice = true;
+        payload.force_wait_for_invoice = true;
+      }
+
       console.log('Sending to external INVOICE API:', invoiceApiUrl);
       console.log('═══════════════════════════════════════════════════');
       console.log('📤 SENDING TO INVOICE API - FULL PAYLOAD:');
