@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Resultado de aprobación | DogCatiFy</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f5f7f9;
+      color: #0f172a;
+      padding: 16px;
+    }
+    .card {
+      width: 100%;
+      max-width: 640px;
+      background: #fff;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+      border: 1px solid #e5e7eb;
+    }
+    .header {
+      background: #4B9991;
+      color: #fff;
+      padding: 24px 20px;
+      text-align: center;
+    }
+    .badge {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.22);
+      color: #fff;
+    }
+    .content { padding: 20px; }
+    .title {
+      margin: 0;
+      font-size: 26px;
+      line-height: 1.2;
+      font-weight: 700;
+    }
+    .message {
+      margin: 0;
+      margin-top: 12px;
+      color: #334155;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+    .detail {
+      margin-top: 16px;
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+      background: #f8fafc;
+      font-size: 14px;
+      color: #334155;
+    }
+    .footer {
+      border-top: 1px solid #e5e7eb;
+      padding: 14px 20px;
+      font-size: 12px;
+      color: #6b7280;
+      text-align: center;
+      background: #f8fafc;
+    }
+
+    .status-success .header { background: #4B9991; }
+    .status-warning .header { background: #b45309; }
+    .status-danger .header { background: #b91c1c; }
+    .status-info .header { background: #1d4ed8; }
+
+    .status-success .detail { background: #e6f4f2; border-color: #4B9991; }
+    .status-warning .detail { background: #fff7ed; border-color: #fdba74; }
+    .status-danger .detail { background: #fef2f2; border-color: #fecaca; }
+    .status-info .detail { background: #eef6ff; border-color: #93c5fd; }
+  </style>
+</head>
+<body>
+  <main id="card" class="card status-info">
+    <header class="header">
+      <h1 id="title" class="title">Procesando solicitud</h1>
+      <span id="badge" class="badge">INFO</span>
+    </header>
+    <section class="content">
+      <p id="message" class="message">Estamos obteniendo el resultado de tu aprobación.</p>
+      <div id="detail" class="detail">Podés cerrar esta ventana cuando termines.</div>
+    </section>
+    <footer class="footer">DogCatiFy Marketplace</footer>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+
+    const allowed = ["success", "warning", "danger", "info"];
+    const status = allowed.includes(params.get("status")) ? params.get("status") : "info";
+    const title = params.get("title") || "Resultado";
+    const message = params.get("message") || "Tu solicitud fue procesada.";
+    const code = params.get("code") || "200";
+
+    const badgeMap = {
+      success: "OK",
+      warning: "ATENCIÓN",
+      danger: "ERROR",
+      info: "INFO",
+    };
+
+    const card = document.getElementById("card");
+    const titleEl = document.getElementById("title");
+    const messageEl = document.getElementById("message");
+    const detailEl = document.getElementById("detail");
+    const badgeEl = document.getElementById("badge");
+
+    card.className = `card status-${status}`;
+    titleEl.textContent = title;
+    messageEl.textContent = message;
+    detailEl.textContent = `Código de respuesta: ${code}. Si necesitás ayuda, contactá soporte.`;
+    badgeEl.textContent = badgeMap[status] || "INFO";
+  </script>
+</body>
+</html>

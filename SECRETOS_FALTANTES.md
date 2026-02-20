@@ -13,6 +13,7 @@
 - ACCOUNTING_EMPRESA_ID
 - ACCOUNTING_API_KEY
 - ACCOUNTING_WEBHOOK_URL
+- ACCOUNTING_PROMOTION_WEBHOOK_URL (nuevo recomendado para facturas de promociones)
 
 ### ❌ Secretos que FALTAN (Están en la base de datos vieja pero no en la nueva):
 

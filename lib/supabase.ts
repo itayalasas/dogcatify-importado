@@ -29,6 +29,16 @@ function setSupabaseClientInstance(client: SupabaseClient | null): void {
  */
 export const initializeSupabase = async (): Promise<void> => {
   try {
+    // Asegurarse de que envConfig esté inicializado
+    if (!envConfig.isInitialized()) {
+      console.log('[Supabase] ⏳ Waiting for envConfig initialization...');
+      await envConfig.initialize();
+    }
+
+    // Hidratar variables exportadas siempre (incluso si se reutiliza cliente por Hot Reload)
+    supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+    supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+
     // Si ya existe un cliente, reutilizarlo
     const existingClient = getSupabaseClientInstance();
     if (existingClient) {
@@ -37,16 +47,6 @@ export const initializeSupabase = async (): Promise<void> => {
     }
 
     console.log('[Supabase] 🚀 Initializing Supabase client...');
-
-    // Asegurarse de que envConfig esté inicializado
-    if (!envConfig.isInitialized()) {
-      console.log('[Supabase] ⏳ Waiting for envConfig initialization...');
-      await envConfig.initialize();
-    }
-
-    // Obtener configuración
-    supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
-    supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 
     console.log('[Supabase] 🔗 Raw Supabase URL from config:', supabaseUrl);
     console.log('[Supabase] 🔑 Raw Anon Key from config:', supabaseAnonKey);
