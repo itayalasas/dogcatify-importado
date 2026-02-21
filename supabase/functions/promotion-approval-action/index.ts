@@ -142,7 +142,7 @@ const buildResultUrl = (
   const baseUrl =
     Deno.env.get("PROMOTION_APPROVAL_RESULT_URL") ||
     Deno.env.get("APP_URL") ||
-    "https://app.dogcatify.com/promotion-approval";
+    "https://app.dogcatify.com/web-info";
 
   try {
     const resultUrl = new URL(baseUrl);
