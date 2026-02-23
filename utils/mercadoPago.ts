@@ -1085,6 +1085,7 @@ export const createServiceBookingOrder = async (bookingData: {
       date: bookingData.date.toISOString(),
       time: bookingData.time,
       status: 'pending_payment',
+      payment_status: 'pending',
       notes: bookingData.notes,
       total_amount: bookingData.totalAmount,
       commission_amount: commissionAmount,
@@ -1146,6 +1147,7 @@ export const createServiceBookingOrder = async (bookingData: {
         subtotal: subtotal,
         iva_amount: ivaAmount,
         discount_percentage: bookingData.discountPercentage ?? 0,
+        discount_amount: Math.max(0, (bookingData.originalPrice ?? bookingData.totalAmount) - bookingData.totalAmount),
         original_price: bookingData.originalPrice ?? bookingData.totalAmount,
         currency: serviceData?.currency || 'UYU',
         currency_code_dgi: serviceData?.currency_code_dgi || '858'
@@ -1158,24 +1160,68 @@ export const createServiceBookingOrder = async (bookingData: {
       commission_amount: commissionAmount,
       partner_amount: partnerAmount,
       payment_method: 'mercadopago',
+      payment_status: 'pending',
+      payment_status_detail: null,
+      payment_id: null,
+      payment_data: null,
       status: 'pending',
       order_type: 'service_booking',
       created_at: new Date().toISOString()
     };
     
-    console.log('Creating order record...');
-    const { data: insertedOrder, error: orderError } = await supabaseClient
+    console.log('Checking if an order already exists for booking:', insertedBooking.id);
+    const { data: existingOrder, error: existingOrderError } = await supabaseClient
       .from('orders')
-      .insert([orderData])
-      .select()
-      .single();
-    
-    if (orderError) {
-      console.error('Error creating order:', orderError);
-      throw new Error('No se pudo crear la orden de pago');
+      .select('id')
+      .eq('booking_id', insertedBooking.id)
+      .maybeSingle();
+
+    if (existingOrderError) {
+      console.error('Error checking existing order:', existingOrderError);
+      throw new Error('No se pudo validar la orden existente de la reserva');
     }
-    
-    console.log('Order created with ID:', insertedOrder.id);
+
+    let insertedOrder: any = null;
+
+    if (existingOrder?.id) {
+      console.log('Existing order found for booking, updating it:', existingOrder.id);
+      const { data: updatedOrder, error: updateOrderError } = await supabaseClient
+        .from('orders')
+        .update({
+          ...orderData,
+          payment_status: 'pending',
+          payment_status_detail: null,
+          payment_id: null,
+          payment_data: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingOrder.id)
+        .select()
+        .single();
+
+      if (updateOrderError || !updatedOrder) {
+        console.error('Error updating existing order:', updateOrderError);
+        throw new Error('No se pudo actualizar la orden existente de la reserva');
+      }
+
+      insertedOrder = updatedOrder;
+      console.log('Existing order updated successfully:', insertedOrder.id);
+    } else {
+      console.log('Creating order record...');
+      const { data: createdOrder, error: orderError } = await supabaseClient
+        .from('orders')
+        .insert([orderData])
+        .select()
+        .single();
+
+      if (orderError || !createdOrder) {
+        console.error('Error creating order:', orderError);
+        throw new Error('No se pudo crear la orden de pago');
+      }
+
+      insertedOrder = createdOrder;
+      console.log('Order created with ID:', insertedOrder.id);
+    }
 
     // Registrar creación del booking en auditoría
     await logResourceAction('BOOKING_CREATE', 'booking', insertedBooking.id, {
