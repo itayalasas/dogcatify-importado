@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { supabaseClient } from '@/lib/supabase';
 import { useCart } from '../../contexts/CartContext';
 import { logResourceAction } from '../../services/auditService';
+import { envConfig } from '../../utils/envConfig';
 
 export default function PaymentSuccess() {
   const { order_id, type, payment_id } = useLocalSearchParams<{
@@ -38,7 +39,7 @@ export default function PaymentSuccess() {
       console.log('Loading order details:', { order_id, type, payment_id });
 
       // Load order from database
-      const { data: order, error: orderError } = await supabaseClient
+      const { data: initialOrder, error: orderError } = await supabaseClient
         .from('orders')
         .select('*')
         .eq('id', order_id)
@@ -49,8 +50,52 @@ export default function PaymentSuccess() {
         throw new Error('No se pudo cargar la orden');
       }
 
-      if (!order) {
+      if (!initialOrder) {
         throw new Error('Orden no encontrada');
+      }
+
+      let order = initialOrder;
+
+      const deepLinkPaymentId = Array.isArray(payment_id) ? payment_id[0] : payment_id;
+      const shouldSyncFromDeepLink = (!order.payment_id || order.status === 'pending');
+
+      if (shouldSyncFromDeepLink) {
+        try {
+          const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+          const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+
+          const syncPayload = deepLinkPaymentId
+            ? {
+                type: 'payment',
+                action: 'payment.updated',
+                data: { id: String(deepLinkPaymentId) }
+              }
+            : {
+                order_id: String(order_id)
+              };
+
+          await fetch(`${supabaseUrl}/functions/v1/mercadopago-webhook`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseAnonKey}`,
+            },
+            body: JSON.stringify(syncPayload)
+          });
+
+          // Recargar orden para mostrar datos actualizados
+          const { data: refreshedOrder } = await supabaseClient
+            .from('orders')
+            .select('*')
+            .eq('id', order_id)
+            .single();
+
+          if (refreshedOrder) {
+            order = refreshedOrder;
+          }
+        } catch (syncError) {
+          console.error('Error syncing payment from deep link:', syncError);
+        }
       }
 
       console.log('Order loaded:', {

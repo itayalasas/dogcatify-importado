@@ -117,6 +117,12 @@ export default function AdminTabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="subscription-plans"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

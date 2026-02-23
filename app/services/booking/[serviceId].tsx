@@ -11,6 +11,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 import { createServiceBookingOrder, openMercadoPagoPayment, isTestEnvironment } from '../../../utils/mercadoPago';
 import { envConfig } from '../../../utils/envConfig';
+import { getActivePromotionForItem } from '@/utils/promotions';
 
 interface CardType {
   name: string;
@@ -78,18 +79,36 @@ export default function ServiceBooking() {
   const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
 
   useEffect(() => {
-    if (serviceId && partnerId && petId) {
+    const normalizedServiceId = Array.isArray(serviceId) ? serviceId[0] : serviceId;
+    const normalizedPartnerId = Array.isArray(partnerId) ? partnerId[0] : partnerId;
+    const normalizedPetId = Array.isArray(petId) ? petId[0] : petId;
+    const normalizedDiscount = Array.isArray(discount) ? discount[0] : discount;
+
+    if (normalizedServiceId && normalizedPartnerId && normalizedPetId) {
       fetchBookingData();
     }
 
     // Apply discount from promotion if provided
-    if (discount) {
-      const discountValue = parseFloat(discount);
+    if (normalizedDiscount) {
+      const discountValue = parseFloat(normalizedDiscount);
       if (!isNaN(discountValue) && discountValue > 0 && discountValue <= 100) {
         setAppliedDiscount(discountValue);
       }
+    } else if (normalizedServiceId) {
+      loadActivePromotion(normalizedServiceId);
     }
   }, [serviceId, partnerId, petId, discount]);
+
+  const loadActivePromotion = async (currentServiceId: string) => {
+    try {
+      const promotion = await getActivePromotionForItem(currentServiceId, 'service');
+      if (promotion?.discount_percentage && promotion.discount_percentage > 0) {
+        setAppliedDiscount(promotion.discount_percentage);
+      }
+    } catch (error) {
+      console.error('Error loading active promotion in booking:', error);
+    }
+  };
 
   // Animar barra de progreso cuando se activa el loading
   useEffect(() => {
@@ -395,7 +414,7 @@ export default function ServiceBooking() {
     }).format(amount);
   };
 
-  const getServicePrice = () => {
+  const getBaseServicePrice = () => {
     if (!service) return 0;
 
     if (boardingCategory) {
@@ -414,6 +433,14 @@ export default function ServiceBooking() {
     }
 
     return service.price || 0;
+  };
+
+  const getServicePrice = () => {
+    const basePrice = getBaseServicePrice();
+    if (appliedDiscount > 0) {
+      return basePrice * (1 - appliedDiscount / 100);
+    }
+    return basePrice;
   };
 
   // Card formatting functions
@@ -610,41 +637,76 @@ export default function ServiceBooking() {
         }
       };
 
-      const { data: orderData, error: orderError } = await supabaseClient
+      const freeOrderPayload = {
+        partner_id: partnerId,
+        partner_name: partner.business_name,
+        customer_id: currentUser.id,
+        customer_name: currentUser.displayName || currentUser.email,
+        customer_email: currentUser.email,
+        customer_phone: currentUser.phone || null,
+        booking_id: bookingData.id,
+        service_id: serviceId,
+        service_name: service.name,
+        pet_id: petId,
+        pet_name: pet.name,
+        appointment_date: appointmentDate.toISOString(), // ✅ Fecha a medianoche UTC
+        appointment_time: selectedTime || null,
+        booking_notes: notes.trim() || null,
+        items: [serviceItem],
+        subtotal: 0,
+        iva_rate: 0,
+        iva_amount: 0,
+        iva_included_in_price: true,
+        total_amount: 0,
+        commission_amount: 0,
+        partner_amount: 0,
+        shipping_address: null,
+        payment_method: 'free',
+        payment_status: 'paid',
+        status: 'reserved',
+        order_type: 'service_booking',
+        partner_breakdown: partnerBreakdown,
+      };
+
+      const { data: existingOrder, error: existingOrderError } = await supabaseClient
         .from('orders')
-        .insert({
-          partner_id: partnerId,
-          partner_name: partner.business_name,
-          customer_id: currentUser.id,
-          customer_name: currentUser.displayName || currentUser.email,
-          customer_email: currentUser.email,
-          customer_phone: currentUser.phone || null,
-          booking_id: bookingData.id,
-          service_id: serviceId,
-          service_name: service.name,
-          pet_id: petId,
-          pet_name: pet.name,
-          appointment_date: appointmentDate.toISOString(), // ✅ Fecha a medianoche UTC
-          appointment_time: selectedTime || null,
-          booking_notes: notes.trim() || null,
-          items: [serviceItem],
-          subtotal: 0,
-          iva_rate: 0,
-          iva_amount: 0,
-          iva_included_in_price: true,
-          total_amount: 0,
-          commission_amount: 0,
-          partner_amount: 0,
-          shipping_address: null,
-          payment_method: 'free',
-          payment_status: 'paid',
-          status: 'reserved',
-          order_type: 'service_booking',
-          partner_breakdown: partnerBreakdown,
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .single();
+        .select('id')
+        .eq('booking_id', bookingData.id)
+        .maybeSingle();
+
+      if (existingOrderError) {
+        throw existingOrderError;
+      }
+
+      let orderData;
+      let orderError;
+
+      if (existingOrder?.id) {
+        const updateResult = await supabaseClient
+          .from('orders')
+          .update({
+            ...freeOrderPayload,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingOrder.id)
+          .select()
+          .single();
+
+        orderData = updateResult.data;
+        orderError = updateResult.error;
+      } else {
+        const insertResult = await supabaseClient
+          .from('orders')
+          .insert({
+            ...freeOrderPayload,
+            created_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        orderData = insertResult.data;
+        orderError = insertResult.error;
+      }
 
       if (orderError) {
         console.error('Error creating order:', orderError);
@@ -759,7 +821,7 @@ export default function ServiceBooking() {
         date: selectedDate.toISOString(),
         time: selectedTime || 'N/A', // Para servicios de pensión, la hora no aplica
         serviceName: service.name,
-        totalAmount: service.price
+        totalAmount: getServicePrice()
       });
 
       // VALIDACIÓN CRÍTICA: Verificar que no exista una reserva para esta fecha/hora/servicio
@@ -806,10 +868,8 @@ export default function ServiceBooking() {
         console.log('✅ Horario disponible, continuando con la reserva...');
       }
 
-      const originalPrice = getServicePrice();
-      const finalPrice = appliedDiscount > 0
-        ? originalPrice * (1 - appliedDiscount / 100)
-        : originalPrice;
+      const originalPrice = getBaseServicePrice();
+      const finalPrice = getServicePrice();
 
       const bookingData = {
         serviceId: service.id,
