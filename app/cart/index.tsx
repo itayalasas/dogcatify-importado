@@ -27,6 +27,7 @@ export default function Cart() {
   const [partnerInfo, setPartnerInfo] = useState<{
     has_shipping: boolean;
     shipping_cost: number;
+    free_shipping_threshold: number;
     calle: string;
     barrio: string;
     city: string;
@@ -172,7 +173,7 @@ export default function Cart() {
       if (productData?.partner_id) {
         const { data: partnerData } = await supabaseClient
           .from('partners')
-          .select('has_shipping, shipping_cost, calle, barrio, city')
+          .select('has_shipping, shipping_cost, free_shipping_threshold, calle, barrio, city')
           .eq('id', productData.partner_id)
           .maybeSingle();
 
@@ -180,6 +181,7 @@ export default function Cart() {
           setPartnerInfo({
             has_shipping: partnerData.has_shipping || false,
             shipping_cost: partnerData.shipping_cost || 0,
+            free_shipping_threshold: partnerData.free_shipping_threshold || 0,
             calle: partnerData.calle || '',
             barrio: partnerData.barrio || '',
             city: partnerData.city || '',
@@ -356,7 +358,7 @@ export default function Cart() {
 
       console.log('Shipping address:', fullAddress);
 
-      const totalShippingCost = partnerInfo?.has_shipping ? (partnerInfo.shipping_cost || 0) : 0;
+      const totalShippingCost = getEffectiveShippingCost();
 
       // Esperar 800ms para que el loader sea visible
       await new Promise(resolve => setTimeout(resolve, 800));
@@ -504,6 +506,27 @@ export default function Cart() {
       style: 'currency',
       currency: 'UYU',
     }).format(amount);
+  };
+
+  const getEffectiveShippingCost = () => {
+    if (!partnerInfo?.has_shipping) return 0;
+
+    const shippingCost = Number(partnerInfo.shipping_cost || 0);
+    const threshold = Number(partnerInfo.free_shipping_threshold || 0);
+    const cartTotal = Number(getCartTotal() || 0);
+
+    if (threshold > 0 && cartTotal >= threshold) {
+      return 0;
+    }
+
+    return shippingCost;
+  };
+
+  const hasFreeShippingApplied = () => {
+    if (!partnerInfo?.has_shipping) return false;
+
+    const threshold = Number(partnerInfo.free_shipping_threshold || 0);
+    return threshold > 0 && Number(getCartTotal() || 0) >= threshold;
   };
 
   const getCompactAddress = () => {
@@ -675,10 +698,18 @@ export default function Cart() {
               </View>
               
               {partnerInfo?.has_shipping ? (
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Envío</Text>
-                  <Text style={styles.summaryValue}>{formatCurrency(partnerInfo.shipping_cost)}</Text>
-                </View>
+                <>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Envío</Text>
+                    <Text style={styles.summaryValue}>{formatCurrency(getEffectiveShippingCost())}</Text>
+                  </View>
+                  {hasFreeShippingApplied() && (
+                    <View style={styles.summaryRow}>
+                      <Text style={[styles.summaryLabel, { color: '#10B981' }]}>Beneficio</Text>
+                      <Text style={[styles.summaryValue, { color: '#10B981' }]}>Envío gratis aplicado</Text>
+                    </View>
+                  )}
+                </>
               ) : (
                 <View style={styles.pickupNotice}>
                   <Text style={styles.pickupNoticeText}>🏪 Retiro en tienda</Text>
@@ -690,7 +721,7 @@ export default function Cart() {
               <View style={styles.summaryRow}>
                 <Text style={styles.totalLabel}>Total</Text>
                 <Text style={styles.totalValue}>
-                  {formatCurrency(getCartTotal() + (partnerInfo?.has_shipping ? (partnerInfo.shipping_cost || 0) : 0))}
+                  {formatCurrency(getCartTotal() + getEffectiveShippingCost())}
                 </Text>
               </View>
 
@@ -887,7 +918,7 @@ export default function Cart() {
                 <CreditCard size={40} color="#2D6A6F" />
                 <Text style={styles.methodsTitle}>Selecciona tu método de pago</Text>
                 <Text style={styles.methodsSubtitle}>
-                  Total: {formatCurrency(getCartTotal() + (partnerInfo?.has_shipping ? (partnerInfo.shipping_cost || 0) : 0))}
+                  Total: {formatCurrency(getCartTotal() + getEffectiveShippingCost())}
                 </Text>
               </View>
 

@@ -67,9 +67,16 @@ BEGIN
       event_type := 'order.updated';
     END IF;
 
-    IF payment_status_changed
-       AND NEW.payment_status IN ('paid', 'approved')
-       AND (OLD.payment_status IS NULL OR OLD.payment_status NOT IN ('paid', 'approved')) THEN
+    IF (
+         payment_status_changed
+         AND NEW.payment_status IN ('paid', 'approved')
+         AND (OLD.payment_status IS NULL OR OLD.payment_status NOT IN ('paid', 'approved'))
+       )
+       OR (
+         status_changed
+         AND NEW.status = 'confirmed'
+         AND NEW.payment_status IN ('paid', 'approved')
+       ) THEN
       should_send_to_accounting := true;
     END IF;
   ELSE

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowLeft, Building, Camera, MapPin, Phone, Mail, FileText, DollarSign } from 'lucide-react-native';
+import { ArrowLeft, Building, Camera, MapPin, Phone, Mail, FileText, DollarSign, Truck } from 'lucide-react-native';
 import { ChevronDown, Check } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -101,6 +101,7 @@ export default function PartnerRegister() {
   const [images, setImages] = useState<string[]>([]);
   const [hasShipping, setHasShipping] = useState(false);
   const [shippingCost, setShippingCost] = useState('');
+  const [freeShippingThreshold, setFreeShippingThreshold] = useState('');
   const [loading, setLoading] = useState(false);
   
   // Nuevos campos de ubicación
@@ -591,39 +592,68 @@ export default function PartnerRegister() {
   const createPartnerRecord = async (logoUrl: string | null, imageUrls: string[]) => {
     try {
       console.log('Creating partner record in database...');
+
+      const parsedShippingCost = hasShipping ? parseFloat(shippingCost) || 0 : 0;
+      const parsedFreeShippingThreshold = hasShipping ? parseFloat(freeShippingThreshold) || 0 : 0;
+
+      const partnerPayload: any = {
+        user_id: currentUser.id,
+        business_name: businessName.trim(),
+        business_type: selectedType,
+        description: description.trim(),
+        address: `${calle.trim()} ${numero.trim()}${barrio ? ', ' + barrio : ''}, ${selectedDepartment?.name || ''}, ${selectedCountry?.name || ''}`,
+        phone: phone.trim(),
+        email: email.trim(),
+        logo: logoUrl,
+        images: imageUrls,
+        has_shipping: hasShipping,
+        shipping_cost: parsedShippingCost,
+        country_id: selectedCountry?.id,
+        department_id: selectedDepartment?.id,
+        calle: calle.trim(),
+        numero: numero.trim(),
+        barrio: barrio.trim() || null,
+        codigo_postal: codigoPostal.trim() || null,
+        latitud: latitud.trim() || null,
+        longitud: longitud.trim() || null,
+        rut: rut.trim(),
+        iva_rate: parseFloat(ivaRate) || 0,
+        iva_included_in_price: ivaIncludedInPrice,
+        is_active: true,
+        is_verified: false,
+        rating: 0,
+        reviews_count: 0,
+        created_at: new Date().toISOString(),
+      };
+
+      if (selectedType === 'shop' && hasShipping) {
+        partnerPayload.free_shipping_threshold = parsedFreeShippingThreshold;
+      }
       
       // Create partner request
-      const { error } = await supabaseClient
+      let { error } = await supabaseClient
         .from('partners')
-        .insert({
-          user_id: currentUser.id,
-          business_name: businessName.trim(),
-          business_type: selectedType,
-          description: description.trim(),
-          address: `${calle.trim()} ${numero.trim()}${barrio ? ', ' + barrio : ''}, ${selectedDepartment?.name || ''}, ${selectedCountry?.name || ''}`,
-          phone: phone.trim(),
-          email: email.trim(),
-          logo: logoUrl,
-          images: imageUrls,
-          has_shipping: hasShipping,
-          shipping_cost: hasShipping ? parseFloat(shippingCost) || 0 : 0,
-          country_id: selectedCountry?.id,
-          department_id: selectedDepartment?.id,
-          calle: calle.trim(),
-          numero: numero.trim(),
-          barrio: barrio.trim() || null,
-          codigo_postal: codigoPostal.trim() || null,
-          latitud: latitud.trim() || null,
-          longitud: longitud.trim() || null,
-          rut: rut.trim(),
-          iva_rate: parseFloat(ivaRate) || 0,
-          iva_included_in_price: ivaIncludedInPrice,
-          is_active: true,
-          is_verified: false,
-          rating: 0,
-          reviews_count: 0,
-          created_at: new Date().toISOString(),
-        });
+        .insert(partnerPayload);
+
+      const errorText = String(error?.message || '');
+      const thresholdColumnMissing =
+        !!error &&
+        (
+          error?.code === '42703' ||
+          error?.code === 'PGRST204' ||
+          errorText.includes('free_shipping_threshold')
+        );
+
+      if (thresholdColumnMissing) {
+        console.warn('free_shipping_threshold column missing in partners table. Retrying insert without threshold.');
+        delete partnerPayload.free_shipping_threshold;
+
+        const retry = await supabaseClient
+          .from('partners')
+          .insert(partnerPayload);
+
+        error = retry.error;
+      }
 
       if (error) throw error;
       
@@ -996,14 +1026,25 @@ export default function PartnerRegister() {
               </TouchableOpacity>
 
               {hasShipping && (
-                <Input
-                  label="Costo de envío"
-                  placeholder="Ej: 500"
-                  value={shippingCost}
-                  onChangeText={setShippingCost}
-                  keyboardType="numeric"
-                  leftIcon={<DollarSign size={20} color="#6B7280" />}
-                />
+                <>
+                  <Input
+                    label="Costo de envío"
+                    placeholder="Ej: 500"
+                    value={shippingCost}
+                    onChangeText={setShippingCost}
+                    keyboardType="numeric"
+                    leftIcon={<DollarSign size={20} color="#6B7280" />}
+                  />
+
+                  <Input
+                    label="Umbral envío gratis"
+                    placeholder="Ej: 5000"
+                    value={freeShippingThreshold}
+                    onChangeText={setFreeShippingThreshold}
+                    keyboardType="numeric"
+                    leftIcon={<Truck size={20} color="#6B7280" />}
+                  />
+                </>
               )}
             </View>
           )}

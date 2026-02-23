@@ -430,6 +430,11 @@ export default function ServiceDetail() {
           petId: petId
         };
 
+        // Propagar descuento activo para mantener el precio promocional en booking
+        if (appliedDiscount > 0) {
+          params.discount = String(appliedDiscount);
+        }
+
         // Add boarding category if selected
         if (selectedCategory) {
           params.boardingCategory = selectedCategory;
