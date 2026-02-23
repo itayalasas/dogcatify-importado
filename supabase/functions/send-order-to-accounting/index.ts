@@ -41,7 +41,15 @@ async function sendToAccounting(
     const items = [];
 
     if (orderData.items && Array.isArray(orderData.items)) {
-      const partnerIds = [...new Set(orderData.items.map((item: any) => item.partnerId || item.partner_id))];
+      const partnerIds = [...new Set(
+        orderData.items
+          .map((item: any) => item.partnerId || item.partner_id)
+          .filter((id: any) => !!id)
+      )] as string[];
+
+      if (partnerIds.length === 0 && orderData.partner_id) {
+        partnerIds.push(orderData.partner_id);
+      }
 
       // Obtener información de todos los partners en una sola consulta
       const { data: partnersData, error: partnersError } = await supabase
@@ -57,7 +65,7 @@ async function sendToAccounting(
       const partnersMap = new Map(partnersData?.map((p: any) => [p.id, p]) || []);
 
       for (const item of orderData.items) {
-        const partnerId = item.partnerId || item.partner_id;
+        const partnerId = item.partnerId || item.partner_id || orderData.partner_id;
         const partnerInfo = partnersMap.get(partnerId);
 
         if (!partnerInfo) {
@@ -67,9 +75,21 @@ async function sendToAccounting(
 
         // Calcular precios y descuentos
         const quantity = parseInt(item.quantity) || 1;
-        const originalPrice = parseFloat(item.original_price) || parseFloat(item.price) || 0;
         const finalPrice = parseFloat(item.price) || 0;
-        const discountPercentage = parseFloat(item.discount_percentage) || 0;
+
+        // Normalizar precio original y descuento para evitar inconsistencias
+        const rawOriginalPrice = parseFloat(item.original_price);
+        const rawDiscountPercentage = parseFloat(item.discount_percentage) || 0;
+        const rawDiscountAmount = parseFloat(item.discount_amount);
+
+        let originalPrice = Number.isFinite(rawOriginalPrice) && rawOriginalPrice > 0
+          ? rawOriginalPrice
+          : finalPrice;
+
+        // Si hay porcentaje de descuento y el precio original no es válido, reconstruirlo
+        if (rawDiscountPercentage > 0 && rawDiscountPercentage < 100 && originalPrice <= finalPrice) {
+          originalPrice = finalPrice / (1 - (rawDiscountPercentage / 100));
+        }
 
         // Los precios YA INCLUYEN IVA
         // itemTotal = precio final con IVA * cantidad
@@ -79,7 +99,14 @@ async function sendToAccounting(
         const itemSubtotal = originalPrice * quantity;
 
         // Calcular descuento en valor absoluto
-        const discountAmount = itemSubtotal - itemTotal;
+        const discountAmount = Number.isFinite(rawDiscountAmount) && rawDiscountAmount > 0
+          ? rawDiscountAmount
+          : Math.max(0, itemSubtotal - itemTotal);
+
+        // Recalcular porcentaje de descuento coherente con los montos
+        const discountPercentage = itemSubtotal > 0
+          ? (discountAmount / itemSubtotal) * 100
+          : 0;
 
         // Obtener tasa de IVA (default 22%)
         const taxRate = parseFloat(item.iva_rate) / 100 || 0.22;
@@ -112,13 +139,15 @@ async function sendToAccounting(
           name: item.name || item.title || "Producto",
           quantity: quantity,
           unit_price: Number(originalPrice.toFixed(2)), // Precio unitario CON IVA
+          original_price: Number(originalPrice.toFixed(2)),
+          final_unit_price: Number(finalPrice.toFixed(2)),
           subtotal: Number(itemSubtotal.toFixed(2)), // Subtotal CON IVA
           discount: Number(discountAmount.toFixed(2)),
+          discount_amount: Number(discountAmount.toFixed(2)),
           discount_percentage: Number(discountPercentage.toFixed(3)),
           total: Number(itemTotal.toFixed(2)), // Total CON IVA
           tax_rate: Number(taxRate.toFixed(2)),
           tax_amount: Number(taxAmount.toFixed(2)), // IVA desglosado
-          base_amount: Number(itemBase.toFixed(2)), // Base imponible SIN IVA
           partner: {
             partner_id: partnerInfo.id,
             name: partnerInfo.business_name,
@@ -133,7 +162,7 @@ async function sendToAccounting(
 
     // Calcular totales consolidados
     // NOTA: Todos los precios YA INCLUYEN IVA
-    const totalBase = items.reduce((sum, item) => sum + item.base_amount, 0);
+    const totalBase = items.reduce((sum, item) => sum + (item.total - item.tax_amount), 0);
     const totalTax = items.reduce((sum, item) => sum + item.tax_amount, 0);
     const totalBeforeDiscount = items.reduce((sum, item) => sum + item.subtotal, 0);
     
@@ -162,9 +191,8 @@ async function sendToAccounting(
         order_number: orderData.order_number || `#${orderData.id.slice(-6)}`, // Usar order_number de la BD o últimos 6 caracteres del UUID como fallback
         created_at: orderData.created_at,
         status: orderData.status,
-        subtotal: Number(totalBase.toFixed(2)), // Subtotal SIN IVA (base imponible)
+        subtotal: Number(totalBeforeDiscount.toFixed(2)), // Subtotal original CON IVA (antes de descuento)
         discount: Number(totalDiscount.toFixed(2)),
-        base_amount: Number(totalBase.toFixed(2)), // Base imponible (sin IVA) - mismo que subtotal
         tax: Number(totalTax.toFixed(2)), // IVA desglosado
         total: Number(totalFromItems.toFixed(2)), // ✅ Usar suma de items.total (CON IVA)
         currency: "UYU",

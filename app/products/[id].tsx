@@ -291,6 +291,37 @@ export default function ProductDetail() {
     }).format(price);
   };
 
+  const hasShipping = Boolean(partnerInfo?.has_shipping);
+  const shippingCost = Number(partnerInfo?.shipping_cost || 0);
+  const freeShippingThreshold = Number(partnerInfo?.free_shipping_threshold || 0);
+  const hasFreeShippingThreshold = hasShipping && freeShippingThreshold > 0;
+
+  const quickShippingLabel = hasShipping
+    ? hasFreeShippingThreshold
+      ? 'Envío gratis'
+      : 'Envío'
+    : 'Entrega';
+
+  const quickShippingValue = hasShipping
+    ? hasFreeShippingThreshold
+      ? `Comprando +${formatPrice(freeShippingThreshold)}`
+      : shippingCost > 0
+        ? `Desde ${formatPrice(shippingCost)}`
+        : 'Disponible'
+    : 'Retiro en tienda';
+
+  const shippingTitle = hasShipping
+    ? hasFreeShippingThreshold
+      ? `Envío gratis comprando +${formatPrice(freeShippingThreshold)}`
+      : shippingCost > 0
+        ? `Costo de envío ${formatPrice(shippingCost)}`
+        : 'Envío disponible'
+    : 'Retiro en tienda';
+
+  const shippingSubtitle = hasShipping
+    ? 'Llega en 24-48 horas • Envío rápido'
+    : 'Coordiná retiro directamente con la tienda';
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -443,8 +474,8 @@ export default function ProductDetail() {
             </View>
             <View style={styles.quickInfoDivider} />
             <View style={styles.quickInfoItem}>
-              <Text style={styles.quickInfoLabel}>Envío gratis</Text>
-              <Text style={styles.quickInfoValue}>Comprando +$5.000</Text>
+              <Text style={styles.quickInfoLabel}>{quickShippingLabel}</Text>
+              <Text style={styles.quickInfoValue}>{quickShippingValue}</Text>
             </View>
           </View>
           
@@ -477,8 +508,8 @@ export default function ProductDetail() {
           <View style={styles.shippingCard}>
             <Truck size={24} color="#00A650" />
             <View style={styles.shippingInfo}>
-              <Text style={styles.shippingTitle}>Envío gratis comprando +$5.000</Text>
-              <Text style={styles.shippingSubtitle}>Llega en 24-48 horas • Envío rápido</Text>
+              <Text style={styles.shippingTitle}>{shippingTitle}</Text>
+              <Text style={styles.shippingSubtitle}>{shippingSubtitle}</Text>
             </View>
           </View>
         </View>

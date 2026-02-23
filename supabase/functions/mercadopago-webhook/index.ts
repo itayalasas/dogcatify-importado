@@ -22,6 +22,98 @@ interface WebhookNotification {
   };
 }
 
+async function getMercadoPagoTokenCandidates(supabase: any): Promise<string[]> {
+  const tokenCandidates: string[] = [];
+
+  const { data: adminConfig } = await supabase
+    .from('admin_settings')
+    .select('value')
+    .eq('key', 'mercadopago_config')
+    .maybeSingle();
+
+  if (adminConfig?.value?.access_token) {
+    tokenCandidates.push(adminConfig.value.access_token);
+  }
+
+  const { data: partners } = await supabase
+    .from('partners')
+    .select('mercadopago_config')
+    .not('mercadopago_config', 'is', null);
+
+  for (const partner of partners || []) {
+    const token = partner?.mercadopago_config?.access_token;
+    if (token && !tokenCandidates.includes(token)) {
+      tokenCandidates.push(token);
+    }
+  }
+
+  return tokenCandidates;
+}
+
+async function syncOrderPaymentByOrderId(supabase: any, orderId: string): Promise<boolean> {
+  try {
+    console.log(`🔄 Manual payment sync requested for order: ${orderId}`);
+
+    const tokenCandidates = await getMercadoPagoTokenCandidates(supabase);
+    if (tokenCandidates.length === 0) {
+      console.error('❌ No Mercado Pago access tokens available for manual sync');
+      return false;
+    }
+
+    for (const token of tokenCandidates) {
+      const response = await fetch(`https://api.mercadopago.com/v1/payments/search?external_reference=${orderId}&sort=date_created&criteria=desc&limit=5`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+      });
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const searchData = await response.json();
+      const results = searchData?.results || [];
+
+      if (!results.length) {
+        continue;
+      }
+
+      const approvedAccredited = results.find((payment: any) => payment.status === 'approved' && payment.status_detail === 'accredited');
+      const selectedPayment = approvedAccredited || results[0];
+
+      if (!selectedPayment?.id) {
+        continue;
+      }
+
+      console.log(`✅ Found payment ${selectedPayment.id} for order ${orderId}, processing...`);
+
+      await processPaymentNotification(supabase, {
+        id: Number(selectedPayment.id),
+        live_mode: true,
+        type: 'payment',
+        date_created: new Date().toISOString(),
+        application_id: 0,
+        user_id: 0,
+        version: 1,
+        api_version: 'v1',
+        action: 'payment.updated',
+        data: {
+          id: String(selectedPayment.id)
+        }
+      } as WebhookNotification);
+
+      return true;
+    }
+
+    console.warn(`⚠️ No payments found in MP for order ${orderId}`);
+    return false;
+  } catch (error) {
+    console.error('❌ Error syncing order payment by order_id:', error);
+    return false;
+  }
+}
+
 async function verifyWebhookSignature(req: Request, notificationData: any): Promise<boolean> {
   try {
     const xSignature = req.headers.get('x-signature');
@@ -137,7 +229,24 @@ serve(async (req: Request) => {
 
     console.log('Webhook URL params:', urlParams);
 
-    const notification: WebhookNotification = await req.json();
+    const requestBody = await req.json();
+
+    if (requestBody?.order_id && !requestBody?.type) {
+      const synced = await syncOrderPaymentByOrderId(supabase, String(requestBody.order_id));
+
+      return new Response(
+        JSON.stringify({ status: synced ? 'synced' : 'not_found' }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders,
+          },
+        }
+      );
+    }
+
+    const notification: WebhookNotification = requestBody;
 
     console.log('Received MP webhook notification FULL:', JSON.stringify(notification, null, 2));
     console.log('Received MP webhook notification summary:', {
@@ -508,6 +617,35 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
       if (orderData.order_type === 'service_booking' && orderData.booking_id) {
         console.log(`📅 Updating booking ${orderData.booking_id} status to confirmed`);
         await updateBookingStatus(supabase, orderData.booking_id, 'confirmed', paymentId);
+      }
+
+      // Fallback robusto: disparar envío contable explícitamente al confirmar pago
+      // (evita pérdida de envíos si el trigger de BD falla en algún escenario)
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+        if (!supabaseUrl || !serviceRoleKey) {
+          console.warn('⚠️ Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY, skipping accounting fallback call');
+        } else {
+          const accountingResponse = await fetch(`${supabaseUrl}/functions/v1/send-order-to-accounting`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${serviceRoleKey}`,
+            },
+            body: JSON.stringify({ order_id: orderId }),
+          });
+
+          const accountingBody = await accountingResponse.text();
+          console.log('📨 Accounting fallback response:', {
+            status: accountingResponse.status,
+            ok: accountingResponse.ok,
+            body: accountingBody.slice(0, 500),
+          });
+        }
+      } catch (accountingError) {
+        console.error('❌ Error triggering accounting fallback from MP webhook:', accountingError);
       }
 
       console.log('✅ All post-payment actions completed');
