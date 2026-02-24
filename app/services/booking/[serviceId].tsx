@@ -725,24 +725,44 @@ export default function ServiceBooking() {
         const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
         const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 
-        await fetch(`${supabaseUrl}/functions/v1/send-notification-fcm-v1`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${supabaseAnonKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId: partnerId,
-            title: '🎉 Nueva Reserva',
-            body: `${currentUser.displayName || 'Un cliente'} ha reservado ${service.name} para el ${bookingDate.toLocaleDateString()}`,
-            data: {
-              type: 'booking',
-              bookingId: bookingData.id,
-              orderId: orderData.id,
-              serviceId: serviceId
-            }
-          })
-        });
+        const { data: partnerData, error: partnerError } = await supabaseClient
+          .from('partners')
+          .select('user_id')
+          .eq('id', partnerId)
+          .single();
+
+        if (partnerError || !partnerData?.user_id) {
+          console.error('Error loading partner user for notification:', partnerError);
+        } else {
+          const { data: profileData, error: profileError } = await supabaseClient
+            .from('profiles')
+            .select('fcm_token')
+            .eq('id', partnerData.user_id)
+            .single();
+
+          if (profileError || !profileData?.fcm_token) {
+            console.warn('Partner has no fcm_token for booking notification:', profileError);
+          } else {
+            await fetch(`${supabaseUrl}/functions/v1/send-notification-fcm-v1`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${supabaseAnonKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                token: profileData.fcm_token,
+                title: '🎉 Nueva Reserva',
+                body: `${currentUser.displayName || 'Un cliente'} ha reservado ${service.name} para el ${bookingDate.toLocaleDateString()}`,
+                data: {
+                  type: 'booking',
+                  bookingId: bookingData.id,
+                  orderId: orderData.id,
+                  serviceId: serviceId
+                }
+              })
+            });
+          }
+        }
       } catch (notifError) {
         console.error('Error sending notification:', notifError);
       }

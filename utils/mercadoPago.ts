@@ -474,10 +474,12 @@ interface IVACalculation {
 const calculateIVA = (cartItems: any[], partner: any): IVACalculation => {
   // Get IVA configuration from partner (default 0% if not set)
   const ivaRate = partner.iva_rate || 0;
-  // DEFAULT TO TRUE for Uruguay - most prices include IVA
-  // If partner.iva_included_in_price is explicitly false, it will be false
-  // If it's null/undefined, we default to true
-  const ivaIncluded = partner.iva_included_in_price !== false;
+
+  // IMPORTANTE:
+  // En el carrito de la app, `item.price` ya representa el precio final que paga el cliente.
+  // Para evitar duplicar IVA al crear la orden (caso 2600 -> 3172),
+  // tratamos SIEMPRE los precios de carrito como IVA incluido.
+  const ivaIncluded = true;
 
   console.log('🔍 calculateIVA - Partner IVA Config:', {
     partner_id: partner.id,

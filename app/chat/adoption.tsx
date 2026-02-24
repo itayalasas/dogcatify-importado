@@ -197,7 +197,7 @@ export default function AdoptionChat() {
                 'Authorization': `Bearer ${envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY')}`,
               },
               body: JSON.stringify({
-                fcmToken: profileData.fcm_token,
+                token: profileData.fcm_token,
                 title: `Nuevo mensaje sobre ${petName}`,
                 body: `${currentUser!.displayName}: ${textToSend.substring(0, 100)}`,
                 data: {
