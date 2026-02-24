@@ -92,8 +92,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         .eq('id', currentUser!.id)
         .single();
 
-      if (data?.push_token) {
-        setExpoPushToken(data.push_token);
+      if (data?.push_token || data?.fcm_token) {
+        setExpoPushToken(data.push_token || null);
         setNotificationsEnabled(true);
       }
     } catch (error) {
@@ -268,22 +268,24 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           }
         }
 
-        // Get FCM token for Android (native token for FCM v1 API)
-        // IMPORTANTE: Este es el token prioritario para notificaciones
+        // Get native device token (FCM en Android / APNs en iOS)
+        // IMPORTANTE: se guarda en fcm_token para priorizar envío v1
         let fcmToken: string | null = null;
-        if (Platform.OS === 'android') {
-          try {
-            console.log('🔑 Getting native FCM token for Android (PRIORITARIO)...');
-            const devicePushToken = await Notifications.getDevicePushTokenAsync();
-            fcmToken = devicePushToken.data;
-            console.log('✅ FCM token obtained:', fcmToken ? fcmToken.substring(0, 30) + '...' : 'null');
+        try {
+          console.log('🔑 Getting native device push token (PRIORITARIO)...');
+          const devicePushToken = await Notifications.getDevicePushTokenAsync();
+          fcmToken = devicePushToken?.data || null;
 
-            if (!fcmToken) {
-              console.error('❌ CRÍTICO: No se pudo obtener FCM token en Android');
-              throw new Error('No se pudo obtener el token FCM. Las notificaciones podrían no funcionar.');
-            }
-          } catch (fcmError) {
-            console.error('❌ Error obteniendo FCM token:', fcmError);
+          const tokenType = Platform.OS === 'android' ? 'FCM' : 'APNs';
+          console.log(`✅ ${tokenType} token obtained:`, fcmToken ? fcmToken.substring(0, 30) + '...' : 'null');
+
+          if (!fcmToken && Platform.OS === 'android') {
+            console.error('❌ CRÍTICO: No se pudo obtener FCM token en Android');
+            throw new Error('No se pudo obtener el token FCM. Las notificaciones podrían no funcionar.');
+          }
+        } catch (fcmError: any) {
+          console.error('❌ Error obteniendo token nativo del dispositivo:', fcmError);
+          if (Platform.OS === 'android') {
             throw new Error('Error al obtener token FCM: ' + fcmError.message);
           }
         }
@@ -389,7 +391,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           'Authorization': `Bearer ${anonKey}`,
         },
         body: JSON.stringify({
-          fcmToken: profile.fcm_token,
+          token: profile.fcm_token,
           title,
           body,
           data: data || {}
@@ -422,9 +424,20 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   ): Promise<void> => {
     try {
       console.log('🚀 Sending notification to admin via Edge Function...');
-      
-      // Use Edge Function for admin notifications too
-      await sendNotificationToUser('admin@dogcatify.com', title, body, data);
+
+      const { data: adminProfile, error: adminError } = await supabaseClient
+        .from('profiles')
+        .select('id')
+        .eq('is_admin', true)
+        .limit(1)
+        .maybeSingle();
+
+      if (adminError || !adminProfile?.id) {
+        console.error('❌ Admin profile not found for push notification:', adminError);
+        return;
+      }
+
+      await sendNotificationToUser(adminProfile.id, title, body, data);
     } catch (error) {
       console.error('❌ Error sending notification to admin:', error);
     }
@@ -552,19 +565,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         console.warn('⚠️ No se pudo obtener Expo token:', tokenError);
       }
 
-      if (Platform.OS === 'android') {
-        try {
-          const devicePushToken = await Notifications.getDevicePushTokenAsync();
-          currentFcmToken = devicePushToken.data;
-          console.log('✅ FCM token actual:', currentFcmToken.substring(0, 30) + '...');
+      try {
+        const devicePushToken = await Notifications.getDevicePushTokenAsync();
+        currentFcmToken = devicePushToken?.data || null;
 
-          if (currentFcmToken !== storedFcmToken) {
-            console.log('🔄 FCM token cambió, necesita actualización');
-            needsUpdate = true;
-          }
-        } catch (fcmError) {
-          console.warn('⚠️ No se pudo obtener FCM token:', fcmError);
+        const tokenType = Platform.OS === 'android' ? 'FCM' : 'APNs';
+        console.log(`✅ ${tokenType} token actual:`, currentFcmToken ? currentFcmToken.substring(0, 30) + '...' : 'null');
+
+        if (currentFcmToken !== storedFcmToken) {
+          console.log('🔄 Token nativo cambió, necesita actualización');
+          needsUpdate = true;
         }
+      } catch (fcmError) {
+        console.warn('⚠️ No se pudo obtener token nativo del dispositivo:', fcmError);
       }
 
       // IMPORTANTE: Si el usuario no tiene tokens, intentamos obtenerlos

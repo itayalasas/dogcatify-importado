@@ -144,3 +144,21 @@ $$;
 
 COMMENT ON FUNCTION public.trigger_crm_and_accounting_webhook() IS
 'Hotfix 2026-02-20: usa service_role key desde DB settings en vez de JWT hardcodeado';
+
+-- Re-vincular triggers por si fueron eliminados/deshabilitados
+DROP TRIGGER IF EXISTS order_created_webhook ON public.orders;
+DROP TRIGGER IF EXISTS order_updated_webhook ON public.orders;
+
+CREATE TRIGGER order_created_webhook
+AFTER INSERT ON public.orders
+FOR EACH ROW
+EXECUTE FUNCTION public.trigger_crm_and_accounting_webhook();
+
+CREATE TRIGGER order_updated_webhook
+AFTER UPDATE ON public.orders
+FOR EACH ROW
+EXECUTE FUNCTION public.trigger_crm_and_accounting_webhook();
+
+ALTER TABLE public.orders ENABLE TRIGGER order_created_webhook;
+ALTER TABLE public.orders ENABLE TRIGGER order_updated_webhook;
+
