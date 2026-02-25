@@ -25,14 +25,41 @@ function base64UrlEncode(str: string): string {
 }
 
 function pemToArrayBuffer(pem: string): ArrayBuffer {
-  const pemHeader = '-----BEGIN PRIVATE KEY-----';
-  const pemFooter = '-----END PRIVATE KEY-----';
-  const pemContents = pem
-    .replace(pemHeader, '')
-    .replace(pemFooter, '')
+  const normalizedPem = pem
+    .trim()
+    .replace(/^["'`]|["'`]$/g, '')
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\n')
+    .replace(/\r/g, '\n');
+
+  const pemContents = normalizedPem
+    .replace(/-----BEGIN [^-]+-----/g, '')
+    .replace(/-----END [^-]+-----/g, '')
     .replace(/\s/g, '');
 
-  const binaryString = atob(pemContents);
+  if (!pemContents || pemContents.length < 100) {
+    throw new Error('Invalid Firebase private key format: key body is empty or too short');
+  }
+
+  let normalizedBase64 = pemContents
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+
+  const padding = normalizedBase64.length % 4;
+  if (padding > 0) {
+    normalizedBase64 += '='.repeat(4 - padding);
+  }
+
+  let binaryString: string;
+  try {
+    binaryString = atob(normalizedBase64);
+  } catch {
+    throw new Error(
+      'Invalid Firebase private key format: base64 decode failed. Verify FIREBASE_PRIVATE_KEY with full PEM content and correct newline escaping.'
+    );
+  }
+
   const bytes = new Uint8Array(binaryString.length);
   for (let i = 0; i < binaryString.length; i++) {
     bytes[i] = binaryString.charCodeAt(i);

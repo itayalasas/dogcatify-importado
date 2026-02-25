@@ -1,43 +1,26 @@
 {
   "project_info": {
-    "project_number": "867298215472",
-    "project_id": "app-mascota-7db30",
-    "storage_bucket": "app-mascota-7db30.firebasestorage.app"
+    "project_number": "742444305791",
+    "project_id": "dogcatify",
+    "storage_bucket": "dogcatify.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:867298215472:android:44f476301c4481617acff5",
+        "mobilesdk_app_id": "1:742444305791:android:6192fe8f3749acae919e4a",
         "android_client_info": {
-          "package_name": "com.dogcatify.app"
+          "package_name": "com.dogcatify.app2"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "867298215472-nke4m90ab3qm8m73mriigjkg3j59cm6f.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAlt55C6ATYFoJUu_X18JvsBTjK8N2_xnQ"
+          "current_key": "AIzaSyAygABXIbHyPyJ8DGPbCo6meHgpoEgjRu0"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "867298215472-nke4m90ab3qm8m73mriigjkg3j59cm6f.apps.googleusercontent.com",
-              "client_type": 3
-            },
-            {
-              "client_id": "867298215472-0051di88vsug5g98v8n0hgbg857dak46.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "com.petcare.apps"
-              }
-            }
-          ]
+          "other_platform_oauth_client": []
         }
       }
     }
