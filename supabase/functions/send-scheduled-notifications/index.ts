@@ -22,9 +22,29 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const expoAccessToken = Deno.env.get('EXPO_ACCESS_TOKEN');
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      const missing = [
+        !supabaseUrl ? 'SUPABASE_URL' : null,
+        !supabaseServiceKey ? 'SUPABASE_SERVICE_ROLE_KEY' : null,
+      ].filter(Boolean);
+
+      console.error('Missing required environment variables:', missing.join(', '));
+      return new Response(
+        JSON.stringify({
+          error: 'Missing required environment variables',
+          missing,
+          hint: 'Configure function secrets before running scheduled notifications',
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -118,6 +138,7 @@ Deno.serve(async (req: Request) => {
                 headers: {
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${supabaseServiceKey}`,
+                  'apikey': supabaseServiceKey,
                 },
                 body: JSON.stringify({
                   token: profile.fcm_token,
@@ -136,8 +157,29 @@ Deno.serve(async (req: Request) => {
               sendMethod = 'fcm-v1';
               ticket = { status: 'ok', id: fcmResult.messageId };
             } else {
-              const errorData = await fcmResponse.json();
-              console.warn('FCM v1 failed, will try fallback:', errorData);
+              const errorText = await fcmResponse.text();
+              let errorData: any = {};
+              try {
+                errorData = errorText ? JSON.parse(errorText) : {};
+              } catch {
+                errorData = { raw: errorText };
+              }
+
+              if (fcmResponse.status === 401) {
+                ticket = {
+                  status: 'error',
+                  message: 'FCM v1 auth failed (Invalid JWT). Verify SUPABASE_SERVICE_ROLE_KEY secret in send-scheduled-notifications.',
+                  details: {
+                    status: 401,
+                    response: errorData,
+                  },
+                };
+              }
+
+              console.warn('FCM v1 failed, will try fallback:', {
+                status: fcmResponse.status,
+                errorData,
+              });
             }
           } catch (fcmError) {
             console.warn('FCM v1 error, will try fallback:', fcmError.message);

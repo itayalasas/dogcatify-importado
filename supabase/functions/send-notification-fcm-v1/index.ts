@@ -51,6 +51,32 @@ interface FCMMessage {
   };
 }
 
+function buildServiceAccountFromEnv() {
+  const projectId = Deno.env.get('FIREBASE_PROJECT_ID');
+  const privateKey = Deno.env.get('FIREBASE_PRIVATE_KEY');
+  const privateKeyId = Deno.env.get('FIREBASE_PRIVATE_KEY_ID');
+  const clientEmail = Deno.env.get('FIREBASE_CLIENT_EMAIL');
+  const clientId = Deno.env.get('FIREBASE_CLIENT_ID');
+  const clientCertUrl = Deno.env.get('FIREBASE_CLIENT_CERT_URL');
+
+  if (!projectId || !privateKey || !privateKeyId || !clientEmail || !clientId || !clientCertUrl) {
+    return null;
+  }
+
+  return {
+    type: 'service_account',
+    project_id: projectId,
+    private_key_id: privateKeyId,
+    private_key: privateKey.replace(/\\n/g, '\n'),
+    client_email: clientEmail,
+    client_id: clientId,
+    auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+    token_uri: 'https://oauth2.googleapis.com/token',
+    auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
+    client_x509_cert_url: clientCertUrl,
+  };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -61,12 +87,25 @@ Deno.serve(async (req: Request) => {
 
   try {
     const serviceAccountJson = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
+    let serviceAccount: any = null;
 
-    if (!serviceAccountJson) {
+    if (serviceAccountJson) {
+      try {
+        serviceAccount = parseServiceAccount(serviceAccountJson);
+      } catch (parseError) {
+        console.warn('Invalid FIREBASE_SERVICE_ACCOUNT JSON, trying split FIREBASE_* secrets fallback');
+      }
+    }
+
+    if (!serviceAccount) {
+      serviceAccount = buildServiceAccountFromEnv();
+    }
+
+    if (!serviceAccount) {
       return new Response(
         JSON.stringify({
-          error: 'FIREBASE_SERVICE_ACCOUNT not configured',
-          message: 'Please configure Firebase Service Account in Supabase secrets'
+          error: 'Firebase credentials not configured',
+          message: 'Set FIREBASE_SERVICE_ACCOUNT or split FIREBASE_* secrets (PROJECT_ID, PRIVATE_KEY, PRIVATE_KEY_ID, CLIENT_EMAIL, CLIENT_ID, CLIENT_CERT_URL)'
         }),
         {
           status: 500,
@@ -75,7 +114,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const serviceAccount = parseServiceAccount(serviceAccountJson);
     const projectId = serviceAccount.project_id;
 
     const payload: NotificationPayload = await req.json();
@@ -140,7 +178,6 @@ Deno.serve(async (req: Request) => {
 
    const fcmUrl = `https://api.flowbridge.site/functions/v1/api-gateway/47256d34-2e5f-4b33-ac5d-5d2723bfd917`;
     console.log('Sending notification to FCM v1 API...');
-    console.log(accessToken);
     const response = await fetch(fcmUrl, {
       method: 'POST',
       headers: {
