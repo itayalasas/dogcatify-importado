@@ -78,6 +78,20 @@ export default function ServiceBooking() {
   const [processing, setProcessing] = useState(false);
   const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
 
+  const handleBackPress = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    if (serviceId && partnerId) {
+      router.replace(`/services/${serviceId}?partnerId=${partnerId}`);
+      return;
+    }
+
+    router.replace('/(tabs)/services');
+  };
+
   useEffect(() => {
     const normalizedServiceId = Array.isArray(serviceId) ? serviceId[0] : serviceId;
     const normalizedPartnerId = Array.isArray(partnerId) ? partnerId[0] : partnerId;
@@ -1074,7 +1088,7 @@ export default function ServiceBooking() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>Reservar Servicio</Text>

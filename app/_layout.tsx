@@ -531,6 +531,8 @@ function RootLayout() {
                   <Stack.Screen name="chat/[id]" />
                   <Stack.Screen name="chat/adoption" />
                   <Stack.Screen name="partner-register" />
+                  <Stack.Screen name="delivery-register" />
+                  <Stack.Screen name="delivery/orders" />
                   <Stack.Screen name="partner/add-service" />
                   <Stack.Screen name="partner/add-adoption-pet" />
                   <Stack.Screen name="partner/edit-service" />
@@ -572,6 +574,8 @@ function RootLayout() {
                   <Stack.Screen name="pets/medical-history-preview" />
                   <Stack.Screen name="pets/share-medical-history" />
                   <Stack.Screen name="pets/share-pet" />
+                  <Stack.Screen name="pets/mating/[id]" />
+                  <Stack.Screen name="pets/mating/chat/[id]" />
                   <Stack.Screen name="pet-share/[id]" options={{ title: 'Invitación' }} />
                   <Stack.Screen name="+not-found" />
                 </Stack>

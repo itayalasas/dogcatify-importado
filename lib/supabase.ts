@@ -75,6 +75,7 @@ export const initializeSupabase = async (): Promise<void> => {
         headers: {
           'X-Client-Info': 'dogcatify-mobile',
         },
+        fetch: createAuthAwareFetch(),
       },
     });
 
@@ -136,6 +137,42 @@ export const setTokenExpirationCallback = (callback: () => void) => {
   tokenExpirationCallback = callback;
 };
 
+const isSessionErrorResponse = (status: number, responseText: string): boolean => {
+  const text = (responseText || '').toLowerCase();
+
+  return (
+    status === 401 ||
+    status === 403 ||
+    text.includes('jwt') ||
+    text.includes('expired') ||
+    text.includes('session_not_found') ||
+    text.includes('refresh_token_not_found') ||
+    text.includes('invalid refresh token') ||
+    text.includes('pgrst301')
+  );
+};
+
+const createAuthAwareFetch = () => {
+  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const response = await fetch(input, init);
+
+    if (!response.ok) {
+      try {
+        const responseClone = response.clone();
+        const responseText = await responseClone.text();
+
+        if (isSessionErrorResponse(response.status, responseText) && tokenExpirationCallback) {
+          console.log('Session error detected from Supabase HTTP response, triggering expiration callback');
+          tokenExpirationCallback();
+        }
+      } catch (inspectError) {
+        console.warn('Could not inspect Supabase response for session errors:', inspectError);
+      }
+    }
+
+    return response;
+  };
+};
 export const handleSupabaseError = (error: any) => {
   if (error && typeof error === 'object') {
     const errorMessage = (error.message || '').toLowerCase();

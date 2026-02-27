@@ -8,17 +8,33 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 
 export default function PartnerOrders() {
-  const { partnerId } = useLocalSearchParams<{ partnerId: string }>();
+  const params = useLocalSearchParams<{
+    partnerId?: string | string[];
+    businessId?: string | string[];
+    activeTab?: 'pending' | 'processing' | 'completed' | string | string[];
+    openOrderId?: string | string[];
+  }>();
+
+  const normalizeParam = (value?: string | string[]) => Array.isArray(value) ? value[0] : value;
+
+  const normalizedPartnerId = Array.isArray(params.partnerId)
+    ? params.partnerId[0]
+    : (params.partnerId || (Array.isArray(params.businessId) ? params.businessId[0] : params.businessId));
+  const initialTab = normalizeParam(params.activeTab);
+  const initialOpenOrderId = normalizeParam(params.openOrderId);
   const { currentUser } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'pending' | 'processing' | 'completed'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'processing' | 'completed'>(
+    initialTab === 'processing' || initialTab === 'completed' ? initialTab : 'pending'
+  );
   const [loading, setLoading] = useState(true);
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(initialOpenOrderId || null);
 
   useEffect(() => {
-    if (!currentUser || !partnerId) return;
+    if (!currentUser || !normalizedPartnerId) return;
 
-    console.log('Loading orders for partner ID:', partnerId as string);
+    console.log('Loading orders for partner ID:', normalizedPartnerId as string);
 
     // Get partner profile using Supabase
     const fetchPartnerProfile = async () => {
@@ -26,7 +42,7 @@ export default function PartnerOrders() {
         const { data, error } = await supabaseClient
           .from('partners')
           .select('*')
-          .eq('id', partnerId)
+          .eq('id', normalizedPartnerId)
           .single();
         
         if (error) throw error;
@@ -38,7 +54,7 @@ export default function PartnerOrders() {
             businessType: data.business_type,
             ...data
           });
-          fetchOrders(partnerId as string);
+          fetchOrders(normalizedPartnerId as string);
         }
       } catch (error) {
         console.error('Error fetching partner profile:', error);
@@ -57,7 +73,7 @@ export default function PartnerOrders() {
           event: '*', 
           schema: 'public', 
           table: 'partners',
-          filter: `id=eq.${partnerId}`
+          filter: `id=eq.${normalizedPartnerId}`
         }, 
         () => {
           fetchPartnerProfile();
@@ -68,20 +84,38 @@ export default function PartnerOrders() {
     return () => {
       subscription.unsubscribe();
     };
-  }, [currentUser, partnerId]);
+  }, [currentUser, normalizedPartnerId]);
+
+  const isOrderForPartner = (order: any, partnerId: string) => {
+    if (order?.partner_id === partnerId) return true;
+
+    if (order?.partner_breakdown?.partners && Object.prototype.hasOwnProperty.call(order.partner_breakdown.partners, partnerId)) {
+      return true;
+    }
+
+    if (Array.isArray(order?.items)) {
+      return order.items.some((item: any) => item?.partnerId === partnerId || item?.partner_id === partnerId);
+    }
+
+    return false;
+  };
 
   const fetchOrders = (partnerId: string) => {
     const fetchOrdersData = async () => {
       try {
+        const breakdownFilter = JSON.stringify({ partners: { [partnerId]: {} } });
+
         const { data, error } = await supabaseClient
           .from('orders')
           .select('*')
-          .eq('partner_id', partnerId)
+          .or(`partner_id.eq.${partnerId},partner_breakdown.cs.${breakdownFilter}`)
           .order('created_at', { ascending: false });
         
         if (error) throw error;
         
-        const ordersData = data.map(order => ({
+        const ordersData = (data || [])
+          .filter(order => isOrderForPartner(order, partnerId))
+          .map(order => ({
           id: order.id,
           orderNumber: order.order_number,
           ...order,
@@ -148,6 +182,7 @@ export default function PartnerOrders() {
 
       const statusMessages = {
         processing: 'Pedido en procesamiento',
+        ready_for_delivery: 'Pedido listo para entrega',
         shipped: 'Pedido enviado',
         delivered: 'Pedido entregado',
         cancelled: 'Pedido cancelado'
@@ -158,8 +193,8 @@ export default function PartnerOrders() {
       console.error('Error updating order status:', error);
       Alert.alert('Error', 'No se pudo actualizar el pedido');
       // Revertir el cambio optimista recargando los datos
-      if (partnerId) {
-        fetchOrders(partnerId as string);
+      if (normalizedPartnerId) {
+        fetchOrders(normalizedPartnerId as string);
       }
     }
   };
@@ -167,10 +202,17 @@ export default function PartnerOrders() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return '#FEF3C7';
+      case 'reserved': return '#FEF3C7';
+      case 'payment_failed': return '#FECACA';
+      case 'confirmed': return '#DBEAFE';
       case 'processing': return '#DBEAFE';
+      case 'preparing': return '#DBEAFE';
+      case 'ready_for_delivery': return '#D1FAE5';
       case 'shipped': return '#D1FAE5';
       case 'delivered': return '#D1FAE5';
+      case 'completed': return '#D1FAE5';
       case 'cancelled': return '#FEE2E2';
+      case 'refunded': return '#F3F4F6';
       default: return '#F3F4F6';
     }
   };
@@ -178,36 +220,98 @@ export default function PartnerOrders() {
   const getStatusTextColor = (status: string) => {
     switch (status) {
       case 'pending': return '#92400E';
+      case 'reserved': return '#92400E';
+      case 'payment_failed': return '#991B1B';
+      case 'confirmed': return '#1E40AF';
       case 'processing': return '#1E40AF';
+      case 'preparing': return '#1E40AF';
+      case 'ready_for_delivery': return '#065F46';
       case 'shipped': return '#065F46';
       case 'delivered': return '#065F46';
+      case 'completed': return '#065F46';
       case 'cancelled': return '#991B1B';
+      case 'refunded': return '#374151';
       default: return '#374151';
     }
   };
 
-  const getStatusText = (status: string) => {
+  const getStatusText = (status: string, orderType?: string) => {
     switch (status) {
-      case 'pending': return 'Pendiente';
+      case 'pending': return orderType === 'service_booking' ? 'Pendiente de pago' : 'Pendiente';
+      case 'reserved': return 'Reservado';
+      case 'payment_failed': return 'Pago fallido';
+      case 'confirmed': return 'Confirmado';
       case 'processing': return 'En proceso';
-      case 'shipped': return 'Enviado';
+      case 'preparing': return 'Preparando';
+      case 'ready_for_delivery': return 'Listo para entrega';
+      case 'shipped': return 'En reparto';
       case 'delivered': return 'Entregado';
+      case 'completed': return 'Completado';
       case 'cancelled': return 'Cancelado';
+      case 'refunded': return 'Reembolsado';
       default: return 'Desconocido';
     }
   };
 
+  const isServiceOrder = (order: any) => order.orderType === 'service_booking';
+
+  const isPendingTabOrder = (order: any) => {
+    if (isServiceOrder(order)) {
+      return ['pending', 'reserved', 'payment_failed'].includes(order.status);
+    }
+    return order.status === 'pending';
+  };
+
+  const isProcessingTabOrder = (order: any) => {
+    if (isServiceOrder(order)) {
+      return order.status === 'confirmed';
+    }
+    return ['confirmed', 'processing', 'preparing', 'ready_for_delivery', 'shipped'].includes(order.status);
+  };
+
+  const isCompletedTabOrder = (order: any) => {
+    if (isServiceOrder(order)) {
+      return ['completed', 'cancelled', 'refunded'].includes(order.status);
+    }
+    return ['delivered', 'cancelled', 'refunded'].includes(order.status);
+  };
+
   const filteredOrders = orders.filter(order => {
-    if (activeTab === 'pending') return order.status === 'pending';
-    if (activeTab === 'processing') return order.status === 'processing' || order.status === 'shipped';
-    return order.status === 'delivered' || order.status === 'cancelled';
+    if (activeTab === 'pending') return isPendingTabOrder(order);
+    if (activeTab === 'processing') return isProcessingTabOrder(order);
+    return isCompletedTabOrder(order);
   });
+
+  useEffect(() => {
+    if (!initialOpenOrderId || orders.length === 0) return;
+
+    const targetOrder = orders.find(order => order.id === initialOpenOrderId);
+    if (!targetOrder) return;
+
+    if (isPendingTabOrder(targetOrder)) {
+      setActiveTab('pending');
+    } else if (isProcessingTabOrder(targetOrder)) {
+      setActiveTab('processing');
+    } else {
+      setActiveTab('completed');
+    }
+
+    setExpandedOrderId(initialOpenOrderId);
+  }, [orders, initialOpenOrderId]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-AR', {
       style: 'currency',
       currency: 'ARS',
     }).format(amount);
+  };
+
+  const shouldShowDetailToggle = (order: any) => {
+    if (order.orderType === 'service_booking') {
+      return order.status === 'confirmed';
+    }
+
+    return ['confirmed', 'processing', 'preparing', 'shipped'].includes(order.status);
   };
 
   // Helper function to get customer profile data
@@ -242,7 +346,7 @@ export default function PartnerOrders() {
             styles.statusText,
             { color: getStatusTextColor(order.status) }
           ]}>
-            {getStatusText(order.status)}
+            {getStatusText(order.status, order.orderType)}
           </Text>
         </View>
       </View>
@@ -306,7 +410,63 @@ export default function PartnerOrders() {
       </View>
 
       <View style={styles.orderActions}>
-        {order.status === 'pending' && (
+        {shouldShowDetailToggle(order) && (
+          <TouchableOpacity
+            style={styles.detailToggleButton}
+            onPress={() => setExpandedOrderId(prev => prev === order.id ? null : order.id)}
+          >
+            <Text style={styles.detailToggleText}>
+              {expandedOrderId === order.id ? 'Ocultar detalle' : 'Ver detalle para preparación'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {expandedOrderId === order.id && (
+          <View style={styles.preparationDetailsCard}>
+            <Text style={styles.preparationDetailsTitle}>Detalle operativo</Text>
+
+            <View style={styles.preparationRow}>
+              <User size={16} color="#374151" />
+              <Text style={styles.preparationText}>
+                Cliente: {order.customer_name || order.customerName || order.customer_id || 'No disponible'}
+              </Text>
+            </View>
+
+            {!!order.shippingAddress && (
+              <View style={styles.preparationRow}>
+                <MapPin size={16} color="#374151" />
+                <Text style={styles.preparationText}>Entrega: {order.shippingAddress}</Text>
+              </View>
+            )}
+
+            {(order.notes || order.special_instructions || order.delivery_notes) && (
+              <View style={styles.preparationNotesBox}>
+                <Text style={styles.preparationNotesTitle}>Notas del pedido</Text>
+                <Text style={styles.preparationNotesText}>
+                  {order.notes || order.special_instructions || order.delivery_notes}
+                </Text>
+              </View>
+            )}
+
+            {Array.isArray(order.items) && order.items.length > 0 && (
+              <View style={styles.preparationItemsBox}>
+                <Text style={styles.preparationItemsTitle}>Checklist de armado</Text>
+                {order.items.map((item: any, index: number) => (
+                  <View key={`${order.id}-detail-${index}`} style={styles.preparationItemRow}>
+                    <Text style={styles.preparationItemName}>
+                      {item.quantity || 1} x {item.name || 'Producto'}
+                    </Text>
+                    <Text style={styles.preparationItemSubtotal}>
+                      {formatCurrency((item.price || 0) * (item.quantity || 1))}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {order.status === 'pending' && order.orderType !== 'service_booking' && (
           <>
             <Button
               title="Cancelar"
@@ -321,16 +481,38 @@ export default function PartnerOrders() {
             />
           </>
         )}
+
+        {order.orderType === 'service_booking' && order.status === 'confirmed' && (
+          <>
+            <Button
+              title="Cancelar"
+              onPress={() => handleUpdateOrderStatus(order.id, 'cancelled')}
+              variant="outline"
+              size="small"
+            />
+            <Button
+              title="Marcar Completado"
+              onPress={() => handleUpdateOrderStatus(order.id, 'completed')}
+              size="small"
+            />
+          </>
+        )}
         
-        {order.status === 'processing' && (
+        {order.orderType !== 'service_booking' && ['confirmed', 'processing', 'preparing'].includes(order.status) && (
           <Button
-            title="Marcar como Enviado"
-            onPress={() => handleUpdateOrderStatus(order.id, 'shipped')}
+            title="Marcar Listo para Entrega"
+            onPress={() => handleUpdateOrderStatus(order.id, 'ready_for_delivery')}
             size="small"
           />
         )}
+
+        {order.orderType !== 'service_booking' && order.status === 'ready_for_delivery' && (
+          <View style={styles.readyForDeliveryInfo}>
+            <Text style={styles.readyForDeliveryText}>Esperando que un repartidor tome el pedido</Text>
+          </View>
+        )}
         
-        {order.status === 'shipped' && (
+        {order.orderType !== 'service_booking' && order.status === 'shipped' && (
           <Button
             title="Marcar como Entregado"
             onPress={() => handleUpdateOrderStatus(order.id, 'delivered')}
@@ -403,7 +585,7 @@ export default function PartnerOrders() {
           onPress={() => setActiveTab('pending')}
         >
           <Text style={[styles.tabText, activeTab === 'pending' && styles.activeTabText]}>
-            Pendientes ({orders.filter(o => o.status === 'pending').length})
+            Pendientes ({orders.filter(isPendingTabOrder).length})
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -411,7 +593,7 @@ export default function PartnerOrders() {
           onPress={() => setActiveTab('processing')}
         >
           <Text style={[styles.tabText, activeTab === 'processing' && styles.activeTabText]}>
-            En Proceso ({orders.filter(o => o.status === 'processing' || o.status === 'shipped').length})
+            En Proceso ({orders.filter(isProcessingTabOrder).length})
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -419,7 +601,7 @@ export default function PartnerOrders() {
           onPress={() => setActiveTab('completed')}
         >
           <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>
-            Completados ({orders.filter(o => o.status === 'delivered' || o.status === 'cancelled').length})
+            Completados ({orders.filter(isCompletedTabOrder).length})
           </Text>
         </TouchableOpacity>
       </View>
@@ -434,15 +616,15 @@ export default function PartnerOrders() {
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
-                {orders.filter(o => o.status === 'pending').length}
+                {orders.filter(isPendingTabOrder).length}
               </Text>
               <Text style={styles.statLabel}>Pendientes</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
-                {orders.filter(o => o.status === 'delivered').length}
+                {orders.filter(isCompletedTabOrder).length}
               </Text>
-              <Text style={styles.statLabel}>Entregados</Text>
+              <Text style={styles.statLabel}>Completados</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
@@ -741,6 +923,105 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     gap: 8,
     marginTop: 8,
+  },
+  readyForDeliveryInfo: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  readyForDeliveryText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#065F46',
+    textAlign: 'center',
+  },
+  detailToggleButton: {
+    borderWidth: 1,
+    borderColor: '#3B82F6',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+  },
+  detailToggleText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E40AF',
+  },
+  preparationDetailsCard: {
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 10,
+    backgroundColor: '#F8FBFF',
+    padding: 12,
+    gap: 8,
+  },
+  preparationDetailsTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E3A8A',
+  },
+  preparationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  preparationText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+  },
+  preparationNotesBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  preparationNotesTitle: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  preparationNotesText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#4B5563',
+  },
+  preparationItemsBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 6,
+  },
+  preparationItemsTitle: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#374151',
+  },
+  preparationItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  preparationItemName: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#111827',
+    flex: 1,
+    marginRight: 8,
+  },
+  preparationItemSubtotal: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
   },
   orderActionButton: {
     marginBottom: 4,

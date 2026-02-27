@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Alert, Linking, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { ArrowLeft, Package, Clock, Truck, CircleCheck as CheckCircle, Circle as XCircle, MapPin, Phone, Star, AlertCircle, RefreshCw } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -14,14 +15,23 @@ export default function MyOrders() {
   const [orders, setOrders] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [counts, setCounts] = useState({ active: 0, completed: 0 });
+
+  const PAGE_SIZE = 20;
+  const ACTIVE_STATUSES = ['pending', 'reserved', 'payment_failed', 'confirmed', 'processing', 'preparing', 'ready_for_delivery', 'shipped'];
+  const COMPLETED_STATUSES = ['completed', 'delivered', 'cancelled', 'refunded'];
 
   useEffect(() => {
     if (!currentUser) {
       router.replace('/auth/login');
       return;
     }
-    
-    fetchOrders();
+
+    fetchOrders(true);
+    fetchOrderCounts();
 
     // Suscripción en tiempo real para actualizar pedidos cuando cambie el estado
     const ordersSubscription = supabaseClient
@@ -29,25 +39,15 @@ export default function MyOrders() {
       .on(
         'postgres_changes',
         {
-          event: 'UPDATE',
+          event: '*',
           schema: 'public',
           table: 'orders',
           filter: `customer_id=eq.${currentUser.id}`
         },
         (payload) => {
-          console.log('📦 Order updated in real-time:', payload.new);
-          // Actualizar el pedido en el estado local
-          setOrders(prevOrders =>
-            prevOrders.map(order =>
-              order.id === payload.new.id
-                ? {
-                    ...order,
-                    status: payload.new.status,
-                    updatedAt: new Date(payload.new.updated_at)
-                  }
-                : order
-            )
-          );
+          console.log('📦 Order changed in real-time:', payload.eventType, payload.new || payload.old);
+          fetchOrders(true);
+          fetchOrderCounts();
         }
       )
       .subscribe();
@@ -58,15 +58,76 @@ export default function MyOrders() {
     };
   }, [currentUser]);
 
-  const fetchOrders = async () => {
+  useEffect(() => {
     if (!currentUser) return;
+    fetchOrders(true);
+    fetchOrderCounts();
+  }, [activeTab]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!currentUser) return;
+      fetchOrders(true);
+      fetchOrderCounts();
+    }, [currentUser?.id, activeTab])
+  );
+
+  const fetchOrderCounts = async () => {
+    if (!currentUser) return;
+
+    try {
+      const [{ count: activeCount, error: activeError }, { count: completedCount, error: completedError }] = await Promise.all([
+        supabaseClient
+          .from('orders')
+          .select('id', { count: 'exact', head: true })
+          .eq('customer_id', currentUser.id)
+          .in('status', ACTIVE_STATUSES),
+        supabaseClient
+          .from('orders')
+          .select('id', { count: 'exact', head: true })
+          .eq('customer_id', currentUser.id)
+          .in('status', COMPLETED_STATUSES),
+      ]);
+
+      if (activeError || completedError) {
+        console.error('Error fetching order counts:', activeError || completedError);
+        return;
+      }
+
+      setCounts({
+        active: activeCount || 0,
+        completed: completedCount || 0,
+      });
+    } catch (error) {
+      console.error('Error fetching order counts:', error);
+    }
+  };
+
+  const fetchOrders = async (reset = false) => {
+    if (!currentUser) return;
+
+    const currentLength = reset ? 0 : orders.length;
+    const from = currentLength;
+    const to = currentLength + PAGE_SIZE - 1;
+
+    if (reset) {
+      setLoading(true);
+      setHasMore(true);
+    } else {
+      if (!hasMore || loadingMore || loading) return;
+      setLoadingMore(true);
+    }
     
     try {
+      const statusFilter = activeTab === 'active' ? ACTIVE_STATUSES : COMPLETED_STATUSES;
+
       const { data, error } = await supabaseClient
         .from('orders')
-        .select('*')
+        .select('id, order_number, partner_id, customer_id, items, status, order_type, total_amount, shipping_address, created_at, updated_at, payment_link_expires_at, last_payment_url, payment_retry_count')
         .eq('customer_id', currentUser.id)
-        .order('created_at', { ascending: false });
+        .in('status', statusFilter)
+        .order('created_at', { ascending: false })
+        .range(from, to);
       
       if (error) throw error;
       
@@ -86,25 +147,51 @@ export default function MyOrders() {
         lastPaymentUrl: order.last_payment_url,
         paymentRetryCount: order.payment_retry_count || 0
       })) || [];
-      
-      setOrders(ordersData);
+
+      setHasMore(ordersData.length === PAGE_SIZE);
+      setOrders(prev => reset ? ordersData : [...prev, ...ordersData]);
     } catch (error) {
       console.error('Error fetching orders:', error);
       Alert.alert('Error', 'No se pudieron cargar los pedidos');
     } finally {
-      setLoading(false);
+      if (reset) {
+        setLoading(false);
+      } else {
+        setLoadingMore(false);
+      }
+    }
+  };
+
+  const loadMoreOrders = () => {
+    if (!hasMore || loading || loadingMore) return;
+    fetchOrders(false);
+  };
+
+  const onRefresh = async () => {
+    if (!currentUser) return;
+
+    setRefreshing(true);
+    try {
+      await Promise.all([fetchOrders(true), fetchOrderCounts()]);
+    } finally {
+      setRefreshing(false);
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return '#FEF3C7';
+      case 'reserved': return '#FEF3C7';
       case 'payment_failed': return '#FECACA';
       case 'confirmed': return '#DBEAFE';
       case 'processing': return '#DBEAFE';
+      case 'preparing': return '#DBEAFE';
+      case 'ready_for_delivery': return '#DBEAFE';
       case 'shipped': return '#D1FAE5';
+      case 'completed': return '#D1FAE5';
       case 'delivered': return '#D1FAE5';
       case 'cancelled': return '#FEE2E2';
+      case 'refunded': return '#F3F4F6';
       default: return '#F3F4F6';
     }
   };
@@ -112,25 +199,35 @@ export default function MyOrders() {
   const getStatusTextColor = (status: string) => {
     switch (status) {
       case 'pending': return '#92400E';
+      case 'reserved': return '#92400E';
       case 'payment_failed': return '#991B1B';
       case 'confirmed': return '#1E40AF';
       case 'processing': return '#1E40AF';
+      case 'preparing': return '#1E40AF';
+      case 'ready_for_delivery': return '#1E40AF';
       case 'shipped': return '#065F46';
+      case 'completed': return '#065F46';
       case 'delivered': return '#065F46';
       case 'cancelled': return '#991B1B';
+      case 'refunded': return '#374151';
       default: return '#374151';
     }
   };
 
-  const getStatusText = (status: string) => {
+  const getStatusText = (status: string, orderType?: string) => {
     switch (status) {
-      case 'pending': return 'Pendiente';
+      case 'pending': return orderType === 'service_booking' ? 'Pendiente de pago' : 'Pendiente';
+      case 'reserved': return 'Reservado';
       case 'payment_failed': return 'Pago fallido';
       case 'confirmed': return 'Confirmado';
       case 'processing': return 'En proceso';
-      case 'shipped': return 'Enviado';
+      case 'preparing': return 'Preparando';
+      case 'ready_for_delivery': return 'Listo para entrega';
+      case 'shipped': return 'En reparto';
+      case 'completed': return 'Completado';
       case 'delivered': return 'Entregado';
       case 'cancelled': return 'Cancelado';
+      case 'refunded': return 'Reembolsado';
       default: return 'Desconocido';
     }
   };
@@ -138,12 +235,17 @@ export default function MyOrders() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pending': return <Clock size={16} color="#92400E" />;
+      case 'reserved': return <Clock size={16} color="#92400E" />;
       case 'payment_failed': return <AlertCircle size={16} color="#991B1B" />;
       case 'confirmed': return <CheckCircle size={16} color="#1E40AF" />;
       case 'processing': return <Package size={16} color="#1E40AF" />;
+      case 'preparing': return <Package size={16} color="#1E40AF" />;
+      case 'ready_for_delivery': return <Clock size={16} color="#1E40AF" />;
       case 'shipped': return <Truck size={16} color="#065F46" />;
+      case 'completed': return <CheckCircle size={16} color="#065F46" />;
       case 'delivered': return <CheckCircle size={16} color="#065F46" />;
       case 'cancelled': return <XCircle size={16} color="#991B1B" />;
+      case 'refunded': return <RefreshCw size={16} color="#374151" />;
       default: return <Clock size={16} color="#374151" />;
     }
   };
@@ -157,9 +259,9 @@ export default function MyOrders() {
 
   const filteredOrders = orders.filter(order => {
     if (activeTab === 'active') {
-      return ['pending', 'payment_failed', 'confirmed', 'processing', 'shipped'].includes(order.status);
+      return ACTIVE_STATUSES.includes(order.status);
     } else {
-      return ['delivered', 'cancelled'].includes(order.status);
+      return COMPLETED_STATUSES.includes(order.status);
     }
   });
 
@@ -267,7 +369,7 @@ export default function MyOrders() {
             styles.statusText,
             { color: getStatusTextColor(order.status) }
           ]}>
-            {getStatusText(order.status)}
+                {getStatusText(order.status, order.orderType)}
           </Text>
         </View>
       </View>
@@ -327,7 +429,7 @@ export default function MyOrders() {
             size="small"
           />
         )}
-        {['pending', 'confirmed', 'processing', 'shipped'].includes(order.status) && (
+        {['pending', 'reserved', 'confirmed', 'processing', 'preparing', 'shipped'].includes(order.status) && (
           <Button
             title="Rastrear"
             onPress={() => handleTrackOrder(order)}
@@ -379,7 +481,7 @@ export default function MyOrders() {
           onPress={() => setActiveTab('active')}
         >
           <Text style={[styles.tabText, activeTab === 'active' && styles.activeTabText]}>
-            Activos ({orders.filter(o => ['pending', 'confirmed', 'processing', 'shipped'].includes(o.status)).length})
+            Activos ({counts.active})
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -387,74 +489,94 @@ export default function MyOrders() {
           onPress={() => setActiveTab('completed')}
         >
           <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>
-            Completados ({orders.filter(o => ['delivered', 'cancelled'].includes(o.status)).length})
+            Completados ({counts.completed})
           </Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {orders.length === 0 ? (
-          <Card style={styles.emptyCard}>
-            <Package size={64} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>No tienes pedidos</Text>
-            <Text style={styles.emptySubtitle}>
-              Cuando realices compras en la tienda, aparecerán aquí
-            </Text>
-            <Button
-              title="Ir a la Tienda"
-              onPress={() => router.push('/(tabs)/shop')}
-              size="large"
-            />
-          </Card>
-        ) : filteredOrders.length === 0 ? (
-          <Card style={styles.emptyCard}>
-            <Package size={64} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>
-              No hay pedidos {activeTab === 'active' ? 'activos' : 'completados'}
-            </Text>
-            <Text style={styles.emptySubtitle}>
-              {activeTab === 'active' 
-                ? 'Tus pedidos en proceso aparecerán aquí'
-                : 'Tus pedidos entregados y cancelados aparecerán aquí'
-              }
-            </Text>
-          </Card>
-        ) : (
-          <View style={styles.ordersList}>
-            {filteredOrders.map(renderOrder)}
-          </View>
-        )}
+      <FlatList
+        style={styles.content}
+        data={filteredOrders}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => renderOrder(item)}
+        showsVerticalScrollIndicator={false}
+        onEndReached={loadMoreOrders}
+        onEndReachedThreshold={0.4}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+          />
+        }
+        ListEmptyComponent={
+          orders.length === 0 ? (
+            <Card style={styles.emptyCard}>
+              <Package size={64} color="#9CA3AF" />
+              <Text style={styles.emptyTitle}>No tienes pedidos</Text>
+              <Text style={styles.emptySubtitle}>
+                Cuando realices compras en la tienda, aparecerán aquí
+              </Text>
+              <Button
+                title="Ir a la Tienda"
+                onPress={() => router.push('/(tabs)/shop')}
+                size="large"
+              />
+            </Card>
+          ) : (
+            <Card style={styles.emptyCard}>
+              <Package size={64} color="#9CA3AF" />
+              <Text style={styles.emptyTitle}>
+                No hay pedidos {activeTab === 'active' ? 'activos' : 'completados'}
+              </Text>
+              <Text style={styles.emptySubtitle}>
+                {activeTab === 'active'
+                  ? 'Tus pedidos en proceso aparecerán aquí'
+                  : 'Tus pedidos entregados y cancelados aparecerán aquí'
+                }
+              </Text>
+            </Card>
+          )
+        }
+        ListFooterComponent={
+          <>
+            {loadingMore && (
+              <View style={styles.loadMoreContainer}>
+                <ActivityIndicator size="small" color="#3B82F6" />
+                <Text style={styles.loadMoreText}>Cargando más pedidos...</Text>
+              </View>
+            )}
 
-        {/* Quick Actions */}
-        <Card style={styles.quickActionsCard}>
-          <Text style={styles.quickActionsTitle}>Acciones Rápidas</Text>
-          <View style={styles.quickActions}>
-            <TouchableOpacity 
-              style={styles.quickAction}
-              onPress={() => router.push('/(tabs)/shop')}
-            >
-              <Package size={24} color="#3B82F6" />
-              <Text style={styles.quickActionText}>Ir a Tienda</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.quickAction}
-              onPress={handleContactSupport}
-            >
-              <Phone size={24} color="#10B981" />
-              <Text style={styles.quickActionText}>Soporte</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.quickAction}
-              onPress={() => router.push('/cart')}
-            >
-              <Package size={24} color="#F59E0B" />
-              <Text style={styles.quickActionText}>Mi Carrito</Text>
-            </TouchableOpacity>
-          </View>
-        </Card>
-      </ScrollView>
+            <Card style={styles.quickActionsCard}>
+              <Text style={styles.quickActionsTitle}>Acciones Rápidas</Text>
+              <View style={styles.quickActions}>
+                <TouchableOpacity
+                  style={styles.quickAction}
+                  onPress={() => router.push('/(tabs)/shop')}
+                >
+                  <Package size={24} color="#3B82F6" />
+                  <Text style={styles.quickActionText}>Ir a Tienda</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.quickAction}
+                  onPress={handleContactSupport}
+                >
+                  <Phone size={24} color="#10B981" />
+                  <Text style={styles.quickActionText}>Soporte</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.quickAction}
+                  onPress={() => router.push('/cart')}
+                >
+                  <Package size={24} color="#F59E0B" />
+                  <Text style={styles.quickActionText}>Mi Carrito</Text>
+                </TouchableOpacity>
+              </View>
+            </Card>
+          </>
+        }
+      />
     </SafeAreaView>
   );
 }
@@ -515,7 +637,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  ordersList: {
     padding: 16,
+    paddingBottom: 8,
   },
   loadingContainer: {
     flex: 1,
@@ -546,10 +671,8 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     lineHeight: 24,
   },
-  ordersList: {
-    marginBottom: 16,
-  },
   orderCard: {
+    marginHorizontal: 16,
     marginBottom: 12,
   },
   orderHeader: {
@@ -683,7 +806,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   quickActionsCard: {
+    marginHorizontal: 16,
     marginTop: 8,
+    marginBottom: 16,
   },
   quickActionsTitle: {
     fontSize: 16,
@@ -709,5 +834,17 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginTop: 8,
     textAlign: 'center',
+  },
+  loadMoreContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 8,
+  },
+  loadMoreText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
   },
 });

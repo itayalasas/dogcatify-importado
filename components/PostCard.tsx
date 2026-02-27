@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions, Modal, TextInput, FlatList, ActivityIndicator, ScrollView, Image, Share, Platform, KeyboardAvoidingView, StatusBar } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { Heart, MessageCircle, Share2, MoveHorizontal as MoreHorizontal, ArrowLeft, Send, Play, Pause } from 'lucide-react-native';
+import { Heart, MessageCircle, Share2, MoveHorizontal as MoreHorizontal, ArrowLeft, Send, Play, Pause, TriangleAlert as AlertTriangle, MapPin, Phone } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { supabaseClient } from '../lib/supabase';
 import { FollowButton } from './FollowButton';
@@ -676,6 +676,7 @@ const PostCard: React.FC<PostCardProps> = ({
     try {
       // Determine if it's an album or regular post
       const isAlbum = post.type === 'album';
+      const isLostPet = post.type === 'lost_pet';
       const contentType = isAlbum ? 'álbum' : 'publicación';
 
       // Create Universal Link (web URL que abre la app automáticamente)
@@ -684,7 +685,9 @@ const PostCard: React.FC<PostCardProps> = ({
         : `https://app-dogcatify.netlify.app/post/${post.id}`;
 
       // Prepare share message with clickable universal link
-      const shareMessage = isAlbum
+      const shareMessage = isLostPet
+        ? `🚨 ALERTA MASCOTA PERDIDA 🚨\n\n${post.pet?.name || 'Esta mascota'} se encuentra perdida.\n\n📍 ${post.pet?.lostPetAlert?.lastSeenLocation || 'Ubicación no especificada'}\n📞 ${post.pet?.lostPetAlert?.contactPhone || 'Sin contacto'}\n\n${webLink}\n\n🙏 Si tienes información, por favor comunícate.`
+        : isAlbum
         ? `🐾 ¡Mira este ${contentType} de ${post.pet?.name || 'mascota'} compartido por ${post.author?.name} en DogCatiFy!\n\n📸 ${post.album_images?.length || 1} foto(s)\n\n${webLink}\n\n✨ Abre el link para ver el contenido directo en la app DogCatiFy`
         : `🐾 ¡Mira esta ${contentType} de ${post.author?.name} en DogCatiFy!\n\n${webLink}\n\n✨ Abre el link para ver el contenido directo en la app DogCatiFy`;
 
@@ -804,6 +807,9 @@ const PostCard: React.FC<PostCardProps> = ({
     return date.toLocaleDateString();
   };
 
+  const isLostPetAlert = post.type === 'lost_pet';
+  const lostPetAlert = post.pet?.lostPetAlert || {};
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -817,13 +823,42 @@ const PostCard: React.FC<PostCardProps> = ({
             <Text style={styles.authorName}>{post.author?.name || 'Usuario'}</Text>
             <FollowButton userId={post.userId} authorName={post.author?.name || 'Usuario'} compact={true} />
           </View>
-          <Text style={styles.petName}>con {post.pet?.name || 'mascota'}</Text>
+          <Text style={styles.petName}>
+            {isLostPetAlert ? '🚨 Alerta de mascota perdida' : `con ${post.pet?.name || 'mascota'}`}
+          </Text>
           <Text style={styles.timestamp}>{post.timeAgo || formatDate(post.createdAt)}</Text>
         </View>
         <TouchableOpacity style={styles.moreButton}>
           <MoreHorizontal size={20} color="#666" />
         </TouchableOpacity>
       </View>
+
+      {isLostPetAlert && (
+        <View style={styles.lostAlertContainer}>
+          <View style={styles.lostAlertHeader}>
+            <AlertTriangle size={18} color="#B91C1C" />
+            <Text style={styles.lostAlertTitle}>Se busca a {post.pet?.name || 'esta mascota'}</Text>
+          </View>
+
+          {!!lostPetAlert.lastSeenLocation && (
+            <View style={styles.lostAlertRow}>
+              <MapPin size={14} color="#B91C1C" />
+              <Text style={styles.lostAlertText}>Última ubicación: {lostPetAlert.lastSeenLocation}</Text>
+            </View>
+          )}
+
+          {!!lostPetAlert.contactPhone && (
+            <View style={styles.lostAlertRow}>
+              <Phone size={14} color="#B91C1C" />
+              <Text style={styles.lostAlertText}>Contacto: {lostPetAlert.contactPhone}</Text>
+            </View>
+          )}
+
+          {!!lostPetAlert.reward && (
+            <Text style={styles.lostAlertReward}>💰 Recompensa: {lostPetAlert.reward}</Text>
+          )}
+        </View>
+      )}
 
       {/* Content */}
       {post.content && (
@@ -1138,6 +1173,41 @@ const styles = StyleSheet.create({
     color: '#000',
     paddingHorizontal: 16,
     marginBottom: 12,
+  },
+  lostAlertContainer: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    gap: 6,
+  },
+  lostAlertHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  lostAlertTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#B91C1C',
+  },
+  lostAlertRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  lostAlertText: {
+    fontSize: 13,
+    color: '#7F1D1D',
+    flex: 1,
+  },
+  lostAlertReward: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#991B1B',
   },
   imageContainer: {
     position: 'relative',
