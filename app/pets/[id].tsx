@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Modal, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Calendar, Scale, Syringe, Heart, TriangleAlert as AlertTriangle, Pill, Camera, Plus, CreditCard as Edit, Trash2, Play, Image as ImageIcon, X } from 'lucide-react-native';
+import { ArrowLeft, Calendar, Scale, Syringe, Heart, TriangleAlert as AlertTriangle, Pill, Camera, Plus, CreditCard as Edit, Trash2, Play, Image as ImageIcon, X, MapPin, Phone } from 'lucide-react-native';
 import { Video } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { Card } from '../../components/ui/Card';
@@ -44,6 +44,17 @@ export default function PetDetail() {
   const [currentAlertIndex, setCurrentAlertIndex] = useState(0);
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [alertsToShow, setAlertsToShow] = useState<any[]>([]);
+  const [showLostPetModal, setShowLostPetModal] = useState(false);
+  const [lostPetPost, setLostPetPost] = useState<any>(null);
+  const [reportingLostPet, setReportingLostPet] = useState(false);
+  const [lostContactPhone, setLostContactPhone] = useState('');
+  const [lostContactName, setLostContactName] = useState('');
+  const [lostLastSeenLocation, setLostLastSeenLocation] = useState('');
+  const [lostLastSeenDate, setLostLastSeenDate] = useState('');
+  const [lostReward, setLostReward] = useState('');
+  const [lostAdditionalNotes, setLostAdditionalNotes] = useState('');
+  const [matingProfile, setMatingProfile] = useState<any>(null);
+  const [updatingMatingStatus, setUpdatingMatingStatus] = useState(false);
 
   useEffect(() => {
     fetchPetDetails();
@@ -52,6 +63,16 @@ export default function PetDetail() {
     fetchMedicalAlerts();
     fetchBehaviorHistory();
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    fetchActiveLostPetPost();
+  }, [id, currentUser]);
+
+  useEffect(() => {
+    if (!id || !currentUser) return;
+    fetchMatingProfile();
+  }, [id, currentUser]);
 
   useEffect(() => {
     if (medicalAlerts.length > 0 && alertsToShow.length === 0) {
@@ -185,6 +206,284 @@ export default function PetDetail() {
       console.error('Error fetching health records:', error);
       Alert.alert('Error', 'Error al cargar los datos de salud');
     }
+  };
+
+  const fetchActiveLostPetPost = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('posts')
+        .select('*')
+        .eq('pet_id', id)
+        .eq('type', 'lost_pet')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching lost pet post:', error);
+        return;
+      }
+
+      setLostPetPost(data || null);
+
+      if (data?.pet?.lostPetAlert) {
+        setLostContactPhone(data.pet.lostPetAlert.contactPhone || '');
+        setLostContactName(data.pet.lostPetAlert.contactName || '');
+        setLostLastSeenLocation(data.pet.lostPetAlert.lastSeenLocation || '');
+        setLostLastSeenDate(data.pet.lostPetAlert.lastSeenDate || '');
+        setLostReward(data.pet.lostPetAlert.reward || '');
+        setLostAdditionalNotes(data.pet.lostPetAlert.additionalNotes || '');
+      }
+    } catch (error) {
+      console.error('Error fetching active lost pet post:', error);
+    }
+  };
+
+  const fetchMatingProfile = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('pet_mating_profiles')
+        .select('*')
+        .eq('pet_id', id)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching mating profile:', error);
+        return;
+      }
+
+      setMatingProfile(data || null);
+    } catch (error) {
+      console.error('Error fetching mating profile:', error);
+    }
+  };
+
+  const handleToggleMatingStatus = async () => {
+    if (!currentUser || !pet) return;
+
+    if (pet.is_neutered) {
+      Alert.alert(
+        'No disponible',
+        'Esta mascota figura como castrada y no puede habilitarse para búsqueda de pareja.'
+      );
+      return;
+    }
+
+    setUpdatingMatingStatus(true);
+    try {
+      const nextActive = !(matingProfile?.is_active || false);
+
+      const { error } = await supabaseClient
+        .from('pet_mating_profiles')
+        .upsert({
+          pet_id: pet.id,
+          owner_id: currentUser.id,
+          is_active: nextActive,
+          bio: matingProfile?.bio || null,
+        }, { onConflict: 'pet_id' });
+
+      if (error) throw error;
+
+      await fetchMatingProfile();
+
+      Alert.alert(
+        nextActive ? 'Modo activado' : 'Modo desactivado',
+        nextActive
+          ? `${pet.name} ahora aparece para buscar pareja.`
+          : `${pet.name} ya no aparecerá en búsqueda de pareja.`
+      );
+    } catch (error) {
+      console.error('Error toggling mating status:', error);
+      Alert.alert('Error', 'No se pudo actualizar el estado de búsqueda de pareja');
+    } finally {
+      setUpdatingMatingStatus(false);
+    }
+  };
+
+  const handleOpenPetMatching = () => {
+    if (!pet?.id) return;
+
+    if (!(matingProfile?.is_active)) {
+      Alert.alert('Activa primero', 'Debes activar "Busca pareja" para usar esta funcionalidad.');
+      return;
+    }
+
+    router.push({
+      pathname: '/pets/mating/[id]',
+      params: { id: pet.id }
+    });
+  };
+
+  const resetLostPetForm = () => {
+    setLostContactPhone('');
+    setLostContactName('');
+    setLostLastSeenLocation('');
+    setLostLastSeenDate('');
+    setLostReward('');
+    setLostAdditionalNotes('');
+  };
+
+  const handleReportLostPet = async () => {
+    if (!currentUser || !pet) {
+      Alert.alert('Error', 'No se pudo obtener la información para reportar la mascota');
+      return;
+    }
+
+    if (!lostContactPhone.trim()) {
+      Alert.alert('Campo requerido', 'Ingresa al menos un número de contacto');
+      return;
+    }
+
+    if (!lostLastSeenLocation.trim()) {
+      Alert.alert('Campo requerido', 'Ingresa dónde fue vista por última vez');
+      return;
+    }
+
+    setReportingLostPet(true);
+    try {
+      const { data: userData } = await supabaseClient
+        .from('profiles')
+        .select('display_name, photo_url')
+        .eq('id', currentUser.id)
+        .maybeSingle();
+
+      const alertDetails = {
+        contactPhone: lostContactPhone.trim(),
+        contactName: lostContactName.trim(),
+        lastSeenLocation: lostLastSeenLocation.trim(),
+        lastSeenDate: lostLastSeenDate.trim(),
+        reward: lostReward.trim(),
+        additionalNotes: lostAdditionalNotes.trim(),
+      };
+
+      const alertDescription = [
+        `🚨 ${pet.name} está perdido/a`,
+        `📍 Última ubicación: ${alertDetails.lastSeenLocation}`,
+        alertDetails.lastSeenDate ? `🗓️ Última vez visto/a: ${alertDetails.lastSeenDate}` : null,
+        alertDetails.reward ? `💰 Recompensa: ${alertDetails.reward}` : null,
+        alertDetails.additionalNotes ? `📝 ${alertDetails.additionalNotes}` : null,
+        `📞 Contacto: ${alertDetails.contactPhone}`,
+      ].filter(Boolean).join('\n');
+
+      if (lostPetPost?.id) {
+        const { error: updateError } = await supabaseClient
+          .from('posts')
+          .update({
+            content: alertDescription,
+            image_url: pet.photo_url || null,
+            pet: {
+              name: pet.name,
+              species: pet.species === 'dog' ? 'Perro' : 'Gato',
+              lostPetAlert: alertDetails,
+            },
+            created_at: new Date().toISOString(),
+          })
+          .eq('id', lostPetPost.id);
+
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabaseClient
+          .from('posts')
+          .insert({
+            user_id: currentUser.id,
+            pet_id: pet.id,
+            content: alertDescription,
+            image_url: pet.photo_url || null,
+            album_images: [],
+            type: 'lost_pet',
+            author: {
+              name: userData?.display_name || currentUser.displayName || 'Usuario',
+              avatar: userData?.photo_url || currentUser.photoURL || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100',
+            },
+            pet: {
+              name: pet.name,
+              species: pet.species === 'dog' ? 'Perro' : 'Gato',
+              lostPetAlert: alertDetails,
+            },
+            likes: [],
+            created_at: new Date().toISOString(),
+          });
+
+        if (insertError) throw insertError;
+      }
+
+      await fetchActiveLostPetPost();
+      setShowLostPetModal(false);
+      Alert.alert('Alerta publicada', 'La publicación de mascota perdida ya está activa en el feed.');
+    } catch (error) {
+      console.error('Error reporting lost pet:', error);
+      Alert.alert('Error', 'No se pudo publicar la alerta de mascota perdida');
+    } finally {
+      setReportingLostPet(false);
+    }
+  };
+
+  const handleMarkPetAsFound = async () => {
+    if (!lostPetPost?.id) return;
+
+    Alert.alert(
+      'Marcar como encontrada',
+      `¿Confirmas que ${pet?.name} ya fue encontrado/a? La alerta se quitará del feed.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Sí, encontrada',
+          onPress: async () => {
+            try {
+              const { error } = await supabaseClient
+                .from('posts')
+                .update({
+                  type: 'lost_pet_found',
+                  content: `✅ ${pet?.name} fue encontrado/a. Gracias por ayudar.`,
+                })
+                .eq('id', lostPetPost.id);
+
+              if (error) throw error;
+
+              setLostPetPost(null);
+              resetLostPetForm();
+              Alert.alert('Excelente noticia', 'La alerta se removió del feed.');
+            } catch (updateError) {
+              console.error('Error marking pet as found:', updateError);
+              Alert.alert('Error', 'No se pudo actualizar el estado de la alerta');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleDisableLostPetAlert = async () => {
+    if (!lostPetPost?.id) return;
+
+    Alert.alert(
+      'Desactivar alerta',
+      'La publicación dejará de mostrarse en el feed, pero no se marcará como encontrada.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Desactivar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabaseClient
+                .from('posts')
+                .update({ type: 'lost_pet_disabled' })
+                .eq('id', lostPetPost.id);
+
+              if (error) throw error;
+
+              setLostPetPost(null);
+              resetLostPetForm();
+              Alert.alert('Alerta desactivada', 'La publicación fue removida del feed.');
+            } catch (disableError) {
+              console.error('Error disabling lost pet alert:', disableError);
+              Alert.alert('Error', 'No se pudo desactivar la alerta');
+            }
+          }
+        }
+      ]
+    );
   };
   
   const createInitialWeightRecord = async () => {
@@ -1751,6 +2050,103 @@ export default function PetDetail() {
         {activeTab === 'basics' && (
           <>
             {renderBasicsTab()}
+
+            {currentUser?.id === pet.owner_id && (
+              <Card style={[styles.lostPetCard, lostPetPost && styles.lostPetCardActive]}>
+                <View style={styles.lostPetHeader}>
+                  <View>
+                    <Text style={styles.lostPetTitle}>🚨 Mascota Perdida</Text>
+                    <Text style={styles.lostPetSubtitle}>
+                      {lostPetPost
+                        ? 'Alerta activa en el feed. Puedes actualizar datos o marcar como encontrada.'
+                        : 'Activa una alerta en el feed para que la comunidad te ayude a encontrarla.'}
+                    </Text>
+                  </View>
+                </View>
+
+                {lostPetPost?.pet?.lostPetAlert?.lastSeenLocation && (
+                  <View style={styles.lostPetInfoRow}>
+                    <MapPin size={14} color="#B91C1C" />
+                    <Text style={styles.lostPetInfoText}>
+                      Última ubicación: {lostPetPost.pet.lostPetAlert.lastSeenLocation}
+                    </Text>
+                  </View>
+                )}
+
+                {lostPetPost?.pet?.lostPetAlert?.contactPhone && (
+                  <View style={styles.lostPetInfoRow}>
+                    <Phone size={14} color="#B91C1C" />
+                    <Text style={styles.lostPetInfoText}>
+                      Contacto: {lostPetPost.pet.lostPetAlert.contactPhone}
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.lostPetActionsRow}>
+                  <Button
+                    title={lostPetPost ? 'Actualizar alerta' : 'Declarar perdida'}
+                    onPress={() => setShowLostPetModal(true)}
+                    size="medium"
+                  />
+                  {lostPetPost && (
+                    <Button
+                      title="Marcar encontrada"
+                      onPress={handleMarkPetAsFound}
+                      variant="outline"
+                      size="medium"
+                    />
+                  )}
+                  {lostPetPost && (
+                    <Button
+                      title="Desactivar alerta"
+                      onPress={handleDisableLostPetAlert}
+                      variant="outline"
+                      size="medium"
+                    />
+                  )}
+                </View>
+              </Card>
+            )}
+
+            {currentUser?.id === pet.owner_id && (
+              <Card style={styles.matchingCard}>
+                <Text style={styles.matchingTitle}>💘 Buscar pareja para {pet.name}</Text>
+                <Text style={styles.matchingSubtitle}>
+                  Activa este modo para mostrar a tu mascota en un flujo tipo Tinder y recibir matches mutuos.
+                </Text>
+
+                <View style={styles.matchingStatusRow}>
+                  <Text style={styles.matchingStatusLabel}>Estado:</Text>
+                  <Text style={[
+                    styles.matchingStatusValue,
+                    matingProfile?.is_active ? styles.matchingStatusActive : styles.matchingStatusInactive
+                  ]}>
+                    {pet.is_neutered
+                      ? 'No disponible (castrada/o)'
+                      : matingProfile?.is_active
+                        ? 'Activo'
+                        : 'Inactivo'}
+                  </Text>
+                </View>
+
+                <View style={styles.matchingActionsRow}>
+                  <Button
+                    title={matingProfile?.is_active ? 'Desactivar búsqueda' : 'Activar búsqueda'}
+                    onPress={handleToggleMatingStatus}
+                    size="medium"
+                    variant={matingProfile?.is_active ? 'outline' : 'primary'}
+                    disabled={updatingMatingStatus || !!pet.is_neutered}
+                  />
+
+                  <Button
+                    title="Explorar candidatos"
+                    onPress={handleOpenPetMatching}
+                    size="medium"
+                    disabled={!matingProfile?.is_active || !!pet.is_neutered}
+                  />
+                </View>
+              </Card>
+            )}
             
             {/* Medical History Actions */}
             <Card style={styles.medicalHistoryCard}>
@@ -1851,6 +2247,103 @@ export default function PetDetail() {
           </View>
         </Modal>
       )}
+
+      {/* Scan Options Modal */}
+      <Modal
+        visible={showLostPetModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowLostPetModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+        >
+          <View style={[styles.modalContent, styles.lostPetModalContent]}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.lostPetModalScrollContent}
+            >
+              <Text style={styles.modalTitle}>🚨 Reportar Mascota Perdida</Text>
+              <Text style={styles.modalSubtitle}>
+                Completa estos datos para generar una publicación de alerta clara y útil en el feed.
+              </Text>
+
+              <View style={styles.lostPetFormContainer}>
+                <TextInput
+                  style={styles.lostPetInput}
+                  placeholder="Número de contacto *"
+                  value={lostContactPhone}
+                  onChangeText={setLostContactPhone}
+                  keyboardType="phone-pad"
+                  returnKeyType="next"
+                />
+
+                <TextInput
+                  style={styles.lostPetInput}
+                  placeholder="Nombre de contacto"
+                  value={lostContactName}
+                  onChangeText={setLostContactName}
+                  returnKeyType="next"
+                />
+
+                <TextInput
+                  style={styles.lostPetInput}
+                  placeholder="Última ubicación donde fue vista *"
+                  value={lostLastSeenLocation}
+                  onChangeText={setLostLastSeenLocation}
+                  returnKeyType="next"
+                />
+
+                <TextInput
+                  style={styles.lostPetInput}
+                  placeholder="Fecha/hora última vez visto (ej: 26/02 19:30)"
+                  value={lostLastSeenDate}
+                  onChangeText={setLostLastSeenDate}
+                  returnKeyType="next"
+                />
+
+                <TextInput
+                  style={styles.lostPetInput}
+                  placeholder="Recompensa (opcional)"
+                  value={lostReward}
+                  onChangeText={setLostReward}
+                  returnKeyType="next"
+                />
+
+                <TextInput
+                  style={[styles.lostPetInput, styles.lostPetMultilineInput]}
+                  placeholder="Señas particulares, collar, temperamento, etc."
+                  value={lostAdditionalNotes}
+                  onChangeText={setLostAdditionalNotes}
+                  multiline
+                  textAlignVertical="top"
+                />
+              </View>
+
+              {reportingLostPet ? (
+                <ActivityIndicator size="large" color="#B91C1C" />
+              ) : (
+                <View style={styles.lostPetModalActions}>
+                  <Button
+                    title={lostPetPost ? 'Actualizar publicación' : 'Publicar alerta'}
+                    onPress={handleReportLostPet}
+                    size="large"
+                  />
+                  <Button
+                    title="Cancelar"
+                    onPress={() => setShowLostPetModal(false)}
+                    variant="outline"
+                    size="large"
+                  />
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Scan Options Modal */}
       <Modal
@@ -2807,6 +3300,117 @@ const styles = StyleSheet.create({
     color: '#0369A1',
     marginBottom: 16,
     lineHeight: 20,
+  },
+  lostPetCard: {
+    marginBottom: 16,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  lostPetCardActive: {
+    borderColor: '#DC2626',
+    borderWidth: 2,
+  },
+  lostPetHeader: {
+    marginBottom: 10,
+  },
+  lostPetTitle: {
+    fontSize: 17,
+    fontFamily: 'Inter-SemiBold',
+    color: '#B91C1C',
+    marginBottom: 4,
+  },
+  lostPetSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#7F1D1D',
+    lineHeight: 18,
+  },
+  lostPetInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  lostPetInfoText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#7F1D1D',
+  },
+  lostPetActionsRow: {
+    marginTop: 10,
+    gap: 8,
+  },
+  lostPetFormContainer: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  lostPetInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    backgroundColor: '#FFFFFF',
+  },
+  lostPetMultilineInput: {
+    minHeight: 80,
+  },
+  lostPetModalActions: {
+    gap: 10,
+  },
+  matchingCard: {
+    marginBottom: 16,
+    backgroundColor: '#F5F3FF',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  matchingTitle: {
+    fontSize: 17,
+    fontFamily: 'Inter-SemiBold',
+    color: '#5B21B6',
+    marginBottom: 6,
+  },
+  matchingSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6D28D9',
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  matchingStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  matchingStatusLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#4C1D95',
+    marginRight: 6,
+  },
+  matchingStatusValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+  },
+  matchingStatusActive: {
+    color: '#15803D',
+  },
+  matchingStatusInactive: {
+    color: '#B91C1C',
+  },
+  matchingActionsRow: {
+    gap: 8,
+  },
+  lostPetModalContent: {
+    maxHeight: '88%',
+  },
+  lostPetModalScrollContent: {
+    paddingBottom: 12,
   },
   modalOverlay: {
     flex: 1,

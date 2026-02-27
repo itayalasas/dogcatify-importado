@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
 import { router } from 'expo-router';
-import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, Shield, CircleHelp as HelpCircle, Globe, Building, CreditCard, Fingerprint, ChevronRight, ArrowRight, Trash2, Crown } from 'lucide-react-native';
+import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, Shield, CircleHelp as HelpCircle, Building, CreditCard, Fingerprint, ChevronRight, ArrowRight, Trash2, Crown, Truck } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
@@ -13,7 +13,7 @@ import { supabaseClient } from '../../lib/supabase';
 
 export default function Profile() {
   const { currentUser, logout } = useAuth();
-  const { t, language, setLanguage } = useLanguage();
+  const { t } = useLanguage();
   const { expoPushToken, notificationsEnabled, registerForPushNotifications, disableNotifications } = useNotifications();
   const { 
     isBiometricSupported, 
@@ -30,6 +30,7 @@ export default function Profile() {
     followingCount: 0
   });
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
+  const [deliveryProfile, setDeliveryProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
   const [userSubscription, setUserSubscription] = useState<any>(null);
@@ -39,6 +40,7 @@ export default function Profile() {
     if (currentUser) {
       fetchUserStats();
       fetchPartnerProfile();
+      fetchDeliveryProfile();
       checkSubscriptionSettings();
       fetchUserSubscription();
       fetchDottyStatus();
@@ -290,6 +292,29 @@ export default function Profile() {
     }
   };
 
+  const fetchDeliveryProfile = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('delivery_profiles')
+        .select('id, delivery_mode, is_active, approval_status')
+        .eq('user_id', currentUser!.id)
+        .maybeSingle();
+
+      if (error) {
+        const errorText = String(error.message || '').toLowerCase();
+        const relationMissing = errorText.includes('delivery_profiles');
+        if (!relationMissing) {
+          throw error;
+        }
+      }
+
+      setDeliveryProfile(data || null);
+    } catch (error) {
+      console.error('Error fetching delivery profile:', error);
+      setDeliveryProfile(null);
+    }
+  };
+
   const handleEditProfile = () => {
     router.push('/profile/edit');
   };
@@ -307,6 +332,14 @@ export default function Profile() {
 
   const handleAdminMode = () => {
     router.push('/(admin-tabs)/requests');
+  };
+
+  const handleDeliveryMode = () => {
+    router.push('/delivery-register');
+  };
+
+  const handleDeliveryOrders = () => {
+    router.push('/delivery/orders');
   };
 
   const handleMyOrders = () => {
@@ -448,26 +481,6 @@ export default function Profile() {
       console.error('Error in handleToggleNotifications:', error);
       Alert.alert('Error', 'Hubo un problema con la configuración de notificaciones');
     }
-  };
-
-  const handleLanguageChange = () => {
-    Alert.alert(
-      'Cambiar idioma',
-      'Selecciona tu idioma preferido',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Español', 
-          onPress: () => setLanguage('es'),
-          style: language === 'es' ? 'default' : 'default'
-        },
-        { 
-          text: 'English', 
-          onPress: () => setLanguage('en'),
-          style: language === 'en' ? 'default' : 'default'
-        }
-      ]
-    );
   };
 
   const handleLogout = () => {
@@ -612,6 +625,41 @@ export default function Profile() {
           )}
         </Card>
 
+        <Card style={styles.partnerCard}>
+          <View style={styles.partnerHeader}>
+            <Truck size={24} color="#2D6A6F" />
+            <Text style={styles.partnerTitle}>Modo Repartidor</Text>
+          </View>
+
+          {deliveryProfile ? (
+            <View style={styles.partnerActive}>
+              <View style={styles.partnerButtons}>
+                <Button
+                  title="Gestionar Reparto"
+                  onPress={handleDeliveryMode}
+                  size="large"
+                  style={styles.partnerButton}
+                />
+                <Button
+                  title="Ver Pedidos de Reparto"
+                  onPress={handleDeliveryOrders}
+                  variant="outline"
+                  size="large"
+                  style={styles.partnerButton}
+                />
+              </View>
+            </View>
+          ) : (
+            <View style={styles.partnerInactive}>
+              <Button
+                title="Convertirse en Repartidor"
+                onPress={handleDeliveryMode}
+                size="large"
+              />
+            </View>
+          )}
+        </Card>
+
         {/* Premium Subscription Card */}
         {subscriptionsEnabled && (
           <Card style={[styles.menuCard, styles.premiumCard]}>
@@ -727,19 +775,6 @@ export default function Profile() {
             </View>
             <View style={styles.toggleContainer}>
               <Text style={styles.toggleStatus}>{isDottyEnabled ? 'Visible' : 'Oculto'}</Text>
-              <ChevronRight size={16} color="#6B7280" />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuOption} onPress={handleLanguageChange}>
-            <View style={styles.menuOptionLeft}>
-              <Globe size={20} color="#6B7280" />
-              <Text style={styles.menuOptionText}>{t('language')}</Text>
-            </View>
-            <View style={styles.languageIndicator}>
-              <Text style={styles.languageText}>
-                {language === 'es' ? t('spanish') : t('english')}
-              </Text>
               <ChevronRight size={16} color="#6B7280" />
             </View>
           </TouchableOpacity>

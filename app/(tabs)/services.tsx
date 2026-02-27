@@ -17,6 +17,68 @@ LogBox.ignoreLogs([
   'Warning: Each child in a list should have a unique "key" prop.'
 ]);
 
+const CAROUSEL_INTERVAL_MS = 3500;
+
+const getServiceTypeLabel = (partnerType: string) => {
+  switch (partnerType) {
+    case 'veterinary':
+      return 'Veterinaria';
+    case 'grooming':
+      return 'Peluquería';
+    case 'boarding':
+      return 'Pensión';
+    case 'walking':
+      return 'Paseo';
+    case 'shelter':
+      return 'Albergue';
+    default:
+      return 'Servicio';
+  }
+};
+
+function ServiceImageCarousel({ images }: { images: string[] }) {
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  React.useEffect(() => {
+    if (images.length <= 1) {
+      setCurrentImageIndex(0);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setCurrentImageIndex((prevIndex) => (prevIndex + 1) % images.length);
+    }, CAROUSEL_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [images]);
+
+  const safeIndex = Math.min(currentImageIndex, Math.max(images.length - 1, 0));
+
+  return (
+    <View style={styles.carouselContainer}>
+      <Image
+        source={{ uri: images[safeIndex] }}
+        style={styles.cardImage}
+        resizeMode="cover"
+      />
+
+      {images.length > 1 && (
+        <View style={styles.carouselDotsContainer}>
+          {images.map((_, index) => (
+            <View
+              key={`${index}`}
+              style={[
+                styles.carouselDot,
+                index === safeIndex && styles.carouselDotActive,
+              ]}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function Services() {
   const [partners, setPartners] = useState<any[]>([]);
   const [displayedPartners, setDisplayedPartners] = useState<any[]>([]);
@@ -272,12 +334,20 @@ export default function Services() {
   };
 
   const getServiceImage = (item: any) => {
-    // Primero intentar cargar imagen del servicio
-    if (item.serviceImages && item.serviceImages.length > 0) {
-      return item.serviceImages[0];
+    const serviceImages = Array.isArray(item.serviceImages)
+      ? item.serviceImages.filter((img: unknown) => typeof img === 'string' && img)
+      : [];
+
+    if (serviceImages.length > 0) {
+      return serviceImages;
     }
-    if (item.images && item.images.length > 0) {
-      return item.images[0];
+
+    const images = Array.isArray(item.images)
+      ? item.images.filter((img: unknown) => typeof img === 'string' && img)
+      : [];
+
+    if (images.length > 0) {
+      return images;
     }
 
     // Fallback: imágenes de Pexels relacionadas con mascotas según tipo de negocio
@@ -289,7 +359,7 @@ export default function Services() {
       shelter: 'https://images.pexels.com/photos/2253275/pexels-photo-2253275.jpeg?auto=compress&cs=tinysrgb&w=800',
     };
 
-    return fallbackImages[item.partnerType as keyof typeof fallbackImages] || fallbackImages.veterinary;
+    return [fallbackImages[item.partnerType as keyof typeof fallbackImages] || fallbackImages.veterinary];
   };
 
   const getFilteredPartners = () => {
@@ -427,11 +497,7 @@ export default function Services() {
                     >
                       {/* Image Background */}
                       <View style={styles.cardImageContainer}>
-                        <Image
-                          source={{ uri: getServiceImage(item) }}
-                          style={styles.cardImage}
-                          resizeMode="cover"
-                        />
+                        <ServiceImageCarousel images={getServiceImage(item)} />
 
                         {/* Dark overlay for better text readability */}
                         <View style={styles.darkOverlay} />
@@ -462,10 +528,7 @@ export default function Services() {
                           </Text>
                           <View style={styles.typeTagInline}>
                             <Text style={styles.typeTagText}>
-                              {item.partnerType === 'veterinary' ? 'Veterinaria' :
-                               item.partnerType === 'grooming' ? 'Peluquería' :
-                               item.partnerType === 'boarding' ? 'Pensión' :
-                               item.partnerType === 'walking' ? 'Paseo' : 'Servicio'}
+                              {getServiceTypeLabel(item.partnerType)}
                             </Text>
                           </View>
                         </View>
@@ -639,6 +702,27 @@ const styles = StyleSheet.create({
   cardImage: {
     width: '100%',
     height: '100%',
+  },
+  carouselContainer: {
+    width: '100%',
+    height: '100%',
+  },
+  carouselDotsContainer: {
+    position: 'absolute',
+    bottom: 8,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 4,
+    zIndex: 3,
+  },
+  carouselDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  carouselDotActive: {
+    backgroundColor: '#FFFFFF',
   },
   cardImagePlaceholder: {
     width: '100%',

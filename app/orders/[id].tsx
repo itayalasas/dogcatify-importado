@@ -78,6 +78,8 @@ export default function OrderDetail() {
           status: data.status || 'pending',
           orderType: data.order_type || 'product_purchase',
           totalAmount: data.total_amount || 0,
+          subtotalAmount: data.subtotal,
+          shippingCost: Number(data.shipping_cost || 0),
           shippingAddress: data.shipping_address || '',
           createdAt: new Date(data.created_at),
           updatedAt: data.updated_at ? new Date(data.updated_at) : null
@@ -94,11 +96,17 @@ export default function OrderDetail() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return '#FEF3C7';
+      case 'reserved': return '#FEF3C7';
+      case 'payment_failed': return '#FECACA';
       case 'confirmed': return '#DBEAFE';
       case 'processing': return '#DBEAFE';
+      case 'preparing': return '#DBEAFE';
+      case 'ready_for_delivery': return '#DBEAFE';
       case 'shipped': return '#D1FAE5';
       case 'delivered': return '#D1FAE5';
+      case 'completed': return '#D1FAE5';
       case 'cancelled': return '#FEE2E2';
+      case 'refunded': return '#F3F4F6';
       default: return '#F3F4F6';
     }
   };
@@ -106,11 +114,17 @@ export default function OrderDetail() {
   const getStatusTextColor = (status: string) => {
     switch (status) {
       case 'pending': return '#92400E';
+      case 'reserved': return '#92400E';
+      case 'payment_failed': return '#991B1B';
       case 'confirmed': return '#1E40AF';
       case 'processing': return '#1E40AF';
+      case 'preparing': return '#1E40AF';
+      case 'ready_for_delivery': return '#1E40AF';
       case 'shipped': return '#065F46';
       case 'delivered': return '#065F46';
+      case 'completed': return '#065F46';
       case 'cancelled': return '#991B1B';
+      case 'refunded': return '#374151';
       default: return '#374151';
     }
   };
@@ -118,14 +132,32 @@ export default function OrderDetail() {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'pending': return 'Pendiente';
+      case 'reserved': return 'Reservado';
+      case 'payment_failed': return 'Pago fallido';
       case 'confirmed': return 'Confirmado';
       case 'processing': return 'En proceso';
-      case 'shipped': return 'Enviado';
+      case 'preparing': return 'Preparando';
+      case 'ready_for_delivery': return 'Listo para entrega';
+      case 'shipped': return 'En reparto';
       case 'delivered': return 'Entregado';
+      case 'completed': return 'Completado';
       case 'cancelled': return 'Cancelado';
+      case 'refunded': return 'Reembolsado';
       default: return 'Desconocido';
     }
   };
+
+  const isServiceOrder = order?.orderType === 'service_booking';
+  const shippingAddressText = (order?.shippingAddress || '').trim();
+  const isStorePickup = !isServiceOrder && (
+    shippingAddressText.toLowerCase().startsWith('retiro en tienda') ||
+    shippingAddressText.toLowerCase().includes('retiro')
+  );
+
+  const shippingCost = isServiceOrder ? 0 : Number(order?.shippingCost || 0);
+  const subtotalAmount = Number(
+    order?.subtotalAmount ?? Math.max(0, Number(order?.totalAmount || 0) - shippingCost)
+  );
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-AR', {
@@ -239,9 +271,9 @@ export default function OrderDetail() {
         </Card>
 
         {/* Shipping Information */}
-        {order.shippingAddress && (
+        {!isServiceOrder && order.shippingAddress && (
           <Card style={styles.shippingCard}>
-            <Text style={styles.sectionTitle}>Información de Envío</Text>
+            <Text style={styles.sectionTitle}>{isStorePickup ? 'Retiro en Tienda' : 'Información de Envío'}</Text>
             <View style={styles.shippingInfo}>
               <MapPin size={20} color="#6B7280" />
               <Text style={styles.shippingAddress}>{order.shippingAddress}</Text>
@@ -256,13 +288,17 @@ export default function OrderDetail() {
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal</Text>
             <Text style={styles.summaryValue}>
-              {formatCurrency(order.totalAmount - 500)} {/* Assuming 500 shipping */}
+              {formatCurrency(subtotalAmount)}
             </Text>
           </View>
           
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Envío</Text>
-            <Text style={styles.summaryValue}>{formatCurrency(500)}</Text>
+            <Text style={styles.summaryLabel}>
+              {isServiceOrder ? 'Envío' : isStorePickup ? 'Retiro en tienda' : 'Envío'}
+            </Text>
+            <Text style={styles.summaryValue}>
+              {isServiceOrder || isStorePickup ? 'Sin costo' : formatCurrency(shippingCost)}
+            </Text>
           </View>
           
           <View style={styles.divider} />

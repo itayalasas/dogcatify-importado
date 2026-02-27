@@ -43,6 +43,20 @@ export default function ServiceDetail() {
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
+  const handleBackPress = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    if (partnerId || service?.partnerId) {
+      router.replace(`/services/partner/${partnerId || service.partnerId}`);
+      return;
+    }
+
+    router.replace('/(tabs)/services');
+  };
+
   // Función para calcular disponibilidad por categoría
   const calculateCategoryAvailability = async (serviceId: string, categories: any[]) => {
     try {
@@ -517,7 +531,7 @@ export default function ServiceDetail() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.replace(`/services/partner/${partnerId || service.partnerId}`)}
+          onPress={handleBackPress}
           style={styles.backButton}
         >
           <ArrowLeft size={24} color="#111827" />

@@ -39,6 +39,7 @@ export default function PartnerDashboard() {
   });
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
   const [recentBookings, setRecentBookings] = useState<any[]>([]);
+  const [processingOrdersPreview, setProcessingOrdersPreview] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState<DateFilter>('today');
   const [showFilterModal, setShowFilterModal] = useState(false);
@@ -210,10 +211,11 @@ export default function PartnerDashboard() {
       setRecentBookings(recent);
       
       // Fetch orders data with date filter
+      const breakdownFilter = JSON.stringify({ partners: { [partnerId]: {} } });
       const { data: ordersData, error: ordersError } = await supabaseClient
         .from('orders')
         .select('*')
-        .eq('partner_id', partnerId)
+        .or(`partner_id.eq.${partnerId},partner_breakdown.cs.${breakdownFilter}`)
         .gte('created_at', startDate.toISOString())
         .lte('created_at', endDate.toISOString())
         .order('created_at', { ascending: false });
@@ -222,13 +224,53 @@ export default function PartnerDashboard() {
         console.error('Error fetching orders:', ordersError);
       }
 
-      const orders = ordersData || [];
+      const orders = (ordersData || []).filter(order => {
+        if (order?.partner_id === partnerId) return true;
+        if (order?.partner_breakdown?.partners && Object.prototype.hasOwnProperty.call(order.partner_breakdown.partners, partnerId)) return true;
+        if (Array.isArray(order?.items)) {
+          return order.items.some((item: any) => item?.partnerId === partnerId || item?.partner_id === partnerId);
+        }
+        return false;
+      });
       console.log(`Found ${orders.length} orders for partner in date range`);
 
+      const isServiceOrder = (order: any) => order.order_type === 'service_booking';
+
       // Calculate order stats
-      const pendingOrders = orders.filter(order => order.status === 'pending');
-      const completedOrders = orders.filter(order => order.status === 'delivered');
-      const processingOrders = orders.filter(order => ['confirmed', 'processing', 'shipped'].includes(order.status));
+      const pendingOrders = orders.filter(order => {
+        if (isServiceOrder(order)) {
+          return ['pending', 'reserved', 'payment_failed'].includes(order.status);
+        }
+        return order.status === 'pending';
+      });
+
+      const completedOrders = orders.filter(order => {
+        if (isServiceOrder(order)) {
+          return ['completed', 'cancelled', 'refunded'].includes(order.status);
+        }
+        return ['delivered', 'cancelled', 'refunded'].includes(order.status);
+      });
+
+      const processingOrders = orders.filter(order => {
+        if (isServiceOrder(order)) {
+          return order.status === 'confirmed';
+        }
+        return ['confirmed', 'processing', 'preparing', 'shipped'].includes(order.status);
+      });
+
+      const processingPreview = processingOrders
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 5)
+        .map(order => ({
+          id: order.id,
+          orderNumber: order.order_number,
+          status: order.status,
+          createdAt: order.created_at,
+          totalAmount: order.total_amount || 0,
+          orderType: order.order_type,
+        }));
+
+      setProcessingOrdersPreview(processingPreview);
 
       const ordersRevenue = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
 
@@ -382,6 +424,34 @@ export default function PartnerDashboard() {
     }
   };
 
+  const handleViewProcessingOrderDetail = (orderId: string) => {
+    if (partnerProfile?.id) {
+      router.push({
+        pathname: '/partner/orders',
+        params: {
+          partnerId: partnerProfile.id,
+          activeTab: 'processing',
+          openOrderId: orderId,
+        }
+      });
+    }
+  };
+
+  const handleOpenOrdersByTab = (tab: 'pending' | 'processing' | 'completed') => {
+    if (!partnerProfile?.id) {
+      Alert.alert('Error', 'No se pudo obtener la información del negocio');
+      return;
+    }
+
+    router.push({
+      pathname: '/partner/orders',
+      params: {
+        partnerId: partnerProfile.id,
+        activeTab: tab,
+      }
+    });
+  };
+
   // Función para verificar si una funcionalidad está habilitada
   const isFeatureEnabled = (featureKey: string): boolean => {
     if (!partnerProfile?.features) return false;
@@ -500,21 +570,31 @@ export default function PartnerDashboard() {
               <Text style={styles.statLabel}>Ingresos</Text>
             </Card>
 
-            <Card style={styles.statCard}>
-              <View style={styles.statHeader}>
-                <Clock size={20} color="#F59E0B" />
-                <Text style={styles.statValue}>{stats.pendingBookings + stats.pendingOrders}</Text>
-              </View>
-              <Text style={styles.statLabel}>Pendientes</Text>
-            </Card>
+            <TouchableOpacity
+              style={styles.statCardTouchable}
+              onPress={() => handleOpenOrdersByTab('pending')}
+            >
+              <Card style={styles.statCard}>
+                <View style={styles.statHeader}>
+                  <Clock size={20} color="#F59E0B" />
+                  <Text style={styles.statValue}>{stats.pendingBookings + stats.pendingOrders}</Text>
+                </View>
+                <Text style={styles.statLabel}>Pendientes</Text>
+              </Card>
+            </TouchableOpacity>
 
-            <Card style={styles.statCard}>
-              <View style={styles.statHeader}>
-                <TrendingUp size={20} color="#8B5CF6" />
-                <Text style={styles.statValue}>{stats.completedBookings + stats.completedOrders}</Text>
-              </View>
-              <Text style={styles.statLabel}>Completados</Text>
-            </Card>
+            <TouchableOpacity
+              style={styles.statCardTouchable}
+              onPress={() => handleOpenOrdersByTab('completed')}
+            >
+              <Card style={styles.statCard}>
+                <View style={styles.statHeader}>
+                  <TrendingUp size={20} color="#8B5CF6" />
+                  <Text style={styles.statValue}>{stats.completedBookings + stats.completedOrders}</Text>
+                </View>
+                <Text style={styles.statLabel}>Completados</Text>
+              </Card>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -608,6 +688,34 @@ export default function PartnerDashboard() {
                   ]}>
                     <Text style={styles.bookingStatusText}>{getStatusText(booking.status)}</Text>
                   </View>
+                </View>
+              ))
+            )}
+          </Card>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Pedidos en Proceso</Text>
+          <Card style={styles.bookingsCard}>
+            {processingOrdersPreview.length === 0 ? (
+              <Text style={styles.emptyText}>No hay pedidos en proceso</Text>
+            ) : (
+              processingOrdersPreview.map((order) => (
+                <View key={order.id} style={styles.processingOrderItem}>
+                  <View style={styles.processingOrderInfo}>
+                    <Text style={styles.processingOrderTitle}>
+                      Pedido {order.orderNumber || `#${order.id.slice(-6)}`}
+                    </Text>
+                    <Text style={styles.processingOrderMeta}>
+                      {new Date(order.createdAt).toLocaleDateString()} · {formatCurrency(order.totalAmount)}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.processingOrderButton}
+                    onPress={() => handleViewProcessingOrderDetail(order.id)}
+                  >
+                    <Text style={styles.processingOrderButtonText}>Ver detalle</Text>
+                  </TouchableOpacity>
                 </View>
               ))
             )}
@@ -823,6 +931,10 @@ const styles = StyleSheet.create({
     minWidth: '45%',
     padding: 16,
   },
+  statCardTouchable: {
+    flex: 1,
+    minWidth: '45%',
+  },
   statHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -901,6 +1013,42 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'Inter-Medium',
     color: '#374151',
+  },
+  processingOrderItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    gap: 12,
+  },
+  processingOrderInfo: {
+    flex: 1,
+  },
+  processingOrderTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  processingOrderMeta: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  processingOrderButton: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  processingOrderButtonText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E40AF',
   },
   loadingContainer: {
     flex: 1,

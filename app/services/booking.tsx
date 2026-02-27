@@ -5,6 +5,7 @@ import { ArrowLeft, Calendar, Clock, Check, CreditCard, X } from 'lucide-react-n
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { LoadingScreen } from '../../components/ui/LoadingScreen';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 import { NotificationService } from '../../utils/notifications';
@@ -30,6 +31,20 @@ export default function ServiceBooking() {
   const [bookingLoading, setBookingLoading] = useState(false);
   const [notes, setNotes] = useState('');
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
+
+  const handleBackPress = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    if (serviceId && partnerId) {
+      router.replace(`/services/${serviceId}?partnerId=${partnerId}`);
+      return;
+    }
+
+    router.replace('/(tabs)/services');
+  };
 
   useEffect(() => {
     console.log('ServiceBooking - Received params:', { serviceId, partnerId, petId });
@@ -523,19 +538,13 @@ export default function ServiceBooking() {
   };
 
   if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando información de reserva...</Text>
-        </View>
-      </SafeAreaView>
-    );
+    return <LoadingScreen message="Cargando información de reserva..." />;
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>Reservar Servicio</Text>

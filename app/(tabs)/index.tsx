@@ -330,6 +330,8 @@ export default function Home() {
       const { data: postsData, error } = await supabaseClient
         .from('posts')
         .select('*')
+        .neq('type', 'lost_pet_found')
+        .neq('type', 'lost_pet_disabled')
         .order('created_at', { ascending: false })
         .limit(INITIAL_LOAD); // Carga inicial muy pequeña
 
@@ -375,6 +377,8 @@ export default function Home() {
       const { data: morePosts, error } = await supabaseClient
         .from('posts')
         .select('*')
+        .neq('type', 'lost_pet_found')
+        .neq('type', 'lost_pet_disabled')
         .order('created_at', { ascending: false })
         .range(offset, offset + POSTS_PER_PAGE - 1);
 

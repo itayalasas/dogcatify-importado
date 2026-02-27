@@ -112,7 +112,7 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
         label: 'Pedido confirmado',
         description: 'El vendedor confirmó tu pedido',
         icon: CheckCircle,
-        status: orderStatus === 'pending' || isPaymentFailed ? 'pending' :
+        status: ['pending', 'reserved'].includes(orderStatus) || isPaymentFailed ? 'pending' :
                 isCancelled ? 'cancelled' :
                 orderStatus === 'confirmed' ? 'active' :
                 'completed'
@@ -174,8 +174,18 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
         label: 'En preparación',
         description: 'Estamos preparando tu pedido',
         icon: Package,
-        status: ['pending', 'confirmed'].includes(orderStatus) ? 'pending' :
-                orderStatus === 'processing' ? 'active' :
+        status: ['pending', 'reserved', 'confirmed'].includes(orderStatus) ? 'pending' :
+          ['processing', 'preparing'].includes(orderStatus) ? 'active' :
+                isCancelled ? 'cancelled' :
+                'completed'
+      },
+      {
+        id: 'ready_for_delivery',
+        label: 'Listo para entrega',
+        description: 'Tu pedido está listo y esperando repartidor',
+        icon: CheckCircle,
+        status: ['pending', 'reserved', 'confirmed', 'processing', 'preparing'].includes(orderStatus) ? 'pending' :
+                orderStatus === 'ready_for_delivery' ? 'active' :
                 isCancelled ? 'cancelled' :
                 'completed'
       },
@@ -184,7 +194,7 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
         label: 'En camino',
         description: 'Tu pedido está en camino',
         icon: Truck,
-        status: ['pending', 'confirmed', 'processing'].includes(orderStatus) ? 'pending' :
+        status: ['pending', 'reserved', 'confirmed', 'processing', 'preparing', 'ready_for_delivery'].includes(orderStatus) ? 'pending' :
                 orderStatus === 'shipped' ? 'active' :
                 isCancelled ? 'cancelled' :
                 'completed'

@@ -74,6 +74,8 @@ export default function Home() {
       const { data: postsData, error } = await supabaseClient
         .from('posts')
         .select('*')
+        .neq('type', 'lost_pet_found')
+        .neq('type', 'lost_pet_disabled')
         .order('created_at', { ascending: false })
         .limit(20);
 
