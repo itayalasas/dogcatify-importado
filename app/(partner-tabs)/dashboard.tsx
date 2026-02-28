@@ -619,7 +619,7 @@ export default function PartnerDashboard() {
               <Package size={24} color="#10B981" />
               <Text style={styles.quickActionText}>Gestionar Servicios</Text>
             </TouchableOpacity>
-            
+
             <TouchableOpacity 
               style={styles.quickAction} 
               onPress={handleViewClients}
@@ -627,7 +627,7 @@ export default function PartnerDashboard() {
               <Users size={24} color="#F59E0B" />
               <Text style={styles.quickActionText}>Ver Clientes</Text>
             </TouchableOpacity>
-            
+
             <TouchableOpacity 
               style={styles.quickAction} 
               onPress={() => router.push({
@@ -638,21 +638,7 @@ export default function PartnerDashboard() {
               <BarChart3 size={24} color="#8B5CF6" />
               <Text style={styles.quickActionText}>Inteligencia de Negocio</Text>
             </TouchableOpacity>
-            
-            {/* Mostrar contactos de adopción solo para refugios */}
-            {partnerProfile?.business_type === 'shelter' && (
-              <TouchableOpacity 
-                style={styles.quickAction}
-                onPress={() => router.push({
-                  pathname: '/(partner-tabs)/chat-contacts',
-                  params: { businessId: partnerProfile.id }
-                })}
-              >
-                <MessageCircle size={24} color="#8B5CF6" />
-                <Text style={styles.quickActionText}>Contactos Adopción</Text>
-              </TouchableOpacity>
-            )}
-            
+
             {shouldShowProducts() && (
               <TouchableOpacity 
                 style={styles.quickAction}
@@ -662,6 +648,20 @@ export default function PartnerDashboard() {
                 <Text style={styles.quickActionText}>
                   Ver Pedidos
                 </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Mostrar contactos de adopción solo para refugios */}
+            {partnerProfile?.businessType === 'shelter' && (
+              <TouchableOpacity 
+                style={styles.quickAction}
+                onPress={() => router.push({
+                  pathname: '/(partner-tabs)/chat-contacts',
+                  params: { businessId: partnerProfile.id }
+                })}
+              >
+                <MessageCircle size={24} color="#8B5CF6" />
+                <Text style={styles.quickActionText}>Contactos Adopción</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -953,20 +953,24 @@ const styles = StyleSheet.create({
   },
   quickActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingHorizontal: 16,
     gap: 12,
+    paddingBottom: 4,
   },
   quickAction: {
-    flex: 1,
+    width: '48%',
     backgroundColor: '#FFFFFF',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    minHeight: 108,
   },
   quickActionText: {
     fontSize: 12,
@@ -974,6 +978,7 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginTop: 8,
     textAlign: 'center',
+    lineHeight: 16,
   },
   disabledQuickAction: {
     opacity: 0.5,

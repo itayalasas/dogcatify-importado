@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, Shield, CircleHelp as HelpCircle, Building, CreditCard, Fingerprint, ChevronRight, ArrowRight, Trash2, Crown, Truck } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -46,6 +46,16 @@ export default function Profile() {
       fetchDottyStatus();
     }
   }, [currentUser?.id, currentUser?.displayName, currentUser?.photoURL]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!currentUser?.id) {
+        return;
+      }
+
+      fetchDeliveryProfile();
+    }, [currentUser?.id])
+  );
 
   const fetchDottyStatus = async () => {
     try {
