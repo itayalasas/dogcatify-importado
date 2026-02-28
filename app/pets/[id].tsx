@@ -2272,50 +2272,62 @@ export default function PetDetail() {
               </Text>
 
               <View style={styles.lostPetFormContainer}>
+                <Text style={styles.lostPetFieldLabel}>Número de contacto *</Text>
                 <TextInput
                   style={styles.lostPetInput}
-                  placeholder="Número de contacto *"
+                  placeholder="Ej: +54 11 1234 5678"
+                  placeholderTextColor="#9CA3AF"
                   value={lostContactPhone}
                   onChangeText={setLostContactPhone}
                   keyboardType="phone-pad"
                   returnKeyType="next"
                 />
 
+                <Text style={styles.lostPetFieldLabel}>Nombre de contacto</Text>
                 <TextInput
                   style={styles.lostPetInput}
-                  placeholder="Nombre de contacto"
+                  placeholder="Ej: María Pérez"
+                  placeholderTextColor="#9CA3AF"
                   value={lostContactName}
                   onChangeText={setLostContactName}
                   returnKeyType="next"
                 />
 
+                <Text style={styles.lostPetFieldLabel}>Última ubicación donde fue vista *</Text>
                 <TextInput
                   style={styles.lostPetInput}
-                  placeholder="Última ubicación donde fue vista *"
+                  placeholder="Ej: Parque Centenario, CABA"
+                  placeholderTextColor="#9CA3AF"
                   value={lostLastSeenLocation}
                   onChangeText={setLostLastSeenLocation}
                   returnKeyType="next"
                 />
 
+                <Text style={styles.lostPetFieldLabel}>Fecha/hora última vez visto</Text>
                 <TextInput
                   style={styles.lostPetInput}
                   placeholder="Fecha/hora última vez visto (ej: 26/02 19:30)"
+                  placeholderTextColor="#9CA3AF"
                   value={lostLastSeenDate}
                   onChangeText={setLostLastSeenDate}
                   returnKeyType="next"
                 />
 
+                <Text style={styles.lostPetFieldLabel}>Recompensa (opcional)</Text>
                 <TextInput
                   style={styles.lostPetInput}
-                  placeholder="Recompensa (opcional)"
+                  placeholder="Ej: $50.000"
+                  placeholderTextColor="#9CA3AF"
                   value={lostReward}
                   onChangeText={setLostReward}
                   returnKeyType="next"
                 />
 
+                <Text style={styles.lostPetFieldLabel}>Señas particulares</Text>
                 <TextInput
                   style={[styles.lostPetInput, styles.lostPetMultilineInput]}
                   placeholder="Señas particulares, collar, temperamento, etc."
+                  placeholderTextColor="#9CA3AF"
                   value={lostAdditionalNotes}
                   onChangeText={setLostAdditionalNotes}
                   multiline
@@ -3346,6 +3358,12 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 16,
   },
+  lostPetFieldLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#374151',
+    marginBottom: -2,
+  },
   lostPetInput: {
     borderWidth: 1,
     borderColor: '#D1D5DB',
@@ -3407,10 +3425,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   lostPetModalContent: {
-    maxHeight: '88%',
+    maxHeight: '92%',
   },
   lostPetModalScrollContent: {
-    paddingBottom: 12,
+    paddingBottom: 20,
+    flexGrow: 1,
   },
   modalOverlay: {
     flex: 1,

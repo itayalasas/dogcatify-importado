@@ -26,6 +26,7 @@ interface BusinessInsights {
 
 export default function BusinessInsights() {
   const { partnerId } = useLocalSearchParams<{ partnerId: string }>();
+  const normalizedPartnerId = Array.isArray(partnerId) ? partnerId[0] : partnerId;
   const { currentUser } = useAuth();
   const [insights, setInsights] = useState<BusinessInsights | null>(null);
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
@@ -34,19 +35,19 @@ export default function BusinessInsights() {
   const [locationInsights, setLocationInsights] = useState<any>(null);
 
   useEffect(() => {
-    if (partnerId) {
+    if (normalizedPartnerId) {
       fetchPartnerProfile();
       fetchBusinessInsights();
       fetchLocationBasedInsights();
     }
-  }, [partnerId, selectedTimeRange]);
+  }, [normalizedPartnerId, selectedTimeRange]);
 
   const fetchPartnerProfile = async () => {
     try {
       const { data, error } = await supabaseClient
         .from('partners')
         .select('*')
-        .eq('id', partnerId)
+        .eq('id', normalizedPartnerId)
         .single();
       
       if (error) throw error;
@@ -86,7 +87,7 @@ export default function BusinessInsights() {
       const { data: partnerData, error: partnerError } = await supabaseClient
         .from('partners')
         .select('latitud, longitud, address, barrio, department_id, country_id')
-        .eq('id', partnerId)
+        .eq('id', normalizedPartnerId)
         .single();
       
       if (partnerError) {
@@ -149,7 +150,7 @@ export default function BusinessInsights() {
         
         // Verificar si está en el mismo barrio
         if (user.barrio && partnerData.barrio && 
-            user.barrio.toLowerCase() === partnerData.barrio.toLowerCase()) {
+            String(user.barrio).toLowerCase() === String(partnerData.barrio).toLowerCase()) {
           sameNeighborhood += userPetsCount;
         }
         
@@ -320,7 +321,7 @@ export default function BusinessInsights() {
       const { data: partnerTypeData } = await supabaseClient
         .from('partners')
         .select('business_type')
-        .eq('id', partnerId)
+        .eq('id', normalizedPartnerId)
         .single();
 
       const businessType = partnerTypeData?.business_type || partnerProfile?.businessType;
@@ -369,14 +370,14 @@ export default function BusinessInsights() {
           let ageInYears = pet.age || 0;
           
           // Convert age to years if using age_display
-          if (pet.age_display) {
-            const { value, unit } = pet.age_display;
+          if (pet.age_display && typeof pet.age_display === 'object') {
+            const { value, unit } = pet.age_display as { value?: number; unit?: string };
             if (unit === 'months') {
-              ageInYears = value / 12;
+              ageInYears = (value || 0) / 12;
             } else if (unit === 'days') {
-              ageInYears = value / 365;
+              ageInYears = (value || 0) / 365;
             } else {
-              ageInYears = value;
+              ageInYears = value || 0;
             }
           }
           
@@ -425,12 +426,12 @@ export default function BusinessInsights() {
       let totalRevenue = 0;
 
       if (isShopBusiness) {
-        const breakdownFilter = JSON.stringify({ partners: { [partnerId as string]: {} } });
+        const breakdownFilter = JSON.stringify({ partners: { [normalizedPartnerId as string]: {} } });
 
         const { data: ordersData, error: ordersError } = await supabaseClient
           .from('orders')
           .select('id, created_at, total_amount, items, partner_id, partner_breakdown')
-          .or(`partner_id.eq.${partnerId},partner_breakdown.cs.${breakdownFilter}`)
+          .or(`partner_id.eq.${normalizedPartnerId},partner_breakdown.cs.${breakdownFilter}`)
           .gte('created_at', getDateRange(selectedTimeRange));
 
         if (ordersError) {
@@ -438,12 +439,12 @@ export default function BusinessInsights() {
         }
 
         const isOrderForCurrentPartner = (order: any) => {
-          if (order?.partner_id === partnerId) return true;
-          if (order?.partner_breakdown?.partners && Object.prototype.hasOwnProperty.call(order.partner_breakdown.partners, partnerId as string)) {
+          if (order?.partner_id === normalizedPartnerId) return true;
+          if (order?.partner_breakdown?.partners && Object.prototype.hasOwnProperty.call(order.partner_breakdown.partners, normalizedPartnerId as string)) {
             return true;
           }
           if (Array.isArray(order?.items)) {
-            return order.items.some((item: any) => item?.partnerId === partnerId || item?.partner_id === partnerId);
+            return order.items.some((item: any) => item?.partnerId === normalizedPartnerId || item?.partner_id === normalizedPartnerId);
           }
           return false;
         };
@@ -459,7 +460,7 @@ export default function BusinessInsights() {
           if (!Array.isArray(order?.items)) return acc;
 
           order.items.forEach((item: any) => {
-            const belongsToPartner = item?.partnerId === partnerId || item?.partner_id === partnerId || order?.partner_id === partnerId;
+            const belongsToPartner = item?.partnerId === normalizedPartnerId || item?.partner_id === normalizedPartnerId || order?.partner_id === normalizedPartnerId;
             if (!belongsToPartner) return;
 
             const productName = item?.name || 'Producto';
@@ -496,7 +497,7 @@ export default function BusinessInsights() {
         const { data: bookingsData, error: bookingsError } = await supabaseClient
           .from('bookings')
           .select('service_name, created_at, time')
-          .eq('partner_id', partnerId)
+          .eq('partner_id', normalizedPartnerId)
           .gte('created_at', getDateRange(selectedTimeRange));
 
         if (bookingsError) {
@@ -711,15 +712,15 @@ export default function BusinessInsights() {
             <Card style={styles.locationCard}>
               <Text style={styles.locationTitle}>📍 Tu Ubicación</Text>
               <Text style={styles.locationText}>
-                {locationInsights.partnerLocation.address}
+                {locationInsights?.partnerLocation?.address || 'Dirección no disponible'}
               </Text>
-              {locationInsights.partnerLocation.barrio && (
+              {locationInsights?.partnerLocation?.barrio && (
                 <Text style={styles.locationBarrio}>
                   Barrio: {locationInsights.partnerLocation.barrio}
                 </Text>
               )}
               <Text style={styles.locationCoords}>
-                GPS: {locationInsights.partnerLocation.lat.toFixed(4)}, {locationInsights.partnerLocation.lon.toFixed(4)}
+                GPS: {(locationInsights?.partnerLocation?.lat ?? 0).toFixed(4)}, {(locationInsights?.partnerLocation?.lon ?? 0).toFixed(4)}
               </Text>
             </Card>
           )}
@@ -772,13 +773,13 @@ export default function BusinessInsights() {
               
               <View style={styles.locationMetric}>
                 <Text style={styles.locationMetricTitle}>Dentro de 10km</Text>
-                <Text style={styles.locationMetricValue}>{locationInsights.withinRadius['10km']}</Text>
+                <Text style={styles.locationMetricValue}>{locationInsights?.withinRadius?.['10km'] || 0}</Text>
                 <Text style={styles.locationMetricLabel}>mascotas</Text>
               </View>
               
               <View style={styles.locationMetric}>
                 <Text style={styles.locationMetricTitle}>Dentro de 20km</Text>
-                <Text style={styles.locationMetricValue}>{locationInsights.withinRadius['20km']}</Text>
+                <Text style={styles.locationMetricValue}>{locationInsights?.withinRadius?.['20km'] || 0}</Text>
                 <Text style={styles.locationMetricLabel}>mascotas</Text>
               </View>
             </View>
@@ -833,7 +834,7 @@ export default function BusinessInsights() {
               style={styles.configureLocationButton}
               onPress={() => router.push({
                 pathname: '/partner/configure-business',
-                params: { businessId: partnerId }
+                params: { businessId: normalizedPartnerId }
               })}
             >
               <MapPin size={16} color="#3B82F6" />
