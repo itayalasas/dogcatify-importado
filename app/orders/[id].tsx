@@ -12,6 +12,7 @@ export default function OrderDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { currentUser } = useAuth();
   const [order, setOrder] = useState<any>(null);
+  const [partnerAddress, setPartnerAddress] = useState<string>('');  
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -84,6 +85,37 @@ export default function OrderDetail() {
           createdAt: new Date(data.created_at),
           updatedAt: data.updated_at ? new Date(data.updated_at) : null
         });
+
+        // 1. Try partner_breakdown first (works for service bookings where trigger stores it)
+        let resolvedAddress = '';
+        if (data.partner_breakdown && data.partner_id) {
+          const pbPartner = data.partner_breakdown?.partners?.[data.partner_id];
+          if (pbPartner?.partner_address) {
+            resolvedAddress = pbPartner.partner_address;
+          }
+        }
+
+        // 2. Fall back to direct partners table query (works for product purchases)
+        if (!resolvedAddress && data.partner_id) {
+          const { data: partnerData } = await supabaseClient
+            .from('partners')
+            .select('address, calle, numero, barrio, codigo_postal')
+            .eq('id', data.partner_id)
+            .single();
+          if (partnerData) {
+            const parts = [
+              partnerData.calle,
+              partnerData.numero,
+              partnerData.barrio,
+              partnerData.codigo_postal,
+            ].filter(Boolean);
+            resolvedAddress = parts.length > 0
+              ? parts.join(', ')
+              : partnerData.address || '';
+          }
+        }
+
+        if (resolvedAddress) setPartnerAddress(resolvedAddress);
       }
     } catch (error) {
       console.error('Error fetching order details:', error);
@@ -276,8 +308,12 @@ export default function OrderDetail() {
             <Text style={styles.sectionTitle}>{isStorePickup ? 'Retiro en Tienda' : 'Información de Envío'}</Text>
             <View style={styles.shippingInfo}>
               <MapPin size={20} color="#6B7280" />
-              <Text style={styles.shippingAddress}>{order.shippingAddress}</Text>
+              <Text style={styles.shippingAddress}>
+                {isStorePickup && partnerAddress ? partnerAddress : order.shippingAddress}
+              </Text>
             </View>
+          </Card>
+        )}
           </Card>
         )}
 

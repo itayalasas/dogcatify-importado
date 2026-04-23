@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { ArrowLeft, Shield, Lock, Eye, FileText, Mail, Phone, MessageSquare } from 'lucide-react-native';
+import { setPrivacyAccepted } from '../../utils/legalAcceptance';
 
 export default function PrivacyPolicy() {
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
@@ -29,6 +30,7 @@ export default function PrivacyPolicy() {
   };
 
   const handleAccept = () => {
+    setPrivacyAccepted();
     router.back();
   };
 
