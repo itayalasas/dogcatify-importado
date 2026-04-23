@@ -173,18 +173,20 @@ export default function Cart() {
       if (productData?.partner_id) {
         const { data: partnerData } = await supabaseClient
           .from('partners')
-          .select('has_shipping, shipping_cost, free_shipping_threshold, calle, barrio, city')
+          .select('has_shipping, shipping_cost, calle, barrio, numero, codigo_postal, address')
           .eq('id', productData.partner_id)
           .maybeSingle();
 
         if (partnerData) {
+          // Compose city/locality from available address fields
+          const cityPart = partnerData.barrio || partnerData.codigo_postal || '';
           setPartnerInfo({
             has_shipping: partnerData.has_shipping || false,
             shipping_cost: partnerData.shipping_cost || 0,
-            free_shipping_threshold: partnerData.free_shipping_threshold || 0,
-            calle: partnerData.calle || '',
+            free_shipping_threshold: 0,
+            calle: partnerData.calle || partnerData.address || '',
             barrio: partnerData.barrio || '',
-            city: partnerData.city || '',
+            city: cityPart,
           });
         }
       }

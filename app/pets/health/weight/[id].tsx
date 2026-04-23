@@ -11,6 +11,7 @@ import { useAuth } from '../../../../contexts/AuthContext';
 import { envConfig } from '../../../../utils/envConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+
 const screenWidth = Dimensions.get('window').width;
 
 interface WeightRecord {
@@ -90,6 +91,9 @@ export default function PetWeight() {
     // Load cached tips or auto-generate when weight status is determined
     if (weightStatus !== 'unknown' && weightRecords.length > 0 && aiTips.length === 0) {
       loadOrGenerateTips();
+    // Auto-generate AI tips when weight status is determined
+    if (weightStatus !== 'unknown' && weightRecords.length > 0 && aiTips.length === 0) {
+      generateWeightAdvice();
     }
   }, [weightStatus]);
 
@@ -472,6 +476,7 @@ export default function PetWeight() {
     generateWeightAdvice();
   };
 
+
   const getWeightTrend = (): { trend: 'increasing' | 'decreasing' | 'stable'; difference: number } => {
     if (weightRecords.length < 2) return { trend: 'stable', difference: 0 };
     const first = weightRecords[0].weight;
@@ -497,6 +502,8 @@ export default function PetWeight() {
       const latestRecord = weightRecords[weightRecords.length - 1];
       const { trend, difference } = getWeightTrend();
 
+
+      // Calculate age in months
       let ageMonths: number | undefined;
       if (pet.birth_date) {
         const birth = new Date(pet.birth_date);
@@ -539,6 +546,7 @@ export default function PetWeight() {
       setAiTips(tips);
       // Persist tips so they survive app restarts
       await AsyncStorage.setItem(`weight_ai_tips_${id}`, JSON.stringify(tips));
+      setAiTips(data.tips || []);
     } catch (error: any) {
       console.error('Error generating weight advice:', error);
       setAiError('No se pudieron generar los consejos. Intenta de nuevo.');
@@ -1092,6 +1100,8 @@ export default function PetWeight() {
                     AsyncStorage.removeItem(`weight_ai_tips_${id}`);
                     generateWeightAdvice();
                   }}>
+
+                <TouchableOpacity style={styles.aiRefreshButton} onPress={generateWeightAdvice}>
                   <Sparkles size={14} color="#8B5CF6" />
                   <Text style={styles.aiRefreshText}>Regenerar consejos</Text>
                 </TouchableOpacity>
@@ -1620,6 +1630,21 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     lineHeight: 20,
   },
+<<<<<<< HEAD
+=======
+  aiGenerateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+    gap: 8,
+  },
+  aiGenerateButtonText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+  },
+>>>>>>> 4613f22b9367284dbdc7bf18f5da939ea6ebe85b
   aiLoadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
