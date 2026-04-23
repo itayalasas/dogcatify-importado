@@ -4,6 +4,8 @@ import { Search, MapPin, Star, Phone, Stethoscope, Scissors, Home, Dog } from 'l
 import { FlatList } from 'react-native';
 import { ServiceCard } from '../../components/ServiceCard';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
+import { hasSeenHint } from '../../utils/oneTimeHints';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
@@ -91,6 +93,7 @@ export default function Services() {
   const { currentUser } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [canShowCategoryHint, setCanShowCategoryHint] = useState(false);
 
   // Configuración de paginación
   const ITEMS_PER_PAGE = 10;
@@ -105,6 +108,15 @@ export default function Services() {
     fetchPartners();
     
   }, []);
+
+  React.useEffect(() => {
+    const checkSearchHint = async () => {
+      const seen = await hasSeenHint('services_search', currentUser?.id);
+      setCanShowCategoryHint(seen);
+    };
+
+    checkSearchHint();
+  }, [currentUser?.id]);
 
   const fetchPartners = async () => {
     try {
@@ -419,20 +431,38 @@ export default function Services() {
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
-        <View style={styles.searchInputWrapper}>
-          <Search size={20} color="#9CA3AF" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar negocios..."
-            placeholderTextColor="#9CA3AF"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
+        <OneTimeTooltip
+          hintKey="services_search"
+          userId={currentUser?.id}
+          text="Tip: buscá negocios por nombre o zona"
+          placement="bottom"
+          onHidden={() => setCanShowCategoryHint(true)}
+        >
+          <View style={styles.searchInputWrapper}>
+            <Search size={20} color="#9CA3AF" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Buscar negocios..."
+              placeholderTextColor="#9CA3AF"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+        </OneTimeTooltip>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.categories}>
+          <OneTimeTooltip
+            hintKey="services_categories"
+            userId={currentUser?.id}
+            text="Tip: elegí categoría para encontrar más rápido"
+            containerStyle={styles.categoriesTooltipAnchor}
+            enabled={canShowCategoryHint}
+          >
+            <View style={styles.categoriesTooltipTarget} />
+          </OneTimeTooltip>
+
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {categories.map((category) => (
               <TouchableOpacity
@@ -643,7 +673,17 @@ const styles = StyleSheet.create({
   categories: {
     paddingHorizontal: 6,
     paddingVertical: 12,
-    marginBottom: 8,
+    zIndex: 20,
+  },
+  categoriesTooltipAnchor: {
+    position: 'absolute',
+    right: 0,
+    top: -6,
+    zIndex: 30,
+  },
+  categoriesTooltipTarget: {
+    width: 1,
+    height: 1,
   },
   categoryButton: {
     backgroundColor: '#FFFFFF',

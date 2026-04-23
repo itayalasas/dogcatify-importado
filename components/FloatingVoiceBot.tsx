@@ -703,6 +703,126 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           }
         ],
       },
+      'profile': {
+        id: Date.now().toString(),
+        role: 'action',
+        content: 'Te llevo a tu perfil para gestionar tu cuenta y accesos',
+        audioUsed: false,
+        timestamp: new Date(),
+        actionButtons: [
+          {
+            label: 'Ir a Perfil →',
+            action: () => {
+              router.push('/(tabs)/profile');
+            },
+          },
+        ],
+      },
+      'partner-register': {
+        id: Date.now().toString(),
+        role: 'action',
+        content: 'Vamos a crear o editar tu perfil de aliado',
+        audioUsed: false,
+        timestamp: new Date(),
+        actionButtons: [
+          {
+            label: 'Ir a Registro de Aliado →',
+            action: () => {
+              router.push('/(tabs)/partner-register');
+            },
+          },
+        ],
+      },
+      'partner-dashboard': {
+        id: Date.now().toString(),
+        role: 'action',
+        content: 'Te llevo al dashboard de aliado para gestionar tu negocio',
+        audioUsed: false,
+        timestamp: new Date(),
+        actionButtons: [
+          {
+            label: 'Ir al Dashboard de Aliado →',
+            action: () => {
+              router.push('/(partner-tabs)/dashboard');
+            },
+          },
+        ],
+      },
+      'shop': {
+        id: Date.now().toString(),
+        role: 'action',
+        content: 'Abramos la tienda para buscar productos y comprar',
+        audioUsed: false,
+        timestamp: new Date(),
+        actionButtons: [
+          {
+            label: 'Ir a Tienda →',
+            action: () => {
+              router.push('/(tabs)/shop');
+            },
+          },
+        ],
+      },
+      'services': {
+        id: Date.now().toString(),
+        role: 'action',
+        content: 'Te llevo a Servicios para encontrar y reservar',
+        audioUsed: false,
+        timestamp: new Date(),
+        actionButtons: [
+          {
+            label: 'Ir a Servicios →',
+            action: () => {
+              router.push('/(tabs)/services');
+            },
+          },
+        ],
+      },
+      'orders': {
+        id: Date.now().toString(),
+        role: 'action',
+        content: 'Revisemos el estado de tus pedidos',
+        audioUsed: false,
+        timestamp: new Date(),
+        actionButtons: [
+          {
+            label: 'Ir a Mis Pedidos →',
+            action: () => {
+              router.push('/orders');
+            },
+          },
+        ],
+      },
+      'delivery-register': {
+        id: Date.now().toString(),
+        role: 'action',
+        content: 'Vamos a configurar tu perfil de repartidor',
+        audioUsed: false,
+        timestamp: new Date(),
+        actionButtons: [
+          {
+            label: 'Gestionar Reparto →',
+            action: () => {
+              router.push('/delivery-register');
+            },
+          },
+        ],
+      },
+      'delivery-orders': {
+        id: Date.now().toString(),
+        role: 'action',
+        content: 'Te llevo a los pedidos de reparto',
+        audioUsed: false,
+        timestamp: new Date(),
+        actionButtons: [
+          {
+            label: 'Ver Pedidos de Reparto →',
+            action: () => {
+              router.push('/delivery/orders');
+            },
+          },
+        ],
+      },
     };
 
     const message = actionMessages[actionId];

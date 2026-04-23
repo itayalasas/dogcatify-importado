@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { supabaseClient } from '../../lib/supabase';
 import { createEmailConfirmationToken, generateConfirmationUrl, sendConfirmationEmailAPI } from '../../utils/emailConfirmation';
+import { validatePassword, getPasswordStrengthKey, PASSWORD_MIN_LENGTH_EXCLUSIVE } from '../../utils/passwordValidation';
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
@@ -18,13 +19,23 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const passwordValidation = validatePassword(password);
+  const passwordRules = passwordValidation.rules;
+  const passwordScore = passwordValidation.score;
+  const isPasswordValid = passwordValidation.isValid;
+  const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword;
+
+  const getPasswordStrength = () => {
+    return t(getPasswordStrengthKey(passwordScore));
+  };
   
   // Computed property to check if form is valid
   const isFormValid = fullName.trim() && 
                      email.trim() && 
-                     password.length >= 6 && 
+                     isPasswordValid && 
                      confirmPassword && 
-                     password === confirmPassword && 
+                     passwordsMatch && 
                      acceptTerms;
 
   const { register } = useAuth();
@@ -49,8 +60,13 @@ export default function Register() {
       return;
     }
 
-    if (password.length < 6) {
+    if (password.length <= PASSWORD_MIN_LENGTH_EXCLUSIVE) {
       Alert.alert('Error', t('passwordTooShort'));
+      return;
+    }
+
+    if (!isPasswordValid) {
+      Alert.alert('Error', t('passwordRequirementsNotMet'));
       return;
     }
 
@@ -187,7 +203,7 @@ export default function Register() {
 
         <Input
           label={t('password')}
-          placeholder="Mínimo 6 caracteres"
+          placeholder={`Mínimo ${PASSWORD_MIN_LENGTH_EXCLUSIVE + 1} caracteres`}
           value={password}
           onChangeText={setPassword}
           secureTextEntry={!showPassword}
@@ -196,6 +212,37 @@ export default function Register() {
           isPasswordVisible={showPassword}
           onTogglePasswordVisibility={() => setShowPassword(!showPassword)}
         />
+
+        {password.length > 0 && (
+          <View style={styles.passwordFeedbackContainer}>
+            <View style={styles.passwordStrengthHeader}>
+              <Text style={styles.passwordStrengthLabel}>{t('passwordStrength')}</Text>
+              <Text style={styles.passwordStrengthValue}>{getPasswordStrength()}</Text>
+            </View>
+            <View style={styles.passwordStrengthBarBackground}>
+              <View
+                style={[
+                  styles.passwordStrengthBarFill,
+                  { width: `${(passwordScore / passwordRules.length) * 100}%` },
+                ]}
+              />
+            </View>
+
+            <View style={styles.passwordRulesList}>
+              {passwordRules.map((rule) => (
+                <Text
+                  key={rule.key}
+                  style={[
+                    styles.passwordRuleText,
+                    rule.valid ? styles.passwordRuleValid : styles.passwordRulePending,
+                  ]}
+                >
+                  {rule.valid ? '✓' : '○'} {t(rule.key)}
+                </Text>
+              ))}
+            </View>
+          </View>
+        )}
 
         <Input
           label={t('confirmPassword')}
@@ -208,6 +255,17 @@ export default function Register() {
           isPasswordVisible={showConfirmPassword}
           onTogglePasswordVisibility={() => setShowConfirmPassword(!showConfirmPassword)}
         />
+
+        {confirmPassword.length > 0 && (
+          <Text
+            style={[
+              styles.confirmPasswordStatus,
+              passwordsMatch ? styles.passwordRuleValid : styles.confirmPasswordError,
+            ]}
+          >
+            {passwordsMatch ? t('passwordsMatch') : t('passwordsDontMatch')}
+          </Text>
+        )}
 
         <View style={styles.termsContainer}>
           <TouchableOpacity 
@@ -294,6 +352,65 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     fontFamily: 'Inter-Regular',
     lineHeight: 22,
+  },
+  passwordFeedbackContainer: {
+    marginTop: -4,
+    marginBottom: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+  },
+  passwordStrengthHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  passwordStrengthLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+  },
+  passwordStrengthValue: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#2D6A6F',
+  },
+  passwordStrengthBarBackground: {
+    height: 6,
+    borderRadius: 99,
+    backgroundColor: '#D1D5DB',
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  passwordStrengthBarFill: {
+    height: '100%',
+    borderRadius: 99,
+    backgroundColor: '#2D6A6F',
+  },
+  passwordRulesList: {
+    gap: 6,
+  },
+  passwordRuleText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+  },
+  passwordRuleValid: {
+    color: '#2D6A6F',
+  },
+  passwordRulePending: {
+    color: '#6B7280',
+  },
+  confirmPasswordStatus: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    marginTop: -4,
+    marginBottom: 14,
+  },
+  confirmPasswordError: {
+    color: '#374151',
   },
   termsContainer: {
     marginBottom: 24,

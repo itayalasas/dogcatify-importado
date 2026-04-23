@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, Image, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Fingerprint, X } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useBiometric } from '../../contexts/BiometricContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { resolvePostLoginRoute } from '../../utils/onboarding';
 
 export default function BiometricSetup() {
   const { email, password, userName, redirect } = useLocalSearchParams<{
@@ -19,10 +21,19 @@ export default function BiometricSetup() {
     biometricType,
     enableBiometric
   } = useBiometric();
+  const { currentUser } = useAuth();
 
   const [loading, setLoading] = useState(false);
 
-  const getRedirectUrl = () => redirect || '/(tabs)';
+  const navigateToPostLoginRoute = async () => {
+    if (!currentUser?.id) {
+      router.replace((redirect || '/(tabs)') as any);
+      return;
+    }
+
+    const nextRoute = await resolvePostLoginRoute(currentUser.id, redirect);
+    router.replace(nextRoute as any);
+  };
 
   const handleEnableBiometric = async () => {
     if (!email || !password) {
@@ -40,7 +51,7 @@ export default function BiometricSetup() {
           `${biometricType || 'La autenticación biométrica'} ha sido habilitada. Ahora puedes iniciar sesión más rápido.`,
           [{
             text: 'Continuar',
-            onPress: () => router.replace(getRedirectUrl() as any)
+            onPress: () => navigateToPostLoginRoute()
           }]
         );
       } else {
@@ -49,7 +60,7 @@ export default function BiometricSetup() {
           'La biometría no se pudo configurar. Puedes intentarlo más tarde desde tu perfil.',
           [{
             text: 'Continuar',
-            onPress: () => router.replace(getRedirectUrl() as any)
+            onPress: () => navigateToPostLoginRoute()
           }]
         );
       }
@@ -60,7 +71,7 @@ export default function BiometricSetup() {
         'Hubo un problema configurando la biometría. Puedes intentarlo más tarde desde tu perfil.',
         [{
           text: 'Continuar',
-          onPress: () => router.replace(getRedirectUrl() as any)
+          onPress: () => navigateToPostLoginRoute()
         }]
       );
     } finally {
@@ -69,14 +80,16 @@ export default function BiometricSetup() {
   };
 
   const handleSkip = () => {
-    router.replace(getRedirectUrl() as any);
+    navigateToPostLoginRoute();
   };
 
-  if (!isBiometricSupported) {
-    // If biometric is not supported, go directly to main app or redirect
-    router.replace(getRedirectUrl() as any);
-    return null;
-  }
+  useEffect(() => {
+    if (!isBiometricSupported) {
+      navigateToPostLoginRoute();
+    }
+  }, [isBiometricSupported, currentUser?.id, redirect]);
+
+  if (!isBiometricSupported) return null;
 
   return (
     <SafeAreaView style={styles.container}>

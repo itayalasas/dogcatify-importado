@@ -105,29 +105,36 @@ export default function HelpSupport() {
   const handleUserManual = () => {
     Alert.alert(
       '📖 Manual de Usuario',
-      'Manual completo de DogCatiFy:\n\n' +
-      '🐾 GESTIÓN DE MASCOTAS\n' +
-      '• Agregar y editar mascotas\n' +
-      '• Historial médico completo\n' +
-      '• Álbumes de fotos y videos\n' +
-      '• Compartir mascotas\n\n' +
-      '🏥 SERVICIOS\n' +
-      '• Buscar veterinarios\n' +
-      '• Reservar consultas\n' +
-      '• Servicios de pensión\n' +
-      '• Seguimiento de citas\n\n' +
+      'Funciones actuales de DogCatiFy:\n\n' +
+      '🏠 INICIO\n' +
+      '• Feed con publicaciones y promociones\n' +
+      '• Me gusta y comentarios\n\n' +
+      '🐾 MASCOTAS\n' +
+      '• Alta/edición de mascotas\n' +
+      '• Compartir mascota con otros usuarios\n' +
+      '• Salud: vacunas, enfermedades, alergias, desparasitaciones y peso\n' +
+      '• Álbumes y contenido de cada mascota\n\n' +
       '🛒 TIENDA\n' +
-      '• Explorar productos\n' +
-      '• Carrito de compras\n' +
-      '• Historial de pedidos\n' +
-      '• Seguimiento de envíos\n\n' +
-      '📍 LUGARES\n' +
-      '• Guardar lugares favoritos\n' +
-      '• Ubicar servicios cercanos\n\n' +
+      '• Buscar y filtrar productos por categoría\n' +
+      '• Ver detalle de producto\n' +
+      '• Agregar al carrito y gestionar cantidades\n' +
+      '• Checkout y estados de pedido\n\n' +
+      '🏥 SERVICIOS\n' +
+      '• Buscar negocios por nombre/zona\n' +
+      '• Filtrar por tipo de servicio\n' +
+      '• Ver detalle, reseñas y disponibilidad\n' +
+      '• Reservar servicio seleccionando mascota\n\n' +
+      '📍 LUGARES PET-FRIENDLY\n' +
+      '• Explorar lugares y ver detalle\n' +
+      '• Registrar nuevos lugares\n\n' +
+      '👤 PERFIL Y CUENTA\n' +
+      '• Editar perfil\n' +
+      '• Ver pedidos y carrito\n' +
+      '• Configurar biometría/notificaciones\n' +
+      '• Ayuda/soporte y eliminación de cuenta\n\n' +
       '💳 PAGOS\n' +
-      '• Mercado Pago integrado\n' +
-      '• Pago seguro y fácil\n\n' +
-      'Para ayuda adicional, contacta con soporte.',
+      '• Integración con Mercado Pago\n\n' +
+      'Si necesitas ayuda paso a paso, contáctanos por WhatsApp o Email.',
       [
         { text: 'Contactar Soporte', onPress: handleEmailSupport },
         { text: 'Cerrar' }
@@ -138,33 +145,28 @@ export default function HelpSupport() {
   const handlePartnerManual = () => {
     Alert.alert(
       '📚 Manual para Aliados',
-      'Guía completa para aliados comerciales:\n\n' +
+      'Funciones actuales para aliados comerciales:\n\n' +
       '🏢 GESTIÓN DE NEGOCIO\n' +
-      '• Configurar perfil de negocio\n' +
-      '• Horarios y disponibilidad\n' +
-      '• Información de contacto\n\n' +
+      '• Registro y configuración del negocio\n' +
+      '• Actividades, horarios y datos de contacto\n\n' +
       '💼 SERVICIOS\n' +
-      '• Crear y editar servicios\n' +
-      '• Gestionar precios\n' +
-      '• Configurar pensión\n' +
-      '• Aceptar reservas\n\n' +
+      '• Crear, editar y publicar servicios\n' +
+      '• Configurar precios y capacidades (incluye pensión)\n' +
+      '• Gestión de reservas y agenda\n\n' +
       '📦 PRODUCTOS\n' +
-      '• Agregar productos a la tienda\n' +
-      '• Gestionar inventario\n' +
-      '• Control de stock\n' +
-      '• Actualizar precios\n\n' +
+      '• Alta/edición de productos\n' +
+      '• Control de stock y precios\n' +
+      '• Gestión de pedidos\n\n' +
       '📅 RESERVAS\n' +
-      '• Ver reservas pendientes\n' +
-      '• Confirmar citas\n' +
-      '• Gestionar agenda\n\n' +
+      '• Ver pendientes y estados\n' +
+      '• Confirmar/gestionar citas\n\n' +
       '💰 PAGOS\n' +
       '• Configurar Mercado Pago\n' +
       '• Recibir pagos\n' +
-      '• Ver transacciones\n\n' +
+      '• Seguimiento de operaciones\n\n' +
       '📊 ANÁLISIS\n' +
       '• Panel de ventas\n' +
-      '• Estadísticas de negocio\n' +
-      '• Historial de pedidos\n\n' +
+      '• Métricas del negocio\n\n' +
       'Para soporte técnico, contacta con nuestro equipo.',
       [
         { text: 'Contactar Soporte', onPress: handleEmailSupport },
@@ -177,17 +179,24 @@ export default function HelpSupport() {
     Alert.alert(
       'Preguntas Frecuentes',
       '❓ PREGUNTAS COMUNES\n\n' +
-      '¿Cómo agregar una mascota?\n' +
-      'Ve a la pestaña Mascotas y toca el botón +\n\n' +
-      '¿Cómo reservar servicios?\n' +
-      'Busca el servicio en la pestaña Servicios y selecciona fecha/hora\n\n' +
-      '¿Cómo funciona la tienda?\n' +
-      'Navega productos, agrégalos al carrito y paga con Mercado Pago\n\n' +
-      '¿Cómo ser aliado comercial?\n' +
-      'Regístrate como partner desde el menú perfil\n\n' +
-      '¿Es seguro el pago?\n' +
-      'Sí, usamos Mercado Pago para transacciones seguras\n\n' +
-      'Para más información, contacta con soporte.',
+      '¿Cómo agrego mi mascota?\n' +
+      'En Mascotas, toca el botón + y completa los datos.\n\n' +
+      '¿Dónde cargo vacunas o desparasitaciones?\n' +
+      'En el detalle de tu mascota, sección Salud.\n\n' +
+      '¿Cómo reservo un servicio?\n' +
+      'En Servicios, elige negocio/servicio, luego toca Reservar y selecciona mascota.\n\n' +
+      '¿Cómo compro en la tienda?\n' +
+      'Busca productos, agrégalos al carrito y finaliza el pago.\n\n' +
+      '¿Dónde veo mis pedidos?\n' +
+      'En Perfil > Mis Pedidos.\n\n' +
+      '¿Cómo contacto al soporte?\n' +
+      'Desde esta pantalla por WhatsApp o Email.\n\n' +
+      '¿La app tiene inicio con biometría?\n' +
+      'Sí, puedes habilitarlo cuando esté disponible en tu dispositivo.\n\n' +
+      '¿Cómo me registro como aliado?\n' +
+      'Desde Perfil, opción de registro de negocio/aliado.\n\n' +
+      '¿Los pagos son seguros?\n' +
+      'Sí, la app utiliza integración con Mercado Pago.',
       [
         { text: 'Contactar Soporte', onPress: handleEmailSupport },
         { text: 'Cerrar' }
