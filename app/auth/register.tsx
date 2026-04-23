@@ -18,6 +18,31 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
+
+  const handlePasswordChange = (text: string) => {
+    setPassword(text);
+    if (text.length > 0 && text.length < 6) {
+      setPasswordError('La contraseña debe tener al menos 6 caracteres');
+    } else {
+      setPasswordError('');
+    }
+    if (confirmPassword.length > 0 && text !== confirmPassword) {
+      setConfirmPasswordError('Las contraseñas no coinciden');
+    } else if (confirmPassword.length > 0) {
+      setConfirmPasswordError('');
+    }
+  };
+
+  const handleConfirmPasswordChange = (text: string) => {
+    setConfirmPassword(text);
+    if (text.length > 0 && text !== password) {
+      setConfirmPasswordError('Las contraseñas no coinciden');
+    } else {
+      setConfirmPasswordError('');
+    }
+  };
   
   // Computed property to check if form is valid
   const isFormValid = fullName.trim() && 
@@ -25,6 +50,8 @@ export default function Register() {
                      password.length >= 6 && 
                      confirmPassword && 
                      password === confirmPassword && 
+                     !passwordError &&
+                     !confirmPasswordError &&
                      acceptTerms;
 
   const { register } = useAuth();
@@ -189,41 +216,44 @@ export default function Register() {
           label={t('password')}
           placeholder="Mínimo 6 caracteres"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={handlePasswordChange}
           secureTextEntry={!showPassword}
           leftIcon={<Lock size={20} color="#6B7280" />}
           showPasswordToggle={true}
           isPasswordVisible={showPassword}
           onTogglePasswordVisibility={() => setShowPassword(!showPassword)}
+          error={passwordError}
         />
 
         <Input
           label={t('confirmPassword')}
           placeholder="Repite tu contraseña"
           value={confirmPassword}
-          onChangeText={setConfirmPassword}
+          onChangeText={handleConfirmPasswordChange}
           secureTextEntry={!showConfirmPassword}
           leftIcon={<Lock size={20} color="#6B7280" />}
           showPasswordToggle={true}
           isPasswordVisible={showConfirmPassword}
           onTogglePasswordVisibility={() => setShowConfirmPassword(!showConfirmPassword)}
+          error={confirmPasswordError}
         />
 
         <View style={styles.termsContainer}>
-          <TouchableOpacity 
-            style={styles.checkbox}
-            onPress={() => setAcceptTerms(!acceptTerms)}
-          >
-            <View style={[styles.checkboxBox, acceptTerms && styles.checkboxChecked]}>
+          <View style={styles.checkbox}>
+            <TouchableOpacity
+              onPress={() => setAcceptTerms(!acceptTerms)}
+              style={[styles.checkboxBox, acceptTerms && styles.checkboxChecked]}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               {acceptTerms && <Text style={styles.checkmark}>✓</Text>}
-            </View>
+            </TouchableOpacity>
             <Text style={styles.termsText}>
               Acepto las{' '}
               <Text style={styles.termsLink} onPress={handlePrivacyPress}>políticas de privacidad</Text>
               {' '}y los{' '}
               <Text style={styles.termsLink} onPress={handleTermsPress}>términos de servicio</Text>
             </Text>
-          </TouchableOpacity>
+          </View>
         </View>
 
         <Button
