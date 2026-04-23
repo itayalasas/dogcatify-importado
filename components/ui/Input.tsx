@@ -21,6 +21,7 @@ interface InputProps {
   onTogglePasswordVisibility?: () => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  error?: string;
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -42,6 +43,7 @@ export const Input: React.FC<InputProps> = ({
   onTogglePasswordVisibility,
   onFocus,
   onBlur,
+  error,
 }) => {
   const inputStyle: TextStyle[] = [
     styles.input,
@@ -49,6 +51,7 @@ export const Input: React.FC<InputProps> = ({
     (rightIcon || showPasswordToggle) && styles.inputWithRightIcon,
     multiline && styles.multilineInput,
     !editable && styles.disabledInput,
+    error ? { borderColor: '#EF4444' } as TextStyle : null,
     style,
   ];
 
@@ -56,6 +59,8 @@ export const Input: React.FC<InputProps> = ({
     styles.container,
     !editable && styles.disabledContainer,
   ];
+
+  const inputBorderStyle: ViewStyle = error ? { borderColor: '#EF4444' } : {};
 
   return (
     <View style={containerStyle}>
@@ -102,6 +107,7 @@ export const Input: React.FC<InputProps> = ({
           </View>
         )}
       </View>
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
     </View>
   );
 };
@@ -118,6 +124,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#374151',
     marginBottom: 6,
+  },
+  errorText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#EF4444',
+    marginTop: 4,
+    marginLeft: 4,
   },
   inputContainer: {
     position: 'relative',
