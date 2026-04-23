@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { supabaseClient } from '../../lib/supabase';
 import { envConfig } from '../../utils/envConfig';
+import { validatePassword, getPasswordStrengthKey, PASSWORD_MIN_LENGTH_EXCLUSIVE } from '../../utils/passwordValidation';
 
 export default function ResetPasswordScreen() {
   const params = useLocalSearchParams();
@@ -21,6 +22,31 @@ export default function ResetPasswordScreen() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [resetToken, setResetToken] = useState<string | null>(null);
+
+  const passwordValidation = validatePassword(newPassword);
+  const passwordRules = passwordValidation.rules.map((rule) => ({
+    ...rule,
+    label:
+      rule.key === 'passwordRuleLowercase'
+        ? 'Al menos una letra minúscula'
+        : rule.key === 'passwordRuleUppercase'
+          ? 'Al menos una letra mayúscula'
+          : rule.key === 'passwordRuleNumber'
+            ? 'Al menos un número'
+            : rule.key === 'passwordRuleSpecialChar'
+              ? 'Al menos un carácter especial'
+              : 'Más de 8 caracteres',
+  }));
+  const passwordScore = passwordValidation.score;
+  const isPasswordValid = passwordValidation.isValid;
+  const passwordsMatch = confirmPassword.length > 0 && newPassword === confirmPassword;
+
+  const getPasswordStrength = () => {
+    const key = getPasswordStrengthKey(passwordScore);
+    if (key === 'passwordStrengthWeak') return 'Débil';
+    if (key === 'passwordStrengthMedium') return 'Media';
+    return 'Fuerte';
+  };
 
   useEffect(() => {
     // Don't re-validate token if password was already updated
@@ -98,8 +124,13 @@ export default function ResetPasswordScreen() {
       return;
     }
 
-    if (newPassword.length < 6) {
-      Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres');
+    if (newPassword.length <= PASSWORD_MIN_LENGTH_EXCLUSIVE) {
+      Alert.alert('Error', 'La contraseña debe tener más de 8 caracteres');
+      return;
+    }
+
+    if (!isPasswordValid) {
+      Alert.alert('Error', 'La contraseña debe incluir minúscula, mayúscula, número, carácter especial y tener más de 8 caracteres');
       return;
     }
 
@@ -255,11 +286,42 @@ export default function ResetPasswordScreen() {
           <View style={styles.passwordForm}>
             <Input
               label="Nueva contraseña"
-              placeholder="Mínimo 6 caracteres"
+              placeholder={`Mínimo ${PASSWORD_MIN_LENGTH_EXCLUSIVE + 1} caracteres`}
               value={newPassword}
               onChangeText={setNewPassword}
               secureTextEntry
             />
+
+            {newPassword.length > 0 && (
+              <View style={styles.passwordFeedbackContainer}>
+                <View style={styles.passwordStrengthHeader}>
+                  <Text style={styles.passwordStrengthLabel}>Fortaleza</Text>
+                  <Text style={styles.passwordStrengthValue}>{getPasswordStrength()}</Text>
+                </View>
+                <View style={styles.passwordStrengthBarBackground}>
+                  <View
+                    style={[
+                      styles.passwordStrengthBarFill,
+                      { width: `${(passwordScore / passwordRules.length) * 100}%` },
+                    ]}
+                  />
+                </View>
+
+                <View style={styles.passwordRulesList}>
+                  {passwordRules.map((rule) => (
+                    <Text
+                      key={rule.label}
+                      style={[
+                        styles.passwordRuleText,
+                        rule.valid ? styles.passwordRuleValid : styles.passwordRulePending,
+                      ]}
+                    >
+                      {rule.valid ? '✓' : '○'} {rule.label}
+                    </Text>
+                  ))}
+                </View>
+              </View>
+            )}
 
             <Input
               label="Confirmar contraseña"
@@ -269,11 +331,22 @@ export default function ResetPasswordScreen() {
               secureTextEntry
             />
 
+            {confirmPassword.length > 0 && (
+              <Text
+                style={[
+                  styles.confirmPasswordStatus,
+                  passwordsMatch ? styles.passwordRuleValid : styles.confirmPasswordError,
+                ]}
+              >
+                {passwordsMatch ? 'Las contraseñas coinciden' : 'Las contraseñas no coinciden'}
+              </Text>
+            )}
+
             <Button
               title={updatingPassword ? "Actualizando..." : "Cambiar Contraseña"}
               onPress={handlePasswordReset}
               loading={updatingPassword}
-              disabled={!newPassword || !confirmPassword || updatingPassword}
+              disabled={!newPassword || !confirmPassword || !isPasswordValid || !passwordsMatch || updatingPassword}
               size="large"
             />
           </View>
@@ -363,6 +436,64 @@ const styles = StyleSheet.create({
     width: '100%',
     gap: 16,
     marginBottom: 16,
+  },
+  passwordFeedbackContainer: {
+    marginTop: -8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+  },
+  passwordStrengthHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  passwordStrengthLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+  },
+  passwordStrengthValue: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#2D6A6F',
+  },
+  passwordStrengthBarBackground: {
+    height: 6,
+    borderRadius: 99,
+    backgroundColor: '#D1D5DB',
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  passwordStrengthBarFill: {
+    height: '100%',
+    borderRadius: 99,
+    backgroundColor: '#2D6A6F',
+  },
+  passwordRulesList: {
+    gap: 6,
+  },
+  passwordRuleText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+  },
+  passwordRuleValid: {
+    color: '#2D6A6F',
+  },
+  passwordRulePending: {
+    color: '#6B7280',
+  },
+  confirmPasswordStatus: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    marginTop: -8,
+    marginBottom: 8,
+  },
+  confirmPasswordError: {
+    color: '#374151',
   },
   successCard: {
     alignItems: 'center',

@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { Plus, Bell, Check, X, User } from 'lucide-react-native';
 import { PetCard } from '../../components/PetCard';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { getPets, supabaseClient, deletePet } from '../../lib/supabase';
@@ -584,9 +585,16 @@ export default function Pets() {
     <SafeAreaView style={styles.container}>
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>{t('myPets')}</Text>
-        <TouchableOpacity style={styles.addButton} onPress={handleAddPet}>
-          <Plus size={20} color="#FFFFFF" />
-        </TouchableOpacity>
+        <OneTimeTooltip
+          hintKey="pets_add_button_v3"
+          userId={currentUser?.id}
+          text="Tip: tocá + para agregar tu mascota"
+          placement="bottom"
+        >
+          <TouchableOpacity style={styles.addButton} onPress={handleAddPet}>
+            <Plus size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </OneTimeTooltip>
       </View>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {pendingInvitations.length > 0 && (

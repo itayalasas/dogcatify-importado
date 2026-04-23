@@ -9,6 +9,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useBiometric } from '../../contexts/BiometricContext';
 import { resendConfirmationEmail } from '../../utils/emailConfirmation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { resolvePostLoginRoute } from '../../utils/onboarding';
 
 const SAVED_CREDENTIALS_KEY = '@saved_credentials';
 
@@ -228,12 +229,8 @@ export default function Login() {
             }
           });
         } else {
-          // Go to redirect URL if specified, otherwise go to main app
-          if (redirect) {
-            router.replace(redirect as any);
-          } else {
-            router.replace('/(tabs)');
-          }
+          const nextRoute = await resolvePostLoginRoute(result.id, redirect);
+          router.replace(nextRoute as any);
         }
       }
     } catch (error: any) {

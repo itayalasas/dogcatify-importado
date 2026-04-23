@@ -5,6 +5,8 @@ import { Filter, Search, ShoppingCart, Package } from 'lucide-react-native';
 import { FlatGrid } from 'react-native-super-grid';
 import { ProductCard } from '../../components/ProductCard';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
+import { hasSeenHint } from '../../utils/oneTimeHints';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
@@ -18,6 +20,7 @@ export default function Shop() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [canShowCategoryHint, setCanShowCategoryHint] = useState(false);
   const { t } = useLanguage();
   const { currentUser } = useAuth();
   const { cart, addToCart } = useCart();
@@ -25,6 +28,15 @@ export default function Shop() {
   React.useEffect(() => {
     fetchProducts();
   }, []);
+
+  React.useEffect(() => {
+    const checkSearchHint = async () => {
+      const seen = await hasSeenHint('shop_search', currentUser?.id);
+      setCanShowCategoryHint(seen);
+    };
+
+    checkSearchHint();
+  }, [currentUser?.id]);
 
   // Recargar productos cada vez que la pantalla se enfoca (al volver desde Mercado Pago)
   useFocusEffect(
@@ -189,20 +201,38 @@ export default function Shop() {
         </View>
       </View>
       <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Search size={20} color="#9CA3AF" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar productos..."
-            placeholderTextColor="#9CA3AF"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
+        <OneTimeTooltip
+          hintKey="shop_search"
+          userId={currentUser?.id}
+          text="Tip: buscá rápido por nombre de producto"
+          placement="bottom"
+          onHidden={() => setCanShowCategoryHint(true)}
+        >
+          <View style={styles.searchBar}>
+            <Search size={20} color="#9CA3AF" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Buscar productos..."
+              placeholderTextColor="#9CA3AF"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+        </OneTimeTooltip>
       </View>
 
       <View style={styles.content}>
         <View style={styles.categories}>
+          <OneTimeTooltip
+            hintKey="shop_categories"
+            userId={currentUser?.id}
+            text="Tip: usá categorías para filtrar más rápido"
+            containerStyle={styles.categoriesTooltipAnchor}
+            enabled={canShowCategoryHint}
+          >
+            <View style={styles.categoriesTooltipTarget} />
+          </OneTimeTooltip>
+
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesContent}>
             {categories.map((category) => (
               <TouchableOpacity
@@ -379,6 +409,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     marginTop: 0,
+    zIndex: 20,
+  },
+  categoriesTooltipAnchor: {
+    position: 'absolute',
+    right: 16,
+    top: 0,
+    zIndex: 30,
+  },
+  categoriesTooltipTarget: {
+    width: 1,
+    height: 1,
   },
   categoriesContent: {
     paddingRight: 16,

@@ -6,9 +6,11 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingScreen } from '../../components/ui/LoadingScreen';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 import { getActivePromotionForItem, incrementPromotionClicks } from '@/utils/promotions';
+import { hasSeenHint } from '../../utils/oneTimeHints';
 
 const { width } = Dimensions.get('window');
 
@@ -42,6 +44,7 @@ export default function ServiceDetail() {
   const [categoryAvailability, setCategoryAvailability] = useState<{ [key: string]: number }>({});
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [canShowReserveHint, setCanShowReserveHint] = useState(false);
 
   const handleBackPress = () => {
     if (router.canGoBack()) {
@@ -103,6 +106,19 @@ export default function ServiceDetail() {
       loadActivePromotion();
     }
   }, [id, discount]);
+
+  useEffect(() => {
+    const checkHintFlow = async () => {
+      if (boardingCategories.length > 0) {
+        const seenCategoryHint = await hasSeenHint('service_detail_category', currentUser?.id);
+        setCanShowReserveHint(seenCategoryHint);
+      } else {
+        setCanShowReserveHint(true);
+      }
+    };
+
+    checkHintFlow();
+  }, [boardingCategories.length, currentUser?.id, id]);
 
   const loadActivePromotion = async () => {
     try {
@@ -600,9 +616,15 @@ export default function ServiceDetail() {
 
           {/* For boarding services, show categories */}
           {boardingCategories.length > 0 ? (
-            <View style={styles.categoriesContainer}>
-              <Text style={styles.categoriesTitle}>Selecciona el tipo de hospedaje:</Text>
-              {boardingCategories.map((category) => {
+            <OneTimeTooltip
+              hintKey="service_detail_category"
+              userId={currentUser?.id}
+              text="Tip: elegí el tipo de hospedaje primero"
+              onHidden={() => setCanShowReserveHint(true)}
+            >
+              <View style={styles.categoriesContainer}>
+                <Text style={styles.categoriesTitle}>Selecciona el tipo de hospedaje:</Text>
+                {boardingCategories.map((category) => {
                 const isAvailable = categoryAvailability[category.id] === undefined || categoryAvailability[category.id] > 0;
                 return (
                   <TouchableOpacity
@@ -672,8 +694,9 @@ export default function ServiceDetail() {
                   </View>
                 </TouchableOpacity>
                 );
-              })}
-            </View>
+                })}
+              </View>
+            </OneTimeTooltip>
           ) : (
             <>
               {/* Price with Discount - for non-boarding services */}
@@ -738,15 +761,22 @@ export default function ServiceDetail() {
         </Card>
         
         <View style={styles.bookingButtonContainer}>
-          <Button
-            title={
-              boardingCategories.length > 0 && selectedCategory
-                ? `Reservar ${boardingCategories.find(c => c.id === selectedCategory)?.name}`
-                : `Reservar por ${formatPrice(appliedDiscount > 0 ? service.price * (1 - appliedDiscount / 100) : service.price)}`
-            }
-            onPress={handleBookService}
-            variant="primary"
-          />
+          <OneTimeTooltip
+            hintKey="service_detail_book"
+            userId={currentUser?.id}
+            text="Tip: confirmá aquí tu reserva"
+            enabled={canShowReserveHint}
+          >
+            <Button
+              title={
+                boardingCategories.length > 0 && selectedCategory
+                  ? `Reservar ${boardingCategories.find(c => c.id === selectedCategory)?.name}`
+                  : `Reservar por ${formatPrice(appliedDiscount > 0 ? service.price * (1 - appliedDiscount / 100) : service.price)}`
+              }
+              onPress={handleBookService}
+              variant="primary"
+            />
+          </OneTimeTooltip>
         </View>
       </ScrollView>
 

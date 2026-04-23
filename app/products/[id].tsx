@@ -5,10 +5,12 @@ import { ArrowLeft, ShoppingCart, Star, Plus, Minus, Heart, Share2, Truck, Packa
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { useCart } from '@/contexts/CartContext';
 import { getActivePromotionForItem, incrementPromotionClicks } from '@/utils/promotions';
+import { hasSeenHint } from '../../utils/oneTimeHints';
 
 export default function ProductDetail() {
   const { id, discount } = useLocalSearchParams<{ id: string; discount?: string }>();
@@ -24,6 +26,7 @@ export default function ProductDetail() {
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
   const [activePromotion, setActivePromotion] = useState<any>(null);
+  const [canShowCartHint, setCanShowCartHint] = useState(false);
 
   const cartCount = getCartCount();
 
@@ -42,6 +45,15 @@ export default function ProductDetail() {
       loadActivePromotion();
     }
   }, [id, discount]);
+
+  useEffect(() => {
+    const checkAddToCartHint = async () => {
+      const seen = await hasSeenHint('product_add_to_cart', currentUser?.id);
+      setCanShowCartHint(seen);
+    };
+
+    checkAddToCartHint();
+  }, [currentUser?.id, id]);
 
   const loadActivePromotion = async () => {
     try {
@@ -350,14 +362,22 @@ export default function ProductDetail() {
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>Detalle del Producto</Text>
-        <TouchableOpacity onPress={() => router.push('/cart')} style={styles.cartButton}>
-          <ShoppingCart size={24} color="#111827" />
-          {cartCount > 0 && (
-            <View style={styles.cartBadge}>
-              <Text style={styles.cartBadgeText}>{cartCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        <OneTimeTooltip
+          hintKey="product_go_to_cart"
+          userId={currentUser?.id}
+          text="Tip: desde aquí ves y finalizás tu compra"
+          enabled={canShowCartHint}
+          placement="bottom"
+        >
+          <TouchableOpacity onPress={() => router.push('/cart')} style={styles.cartButton}>
+            <ShoppingCart size={24} color="#111827" />
+            {cartCount > 0 && (
+              <View style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>{cartCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </OneTimeTooltip>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -541,9 +561,16 @@ export default function ProductDetail() {
           </View>
 
           {product.stock > 0 ? (
-            <TouchableOpacity style={styles.buyButton} onPress={handleAddToCart}>
-              <Text style={styles.buyButtonText}>Agregar al carrito</Text>
-            </TouchableOpacity>
+            <OneTimeTooltip
+              hintKey="product_add_to_cart"
+              userId={currentUser?.id}
+              text="Tip: agregá primero al carrito"
+              onHidden={() => setCanShowCartHint(true)}
+            >
+              <TouchableOpacity style={styles.buyButton} onPress={handleAddToCart}>
+                <Text style={styles.buyButtonText}>Agregar al carrito</Text>
+              </TouchableOpacity>
+            </OneTimeTooltip>
           ) : (
             <View style={styles.outOfStockButton}>
               <Text style={styles.outOfStockButtonText}>Sin stock disponible</Text>
