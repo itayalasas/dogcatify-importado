@@ -314,8 +314,6 @@ export default function OrderDetail() {
             </View>
           </Card>
         )}
-          </Card>
-        )}
 
         {/* Order Summary */}
         <Card style={styles.summaryCard}>

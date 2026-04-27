@@ -91,11 +91,8 @@ export default function PetWeight() {
     // Load cached tips or auto-generate when weight status is determined
     if (weightStatus !== 'unknown' && weightRecords.length > 0 && aiTips.length === 0) {
       loadOrGenerateTips();
-    // Auto-generate AI tips when weight status is determined
-    if (weightStatus !== 'unknown' && weightRecords.length > 0 && aiTips.length === 0) {
-      generateWeightAdvice();
     }
-  }, [weightStatus]);
+  }, [weightStatus, weightRecords.length, aiTips.length]);
 
   const createInitialWeightRecord = async () => {
     if (!pet || !pet.weight || !currentUser || weightRecords.length > 0) {
@@ -1100,8 +1097,6 @@ export default function PetWeight() {
                     AsyncStorage.removeItem(`weight_ai_tips_${id}`);
                     generateWeightAdvice();
                   }}>
-
-                <TouchableOpacity style={styles.aiRefreshButton} onPress={generateWeightAdvice}>
                   <Sparkles size={14} color="#8B5CF6" />
                   <Text style={styles.aiRefreshText}>Regenerar consejos</Text>
                 </TouchableOpacity>
@@ -1630,8 +1625,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     lineHeight: 20,
   },
-<<<<<<< HEAD
-=======
   aiGenerateButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1644,7 +1637,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
   },
->>>>>>> 4613f22b9367284dbdc7bf18f5da939ea6ebe85b
   aiLoadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',

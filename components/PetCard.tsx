@@ -1,9 +1,8 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
-import { Calendar, Scale, Trash2, UserPlus } from 'lucide-react-native';
+import { Calendar, Scale, ShieldCheck, Trash2, UserPlus } from 'lucide-react-native';
 import { Card } from './ui/Card';
 import { Pet } from '../types';
-import { useLanguage } from '../contexts/LanguageContext';
 
 interface PetCardProps {
   pet: Pet;
@@ -14,7 +13,7 @@ interface PetCardProps {
 }
 
 export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete, onShare, isShared }) => {
-  const { t } = useLanguage();
+  const photoUri = pet.photoURL || pet.photo_url;
 
   const formatAge = () => {
     if (pet.ageDisplay) {
@@ -41,56 +40,84 @@ export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete, onShar
 
   return (
     <Card style={styles.card} padding={false}>
-      <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
-        <Image 
-          source={{ uri: pet.photoURL || pet.photo_url }} 
-          style={styles.petImage} 
-          onError={(e) => console.log('Error loading pet image:', pet.photoURL || pet.photo_url, e.nativeEvent.error)}
-        />
-        {onDelete && (
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              onDelete(pet.id);
-            }}
-          >
-            <Trash2 size={16} color="#FFFFFF" />
-          </TouchableOpacity>
-        )}
-        {onShare && (
-          <TouchableOpacity
-            style={styles.shareButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              onShare(pet.id);
-            }}
-          >
-            <UserPlus size={14} color="#FFFFFF" />
-            <Text style={styles.shareButtonText}>Compartir</Text>
-          </TouchableOpacity>
-        )}
-        {isShared && (
-          <View style={styles.sharedBadge}>
-            <Text style={styles.sharedBadgeText}>Compartida</Text>
+      <TouchableOpacity onPress={onPress} activeOpacity={0.9} style={styles.pressable}>
+        <View style={styles.imageArea}>
+          {photoUri ? (
+            <Image
+              source={{ uri: photoUri }}
+              style={styles.petImage}
+              onError={(e) => console.log('Error loading pet image:', photoUri, e.nativeEvent.error)}
+            />
+          ) : (
+            <View style={styles.imageFallback}>
+              <Text style={styles.imageFallbackText}>{pet.species === 'dog' ? 'Perro' : 'Gato'}</Text>
+            </View>
+          )}
+
+          <View style={styles.imageScrim} />
+
+          <View style={styles.topActions}>
+            {onShare && (
+              <TouchableOpacity
+                style={styles.shareButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onShare(pet.id);
+                }}
+              >
+                <UserPlus size={15} color="#FFFFFF" />
+                <Text style={styles.shareButtonText}>Compartir</Text>
+              </TouchableOpacity>
+            )}
+
+            {onDelete && (
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onDelete(pet.id);
+                }}
+              >
+                <Trash2 size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
           </View>
-        )}
+
+          {isShared && (
+            <View style={styles.sharedBadge}>
+              <ShieldCheck size={13} color="#0F766E" />
+              <Text style={styles.sharedBadgeText}>Compartida</Text>
+            </View>
+          )}
+        </View>
+
         <View style={styles.content}>
-          <View style={styles.header}>
-            <Text style={styles.petName}>{pet.name}</Text>
-            <Text style={styles.genderIcon}>
-              {pet.gender === 'male' ? '♂️' : '♀️'}
-            </Text>
+          <View style={styles.titleRow}>
+            <View style={styles.nameBlock}>
+              <Text style={styles.petName} numberOfLines={1}>{pet.name}</Text>
+              <Text style={styles.petBreed} numberOfLines={1}>{pet.breed}</Text>
+            </View>
+
+            <View style={[
+              styles.genderBadge,
+              pet.gender === 'male' ? styles.genderBadgeMale : styles.genderBadgeFemale,
+            ]}>
+              <Text style={[
+                styles.genderText,
+                pet.gender === 'male' ? styles.genderTextMale : styles.genderTextFemale,
+              ]}>
+                {pet.gender === 'male' ? 'Macho' : 'Hembra'}
+              </Text>
+            </View>
           </View>
-          <Text style={styles.petBreed}>{pet.breed}</Text>
-          
+
           <View style={styles.details}>
-            <View style={styles.detailItem}>
-              <Calendar size={16} color="#6B7280" />
+            <View style={styles.detailPill}>
+              <Calendar size={16} color="#2D6A6F" />
               <Text style={styles.detailText}>{formatAge()}</Text>
             </View>
-            <View style={styles.detailItem}>
-              <Scale size={16} color="#6B7280" />
+            <View style={styles.detailPill}>
+              <Scale size={16} color="#2D6A6F" />
               <Text style={styles.detailText}>{formatWeight()}</Text>
             </View>
           </View>
@@ -99,6 +126,7 @@ export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete, onShar
             <View style={styles.badges}>
               {pet.isNeutered && (
                 <View style={styles.badge}>
+                  <ShieldCheck size={13} color="#0F766E" />
                   <Text style={styles.badgeText}>
                     {pet.species === 'dog' ? 'Castrado' : 'Esterilizado'}
                   </Text>
@@ -106,6 +134,7 @@ export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete, onShar
               )}
               {pet.hasChip && (
                 <View style={styles.badge}>
+                  <ShieldCheck size={13} color="#0F766E" />
                   <Text style={styles.badgeText}>Microchip</Text>
                 </View>
               )}
@@ -119,127 +148,196 @@ export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete, onShar
 
 const styles = StyleSheet.create({
   card: {
-    marginBottom: 10,
+    marginBottom: 16,
     marginHorizontal: 2,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 6,
+  },
+  pressable: {
+    borderRadius: 22,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+  },
+  imageArea: {
+    height: 245,
+    backgroundColor: '#FFFFFF',
   },
   petImage: {
-    width: '100%', 
-    height: 180,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    resizeMode: 'cover',
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
+  },
+  imageFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EEF7F6',
+  },
+  imageFallbackText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    color: '#2D6A6F',
+  },
+  imageScrim: {
+    display: 'none',
+  },
+  topActions: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  shareButton: {
+    minHeight: 36,
+    paddingHorizontal: 13,
+    borderRadius: 18,
+    backgroundColor: 'rgba(37, 99, 235, 0.95)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  shareButtonText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+  },
+  deleteButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(239, 68, 68, 0.96)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  sharedBadge: {
+    position: 'absolute',
+    left: 16,
+    top: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(236, 253, 245, 0.96)',
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+  sharedBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+    color: '#0F766E',
   },
   content: {
-    padding: 12,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 18,
+    backgroundColor: '#FFFFFF',
   },
-  header: {
+  titleRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 3,
+    gap: 14,
   },
-  petName: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+  nameBlock: {
     flex: 1,
   },
-  genderIcon: {
-    fontSize: 16,
+  petName: {
+    fontSize: 23,
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
+    marginBottom: 3,
   },
   petBreed: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 10,
+    fontSize: 16,
+    color: '#64748B',
     fontFamily: 'Inter-Regular',
+  },
+  genderBadge: {
+    minHeight: 34,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  genderBadgeMale: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
+  genderBadgeFemale: {
+    backgroundColor: '#FDF2F8',
+    borderColor: '#FBCFE8',
+  },
+  genderText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+  },
+  genderTextMale: {
+    color: '#2563EB',
+  },
+  genderTextFemale: {
+    color: '#DB2777',
   },
   details: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
+    gap: 10,
+    marginTop: 16,
   },
-  detailItem: {
+  detailPill: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   detailText: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginLeft: 3,
-    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: '#475569',
+    marginLeft: 7,
+    fontFamily: 'Inter-SemiBold',
   },
   badges: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 8,
+    marginTop: 14,
   },
   badge: {
-    backgroundColor: '#EBF8FF',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#3B82F6',
-  },
-  badgeText: {
-    fontSize: 11,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-  },
-  deleteButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(239, 68, 68, 0.9)',
-    borderRadius: 16,
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1,
-  },
-  shareButton: {
-    position: 'absolute',
-    top: 8,
-    right: 48,
-    backgroundColor: 'rgba(59, 130, 246, 0.95)',
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    zIndex: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 3,
+    gap: 5,
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
   },
-  shareButtonText: {
+  badgeText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
-  },
-  sharedBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(16, 185, 129, 0.9)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    zIndex: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  sharedBadgeText: {
-    fontSize: 11,
-    fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
+    fontFamily: 'Inter-Bold',
+    color: '#0F766E',
   },
 });

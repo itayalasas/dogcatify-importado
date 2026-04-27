@@ -204,15 +204,37 @@
         // Obtener parámetros de la URL
         function getUrlParams() {
             const params = new URLSearchParams(window.location.search);
+            const deepLinkParams = new URLSearchParams(window.location.search);
             const path = window.location.pathname;
 
             // Extraer tipo y ID del path
             // Formato esperado: /album/[id] o /post/[id]
-            const pathParts = path.split('/').filter(p => p);
+            const pathParts = path.split('/').filter(p => p && p !== 'index.html');
+            deepLinkParams.delete('type');
+            deepLinkParams.delete('id');
+
+            if (pathParts[0] === 'subscription' && pathParts[1] === 'return') {
+                return {
+                    type: 'profile',
+                    id: 'subscription',
+                    query: deepLinkParams.toString(),
+                    platform: getMobileOperatingSystem()
+                };
+            }
+
+            if (pathParts[0] === 'profile' && pathParts[1] === 'subscription') {
+                return {
+                    type: 'profile',
+                    id: 'subscription',
+                    query: deepLinkParams.toString(),
+                    platform: getMobileOperatingSystem()
+                };
+            }
 
             return {
                 type: pathParts[0] || params.get('type') || 'album',
                 id: pathParts[1] || params.get('id') || '',
+                query: deepLinkParams.toString(),
                 platform: getMobileOperatingSystem()
             };
         }
@@ -237,7 +259,8 @@
             appStoreLink.href = STORES[platform] || STORES.Android;
 
             // Construir deep link
-            const deepLink = `dogcatify://${params.type}/${params.id}`;
+            const path = [params.type, params.id].filter(Boolean).join('/');
+            const deepLink = `dogcatify://${path}${params.query ? `?${params.query}` : ''}`;
 
             console.log('Platform:', platform);
             console.log('Deep Link:', deepLink);

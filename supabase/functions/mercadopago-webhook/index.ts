@@ -267,19 +267,25 @@ serve(async (req: Request) => {
       });
 
       const normalizedNotification = {
+        ...notification,
         type: topicFromUrl,
-        action: 'payment.updated',
+        action: notification.action || 'payment.updated',
         data: {
           id: paymentIdFromUrl
         },
-        live_mode: !paymentIdFromUrl.startsWith('TEST'),
-        ...notification
+        live_mode: notification.live_mode ?? !paymentIdFromUrl.startsWith('TEST'),
       };
 
       if (topicFromUrl === 'payment') {
         await processPaymentNotification(supabase, normalizedNotification as WebhookNotification);
       } else if (topicFromUrl === 'merchant_order') {
         await processMerchantOrderNotification(supabase, normalizedNotification as WebhookNotification);
+      } else if (topicFromUrl === 'subscription_preapproval') {
+        await processSubscriptionPreapprovalNotification(supabase, normalizedNotification as WebhookNotification);
+      } else if (topicFromUrl === 'subscription_authorized_payment') {
+        await processSubscriptionAuthorizedPaymentNotification(supabase, normalizedNotification as WebhookNotification);
+      } else if (topicFromUrl === 'subscription_preapproval_plan') {
+        await processSubscriptionPlanNotification(supabase, normalizedNotification as WebhookNotification);
       } else {
         console.warn(`Unknown URL param topic: ${topicFromUrl}`);
       }
@@ -324,6 +330,12 @@ serve(async (req: Request) => {
       await processPaymentNotification(supabase, notification);
     } else if (notification.type === 'merchant_order') {
       await processMerchantOrderNotification(supabase, notification);
+    } else if (notification.type === 'subscription_preapproval') {
+      await processSubscriptionPreapprovalNotification(supabase, notification);
+    } else if (notification.type === 'subscription_authorized_payment') {
+      await processSubscriptionAuthorizedPaymentNotification(supabase, notification);
+    } else if (notification.type === 'subscription_preapproval_plan') {
+      await processSubscriptionPlanNotification(supabase, notification);
     } else {
       console.warn('Unknown notification type:', notification.type);
     }
@@ -749,6 +761,459 @@ async function processMerchantOrderNotification(supabase: any, notification: Web
   }
 }
 
+async function fetchMercadoPagoResource(supabase: any, path: string): Promise<any | null> {
+  const tokenCandidates = await getMercadoPagoTokenCandidates(supabase);
+
+  for (const token of tokenCandidates) {
+    const response = await fetch(`https://api.mercadopago.com${path}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+    });
+
+    if (response.ok) {
+      return await response.json();
+    }
+
+    const errorText = await response.text();
+    console.warn(`Mercado Pago resource fetch failed for ${path}:`, {
+      status: response.status,
+      body: errorText.slice(0, 300),
+    });
+  }
+
+  return null;
+}
+
+function mapPreapprovalStatusToLocalStatus(mpStatus: string): string {
+  switch (String(mpStatus || '').toLowerCase()) {
+    case 'authorized':
+    case 'active':
+      return 'active';
+    case 'paused':
+      return 'paused';
+    case 'cancelled':
+    case 'canceled':
+    case 'rejected':
+      return 'cancelled';
+    case 'pending':
+    default:
+      return 'pending';
+  }
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+function getPreapprovalPayerEmail(preapproval: any): string | null {
+  const email =
+    preapproval?.payer_email ||
+    preapproval?.payer?.email ||
+    preapproval?.subscriber?.email ||
+    null;
+
+  return email ? String(email).trim().toLowerCase() : null;
+}
+
+async function findPlanByMercadoPagoPlanId(supabase: any, mpPlanId: string): Promise<any | null> {
+  if (!mpPlanId) return null;
+
+  const { data: monthlyPlan } = await supabase
+    .from('subscription_plans')
+    .select('*')
+    .eq('mercadopago_monthly_plan_id', mpPlanId)
+    .maybeSingle();
+
+  if (monthlyPlan) {
+    return {
+      ...monthlyPlan,
+      detected_billing_cycle: 'monthly',
+    };
+  }
+
+  const { data: yearlyPlan } = await supabase
+    .from('subscription_plans')
+    .select('*')
+    .eq('mercadopago_yearly_plan_id', mpPlanId)
+    .maybeSingle();
+
+  if (yearlyPlan) {
+    return {
+      ...yearlyPlan,
+      detected_billing_cycle: 'yearly',
+    };
+  }
+
+  return null;
+}
+
+function getBillingCycleFromPreapproval(preapproval: any, localPlan?: any): string {
+  if (localPlan?.detected_billing_cycle) {
+    return localPlan.detected_billing_cycle;
+  }
+
+  const frequency = Number(preapproval?.auto_recurring?.frequency || 1);
+  const frequencyType = String(preapproval?.auto_recurring?.frequency_type || 'months').toLowerCase();
+
+  if (frequencyType === 'months' && frequency >= 12) {
+    return 'yearly';
+  }
+
+  return 'monthly';
+}
+
+async function findOrCreateLocalSubscriptionForPreapproval(supabase: any, preapproval: any): Promise<any | null> {
+  const preapprovalId = String(preapproval?.id || '');
+  const externalReference = String(preapproval?.external_reference || '');
+  const mpPlanId = String(preapproval?.preapproval_plan_id || '');
+
+  if (externalReference && isUuid(externalReference)) {
+    const { data: byExternalReference } = await supabase
+      .from('user_subscriptions')
+      .select('*')
+      .eq('id', externalReference)
+      .maybeSingle();
+
+    if (byExternalReference) {
+      return byExternalReference;
+    }
+  }
+
+  if (preapprovalId) {
+    const { data: byPreapprovalId } = await supabase
+      .from('user_subscriptions')
+      .select('*')
+      .eq('mercadopago_preapproval_id', preapprovalId)
+      .maybeSingle();
+
+    if (byPreapprovalId) {
+      return byPreapprovalId;
+    }
+  }
+
+  const payerEmail = getPreapprovalPayerEmail(preapproval);
+  if (!payerEmail || !mpPlanId) {
+    return null;
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, email')
+    .ilike('email', payerEmail)
+    .maybeSingle();
+
+  if (!profile) {
+    console.warn('Could not match Mercado Pago subscription payer to local profile:', payerEmail);
+    return null;
+  }
+
+  const localPlan = await findPlanByMercadoPagoPlanId(supabase, mpPlanId);
+  if (!localPlan) {
+    console.warn('Could not match Mercado Pago plan to local subscription plan:', mpPlanId);
+    return null;
+  }
+
+  const { data: pendingSubscription } = await supabase
+    .from('user_subscriptions')
+    .select('*')
+    .eq('user_id', profile.id)
+    .eq('mercadopago_preapproval_plan_id', mpPlanId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (pendingSubscription) {
+    return pendingSubscription;
+  }
+
+  const now = new Date().toISOString();
+  const { data: createdSubscription, error: createError } = await supabase
+    .from('user_subscriptions')
+    .insert({
+      user_id: profile.id,
+      plan_id: localPlan.id,
+      status: 'pending',
+      billing_cycle: getBillingCycleFromPreapproval(preapproval, localPlan),
+      mercadopago_preapproval_id: preapprovalId || null,
+      mercadopago_preapproval_plan_id: mpPlanId,
+      mercadopago_status: preapproval?.status || 'pending',
+      payment_url: preapproval?.init_point || null,
+      metadata: {
+        source: 'mercadopago_webhook',
+        payer_email: payerEmail,
+        created_from_webhook: true,
+      },
+      created_at: now,
+      updated_at: now,
+    })
+    .select('*')
+    .single();
+
+  if (createError) {
+    console.error('Error creating local subscription from Mercado Pago webhook:', createError);
+    return null;
+  }
+
+  return createdSubscription;
+}
+
+async function processSubscriptionPreapprovalNotification(supabase: any, notification: WebhookNotification) {
+  const preapprovalId = notification.data?.id;
+
+  if (!preapprovalId) {
+    console.warn('subscription_preapproval notification without data.id');
+    return;
+  }
+
+  console.log(`Processing subscription_preapproval notification: ${preapprovalId}`);
+
+  let preapproval = await fetchMercadoPagoResource(supabase, `/preapproval/${preapprovalId}`);
+
+  if (!preapproval) {
+    const search = await fetchMercadoPagoResource(
+      supabase,
+      `/preapproval/search?id=${encodeURIComponent(preapprovalId)}`
+    );
+    preapproval = search?.results?.[0] || null;
+  }
+
+  if (!preapproval) {
+    console.error(`Could not fetch Mercado Pago preapproval ${preapprovalId}`);
+    return;
+  }
+
+  const localSubscription = await findOrCreateLocalSubscriptionForPreapproval(supabase, preapproval);
+  if (!localSubscription) {
+    console.warn('No local subscription matched for preapproval:', {
+      id: preapproval.id,
+      external_reference: preapproval.external_reference,
+      preapproval_plan_id: preapproval.preapproval_plan_id,
+      payer_email: getPreapprovalPayerEmail(preapproval),
+    });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const localStatus = mapPreapprovalStatusToLocalStatus(preapproval.status);
+  const metadata = {
+    ...(localSubscription.metadata || {}),
+    mp_preapproval: preapproval,
+    last_webhook: {
+      type: notification.type,
+      action: notification.action,
+      received_at: now,
+    },
+  };
+
+  const updatePayload: any = {
+    status: localStatus,
+    crm_subscription_id: preapproval.id,
+    mercadopago_preapproval_id: preapproval.id,
+    mercadopago_preapproval_plan_id: preapproval.preapproval_plan_id || localSubscription.mercadopago_preapproval_plan_id,
+    mercadopago_status: preapproval.status,
+    payment_url: preapproval.init_point || localSubscription.payment_url,
+    billing_cycle: localSubscription.billing_cycle || getBillingCycleFromPreapproval(preapproval),
+    metadata,
+    last_synced_at: now,
+    updated_at: now,
+  };
+
+  if (localStatus === 'active' && !localSubscription.started_at) {
+    updatePayload.started_at = preapproval.date_created || now;
+  }
+
+  if (preapproval.next_payment_date) {
+    updatePayload.expires_at = preapproval.next_payment_date;
+  }
+
+  const { error: updateError } = await supabase
+    .from('user_subscriptions')
+    .update(updatePayload)
+    .eq('id', localSubscription.id);
+
+  if (updateError) {
+    console.error('Error updating local subscription from preapproval:', updateError);
+    return;
+  }
+
+  console.log('Local subscription synced from Mercado Pago preapproval:', {
+    local_subscription_id: localSubscription.id,
+    preapproval_id: preapproval.id,
+    mp_status: preapproval.status,
+    local_status: localStatus,
+  });
+}
+
+async function processSubscriptionAuthorizedPaymentNotification(supabase: any, notification: WebhookNotification) {
+  const authorizedPaymentId = notification.data?.id;
+
+  if (!authorizedPaymentId) {
+    console.warn('subscription_authorized_payment notification without data.id');
+    return;
+  }
+
+  console.log(`Processing subscription_authorized_payment notification: ${authorizedPaymentId}`);
+
+  const authorizedPayment = await fetchMercadoPagoResource(
+    supabase,
+    `/authorized_payments/${authorizedPaymentId}`
+  );
+
+  if (!authorizedPayment) {
+    console.error(`Could not fetch Mercado Pago authorized payment ${authorizedPaymentId}`);
+    return;
+  }
+
+  const preapprovalId =
+    authorizedPayment.preapproval_id ||
+    authorizedPayment.subscription_id ||
+    authorizedPayment.preapproval?.id ||
+    authorizedPayment.external_reference;
+
+  if (preapprovalId) {
+    await processSubscriptionPreapprovalNotification(supabase, {
+      ...notification,
+      type: 'subscription_preapproval',
+      action: 'subscription.updated',
+      data: {
+        id: String(preapprovalId),
+      },
+    } as WebhookNotification);
+  }
+
+  const { data: localSubscription } = preapprovalId
+    ? await supabase
+      .from('user_subscriptions')
+      .select('*')
+      .eq('mercadopago_preapproval_id', String(preapprovalId))
+      .maybeSingle()
+    : { data: null };
+
+  if (!localSubscription) {
+    console.warn('Authorized payment did not match a local subscription:', {
+      authorized_payment_id: authorizedPaymentId,
+      preapproval_id: preapprovalId,
+    });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const metadata = {
+    ...(localSubscription.metadata || {}),
+    last_authorized_payment: authorizedPayment,
+    last_webhook: {
+      type: notification.type,
+      action: notification.action,
+      received_at: now,
+    },
+  };
+
+  const { error: updateError } = await supabase
+    .from('user_subscriptions')
+    .update({
+      status: 'active',
+      metadata,
+      last_synced_at: now,
+      updated_at: now,
+    })
+    .eq('id', localSubscription.id);
+
+  if (updateError) {
+    console.error('Error updating subscription from authorized payment:', updateError);
+  }
+}
+
+async function processSubscriptionPlanNotification(supabase: any, notification: WebhookNotification) {
+  const mpPlanId = notification.data?.id;
+
+  if (!mpPlanId) {
+    console.warn('subscription_preapproval_plan notification without data.id');
+    return;
+  }
+
+  console.log(`Processing subscription_preapproval_plan notification: ${mpPlanId}`);
+
+  const mpPlan = await fetchMercadoPagoResource(supabase, `/preapproval_plan/${mpPlanId}`);
+  if (!mpPlan) {
+    console.error(`Could not fetch Mercado Pago preapproval plan ${mpPlanId}`);
+    return;
+  }
+
+  let localPlan = await findPlanByMercadoPagoPlanId(supabase, mpPlanId);
+
+  if (!localPlan && mpPlan.external_reference) {
+    const [localPlanId, cycle] = String(mpPlan.external_reference).split(':');
+    if (isUuid(localPlanId)) {
+      const { data: planByReference } = await supabase
+        .from('subscription_plans')
+        .select('*')
+        .eq('id', localPlanId)
+        .maybeSingle();
+
+      if (planByReference) {
+        localPlan = {
+          ...planByReference,
+          detected_billing_cycle: cycle === 'yearly' ? 'yearly' : 'monthly',
+        };
+      }
+    }
+  }
+
+  if (!localPlan) {
+    console.warn('No local subscription plan matched Mercado Pago plan:', mpPlanId);
+    return;
+  }
+
+  const cycle = localPlan.detected_billing_cycle === 'yearly' ? 'yearly' : 'monthly';
+  const priceField = cycle === 'yearly' ? 'price_yearly' : 'price_monthly';
+  const idField = cycle === 'yearly' ? 'mercadopago_yearly_plan_id' : 'mercadopago_monthly_plan_id';
+  const initPointField = cycle === 'yearly' ? 'mercadopago_yearly_init_point' : 'mercadopago_monthly_init_point';
+  const statusField = cycle === 'yearly' ? 'mercadopago_yearly_status' : 'mercadopago_monthly_status';
+  const now = new Date().toISOString();
+  const amount = Number(mpPlan?.auto_recurring?.transaction_amount);
+
+  const updates: any = {
+    [idField]: mpPlan.id,
+    [initPointField]: mpPlan.init_point || null,
+    [statusField]: mpPlan.status || null,
+    mercadopago_last_sync_at: now,
+    mercadopago_sync_error: null,
+    mercadopago_metadata: {
+      ...(localPlan.mercadopago_metadata || {}),
+      [cycle]: {
+        id: mpPlan.id,
+        status: mpPlan.status,
+        reason: mpPlan.reason,
+        init_point: mpPlan.init_point,
+        auto_recurring: mpPlan.auto_recurring,
+        last_modified: mpPlan.last_modified,
+      },
+      last_plan_webhook_at: now,
+    },
+    updated_at: now,
+  };
+
+  if (Number.isFinite(amount) && amount > 0) {
+    updates[priceField] = amount;
+  }
+
+  if (mpPlan?.auto_recurring?.currency_id) {
+    updates.currency = String(mpPlan.auto_recurring.currency_id).toUpperCase();
+  }
+
+  const { error: updateError } = await supabase
+    .from('subscription_plans')
+    .update(updates)
+    .eq('id', localPlan.id);
+
+  if (updateError) {
+    console.error('Error updating local subscription plan from Mercado Pago:', updateError);
+  }
+}
+
 function mapPaymentStatusToOrderStatus(mpStatus: string): string {
   switch (mpStatus) {
     case 'approved':
@@ -768,100 +1233,14 @@ function mapPaymentStatusToOrderStatus(mpStatus: string): string {
 }
 
 async function updateProductStock(supabase: any, orderId: string) {
-  try {
-    console.log(`Updating product stock for order ${orderId}`);
-
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .select('items')
-      .eq('id', orderId)
-      .single();
-
-    if (orderError || !order) {
-      console.error('Error fetching order:', orderError);
-      return;
-    }
-
-    const items = order.items;
-    if (!items || items.length === 0) {
-      console.log('No items found in order');
-      return;
-    }
-
-    console.log(`Processing ${items.length} items for stock update`);
-
-    for (const item of items) {
-      const productId = item.id;
-      const quantity = item.quantity || 1;
-
-      console.log(`Reducing stock for product ${productId} by ${quantity}`);
-
-      const { data: product, error: productError } = await supabase
-        .from('partner_products')
-        .select('stock, name')
-        .eq('id', productId)
-        .single();
-
-      if (productError) {
-        console.error(`Error fetching product ${productId}:`, productError);
-        continue;
-      }
-
-      const currentStock = product.stock || 0;
-      const newStock = Math.max(0, currentStock - quantity);
-
-      console.log(`Product "${product.name}": ${currentStock} -> ${newStock}`);
-
-      const { error: updateError } = await supabase
-        .from('partner_products')
-        .update({
-          stock: newStock,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', productId);
-
-      if (updateError) {
-        console.error(`Error updating stock for product ${productId}:`, updateError);
-      } else {
-        console.log(`Stock updated successfully for product ${productId}`);
-      }
-
-      if (newStock <= 5 && newStock > 0) {
-        console.warn(`⚠️ Low stock warning for product ${productId}: ${newStock} units remaining`);
-      } else if (newStock === 0) {
-        console.warn(`⚠️ Product ${productId} is now out of stock`);
-      }
-    }
-
-    console.log(`✅ Stock update completed for order ${orderId}`);
-  } catch (error) {
-    console.error('Error updating product stock:', error);
-  }
+  void supabase;
+  console.log(`Skipping direct stock update for order ${orderId}; stock is already managed by DB order triggers`);
 }
 
 async function updateBookingStatus(supabase: any, bookingId: string, status: string, paymentId: string) {
-  try {
-    console.log(`Updating booking ${bookingId} to status: ${status}`);
-
-    const { error } = await supabase
-      .from('bookings')
-      .update({
-        status: status,
-        payment_status: 'paid',
-        payment_transaction_id: paymentId,
-        payment_confirmed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', bookingId);
-
-    if (error) {
-      console.error('Error updating booking status:', error);
-      throw error;
-    }
-
-    console.log(`✅ Booking ${bookingId} updated to status: ${status}`);
-  } catch (error) {
-    console.error('Error updating booking status:', error);
-    throw error;
-  }
+  void supabase;
+  void status;
+  void paymentId;
+  console.log(`Skipping direct booking update for ${bookingId}; booking sync is already handled by DB trigger`);
 }
+

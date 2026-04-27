@@ -1,237 +1,324 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, RefreshControl } from 'react-native';
 import { TrendingUp, Users, DollarSign, Package, Calendar, Eye, Clock } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
-import { envConfig } from '../../utils/envConfig';
+
+const SYSTEM_CONFIG_KEY = 'system_config';
+
+type AnalyticsState = {
+  totalUsers: number;
+  totalPartners: number;
+  totalPosts: number;
+  totalBookings: number;
+  totalOrders: number;
+  pendingOrders: number;
+  confirmedOrders: number;
+  processingOrders: number;
+  shippedOrders: number;
+  deliveredOrders: number;
+  cancelledOrders: number;
+  totalRevenue: number;
+  totalCommissions: number;
+  totalPartnerPayments: number;
+  averageCommissionRate: number;
+  monthlyGrowth: number;
+  activePromotions: number;
+  totalViews: number;
+  currentMonthUsers: number;
+  previousMonthUsers: number;
+  currentMonthPartners: number;
+  previousMonthPartners: number;
+  currentMonthPosts: number;
+  previousMonthPosts: number;
+  conversionRate: number;
+  orderSuccessRate: number;
+  bookingPerPartnerRate: number;
+  paymentFailedOrders: number;
+  stalePendingOrders: number;
+  webhookFailureCount: number;
+  webhookDeliveryRate: number;
+  pendingPromotionApprovals: number;
+  rejectedPromotions: number;
+};
+
+const INITIAL_ANALYTICS: AnalyticsState = {
+  totalUsers: 0,
+  totalPartners: 0,
+  totalPosts: 0,
+  totalBookings: 0,
+  totalOrders: 0,
+  pendingOrders: 0,
+  confirmedOrders: 0,
+  processingOrders: 0,
+  shippedOrders: 0,
+  deliveredOrders: 0,
+  cancelledOrders: 0,
+  totalRevenue: 0,
+  totalCommissions: 0,
+  totalPartnerPayments: 0,
+  averageCommissionRate: 0,
+  monthlyGrowth: 0,
+  activePromotions: 0,
+  totalViews: 0,
+  currentMonthUsers: 0,
+  previousMonthUsers: 0,
+  currentMonthPartners: 0,
+  previousMonthPartners: 0,
+  currentMonthPosts: 0,
+  previousMonthPosts: 0,
+  conversionRate: 0,
+  orderSuccessRate: 0,
+  bookingPerPartnerRate: 0,
+  paymentFailedOrders: 0,
+  stalePendingOrders: 0,
+  webhookFailureCount: 0,
+  webhookDeliveryRate: 0,
+  pendingPromotionApprovals: 0,
+  rejectedPromotions: 0,
+};
+
+const safePercent = (numerator: number, denominator: number) => {
+  if (!denominator) return 0;
+  return (numerator / denominator) * 100;
+};
+
+const calculateGrowth = (current: number, previous: number) => {
+  if (previous <= 0) {
+    return current > 0 ? 100 : 0;
+  }
+
+  return ((current - previous) / previous) * 100;
+};
+
+const getMonthBoundaries = () => {
+  const now = new Date();
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+  return {
+    currentMonthStart: currentMonthStart.toISOString(),
+    nextMonthStart: nextMonthStart.toISOString(),
+    previousMonthStart: previousMonthStart.toISOString(),
+  };
+};
 
 export default function AdminAnalytics() {
   const { currentUser } = useAuth();
-  const [analytics, setAnalytics] = useState({
-    totalUsers: 0,
-    totalPartners: 0,
-    totalPosts: 0,
-    totalBookings: 0,
-    totalOrders: 0,
-    pendingOrders: 0,
-    confirmedOrders: 0,
-    shippedOrders: 0,
-    deliveredOrders: 0,
-    cancelledOrders: 0,
-    totalRevenue: 0,
-    totalCommissions: 0,
-    averageCommissionRate: 5.2,
-    monthlyGrowth: 0,
-    activePromotions: 0,
-    totalViews: 0,
-  });
+  const [analytics, setAnalytics] = useState<AnalyticsState>(INITIAL_ANALYTICS);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [advancedAnalyticsEnabled, setAdvancedAnalyticsEnabled] = useState(true);
+
+  const isAdmin = currentUser?.isAdmin || currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
 
   useEffect(() => {
-    if (!currentUser) {
-      console.log('No user logged in');
+    if (!currentUser || !isAdmin) {
+      setLoading(false);
       return;
     }
 
-    console.log('Current user email:', currentUser.email);
-    const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
-    if (!isAdmin) {
-      console.log('User is not admin');
-      return;
-    }
-
-    console.log('Fetching analytics data...');
     fetchAnalytics();
-  }, [currentUser]);
+  }, [currentUser?.id, isAdmin]);
 
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = async (isRefresh = false) => {
+    if (!isAdmin) return;
+
     try {
-      console.log('Starting to fetch analytics data...');
-      
-      // Fetch users count
-      const { count: totalUsers } = await supabaseClient
-        .from('profiles')
-        .select('*', { count: 'exact', head: true });
-
-      console.log('Total users count:', totalUsers);
-
-      // Fetch partners count
-      const { count: totalPartners } = await supabaseClient
-        .from('partners')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_verified', true);
-
-      console.log('Total partners count:', totalPartners);
-
-      // Fetch posts count
-      const { count: totalPosts } = await supabaseClient
-        .from('posts')
-        .select('*', { count: 'exact', head: true });
-
-      console.log('Total posts count:', totalPosts);
-
-      // Fetch bookings and calculate revenue
-      const { data: bookings, count: totalBookings } = await supabaseClient
-        .from('bookings')
-        .select('total_amount', { count: 'exact' });
-
-      console.log('Total bookings count:', totalBookings);
-
-      const totalRevenue = bookings?.reduce((sum, booking) => sum + (Number(booking.total_amount) || 0), 0) || 0;
-
-      console.log('Total revenue calculated:', totalRevenue);
-
-      // Fetch orders data
-      console.log('Fetching orders data...');
-      
-      // Try different approaches to fetch orders data
-      let ordersData = null;
-      let totalOrders = 0;
-      let ordersError = null;
-      
-      // First try: Simple select all
-      try {
-        const result = await supabaseClient
-          .from('orders')
-          .select('*');
-        
-        console.log('Simple orders query result:', result);
-        
-        if (result.error) {
-          console.error('Simple orders query error:', result.error);
-          ordersError = result.error;
-        } else {
-          ordersData = result.data;
-          totalOrders = result.data?.length || 0;
-          console.log('Simple query successful, found orders:', totalOrders);
-        }
-      } catch (simpleError) {
-        console.error('Simple orders query exception:', simpleError);
-        ordersError = simpleError;
-      }
-      
-      // If simple query failed, try with count
-      if (!ordersData || ordersData.length === 0) {
-        console.log('Trying orders query with count...');
-        try {
-          const countResult = await supabaseClient
-            .from('orders')
-            .select('id, status, total_amount, commission_amount, partner_amount, created_at', { count: 'exact' });
-          
-          console.log('Count query result:', countResult);
-          
-          if (countResult.error) {
-            console.error('Count orders query error:', countResult.error);
-            ordersError = countResult.error;
-          } else {
-            ordersData = countResult.data;
-            totalOrders = countResult.count || countResult.data?.length || 0;
-            console.log('Count query successful, found orders:', totalOrders);
-          }
-        } catch (countError) {
-          console.error('Count orders query exception:', countError);
-          ordersError = countError;
-        }
-      }
-      
-      // If still no data, try without RLS (admin override)
-      if (!ordersData || ordersData.length === 0) {
-        console.log('Trying admin override query...');
-        try {
-          // Use a more direct approach for admin
-          const adminResult = await fetch(`${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/rest/v1/orders?select=*`, {
-            headers: {
-              'apikey': envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY') || '',
-              'Authorization': `Bearer ${envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY') || ''}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          if (adminResult.ok) {
-            const adminData = await adminResult.json();
-            console.log('Admin override query result:', adminData);
-            ordersData = adminData;
-            totalOrders = adminData?.length || 0;
-            console.log('Admin query successful, found orders:', totalOrders);
-          } else {
-            console.error('Admin override query failed:', adminResult.status, adminResult.statusText);
-          }
-        } catch (adminError) {
-          console.error('Admin override query exception:', adminError);
-        }
-      }
-      
-      if (ordersError) {
-        console.error('Error fetching orders:', ordersError);
+      if (isRefresh) {
+        setRefreshing(true);
       } else {
-        console.log('Orders data fetched successfully:', ordersData?.length || 0, 'orders');
-        console.log('Sample order data:', ordersData?.[0]);
+        setLoading(true);
       }
-      
-      console.log('Total orders count:', totalOrders);
+      setError(null);
 
-      // Calculate orders by status
-      const pendingOrders = ordersData?.filter(order => order.status === 'pending').length || 0;
-      const confirmedOrders = ordersData?.filter(order => order.status === 'confirmed').length || 0;
-      const processingOrders = ordersData?.filter(order => order.status === 'processing').length || 0;
-      const shippedOrders = ordersData?.filter(order => order.status === 'shipped').length || 0;
-      const deliveredOrders = ordersData?.filter(order => order.status === 'delivered').length || 0;
-      const cancelledOrders = ordersData?.filter(order => order.status === 'cancelled').length || 0;
-      
-      console.log('Orders by status:', {
-        pending: pendingOrders,
-        confirmed: confirmedOrders,
-        processing: processingOrders,
-        shipped: shippedOrders,
-        delivered: deliveredOrders,
-        cancelled: cancelledOrders
-      });
+      const { currentMonthStart, nextMonthStart, previousMonthStart } = getMonthBoundaries();
+      const nowIso = new Date().toISOString();
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
 
-      // Calculate total revenue from orders and commissions
-      const ordersRevenue = ordersData?.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0) || 0;
-      const totalCommissions = ordersData?.reduce((sum, order) => sum + (Number(order.commission_amount) || 0), 0) || 0;
-      const totalPartnerPayments = ordersData?.reduce((sum, order) => sum + (Number(order.partner_amount) || 0), 0) || 0;
+      const [
+        systemConfigResult,
+        totalUsersResult,
+        currentMonthUsersResult,
+        previousMonthUsersResult,
+        totalPartnersResult,
+        currentMonthPartnersResult,
+        previousMonthPartnersResult,
+        totalPostsResult,
+        currentMonthPostsResult,
+        previousMonthPostsResult,
+        bookingsResult,
+        ordersResult,
+        promotionsResult,
+        webhookLogsResult,
+        crmWebhookLogsResult,
+        accountingWebhookLogsResult,
+      ] = await Promise.all([
+        supabaseClient.from('admin_settings').select('value').eq('key', SYSTEM_CONFIG_KEY).maybeSingle(),
+        supabaseClient.from('profiles').select('*', { count: 'exact', head: true }),
+        supabaseClient.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', currentMonthStart).lt('created_at', nextMonthStart),
+        supabaseClient.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', previousMonthStart).lt('created_at', currentMonthStart),
+        supabaseClient.from('partners').select('*', { count: 'exact', head: true }).eq('is_verified', true).eq('is_active', true),
+        supabaseClient.from('partners').select('*', { count: 'exact', head: true }).eq('is_verified', true).eq('is_active', true).gte('created_at', currentMonthStart).lt('created_at', nextMonthStart),
+        supabaseClient.from('partners').select('*', { count: 'exact', head: true }).eq('is_verified', true).eq('is_active', true).gte('created_at', previousMonthStart).lt('created_at', currentMonthStart),
+        supabaseClient.from('posts').select('*', { count: 'exact', head: true }),
+        supabaseClient.from('posts').select('*', { count: 'exact', head: true }).gte('created_at', currentMonthStart).lt('created_at', nextMonthStart),
+        supabaseClient.from('posts').select('*', { count: 'exact', head: true }).gte('created_at', previousMonthStart).lt('created_at', currentMonthStart),
+        supabaseClient.from('bookings').select('id, total_amount'),
+        supabaseClient.from('orders').select('id, status, total_amount, commission_amount, partner_amount, created_at'),
+        supabaseClient.from('promotions').select('id, views, is_active, start_date, end_date, approval_status'),
+        supabaseClient.from('webhook_logs').select('id, success').gte('created_at', sevenDaysAgo),
+        supabaseClient.from('crm_webhook_logs').select('id, success').gte('created_at', sevenDaysAgo),
+        supabaseClient.from('accounting_webhook_logs').select('id, success').gte('created_at', sevenDaysAgo),
+      ]);
 
-      console.log('Orders revenue calculated:', ordersRevenue);
-      console.log('Total commissions calculated:', totalCommissions);
-      console.log('Total partner payments calculated:', totalPartnerPayments);
-      
-      // Calculate combined revenue (bookings + orders)
-      const combinedRevenue = totalRevenue + ordersRevenue;
-      console.log('Combined revenue (bookings + orders):', combinedRevenue);
+      const failedQuery = [
+        totalUsersResult,
+        currentMonthUsersResult,
+        previousMonthUsersResult,
+        totalPartnersResult,
+        currentMonthPartnersResult,
+        previousMonthPartnersResult,
+        totalPostsResult,
+        currentMonthPostsResult,
+        previousMonthPostsResult,
+        bookingsResult,
+        ordersResult,
+        promotionsResult,
+        webhookLogsResult,
+        crmWebhookLogsResult,
+        accountingWebhookLogsResult,
+      ].find((result) => result.error);
 
-      setAnalytics(prev => ({
-        ...prev,
-        totalUsers: totalUsers || 0,
-        totalPartners: totalPartners || 0,
-        totalPosts: totalPosts || 0,
-        totalBookings: totalBookings || 0,
-        totalOrders: totalOrders || 0,
+      if (failedQuery?.error) {
+        throw failedQuery.error;
+      }
+
+      const totalUsers = totalUsersResult.count || 0;
+      setAdvancedAnalyticsEnabled(systemConfigResult.data?.value?.advanced_analytics_enabled ?? true);
+      const currentMonthUsers = currentMonthUsersResult.count || 0;
+      const previousMonthUsers = previousMonthUsersResult.count || 0;
+
+      const totalPartners = totalPartnersResult.count || 0;
+      const currentMonthPartners = currentMonthPartnersResult.count || 0;
+      const previousMonthPartners = previousMonthPartnersResult.count || 0;
+
+      const totalPosts = totalPostsResult.count || 0;
+      const currentMonthPosts = currentMonthPostsResult.count || 0;
+      const previousMonthPosts = previousMonthPostsResult.count || 0;
+
+      const bookings = bookingsResult.data || [];
+      const orders = ordersResult.data || [];
+      const promotions = promotionsResult.data || [];
+
+      const totalBookings = bookings.length;
+      const totalOrders = orders.length;
+
+      const pendingOrders = orders.filter((order) => order.status === 'pending').length;
+      const paymentFailedOrders = orders.filter((order) => order.status === 'payment_failed').length;
+      const confirmedOrders = orders.filter((order) => order.status === 'confirmed').length;
+      const processingOrders = orders.filter((order) => order.status === 'processing').length;
+      const shippedOrders = orders.filter((order) => order.status === 'shipped').length;
+      const deliveredOrders = orders.filter((order) => order.status === 'delivered').length;
+      const cancelledOrders = orders.filter((order) => order.status === 'cancelled').length;
+      const stalePendingOrders = orders.filter((order) => {
+        if (!order.created_at) return false;
+        const createdAt = new Date(order.created_at).getTime();
+        return createdAt < twoHoursAgo && (order.status === 'pending' || order.status === 'processing' || order.status === 'reserved');
+      }).length;
+
+      const bookingsRevenue = bookings.reduce((sum, booking) => sum + (Number(booking.total_amount) || 0), 0);
+      const ordersRevenue = orders.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0);
+      const totalRevenue = bookingsRevenue + ordersRevenue;
+      const totalCommissions = orders.reduce((sum, order) => sum + (Number(order.commission_amount) || 0), 0);
+      const totalPartnerPayments = orders.reduce((sum, order) => sum + (Number(order.partner_amount) || 0), 0);
+      const averageCommissionRate = safePercent(totalCommissions, ordersRevenue);
+
+      const activePromotions = promotions.filter((promotion) => {
+        const approved = !promotion.approval_status || promotion.approval_status === 'approved';
+        const started = new Date(promotion.start_date).toISOString() <= nowIso;
+        const notExpired = new Date(promotion.end_date).toISOString() >= nowIso;
+        return promotion.is_active && approved && started && notExpired;
+      }).length;
+      const pendingPromotionApprovals = promotions.filter((promotion) => promotion.approval_status === 'pending').length;
+      const rejectedPromotions = promotions.filter((promotion) => promotion.approval_status === 'rejected').length;
+      const totalViews = promotions.reduce((sum, promotion) => sum + (Number(promotion.views) || 0), 0);
+
+      const recentWebhookLogs = [
+        ...(webhookLogsResult.data || []),
+        ...(crmWebhookLogsResult.data || []),
+        ...(accountingWebhookLogsResult.data || []),
+      ];
+      const webhookFailureCount = recentWebhookLogs.filter((log) => log.success === false).length;
+      const webhookDeliveryRate = safePercent(
+        recentWebhookLogs.filter((log) => log.success === true).length,
+        recentWebhookLogs.length
+      );
+
+      const monthlyGrowth = calculateGrowth(currentMonthUsers, previousMonthUsers);
+      const conversionRate = safePercent(totalOrders + totalBookings, totalUsers);
+      const orderSuccessRate = safePercent(confirmedOrders + processingOrders + shippedOrders + deliveredOrders, totalOrders);
+      const bookingPerPartnerRate = totalPartners > 0 ? totalBookings / totalPartners : 0;
+
+      setAnalytics({
+        totalUsers,
+        totalPartners,
+        totalPosts,
+        totalBookings,
+        totalOrders,
         pendingOrders,
         confirmedOrders,
         processingOrders,
         shippedOrders,
         deliveredOrders,
         cancelledOrders,
-        totalRevenue: combinedRevenue,
+        totalRevenue,
         totalCommissions,
-        totalPartnerPayments
-      }));
-      
-      console.log('Analytics state updated successfully');
-    } catch (error) {
-      console.error('Error fetching analytics:', error);
+        totalPartnerPayments,
+        averageCommissionRate,
+        monthlyGrowth,
+        activePromotions,
+        totalViews,
+        currentMonthUsers,
+        previousMonthUsers,
+        currentMonthPartners,
+        previousMonthPartners,
+        currentMonthPosts,
+        previousMonthPosts,
+        conversionRate,
+        orderSuccessRate,
+        bookingPerPartnerRate,
+        paymentFailedOrders,
+        stalePendingOrders,
+        webhookFailureCount,
+        webhookDeliveryRate,
+        pendingPromotionApprovals,
+        rejectedPromotions,
+      });
+    } catch (fetchError: any) {
+      console.error('Error fetching admin analytics:', fetchError);
+      setError(fetchError?.message || 'No se pudieron cargar las analiticas');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-UY', {
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('es-UY', {
       style: 'currency',
       currency: 'UYU',
     }).format(amount);
+
+  const formatGrowth = (value: number) => {
+    const prefix = value > 0 ? '+' : '';
+    return `${prefix}${value.toFixed(1)}%`;
   };
 
-  const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
   if (!isAdmin) {
     return (
       <SafeAreaView style={styles.container}>
@@ -248,249 +335,315 @@ export default function AdminAnalytics() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>📊 Analíticas de la Plataforma</Text>
-        <Text style={styles.subtitle}>Métricas y estadísticas generales</Text>
+        <Text style={styles.title}>Analiticas de la Plataforma</Text>
+        <Text style={styles.subtitle}>Metricas reales de usuarios, operaciones y promociones</Text>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Main Metrics */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📈 Métricas Principales</Text>
-          <View style={styles.metricsGrid}>
-            <Card style={styles.metricCard}>
-              <View style={styles.metricHeader}>
-                <Users size={24} color="#3B82F6" />
-                <Text style={styles.metricValue}>{analytics.totalUsers.toLocaleString()}</Text>
-              </View>
-              <Text style={styles.metricLabel}>Total Usuarios</Text>
-            </Card>
-
-            <Card style={styles.metricCard}>
-              <View style={styles.metricHeader}>
-                <Package size={24} color="#10B981" />
-                <Text style={styles.metricValue}>{analytics.totalPartners.toLocaleString()}</Text>
-              </View>
-              <Text style={styles.metricLabel}>Aliados Activos</Text>
-            </Card>
-
-            <Card style={styles.metricCard}>
-              <View style={styles.metricHeader}>
-                <TrendingUp size={24} color="#F59E0B" />
-                <Text style={styles.metricValue}>{analytics.totalPosts.toLocaleString()}</Text>
-              </View>
-              <Text style={styles.metricLabel}>Publicaciones</Text>
-            </Card>
-
-            <Card style={styles.metricCard}>
-              <View style={styles.metricHeader}>
-                <Calendar size={24} color="#8B5CF6" />
-                <Text style={styles.metricValue}>{analytics.totalBookings.toLocaleString()}</Text>
-              </View>
-              <Text style={styles.metricLabel}>Reservas Totales</Text>
-            </Card>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => fetchAnalytics(true)} tintColor="#2D6A6F" />
+        }
+      >
+        {loading ? (
+          <View style={styles.stateBox}>
+            <Text style={styles.stateText}>Cargando analiticas...</Text>
           </View>
-        </View>
-
-        {/* Orders Analytics */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📦 Analíticas de Pedidos</Text>
-          <View style={styles.metricsGrid}>
-            <Card style={styles.metricCard}>
-              <View style={styles.metricHeader}>
-                <Package size={24} color="#3B82F6" />
-                <Text style={styles.metricValue}>{analytics.totalOrders.toLocaleString()}</Text>
-              </View>
-              <Text style={styles.metricLabel}>Total Pedidos</Text>
-            </Card>
-
-            <Card style={styles.metricCard}>
-              <View style={styles.metricHeader}>
-                <Clock size={24} color="#F59E0B" />
-                <Text style={styles.metricValue}>{analytics.pendingOrders.toLocaleString()}</Text>
-              </View>
-              <Text style={styles.metricLabel}>Pendientes</Text>
-            </Card>
-
-            <Card style={styles.metricCard}>
-              <View style={styles.metricHeader}>
-                <TrendingUp size={24} color="#10B981" />
-                <Text style={styles.metricValue}>{analytics.confirmedOrders.toLocaleString()}</Text>
-              </View>
-              <Text style={styles.metricLabel}>Confirmados</Text>
-            </Card>
-
-            <Card style={styles.metricCard}>
-              <View style={styles.metricHeader}>
-                <Package size={24} color="#8B5CF6" />
-                <Text style={styles.metricValue}>{analytics.deliveredOrders.toLocaleString()}</Text>
-              </View>
-              <Text style={styles.metricLabel}>Entregados</Text>
-            </Card>
+        ) : error ? (
+          <View style={styles.stateBox}>
+            <Text style={styles.errorTitle}>No se pudo cargar analytics</Text>
+            <Text style={styles.stateText}>{error}</Text>
           </View>
+        ) : (
+          <>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Metricas Principales</Text>
+              <View style={styles.metricsGrid}>
+                <Card style={styles.metricCard}>
+                  <View style={styles.metricHeader}>
+                    <Users size={24} color="#3B82F6" />
+                    <Text style={styles.metricValue}>{analytics.totalUsers.toLocaleString()}</Text>
+                  </View>
+                  <Text style={styles.metricLabel}>Total Usuarios</Text>
+                </Card>
 
-          {/* Orders Status Breakdown */}
-          <Card style={styles.ordersBreakdownCard}>
-            <Text style={styles.ordersBreakdownTitle}>Estado de Pedidos</Text>
-            <View style={styles.ordersBreakdown}>
-              <View style={styles.orderStatusItem}>
-                <View style={[styles.statusIndicator, { backgroundColor: '#F59E0B' }]} />
-                <Text style={styles.orderStatusLabel}>Pendientes</Text>
-                <Text style={styles.orderStatusValue}>{analytics.pendingOrders}</Text>
-              </View>
-              
-              <View style={styles.orderStatusItem}>
-                <View style={[styles.statusIndicator, { backgroundColor: '#3B82F6' }]} />
-                <Text style={styles.orderStatusLabel}>Confirmados</Text>
-                <Text style={styles.orderStatusValue}>{analytics.confirmedOrders}</Text>
-              </View>
-              
-              <View style={styles.orderStatusItem}>
-                <View style={[styles.statusIndicator, { backgroundColor: '#10B981' }]} />
-                <Text style={styles.orderStatusLabel}>Enviados</Text>
-                <Text style={styles.orderStatusValue}>{analytics.shippedOrders}</Text>
-              </View>
-              
-              <View style={styles.orderStatusItem}>
-                <View style={[styles.statusIndicator, { backgroundColor: '#059669' }]} />
-                <Text style={styles.orderStatusLabel}>Entregados</Text>
-                <Text style={styles.orderStatusValue}>{analytics.deliveredOrders}</Text>
-              </View>
-              
-              <View style={styles.orderStatusItem}>
-                <View style={[styles.statusIndicator, { backgroundColor: '#EF4444' }]} />
-                <Text style={styles.orderStatusLabel}>Cancelados</Text>
-                <Text style={styles.orderStatusValue}>{analytics.cancelledOrders}</Text>
+                <Card style={styles.metricCard}>
+                  <View style={styles.metricHeader}>
+                    <Package size={24} color="#10B981" />
+                    <Text style={styles.metricValue}>{analytics.totalPartners.toLocaleString()}</Text>
+                  </View>
+                  <Text style={styles.metricLabel}>Aliados Activos</Text>
+                </Card>
+
+                <Card style={styles.metricCard}>
+                  <View style={styles.metricHeader}>
+                    <TrendingUp size={24} color="#F59E0B" />
+                    <Text style={styles.metricValue}>{analytics.totalPosts.toLocaleString()}</Text>
+                  </View>
+                  <Text style={styles.metricLabel}>Publicaciones</Text>
+                </Card>
+
+                <Card style={styles.metricCard}>
+                  <View style={styles.metricHeader}>
+                    <Calendar size={24} color="#8B5CF6" />
+                    <Text style={styles.metricValue}>{analytics.totalBookings.toLocaleString()}</Text>
+                  </View>
+                  <Text style={styles.metricLabel}>Reservas Totales</Text>
+                </Card>
               </View>
             </View>
-          </Card>
-        </View>
-        {/* Revenue Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>💰 Ingresos y Comisiones</Text>
-          <Card style={styles.revenueCard}>
-            <View style={styles.revenueHeader}>
-              <DollarSign size={32} color="#10B981" />
-              <View style={styles.revenueInfo}>
-                <Text style={styles.revenueAmount}>
-                  {formatCurrency(analytics.totalRevenue)}
-                </Text>
-                <Text style={styles.revenueLabel}>Ingresos Totales Generados</Text>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Analiticas de Pedidos</Text>
+              <View style={styles.metricsGrid}>
+                <Card style={styles.metricCard}>
+                  <View style={styles.metricHeader}>
+                    <Package size={24} color="#3B82F6" />
+                    <Text style={styles.metricValue}>{analytics.totalOrders.toLocaleString()}</Text>
+                  </View>
+                  <Text style={styles.metricLabel}>Total Pedidos</Text>
+                </Card>
+
+                <Card style={styles.metricCard}>
+                  <View style={styles.metricHeader}>
+                    <Clock size={24} color="#F59E0B" />
+                    <Text style={styles.metricValue}>{analytics.pendingOrders.toLocaleString()}</Text>
+                  </View>
+                  <Text style={styles.metricLabel}>Pendientes</Text>
+                </Card>
+
+                <Card style={styles.metricCard}>
+                  <View style={styles.metricHeader}>
+                    <TrendingUp size={24} color="#10B981" />
+                    <Text style={styles.metricValue}>{analytics.confirmedOrders.toLocaleString()}</Text>
+                  </View>
+                  <Text style={styles.metricLabel}>Confirmados</Text>
+                </Card>
+
+                <Card style={styles.metricCard}>
+                  <View style={styles.metricHeader}>
+                    <Package size={24} color="#8B5CF6" />
+                    <Text style={styles.metricValue}>{analytics.deliveredOrders.toLocaleString()}</Text>
+                  </View>
+                  <Text style={styles.metricLabel}>Entregados</Text>
+                </Card>
               </View>
-            </View>
-            
-            <View style={styles.revenueDetails}>
-              <View style={styles.revenueDetail}>
-                <Text style={styles.revenueDetailLabel}>Comisión promedio</Text>
-                <Text style={styles.revenueDetailValue}>{analytics.averageCommissionRate}%</Text>
-              </View>
-              <View style={styles.revenueDetail}>
-                <Text style={styles.revenueDetailLabel}>Ingresos por comisiones</Text>
-                <Text style={styles.revenueDetailValue}>
-                  {formatCurrency(analytics.totalCommissions)}
-                </Text>
-              </View>
-            </View>
-            
-            <View style={styles.commissionBreakdown}>
-              <Text style={styles.commissionBreakdownTitle}>Desglose de Comisiones</Text>
-              <View style={styles.commissionStats}>
-                <View style={styles.commissionStat}>
-                  <Text style={styles.commissionStatLabel}>Total facturado</Text>
-                  <Text style={styles.commissionStatValue}>
-                    {formatCurrency(analytics.totalRevenue)}
-                  </Text>
+
+              <Card style={styles.ordersBreakdownCard}>
+                <Text style={styles.ordersBreakdownTitle}>Estado de Pedidos</Text>
+                <View style={styles.ordersBreakdown}>
+                  <View style={styles.orderStatusItem}>
+                    <View style={[styles.statusIndicator, { backgroundColor: '#F59E0B' }]} />
+                    <Text style={styles.orderStatusLabel}>Pendientes</Text>
+                    <Text style={styles.orderStatusValue}>{analytics.pendingOrders}</Text>
+                  </View>
+
+                  <View style={styles.orderStatusItem}>
+                    <View style={[styles.statusIndicator, { backgroundColor: '#3B82F6' }]} />
+                    <Text style={styles.orderStatusLabel}>Confirmados</Text>
+                    <Text style={styles.orderStatusValue}>{analytics.confirmedOrders}</Text>
+                  </View>
+
+                  <View style={styles.orderStatusItem}>
+                    <View style={[styles.statusIndicator, { backgroundColor: '#0EA5E9' }]} />
+                    <Text style={styles.orderStatusLabel}>Procesando</Text>
+                    <Text style={styles.orderStatusValue}>{analytics.processingOrders}</Text>
+                  </View>
+
+                  <View style={styles.orderStatusItem}>
+                    <View style={[styles.statusIndicator, { backgroundColor: '#10B981' }]} />
+                    <Text style={styles.orderStatusLabel}>Enviados</Text>
+                    <Text style={styles.orderStatusValue}>{analytics.shippedOrders}</Text>
+                  </View>
+
+                  <View style={styles.orderStatusItem}>
+                    <View style={[styles.statusIndicator, { backgroundColor: '#059669' }]} />
+                    <Text style={styles.orderStatusLabel}>Entregados</Text>
+                    <Text style={styles.orderStatusValue}>{analytics.deliveredOrders}</Text>
+                  </View>
+
+                  <View style={styles.orderStatusItem}>
+                    <View style={[styles.statusIndicator, { backgroundColor: '#EF4444' }]} />
+                    <Text style={styles.orderStatusLabel}>Cancelados</Text>
+                    <Text style={styles.orderStatusValue}>{analytics.cancelledOrders}</Text>
+                  </View>
                 </View>
-                <View style={styles.commissionStat}>
-                  <Text style={styles.commissionStatLabel}>Comisiones DogCatiFy</Text>
-                  <Text style={styles.commissionStatValue}>
-                    {formatCurrency(analytics.totalCommissions)}
-                  </Text>
+              </Card>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Ingresos y Comisiones</Text>
+              <Card style={styles.revenueCard}>
+                <View style={styles.revenueHeader}>
+                  <DollarSign size={32} color="#10B981" />
+                  <View style={styles.revenueInfo}>
+                    <Text style={styles.revenueAmount}>{formatCurrency(analytics.totalRevenue)}</Text>
+                    <Text style={styles.revenueLabel}>Ingresos Totales Generados</Text>
+                  </View>
                 </View>
-                <View style={styles.commissionStat}>
-                  <Text style={styles.commissionStatLabel}>Pagado a aliados</Text>
-                  <Text style={styles.commissionStatValue}>
-                    {formatCurrency(analytics.totalPartnerPayments)}
-                  </Text>
+
+                <View style={styles.revenueDetails}>
+                  <View style={styles.revenueDetail}>
+                    <Text style={styles.revenueDetailLabel}>Comision promedio real</Text>
+                    <Text style={styles.revenueDetailValue}>{analytics.averageCommissionRate.toFixed(2)}%</Text>
+                  </View>
+                  <View style={styles.revenueDetail}>
+                    <Text style={styles.revenueDetailLabel}>Ingresos por comisiones</Text>
+                    <Text style={styles.revenueDetailValue}>{formatCurrency(analytics.totalCommissions)}</Text>
+                  </View>
                 </View>
-              </View>
-            </View>
-          </Card>
-        </View>
 
-        {/* Engagement Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🎯 Engagement y Promociones</Text>
-          <View style={styles.engagementGrid}>
-            <Card style={styles.engagementCard}>
-              <View style={styles.engagementHeader}>
-                <Eye size={20} color="#6B7280" />
-                <Text style={styles.engagementValue}>{analytics.totalViews.toLocaleString()}</Text>
-              </View>
-              <Text style={styles.engagementLabel}>Vistas de Promociones</Text>
-            </Card>
+                <View style={styles.commissionBreakdown}>
+                  <Text style={styles.commissionBreakdownTitle}>Desglose de Comisiones</Text>
+                  <View style={styles.commissionStats}>
+                    <View style={styles.commissionStat}>
+                      <Text style={styles.commissionStatLabel}>Total facturado</Text>
+                      <Text style={styles.commissionStatValue}>{formatCurrency(analytics.totalRevenue)}</Text>
+                    </View>
+                    <View style={styles.commissionStat}>
+                      <Text style={styles.commissionStatLabel}>Comisiones DogCatiFy</Text>
+                      <Text style={styles.commissionStatValue}>{formatCurrency(analytics.totalCommissions)}</Text>
+                    </View>
+                    <View style={styles.commissionStat}>
+                      <Text style={styles.commissionStatLabel}>Pagado a aliados</Text>
+                      <Text style={styles.commissionStatValue}>{formatCurrency(analytics.totalPartnerPayments)}</Text>
+                    </View>
+                  </View>
+                </View>
+              </Card>
+            </View>
 
-            <Card style={styles.engagementCard}>
-              <View style={styles.engagementHeader}>
-                <TrendingUp size={20} color="#6B7280" />
-                <Text style={styles.engagementValue}>{analytics.activePromotions}</Text>
-              </View>
-              <Text style={styles.engagementLabel}>Promociones Activas</Text>
-            </Card>
-          </View>
-        </View>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Engagement y Promociones</Text>
+              <View style={styles.engagementGrid}>
+                <Card style={styles.engagementCard}>
+                  <View style={styles.engagementHeader}>
+                    <Eye size={20} color="#6B7280" />
+                    <Text style={styles.engagementValue}>{analytics.totalViews.toLocaleString()}</Text>
+                  </View>
+                  <Text style={styles.engagementLabel}>Vistas reales de promociones</Text>
+                </Card>
 
-        {/* Growth Trends */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📊 Tendencias de Crecimiento</Text>
-          <Card style={styles.trendsCard}>
-            <View style={styles.trendItem}>
-              <Text style={styles.trendLabel}>Usuarios registrados este mes</Text>
-              <Text style={styles.trendValue}>+{Math.floor(analytics.totalUsers * 0.15)}</Text>
-              <Text style={styles.trendPercentage}>+15%</Text>
+                <Card style={styles.engagementCard}>
+                  <View style={styles.engagementHeader}>
+                    <TrendingUp size={20} color="#6B7280" />
+                    <Text style={styles.engagementValue}>{analytics.activePromotions}</Text>
+                  </View>
+                  <Text style={styles.engagementLabel}>Promociones activas</Text>
+                </Card>
+              </View>
             </View>
-            
-            <View style={styles.trendItem}>
-              <Text style={styles.trendLabel}>Nuevos aliados este mes</Text>
-              <Text style={styles.trendValue}>+{Math.floor(analytics.totalPartners * 0.08)}</Text>
-              <Text style={styles.trendPercentage}>+8%</Text>
-            </View>
-            
-            <View style={styles.trendItem}>
-              <Text style={styles.trendLabel}>Publicaciones este mes</Text>
-              <Text style={styles.trendValue}>+{Math.floor(analytics.totalPosts * 0.25)}</Text>
-              <Text style={styles.trendPercentage}>+25%</Text>
-            </View>
-          </Card>
-        </View>
 
-        {/* Platform Health */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🏥 Salud de la Plataforma</Text>
-          <Card style={styles.healthCard}>
-            <View style={styles.healthMetrics}>
-              <View style={styles.healthMetric}>
-                <Text style={styles.healthMetricLabel}>Tasa de conversión</Text>
-                <Text style={styles.healthMetricValue}>
-                  {((analytics.totalPartners / analytics.totalUsers) * 100).toFixed(1)}%
-                </Text>
-              </View>
-              
-              <View style={styles.healthMetric}>
-                <Text style={styles.healthMetricLabel}>Promedio posts/usuario</Text>
-                <Text style={styles.healthMetricValue}>
-                  {analytics.totalUsers > 0 ? (analytics.totalPosts / analytics.totalUsers).toFixed(1) : '0'}
-                </Text>
-              </View>
-              
-              <View style={styles.healthMetric}>
-                <Text style={styles.healthMetricLabel}>Reservas/aliado</Text>
-                <Text style={styles.healthMetricValue}>
-                  {analytics.totalPartners > 0 ? (analytics.totalBookings / analytics.totalPartners).toFixed(1) : '0'}
-                </Text>
-              </View>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Tendencias de Crecimiento</Text>
+              <Card style={styles.trendsCard}>
+                <View style={styles.trendItem}>
+                  <Text style={styles.trendLabel}>Usuarios registrados este mes</Text>
+                  <Text style={styles.trendValue}>{analytics.currentMonthUsers}</Text>
+                  <Text style={styles.trendPercentage}>{formatGrowth(calculateGrowth(analytics.currentMonthUsers, analytics.previousMonthUsers))}</Text>
+                </View>
+
+                <View style={styles.trendItem}>
+                  <Text style={styles.trendLabel}>Nuevos aliados este mes</Text>
+                  <Text style={styles.trendValue}>{analytics.currentMonthPartners}</Text>
+                  <Text style={styles.trendPercentage}>{formatGrowth(calculateGrowth(analytics.currentMonthPartners, analytics.previousMonthPartners))}</Text>
+                </View>
+
+                <View style={styles.trendItem}>
+                  <Text style={styles.trendLabel}>Publicaciones este mes</Text>
+                  <Text style={styles.trendValue}>{analytics.currentMonthPosts}</Text>
+                  <Text style={styles.trendPercentage}>{formatGrowth(calculateGrowth(analytics.currentMonthPosts, analytics.previousMonthPosts))}</Text>
+                </View>
+              </Card>
             </View>
-          </Card>
-        </View>
+
+            {advancedAnalyticsEnabled ? (
+              <>
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Salud de la Plataforma</Text>
+                  <Card style={styles.healthCard}>
+                    <View style={styles.healthMetrics}>
+                      <View style={styles.healthMetric}>
+                        <Text style={styles.healthMetricLabel}>Conversion a transacciones</Text>
+                        <Text style={styles.healthMetricValue}>{analytics.conversionRate.toFixed(1)}%</Text>
+                      </View>
+
+                      <View style={styles.healthMetric}>
+                        <Text style={styles.healthMetricLabel}>Exito operativo de pedidos</Text>
+                        <Text style={styles.healthMetricValue}>{analytics.orderSuccessRate.toFixed(1)}%</Text>
+                      </View>
+
+                      <View style={styles.healthMetric}>
+                        <Text style={styles.healthMetricLabel}>Reservas por aliado</Text>
+                        <Text style={styles.healthMetricValue}>{analytics.bookingPerPartnerRate.toFixed(1)}</Text>
+                      </View>
+                    </View>
+                  </Card>
+                </View>
+
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Salud Operativa</Text>
+                  <View style={styles.metricsGrid}>
+                    <Card style={styles.metricCard}>
+                      <View style={styles.metricHeader}>
+                        <Clock size={24} color="#DC2626" />
+                        <Text style={styles.metricValue}>{analytics.paymentFailedOrders}</Text>
+                      </View>
+                      <Text style={styles.metricLabel}>Pagos fallidos</Text>
+                    </Card>
+
+                    <Card style={styles.metricCard}>
+                      <View style={styles.metricHeader}>
+                        <Package size={24} color="#F97316" />
+                        <Text style={styles.metricValue}>{analytics.stalePendingOrders}</Text>
+                      </View>
+                      <Text style={styles.metricLabel}>Pedidos atascados +2h</Text>
+                    </Card>
+
+                    <Card style={styles.metricCard}>
+                      <View style={styles.metricHeader}>
+                        <Eye size={24} color="#7C3AED" />
+                        <Text style={styles.metricValue}>{analytics.webhookFailureCount}</Text>
+                      </View>
+                      <Text style={styles.metricLabel}>Fallos webhook 7 dias</Text>
+                    </Card>
+
+                    <Card style={styles.metricCard}>
+                      <View style={styles.metricHeader}>
+                        <TrendingUp size={24} color="#0F766E" />
+                        <Text style={styles.metricValue}>{analytics.webhookDeliveryRate.toFixed(1)}%</Text>
+                      </View>
+                      <Text style={styles.metricLabel}>Entrega webhook 7 dias</Text>
+                    </Card>
+                  </View>
+
+                  <Card style={styles.trendsCard}>
+                    <View style={styles.trendItem}>
+                      <Text style={styles.trendLabel}>Promociones pendientes de aprobacion</Text>
+                      <Text style={styles.trendValue}>{analytics.pendingPromotionApprovals}</Text>
+                      <Text style={styles.trendPercentage}>{analytics.pendingPromotionApprovals > 0 ? 'Revisar' : 'OK'}</Text>
+                    </View>
+
+                    <View style={styles.trendItem}>
+                      <Text style={styles.trendLabel}>Promociones rechazadas</Text>
+                      <Text style={styles.trendValue}>{analytics.rejectedPromotions}</Text>
+                      <Text style={styles.trendPercentage}>{analytics.rejectedPromotions > 0 ? 'Atencion' : 'OK'}</Text>
+                    </View>
+                  </Card>
+                </View>
+              </>
+            ) : (
+              <View style={styles.section}>
+                <Card style={styles.stateBox}>
+                  <Text style={styles.stateText}>
+                    Las analíticas avanzadas están desactivadas desde Configuración del Sistema.
+                  </Text>
+                </Card>
+              </View>
+            )}
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -522,6 +675,23 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  stateBox: {
+    paddingHorizontal: 24,
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  stateText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#991B1B',
+    marginBottom: 8,
   },
   section: {
     marginBottom: 24,
@@ -585,15 +755,18 @@ const styles = StyleSheet.create({
   revenueDetails: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 12,
   },
   revenueDetail: {
     alignItems: 'center',
+    flex: 1,
   },
   revenueDetailLabel: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     marginBottom: 4,
+    textAlign: 'center',
   },
   revenueDetailValue: {
     fontSize: 16,
@@ -641,6 +814,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#374151',
     flex: 1,
+    paddingRight: 8,
   },
   trendValue: {
     fontSize: 16,
@@ -652,6 +826,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     color: '#10B981',
+    minWidth: 64,
+    textAlign: 'right',
   },
   healthCard: {
     marginHorizontal: 16,
@@ -659,9 +835,11 @@ const styles = StyleSheet.create({
   healthMetrics: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    gap: 12,
   },
   healthMetric: {
     alignItems: 'center',
+    flex: 1,
   },
   healthMetricLabel: {
     fontSize: 12,

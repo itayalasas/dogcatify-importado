@@ -6,7 +6,9 @@ import { ArrowLeft, Calendar, Clock, CreditCard, X, Lock, User, FileText, Circle
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
+import { PaymentMethodModal } from '../../../components/PaymentMethodModal';
 import { LoadingScreen } from '../../../components/ui/LoadingScreen';
+import { MercadoPagoRedirectModal } from '../../../components/MercadoPagoRedirectModal';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 import { createServiceBookingOrder, openMercadoPagoPayment, isTestEnvironment } from '../../../utils/mercadoPago';
@@ -1271,239 +1273,17 @@ export default function ServiceBooking() {
           />
         </View>
       )}
-
-      {/* Payment Modal - Single Modal with Steps */}
-      <Modal
+      <PaymentMethodModal
         visible={showPaymentModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPaymentModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {paymentStep === 'methods' ? 'Método de Pago' : 
-                 paymentStep === 'card' ? 'Pago con Tarjeta' : 'Procesando...'}
-              </Text>
-              <TouchableOpacity onPress={() => {
-                setShowPaymentModal(false);
-                setPaymentStep('methods');
-              }}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Payment Methods Step */}
-            {paymentStep === 'methods' && (
-              <View style={styles.methodsContent}>
-                <View style={styles.methodsHeader}>
-                  <CreditCard size={40} color="#2D6A6F" />
-                  <Text style={styles.methodsTitle}>Selecciona tu método de pago</Text>
-                  <Text style={styles.methodsSubtitle}>
-                    Total: {formatCurrency(getServicePrice())}
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.paymentMethodCard}
-                  onPress={() => handlePaymentMethodSelect('mercadopago')}
-                  disabled={paymentLoading}
-                >
-                  <View style={styles.paymentMethodLogoCircle}>
-                    <Image
-                      source={require('../../../assets/images/mercadopago.png')}
-                      style={styles.mercadoPagoLogo}
-                      resizeMode="contain"
-                    />
-                  </View>
-                  <View style={styles.paymentMethodInfo}>
-                    <Text style={styles.paymentMethodTitle}>Mercado Pago</Text>
-                    <Text style={styles.paymentMethodDescription}>
-                      Pago seguro con tarjetas, transferencias y más
-                    </Text>
-                  </View>
-                  {paymentLoading && <ActivityIndicator size="small" color="#00A650" />}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.paymentMethodCard, styles.disabledMethod]}
-                  disabled
-                >
-                  <View style={[styles.paymentMethodIconCircle, { backgroundColor: '#F3F4F6' }]}>
-                    <CreditCard size={32} color="#9CA3AF" />
-                  </View>
-                  <View style={styles.paymentMethodInfo}>
-                    <Text style={[styles.paymentMethodTitle, { color: '#9CA3AF' }]}>Tarjeta de Crédito/Débito</Text>
-                    <Text style={[styles.paymentMethodDescription, { color: '#9CA3AF' }]}>
-                      Visa, Mastercard, American Express
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <Text style={styles.paymentNote}>
-                  Serás redirigido para completar el pago de forma segura
-                </Text>
-              </View>
-            )}
-
-            {/* Card Form Step */}
-            {paymentStep === 'card' && (
-              <ScrollView style={styles.cardFormContainer} showsVerticalScrollIndicator={false}>
-                {/* Booking Summary */}
-                <View style={styles.bookingSummary}>
-                  <Text style={styles.summaryTitle}>Resumen de la Reserva</Text>
-                  <Text style={styles.summaryService}>{service?.name}</Text>
-                  <Text style={styles.summaryDateTime}>
-                    {boardingCategory
-                      ? `${selectedDate?.toLocaleDateString()} - ${boardingCategory}`
-                      : `${selectedDate?.toLocaleDateString()} a las ${selectedTime}`
-                    }
-                  </Text>
-                  <Text style={styles.summaryTotal}>
-                    Total: {formatCurrency(getServicePrice())}
-                  </Text>
-                </View>
-
-                {/* Personal Information */}
-                <View style={styles.formSection}>
-                  <Text style={styles.formSectionTitle}>Información Personal</Text>
-                  
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Nombre completo *</Text>
-                    <View style={styles.inputContainer}>
-                      <User size={20} color="#6B7280" />
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="Juan Pérez"
-                        value={fullName}
-                        onChangeText={setFullName}
-                        autoCapitalize="words"
-                        autoComplete="name"
-                      />
-                    </View>
-                  </View>
-
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Tipo de documento *</Text>
-                    <TouchableOpacity
-                      style={styles.selectInput}
-                      onPress={() => setShowDocumentTypes(true)}
-                    >
-                      <FileText size={20} color="#6B7280" />
-                      <Text style={styles.selectText}>
-                        {documentTypes.find(type => type.value === documentType)?.label || 'Seleccionar'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Número de documento *</Text>
-                    <View style={styles.inputContainer}>
-                      <FileText size={20} color="#6B7280" />
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="12345678"
-                        value={documentNumber}
-                        onChangeText={setDocumentNumber}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                  </View>
-                </View>
-
-
-                {/* Card Information */}
-                <View style={styles.formSection}>
-                  <Text style={styles.formSectionTitle}>Información de la Tarjeta</Text>
-                  
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Número de tarjeta *</Text>
-                    <View style={[styles.inputContainer, styles.cardInputContainer]}>
-                      <CreditCard size={20} color="#6B7280" />
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="1234 5678 9012 3456"
-                        value={cardNumber}
-                        onChangeText={handleCardNumberChange}
-                        keyboardType="numeric"
-                        maxLength={19}
-                        autoComplete="cc-number"
-                      />
-                      {detectedCardType && (
-                        <View style={[styles.cardTypeBadge, { backgroundColor: detectedCardType.color }]}>
-                          <Text style={styles.cardTypeText}>{detectedCardType.name}</Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-
-                  <View style={styles.cardDetailsRow}>
-                    <View style={styles.cardDetailInput}>
-                      <Text style={styles.inputLabel}>Vencimiento *</Text>
-                      <View style={styles.inputContainer}>
-                        <Calendar size={20} color="#6B7280" />
-                        <TextInput
-                          style={styles.textInput}
-                          placeholder="MM/AA"
-                          value={expiryDate}
-                          onChangeText={handleExpiryChange}
-                          keyboardType="numeric"
-                          maxLength={5}
-                          autoComplete="cc-exp"
-                        />
-                      </View>
-                    </View>
-
-                    <View style={styles.cardDetailInput}>
-                      <Text style={styles.inputLabel}>CVV *</Text>
-                      <View style={styles.inputContainer}>
-                        <Lock size={20} color="#6B7280" />
-                        <TextInput
-                          style={styles.textInput}
-                          placeholder="123"
-                          value={cvv}
-                          onChangeText={handleCvvChange}
-                          keyboardType="numeric"
-                          maxLength={4}
-                          secureTextEntry={true}
-                          autoComplete="cc-csc"
-                        />
-                      </View>
-                    </View>
-                  </View>
-                </View>
-
-
-                {/* Security Notice */}
-                <View style={styles.securityNotice}>
-                  <Lock size={16} color="#10B981" />
-                  <Text style={styles.securityText}>
-                    Tu información está protegida con encriptación SSL de 256 bits
-                  </Text>
-                </View>
-                
-                {/* Actions */}
-                <View style={styles.cardFormActions}>
-                  <Button
-                    title="Volver"
-                    onPress={() => setPaymentStep('methods')}
-                    variant="outline"
-                    size="large"
-                  />
-                  <Button
-                    title={processing ? 'Procesando...' : `Pagar ${formatCurrency(getServicePrice())}`}
-                    onPress={handleCardPayment}
-                    loading={processing}
-                    disabled={!validateCardForm() || processing}
-                    size="large"
-                  />
-                </View>
-              </ScrollView>
-            )}
-          </View>
-        </View>
-      </Modal>
+        totalLabel={formatCurrency(getServicePrice())}
+        onClose={() => {
+          setShowPaymentModal(false);
+          setPaymentStep('methods');
+        }}
+        onMercadoPago={() => handlePaymentMethodSelect('mercadopago')}
+        loadingMercadoPago={paymentLoading}
+        secureNote="Seras redirigido para completar el pago de forma segura"
+      />
 
       {/* Document Type Modal */}
       <Modal
@@ -1539,52 +1319,12 @@ export default function ServiceBooking() {
         </View>
       </Modal>
 
-      {/* Payment Loading Overlay con Barra de Progreso */}
-      {paymentLoading && (
-        <Modal
-          visible={paymentLoading}
-          transparent
-          animationType="fade"
-          statusBarTranslucent
-        >
-          <View style={styles.paymentLoadingOverlay}>
-            <View style={styles.paymentLoadingContent}>
-              {/* Logo de Mercado Pago */}
-              <View style={styles.mpLogoContainer}>
-                <Image
-                  source={require('../../../assets/images/mercadopago.png')}
-                  style={styles.mpLoadingLogo}
-                  resizeMode="contain"
-                />
-              </View>
-
-              <ActivityIndicator size="large" color="#00A650" style={{ marginBottom: 20 }} />
-
-              <Text style={styles.paymentLoadingTitle}>Procesando pago...</Text>
-              <Text style={styles.paymentLoadingSubtitle}>
-                {paymentMessage}
-              </Text>
-
-              {/* Barra de progreso animada */}
-              <View style={styles.progressBarContainer}>
-                <Animated.View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: progressAnim.interpolate({
-                        inputRange: [0, 100],
-                        outputRange: ['0%', '100%'],
-                      }),
-                    },
-                  ]}
-                />
-              </View>
-
-              <Text style={styles.loadingHint}>🔒 Serás redirigido a Mercado Pago de forma segura</Text>
-            </View>
-          </View>
-        </Modal>
-      )}
+      <MercadoPagoRedirectModal
+        visible={paymentLoading}
+        message={paymentMessage}
+        progress={progressAnim}
+        hint="Seras redirigido a Mercado Pago de forma segura"
+      />
     </SafeAreaView>
   );
 }
@@ -2150,77 +1890,5 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
-  },
-  paymentLoadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 9999,
-  },
-  paymentLoadingContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 48,
-    alignItems: 'center',
-    width: '85%',
-    maxWidth: 360,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 15,
-  },
-  mpLogoContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#009EE3',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  mpLoadingLogo: {
-    width: 65,
-    height: 65,
-  },
-  paymentLoadingTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#1F2937',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  paymentLoadingSubtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#00A650',
-    marginBottom: 28,
-    textAlign: 'center',
-    lineHeight: 24,
-    paddingHorizontal: 8,
-  },
-  progressBarContainer: {
-    width: '100%',
-    height: 8,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 20,
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#00A650',
-    borderRadius: 4,
-  },
-  loadingHint: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
-    textAlign: 'center',
   },
 });

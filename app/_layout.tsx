@@ -3,6 +3,7 @@ import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
 import { AuthProvider } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { BiometricProvider } from '../contexts/BiometricContext';
 import { CartProvider } from '../contexts/CartContext';
@@ -18,6 +19,23 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { FloatingVoiceBot } from '../components/FloatingVoiceBot';
 
 const { width } = Dimensions.get('window');
+const SYSTEM_CONFIG_KEY = 'system_config';
+
+type RuntimeSystemConfig = {
+  maintenanceMode: boolean;
+  allowGuestAccess: boolean;
+  enableAnalytics: boolean;
+  pushNotifications: boolean;
+  autoApprovePartners: boolean;
+};
+
+const DEFAULT_SYSTEM_CONFIG: RuntimeSystemConfig = {
+  maintenanceMode: false,
+  allowGuestAccess: true,
+  enableAnalytics: true,
+  pushNotifications: true,
+  autoApprovePartners: false,
+};
 // Global error handler test
 if (typeof ErrorUtils !== 'undefined') {
   const originalHandler = ErrorUtils.getGlobalHandler();
@@ -46,7 +64,7 @@ global.onunhandledrejection = (event: any) => {
   const error = event.reason instanceof Error ? event.reason : new Error(String(event.reason));
 
   if (originalUnhandled) {
-    originalUnhandled(event);
+    (originalUnhandled as any)(event);
   }
 };
 
@@ -140,8 +158,8 @@ function RootLayout() {
     try {
       const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
         (event, session) => {
-          if (event === 'SIGNED_UP') {
-            console.log('Blocking SIGNED_UP event to prevent modal');
+          if (event !== 'INITIAL_SESSION' && session?.user) {
+            console.log('Auth event captured at root layout:', event);
           }
         }
       );
@@ -218,6 +236,21 @@ function RootLayout() {
             router.replace(url.replace('dogcatify://', '/'));
           }, 500);
         }
+        else if (
+          path?.startsWith('profile/subscription') ||
+          (hostname === 'profile' && path?.startsWith('subscription'))
+        ) {
+          console.log('Subscription deep link detected');
+
+          setTimeout(() => {
+            const router = require('expo-router').router;
+            const subscriptionId = queryParams?.subscription_id;
+            const query = typeof subscriptionId === 'string'
+              ? `?subscription_id=${encodeURIComponent(subscriptionId)}`
+              : '';
+            router.replace(`/profile/subscription${query}`);
+          }, 500);
+        }
       } catch (error) {
         console.error('Error handling deep link:', error, url);
       }
@@ -239,6 +272,246 @@ function RootLayout() {
 
   // Determine initial route based on platform
   const initialRouteName = Platform.OS === 'web' ? 'web-info' : '(tabs)';
+
+  const AppContent = ({ initialRouteName }: { initialRouteName: string }) => {
+    const { currentUser } = useAuth();
+    const [systemConfig, setSystemConfig] = useState<RuntimeSystemConfig>(DEFAULT_SYSTEM_CONFIG);
+    const [loadingSystemConfig, setLoadingSystemConfig] = useState(true);
+    const [adminAccessRequested, setAdminAccessRequested] = useState(false);
+
+    const isAdminUser = currentUser?.isAdmin || currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
+
+    const loadRuntimeSystemConfig = async () => {
+      try {
+        const { data, error } = await supabaseClient
+          .from('admin_settings')
+          .select('value')
+          .eq('key', SYSTEM_CONFIG_KEY)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        const config = data?.value || {};
+        setSystemConfig({
+          maintenanceMode: Boolean(config.maintenance_mode),
+          allowGuestAccess: config.allow_guest_access ?? true,
+          enableAnalytics: config.advanced_analytics_enabled ?? true,
+          pushNotifications: config.push_notifications_enabled ?? true,
+          autoApprovePartners: config.auto_approve_partners ?? false,
+        });
+      } catch (error) {
+        console.error('Error loading runtime system config:', error);
+      } finally {
+        setLoadingSystemConfig(false);
+      }
+    };
+
+    useEffect(() => {
+      loadRuntimeSystemConfig();
+
+      const interval = setInterval(() => {
+        loadRuntimeSystemConfig();
+      }, 60000);
+
+      return () => clearInterval(interval);
+    }, []);
+
+    useEffect(() => {
+      if (currentUser && !isAdminUser) {
+        setAdminAccessRequested(false);
+      }
+    }, [currentUser?.id, isAdminUser]);
+
+    if (loadingSystemConfig) {
+      return (
+        <View style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: '#F9FAFB',
+        }}>
+          <ActivityIndicator size="large" color="#2D6A6F" />
+          <Text style={{ marginTop: 12, color: '#6B7280', fontSize: 14 }}>
+            Verificando estado de la plataforma...
+          </Text>
+        </View>
+      );
+    }
+
+    if (systemConfig.maintenanceMode && !isAdminUser && !adminAccessRequested) {
+      return (
+        <View style={{
+          flex: 1,
+          backgroundColor: '#0F172A',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 24,
+        }}>
+          <View style={{
+            width: '100%',
+            maxWidth: 420,
+            backgroundColor: '#FFFFFF',
+            borderRadius: 28,
+            padding: 28,
+            alignItems: 'center',
+          }}>
+            <Image
+              source={require('../assets/images/logo-transp.png')}
+              style={{ width: 96, height: 96, marginBottom: 20 }}
+              resizeMode="contain"
+            />
+            <Text style={{
+              color: '#111827',
+              fontSize: 26,
+              fontWeight: '700',
+              marginBottom: 10,
+              textAlign: 'center',
+            }}>
+              Estamos en mantenimiento
+            </Text>
+            <Text style={{
+              color: '#6B7280',
+              fontSize: 15,
+              lineHeight: 22,
+              textAlign: 'center',
+              marginBottom: 24,
+            }}>
+              Estamos realizando ajustes para mejorar DogCatiFy. Vuelve a intentarlo en unos minutos.
+            </Text>
+            <TouchableOpacity
+              onPress={loadRuntimeSystemConfig}
+              style={{
+                width: '100%',
+                backgroundColor: '#2D6A6F',
+                paddingVertical: 14,
+                borderRadius: 16,
+                alignItems: 'center',
+                marginBottom: 12,
+              }}
+            >
+              <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '600' }}>
+                Reintentar
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setAdminAccessRequested(true)}
+              style={{
+                paddingVertical: 10,
+                paddingHorizontal: 16,
+              }}
+            >
+              <Text style={{ color: '#2D6A6F', fontSize: 14, fontWeight: '600' }}>
+                Acceso administrador
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    return (
+	      <Stack screenOptions={{ headerShown: false }} initialRouteName={initialRouteName}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="(admin-tabs)" />
+        <Stack.Screen name="(partner-tabs)" />
+        <Stack.Screen name="web-info" />
+        <Stack.Screen name="auth/login" />
+        <Stack.Screen name="auth/register" />
+        <Stack.Screen name="auth/forgot-password" />
+        <Stack.Screen name="auth/confirm" />
+        <Stack.Screen name="auth/biometric-setup" />
+        <Stack.Screen name="onboarding" />
+        <Stack.Screen name="auth/mercadopago/callback" />
+        <Stack.Screen name="promotion-approval" />
+        <Stack.Screen name="legal/privacy-policy" />
+        <Stack.Screen name="legal/terms-of-service" />
+        <Stack.Screen name="pets/add" />
+        <Stack.Screen name="pets/breed-selector" />
+        <Stack.Screen name="pets/[id]" />
+        <Stack.Screen name="pets/albums/add/[id]" />
+        <Stack.Screen name="pets/albums/[id]" />
+        <Stack.Screen name="pets/behavior/[id]" />
+        <Stack.Screen name="pets/appointments/[id]" />
+        <Stack.Screen name="pets/health/vaccines/[id]" />
+        <Stack.Screen name="pets/health/illness/[id]" />
+        <Stack.Screen name="pets/health/allergies/[id]" />
+        <Stack.Screen name="pets/health/deworming/[id]" />
+        <Stack.Screen name="pets/health/weight/[id]" />
+        <Stack.Screen name="pets/health/select-condition" />
+        <Stack.Screen name="pets/health/select-treatment" />
+        <Stack.Screen name="pets/health/select-veterinarian" />
+        <Stack.Screen name="pets/health/select-vaccine" />
+        <Stack.Screen name="pets/health/select-allergy" />
+        <Stack.Screen name="pets/health/select-dewormer" />
+        <Stack.Screen name="services/[id]" />
+        <Stack.Screen name="services/partner/[id]" />
+        <Stack.Screen name="services/shelter/[id]" />
+        <Stack.Screen
+          name="services/booking/[serviceId]"
+          options={{
+            title: 'Reservar Servicio',
+            headerShown: false
+          }}
+        />
+        <Stack.Screen name="products/[id]" />
+        <Stack.Screen name="cart/index" />
+        <Stack.Screen name="orders/index" />
+        <Stack.Screen name="orders/[id]" />
+        <Stack.Screen name="places/add" />
+        <Stack.Screen name="chat/[id]" />
+        <Stack.Screen name="chat/adoption" />
+        <Stack.Screen name="partner-register" />
+        <Stack.Screen name="delivery-register" />
+        <Stack.Screen name="delivery/orders" />
+        <Stack.Screen name="partner/add-service" />
+        <Stack.Screen name="partner/add-adoption-pet" />
+        <Stack.Screen name="partner/edit-service" />
+        <Stack.Screen name="partner/edit-product" />
+        <Stack.Screen name="partner/configure-business" />
+        <Stack.Screen name="partner/configure-activities" />
+        <Stack.Screen name="partner/configure-activities-page" />
+        <Stack.Screen name="partner/configure-schedule" />
+        <Stack.Screen name="partner/configure-schedule-page" />
+        <Stack.Screen name="partner/agenda" />
+        <Stack.Screen name="partner/bookings" />
+        <Stack.Screen name="partner/orders" />
+        <Stack.Screen name="partner/clients" />
+        <Stack.Screen name="partner/manage-products" />
+        <Stack.Screen name="partner/business-insights" />
+        <Stack.Screen name="partner/edit-business" />
+        <Stack.Screen name="partner/store-products/[id]" />
+        <Stack.Screen name="profile/edit" />
+        <Stack.Screen name="profile/mercadopago-config" />
+        <Stack.Screen name="profile/help-support" />
+        <Stack.Screen name="profile/delete-account" />
+        <Stack.Screen
+          name="payment/success"
+          options={{
+            gestureEnabled: false,
+            headerShown: false
+          }}
+        />
+        <Stack.Screen
+          name="payment/failure"
+          options={{
+            gestureEnabled: false,
+            headerShown: false
+          }}
+        />
+        <Stack.Screen name="payment/pending" />
+        <Stack.Screen name="subscription/return" />
+        <Stack.Screen name="test-adoption" />
+        <Stack.Screen name="medical-history/[id]" />
+        <Stack.Screen name="pets/medical-history-preview" />
+        <Stack.Screen name="pets/share-medical-history" />
+        <Stack.Screen name="pets/share-pet" />
+        <Stack.Screen name="pets/mating/[id]" />
+        <Stack.Screen name="pets/mating/chat/[id]" />
+        <Stack.Screen name="pet-share/[id]" options={{ title: 'Invitación' }} />
+        <Stack.Screen name="+not-found" />
+	      </Stack>
+    );
+  };
 
   // Retry function
   const retryConfiguration = async () => {
@@ -480,8 +753,8 @@ function RootLayout() {
               <BiometricProvider>
                 <NotificationProvider>
                   <CartProvider>
-                    <ErrorBoundary>
-                <Stack screenOptions={{ headerShown: false }} initialRouteName={initialRouteName}>
+	                    <ErrorBoundary>
+	                      <AppContent initialRouteName={initialRouteName} />{false && (<Stack screenOptions={{ headerShown: false }} initialRouteName={initialRouteName}>
                   <Stack.Screen name="(tabs)" />
                   <Stack.Screen name="(admin-tabs)" />
                   <Stack.Screen name="(partner-tabs)" />
@@ -570,6 +843,7 @@ function RootLayout() {
                     }}
                   />
                   <Stack.Screen name="payment/pending" />
+                  <Stack.Screen name="subscription/return" />
                   <Stack.Screen name="test-adoption" />
                   <Stack.Screen name="medical-history/[id]" />
                   <Stack.Screen name="pets/medical-history-preview" />
@@ -579,7 +853,7 @@ function RootLayout() {
                   <Stack.Screen name="pets/mating/chat/[id]" />
                   <Stack.Screen name="pet-share/[id]" options={{ title: 'Invitación' }} />
                   <Stack.Screen name="+not-found" />
-                </Stack>
+	                </Stack>)}
                   </ErrorBoundary>
                   <FloatingVoiceBot showWelcome={false} />
                   <StatusBar style="auto" />
