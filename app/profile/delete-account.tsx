@@ -8,6 +8,48 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { envConfig } from '../../utils/envConfig';
 
+const DOGCATIFY_STORAGE_BUCKET = 'dogcatify';
+
+const extractDogcatifyStoragePath = (value?: string | null) => {
+  const rawValue = String(value || '').replace(/^VIDEO:/, '');
+  const marker = `/storage/v1/object/public/${DOGCATIFY_STORAGE_BUCKET}/`;
+  const markerIndex = rawValue.indexOf(marker);
+
+  if (markerIndex === -1) {
+    return null;
+  }
+
+  const pathWithQuery = rawValue.slice(markerIndex + marker.length);
+  const path = pathWithQuery.split('?')[0];
+
+  return path ? decodeURIComponent(path) : null;
+};
+
+const removeDogcatifyStorageObjects = async (values: Array<string | null | undefined>) => {
+  const paths = Array.from(
+    new Set(
+      values
+        .map(extractDogcatifyStoragePath)
+        .filter((path): path is string => Boolean(path))
+    )
+  );
+
+  if (paths.length === 0) {
+    return;
+  }
+
+  const { error } = await supabaseClient.storage
+    .from(DOGCATIFY_STORAGE_BUCKET)
+    .remove(paths);
+
+  if (error) {
+    console.warn('Could not remove some user storage objects during account deletion:', error);
+  }
+};
+
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
 export default function DeleteAccount() {
   const { currentUser, logout } = useAuth();
   const [confirmationText, setConfirmationText] = useState('');
@@ -31,18 +73,132 @@ export default function DeleteAccount() {
       setDeletionProgress(['Iniciando proceso de eliminación...']);
       console.log('Starting account deletion process for user:', currentUser.id);
 
+      setDeletionProgress(prev => [...prev, 'Verificando datos de negocio...']);
+      console.log('Checking for partner data before deleting anything...');
+      const { data: existingPartnerData, error: existingPartnerError } = await supabaseClient
+        .from('partners')
+        .select('id')
+        .eq('user_id', currentUser.id);
+
+      if (existingPartnerError) {
+        throw new Error(`No se pudo verificar si hay negocios asociados: ${existingPartnerError.message}`);
+      }
+
+      if (existingPartnerData && existingPartnerData.length > 0) {
+        setDeletionProgress(prev => [...prev, 'Error: Usuario tiene negocios asociados']);
+        Alert.alert(
+          'Cuenta con negocio',
+          'Tu cuenta tiene negocios asociados. Para eliminar tu cuenta, primero debes transferir o eliminar tus negocios. Contacta con soporte para asistencia.',
+          [{ text: 'Entendido', onPress: () => setLoading(false) }]
+        );
+        return;
+      }
+
       // 1. Delete user's pets and related data
       console.log('Deleting pets and related data...');
       const { data: userPets, error: petsError } = await supabaseClient
         .from('pets')
-        .select('id')
+        .select('id, photo_url')
         .eq('owner_id', currentUser.id);
 
       setDeletionProgress(prev => [...prev, 'Verificando mascotas del usuario...']);
 
       if (petsError) {
         console.error('Error fetching user pets:', petsError);
-      } else if (userPets && userPets.length > 0) {
+      } else {
+        await removeDogcatifyStorageObjects((userPets || []).map((pet: any) => pet.photo_url));
+      }
+
+      setDeletionProgress(prev => [...prev, 'Eliminando archivos y albumes del usuario...']);
+      const { data: userAlbums, error: userAlbumsError } = await supabaseClient
+        .from('pet_albums')
+        .select('id, images')
+        .eq('user_id', currentUser.id);
+
+      if (userAlbumsError) {
+        console.warn('Could not load user albums before account deletion:', userAlbumsError);
+      } else {
+        const albumMedia = (userAlbums || []).flatMap((album: any) =>
+          Array.isArray(album.images) ? album.images : []
+        );
+        await removeDogcatifyStorageObjects(albumMedia);
+      }
+
+      const petIds = (userPets || []).map((pet: any) => pet.id).filter(Boolean);
+      const albumIds = (userAlbums || []).map((album: any) => album.id).filter(Boolean);
+      const postsToDeleteById = new Set<string>();
+
+      const { data: postsByUser, error: postsByUserError } = await supabaseClient
+        .from('posts')
+        .select('id')
+        .eq('user_id', currentUser.id);
+
+      if (postsByUserError) {
+        throw new Error(`No se pudieron cargar las publicaciones del usuario: ${postsByUserError.message}`);
+      }
+
+      (postsByUser || []).forEach((post: any) => postsToDeleteById.add(post.id));
+
+      if (petIds.length > 0) {
+        const { data: postsByPet, error: postsByPetError } = await supabaseClient
+          .from('posts')
+          .select('id')
+          .in('pet_id', petIds);
+
+        if (postsByPetError) {
+          throw new Error(`No se pudieron cargar publicaciones de mascotas: ${postsByPetError.message}`);
+        }
+
+        (postsByPet || []).forEach((post: any) => postsToDeleteById.add(post.id));
+      }
+
+      if (albumIds.length > 0) {
+        const { data: postsByAlbum, error: postsByAlbumError } = await supabaseClient
+          .from('posts')
+          .select('id')
+          .in('album_id', albumIds);
+
+        if (postsByAlbumError) {
+          throw new Error(`No se pudieron cargar publicaciones de albumes: ${postsByAlbumError.message}`);
+        }
+
+        (postsByAlbum || []).forEach((post: any) => postsToDeleteById.add(post.id));
+      }
+
+      const postIds = Array.from(postsToDeleteById);
+
+      if (postIds.length > 0) {
+        const { error: postCommentsDeleteError } = await supabaseClient
+          .from('comments')
+          .delete()
+          .in('post_id', postIds);
+
+        if (postCommentsDeleteError) {
+          console.warn('Could not delete every comment on user-owned posts before account deletion:', postCommentsDeleteError);
+        }
+
+        const { error: postsDeleteError } = await supabaseClient
+          .from('posts')
+          .delete()
+          .in('id', postIds);
+
+        if (postsDeleteError) {
+          console.warn('Could not delete every user/pet/album post before account deletion:', postsDeleteError);
+        }
+
+        setDeletionProgress(prev => [...prev, 'Eliminando publicaciones y comentarios asociados a mascotas...']);
+      }
+
+      const { error: userAlbumsDeleteError } = await supabaseClient
+        .from('pet_albums')
+        .delete()
+        .eq('user_id', currentUser.id);
+
+      if (userAlbumsDeleteError) {
+        throw new Error(`No se pudieron eliminar los albumes del usuario: ${userAlbumsDeleteError.message}`);
+      }
+
+      if (userPets && userPets.length > 0) {
         for (const pet of userPets) {
           // Delete pet health records
           await supabaseClient
@@ -341,11 +497,18 @@ export default function DeleteAccount() {
       try {
         // Try to delete from auth.users table
         const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+        const { data: sessionData } = await supabaseClient.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+
+        if (!accessToken) {
+          throw new Error('No hay sesion activa para eliminar el usuario de autenticacion');
+        }
+
         const response = await fetch(`${supabaseUrl}/functions/v1/delete-user`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY')}`,
+            'Authorization': `Bearer ${accessToken}`,
           },
           body: JSON.stringify({
             userId: currentUser.id
@@ -374,7 +537,7 @@ export default function DeleteAccount() {
         }
       } catch (authError) {
         console.warn('Error deleting from auth system:', authError);
-        setDeletionProgress(prev => [...prev, `⚠️ Error eliminando de auth: ${authError.message}`]);
+        setDeletionProgress(prev => [...prev, `⚠️ Error eliminando de auth: ${getErrorMessage(authError)}`]);
         setDeletionProgress(prev => [...prev, '⚠️ Continuando con logout forzado...']);
       }
 
@@ -394,11 +557,12 @@ export default function DeleteAccount() {
       );
 
     } catch (error) {
-      setDeletionProgress(prev => [...prev, `❌ Error: ${error.message || error}`]);
+      const errorMessage = getErrorMessage(error);
+      setDeletionProgress(prev => [...prev, `❌ Error: ${errorMessage}`]);
       console.error('Error deleting account:', error);
       Alert.alert(
         'Error',
-        `Ocurrió un error durante la eliminación: ${error.message || error}. Algunos datos pueden haber sido eliminados. Por favor contacta con soporte para completar el proceso.`
+        `Ocurrió un error durante la eliminación: ${errorMessage}. Algunos datos pueden haber sido eliminados. Por favor contacta con soporte para completar el proceso.`
       );
     } finally {
       setLoading(false);
