@@ -37,6 +37,26 @@
   status = 200
 
 [[redirects]]
+  from = "/profile/subscription"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/profile/subscription/*"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/subscription/return"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/subscription/return/*"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
   from = "/promotion-approval"
   to = "/promotion-approval/index.html"
   status = 200

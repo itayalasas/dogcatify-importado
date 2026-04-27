@@ -7,6 +7,21 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+async function hasSuccessfulAccountingDispatch(supabase: any, orderId: string): Promise<boolean> {
+  const { count, error } = await supabase
+    .from("accounting_webhook_logs")
+    .select("id", { head: true, count: "exact" })
+    .eq("order_id", orderId)
+    .eq("success", true);
+
+  if (error) {
+    console.error("❌ Error checking previous accounting dispatch:", error);
+    return false;
+  }
+
+  return (count || 0) > 0;
+}
+
 async function sendToAccounting(
   orderId: string,
   orderData: any,
@@ -440,6 +455,22 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log(`✅ Orden pagada encontrada: ${order.id}`);
+
+    const alreadySentToAccounting = await hasSuccessfulAccountingDispatch(supabase, order_id);
+    if (alreadySentToAccounting) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "Orden ya enviada previamente al sistema contable",
+          order_id: order_id,
+          deduplicated: true,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
 
     const result = await sendToAccounting(
       order_id,

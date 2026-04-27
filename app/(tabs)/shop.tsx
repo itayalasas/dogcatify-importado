@@ -17,6 +17,7 @@ import { getActivePromotionsForItems, calculateDiscountedPrice, incrementPromoti
 
 export default function Shop() {
   const [products, setProducts] = useState<any[]>([]);
+  const [favoriteProductIds, setFavoriteProductIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [loading, setLoading] = useState(true);
@@ -27,6 +28,7 @@ export default function Shop() {
 
   React.useEffect(() => {
     fetchProducts();
+    loadFavoriteProducts();
   }, []);
 
   React.useEffect(() => {
@@ -38,12 +40,41 @@ export default function Shop() {
     checkSearchHint();
   }, [currentUser?.id]);
 
+  React.useEffect(() => {
+    loadFavoriteProducts();
+  }, [currentUser?.id]);
+
   // Recargar productos cada vez que la pantalla se enfoca (al volver desde Mercado Pago)
   useFocusEffect(
     React.useCallback(() => {
       fetchProducts();
+      loadFavoriteProducts();
     }, [])
   );
+
+  const loadFavoriteProducts = async () => {
+    if (!currentUser?.id) {
+      setFavoriteProductIds([]);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabaseClient
+        .from('profiles')
+        .select('favorite_products')
+        .eq('id', currentUser.id)
+        .single();
+
+      if (error) {
+        console.error('Error loading favorite products:', error);
+        return;
+      }
+
+      setFavoriteProductIds(data?.favorite_products || []);
+    } catch (error) {
+      console.error('Error loading favorite products:', error);
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -161,20 +192,53 @@ export default function Shop() {
     }, product.stock);
   };
 
+  const handleToggleFavorite = async (productId: string) => {
+    if (!currentUser?.id) {
+      Alert.alert('Iniciar sesión', 'Debes iniciar sesión para guardar favoritos');
+      return;
+    }
+
+    const previousFavorites = favoriteProductIds;
+    const isCurrentlyFavorite = previousFavorites.includes(productId);
+    const updatedFavorites = isCurrentlyFavorite
+      ? previousFavorites.filter(id => id !== productId)
+      : [...previousFavorites, productId];
+
+    setFavoriteProductIds(updatedFavorites);
+
+    try {
+      const { error } = await supabaseClient
+        .from('profiles')
+        .update({ favorite_products: updatedFavorites })
+        .eq('id', currentUser.id);
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error updating favorite products:', error);
+      setFavoriteProductIds(previousFavorites);
+      Alert.alert('Error', 'No se pudo actualizar tus favoritos');
+    }
+  };
+
   // Filter products by category and search query
   const filteredProducts = products.filter(product => {
-    const matchesCategory = selectedCategory === 'all' || 
+    const matchesFavorites = selectedCategory !== 'favorites' || favoriteProductIds.includes(product.id);
+    const matchesCategory = selectedCategory === 'all' ||
+                           selectedCategory === 'favorites' ||
                            product.category.toLowerCase() === selectedCategory;
     
     const matchesSearch = !searchQuery || 
                          product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          product.description?.toLowerCase().includes(searchQuery.toLowerCase());
     
-    return matchesCategory && matchesSearch;
+    return matchesCategory && matchesFavorites && matchesSearch;
   });
 
   const categories = [
     { id: 'all', name: t('all') },
+    { id: 'favorites', name: 'Favoritos' },
     { id: 'comida', name: 'Comida' },
     { id: 'juguetes', name: 'Juguetes' },
     { id: 'accesorios', name: 'Accesorios' },
@@ -281,6 +345,8 @@ export default function Shop() {
                   onPress={() => handleProductPress(item.id)}
                   onAddToCart={() => handleAddToCart(item.id)}
                   currentCartQuantity={currentCartQuantity}
+                  isFavorite={favoriteProductIds.includes(item.id)}
+                  onToggleFavorite={() => handleToggleFavorite(item.id)}
                 />
               );
             }}

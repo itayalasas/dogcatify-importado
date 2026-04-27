@@ -8,6 +8,7 @@ import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { getPets, supabaseClient, deletePet } from '../../lib/supabase';
+import { Pet } from '../../types';
 
 interface PetShareInvitation {
   id: string;
@@ -694,7 +695,7 @@ export default function Pets() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAFC',
     paddingTop: 30, // Add padding at the top to show status bar
   },
   headerContainer: {
@@ -714,21 +715,25 @@ const styles = StyleSheet.create({
   },
   addButton: {
     backgroundColor: '#10B981',
-    padding: 8,
     borderRadius: 20,
     width: 36,
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#047857',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 3,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 10,
+    paddingHorizontal: 16,
     paddingBottom: 10,
   },
   petsContainer: {
-    padding: 5,
-    paddingTop: 16,
+    paddingTop: 14,
+    paddingBottom: 22,
     position: 'relative',
     minHeight: 500,
   },

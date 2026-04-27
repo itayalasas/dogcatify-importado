@@ -5,6 +5,7 @@ export interface User {
   photoURL?: string;
   isOwner: boolean;
   isPartner: boolean;
+  isAdmin?: boolean;
   createdAt: Date;
   location?: string;
   bio?: string;

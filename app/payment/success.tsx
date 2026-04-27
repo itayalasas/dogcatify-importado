@@ -74,14 +74,22 @@ export default function PaymentSuccess() {
                 order_id: String(order_id)
               };
 
-          await fetch(`${supabaseUrl}/functions/v1/mercadopago-webhook`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseAnonKey}`,
-            },
-            body: JSON.stringify(syncPayload)
-          });
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+          try {
+            await fetch(`${supabaseUrl}/functions/v1/mercadopago-webhook`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseAnonKey}`,
+              },
+              body: JSON.stringify(syncPayload),
+              signal: controller.signal,
+            });
+          } finally {
+            clearTimeout(timeoutId);
+          }
 
           // Recargar orden para mostrar datos actualizados
           const { data: refreshedOrder } = await supabaseClient
@@ -106,6 +114,8 @@ export default function PaymentSuccess() {
       });
 
       // Format order details for display
+      const isPendingValidation = order.status === 'pending' || !order.payment_id;
+
       const formattedOrder = {
         id: order.id,
         displayId: order.order_number || `#${order.id.slice(-6)}`,
@@ -120,13 +130,15 @@ export default function PaymentSuccess() {
         isBooking: order.order_type === 'service_booking',
         partnerName: order.partner_name,
         serviceName: order.service_name,
-        items: order.items || []
+        items: order.items || [],
+        isPendingValidation,
       };
 
       setOrderDetails(formattedOrder);
+      setLoading(false);
       
       // Registrar pago exitoso en auditoría
-      await logResourceAction('PAYMENT_SUCCESS', 'payment', order.id, {
+      logResourceAction('PAYMENT_SUCCESS', 'payment', order.id, {
         success: true,
         resource_id: order.id,
         details: {
@@ -144,7 +156,6 @@ export default function PaymentSuccess() {
         }
       }).catch(err => console.error('Error logging payment audit:', err));
       
-      setLoading(false);
     } catch (err: any) {
       console.error('Error loading order details:', err);
       setError(err.message || 'Error al cargar la orden');
@@ -194,11 +205,13 @@ export default function PaymentSuccess() {
           <CheckCircle size={80} color="#10B981" />
         </View>
 
-        <Text style={styles.title}>¡Pago Exitoso!</Text>
+        <Text style={styles.title}>{orderDetails?.isPendingValidation ? 'Pago Recibido' : 'Pago Exitoso'}</Text>
         <Text style={styles.subtitle}>
-          {orderDetails?.isBooking 
-            ? 'Tu reserva ha sido confirmada y el pago procesado correctamente.'
-            : 'Tu pedido ha sido confirmado y el pago procesado correctamente.'
+          {orderDetails?.isPendingValidation
+            ? 'Estamos validando tu pago con Mercado Pago. Esto puede tardar unos segundos.'
+            : orderDetails?.isBooking 
+              ? 'Tu reserva ha sido confirmada y el pago procesado correctamente.'
+              : 'Tu pedido ha sido confirmado y el pago procesado correctamente.'
           }
         </Text>
 
@@ -221,7 +234,7 @@ export default function PaymentSuccess() {
           
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Estado:</Text>
-            <Text style={[styles.detailValue, styles.successStatus]}>
+            <Text style={[styles.detailValue, orderDetails?.isPendingValidation ? styles.pendingStatus : styles.successStatus]}>
               {orderDetails?.status}
             </Text>
           </View>
@@ -232,7 +245,7 @@ export default function PaymentSuccess() {
           </View>
         </Card>
 
-        <Card style={styles.successCard}>
+        <Card style={[styles.successCard, orderDetails?.isPendingValidation && styles.pendingCard]}>
           <Text style={styles.successTitle}>¡Gracias por tu {orderDetails?.isBooking ? 'reserva' : 'compra'}!</Text>
           <View style={styles.successList}>
             {orderDetails?.isBooking ? (
@@ -356,11 +369,18 @@ const styles = StyleSheet.create({
   successStatus: {
     color: '#10B981',
   },
+  pendingStatus: {
+    color: '#D97706',
+  },
   successCard: {
     backgroundColor: '#F0FDF4',
     borderWidth: 1,
     borderColor: '#BBF7D0',
     marginBottom: 20,
+  },
+  pendingCard: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FCD34D',
   },
   successTitle: {
     fontSize: 16,
@@ -368,6 +388,9 @@ const styles = StyleSheet.create({
     color: '#166534',
     marginBottom: 12,
     textAlign: 'center',
+  },
+  pendingTitle: {
+    color: '#92400E',
   },
   successList: {
     gap: 8,
@@ -377,6 +400,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#166534',
     lineHeight: 20,
+  },
+  pendingItem: {
+    color: '#92400E',
   },
   actionsContainer: {
     paddingHorizontal: 20,
@@ -388,3 +414,4 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 });
+

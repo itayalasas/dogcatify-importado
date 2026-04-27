@@ -15,6 +15,8 @@ import { NotificationService } from '@/utils/notifications';
 import { PartnerServiceAgreement } from '../../components/PartnerServiceAgreement';
 import { envConfig } from '../../utils/envConfig';
 
+const SYSTEM_CONFIG_KEY = 'system_config';
+
 const replicateMercadoPagoConfig = async (userId: string) => {
   try {
     console.log('Checking for existing Mercado Pago configuration for user:', userId);
@@ -136,10 +138,28 @@ export default function PartnerRegister() {
   // Estados para IVA
   const [ivaRate, setIvaRate] = useState('0');
   const [ivaIncludedInPrice, setIvaIncludedInPrice] = useState(false);
+  const [autoApprovePartners, setAutoApprovePartners] = useState(false);
 
   useEffect(() => {
     loadCountries();
+    loadSystemConfig();
   }, []);
+
+  const loadSystemConfig = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('admin_settings')
+        .select('value')
+        .eq('key', SYSTEM_CONFIG_KEY)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      setAutoApprovePartners(Boolean(data?.value?.auto_approve_partners));
+    } catch (error) {
+      console.error('Error loading system config for partner registration:', error);
+    }
+  };
 
   const loadCountries = async () => {
     try {
@@ -273,7 +293,7 @@ export default function PartnerRegister() {
     
     // Extraer barrio
     let barrioFound = '';
-    const streetIndex = parts.findIndex(part => 
+    const streetIndex = parts.findIndex((part: string) => 
       part.toLowerCase().includes(calle.toLowerCase())
     );
     
@@ -576,9 +596,14 @@ export default function PartnerRegister() {
 
   const proceedWithoutGallery = async () => {
     try {
+      const currentUserId = currentUser?.id;
+      if (!currentUserId) {
+        throw new Error('Usuario no autenticado');
+      }
+
       let logoUrl = null;
       if (logo) {
-        logoUrl = await uploadImage(logo, `partners/${currentUser.id}/${Date.now()}_logo.jpg`);
+        logoUrl = await uploadImage(logo, `partners/${currentUserId}/${Date.now()}_logo.jpg`);
       }
       await createPartnerRecord(logoUrl, []);
     } catch (error) {
@@ -592,12 +617,17 @@ export default function PartnerRegister() {
   const createPartnerRecord = async (logoUrl: string | null, imageUrls: string[]) => {
     try {
       console.log('Creating partner record in database...');
+      const currentUserId = currentUser?.id;
+
+      if (!currentUserId) {
+        throw new Error('Usuario no autenticado');
+      }
 
       const parsedShippingCost = hasShipping ? parseFloat(shippingCost) || 0 : 0;
       const parsedFreeShippingThreshold = hasShipping ? parseFloat(freeShippingThreshold) || 0 : 0;
 
       const partnerPayload: any = {
-        user_id: currentUser.id,
+        user_id: currentUserId,
         business_name: businessName.trim(),
         business_type: selectedType,
         description: description.trim(),
@@ -620,7 +650,8 @@ export default function PartnerRegister() {
         iva_rate: parseFloat(ivaRate) || 0,
         iva_included_in_price: ivaIncludedInPrice,
         is_active: true,
-        is_verified: false,
+        is_verified: autoApprovePartners,
+        approval_status: autoApprovePartners ? 'approved' : 'pending',
         rating: 0,
         reviews_count: 0,
         created_at: new Date().toISOString(),
@@ -660,7 +691,7 @@ export default function PartnerRegister() {
       console.log('Partner record created successfully');
 
       // Check if user has other businesses with Mercado Pago configured
-      await replicateMercadoPagoConfig(currentUser.id);
+      await replicateMercadoPagoConfig(currentUserId);
       
       // Update user profile to be a partner
       const { error: profileError } = await supabaseClient
@@ -669,7 +700,7 @@ export default function PartnerRegister() {
           is_partner: true,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', currentUser.id);
+        .eq('id', currentUserId);
 
       if (profileError) throw profileError;
 
@@ -682,7 +713,7 @@ export default function PartnerRegister() {
             type: 'partner_request',
             businessName: businessName.trim(),
             businessType: selectedType,
-            userId: currentUser.id,
+            userId: currentUserId,
             deepLink: '(admin-tabs)/requests'
           }
         );
@@ -693,7 +724,9 @@ export default function PartnerRegister() {
 
       Alert.alert(
         'Registro exitoso',
-        'Tu solicitud para ser aliado ha sido enviada. Te notificaremos cuando sea aprobada.',
+        autoApprovePartners
+          ? 'Tu negocio fue aprobado automáticamente y ya quedó activo dentro de la plataforma.'
+          : 'Tu solicitud para ser aliado ha sido enviada. Te notificaremos cuando sea aprobada.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (error) {

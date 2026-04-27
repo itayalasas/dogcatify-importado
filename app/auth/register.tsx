@@ -1,14 +1,31 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Platform, Linking, KeyboardAvoidingView } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  Image,
+  Platform,
+  KeyboardAvoidingView,
+} from 'react-native';
 import { router, Stack } from 'expo-router';
-import { ArrowLeft, User, Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
+import { ArrowLeft, User, Mail, Lock } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
-import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { supabaseClient } from '../../lib/supabase';
-import { createEmailConfirmationToken, generateConfirmationUrl, sendConfirmationEmailAPI } from '../../utils/emailConfirmation';
-import { validatePassword, getPasswordStrengthKey, PASSWORD_MIN_LENGTH_EXCLUSIVE } from '../../utils/passwordValidation';
+import {
+  createEmailConfirmationToken,
+  generateConfirmationUrl,
+  sendConfirmationEmailAPI,
+} from '../../utils/emailConfirmation';
+import {
+  validatePassword,
+  getPasswordStrengthKey,
+  PASSWORD_MIN_LENGTH_EXCLUSIVE,
+} from '../../utils/passwordValidation';
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
@@ -19,27 +36,48 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
 
+  const { t } = useLanguage();
 
   const passwordValidation = validatePassword(password);
-  const passwordRules = passwordValidation.rules;
+  const passwordRules = passwordValidation.rules.map((rule) => ({
+    ...rule,
+    label:
+      rule.key === 'passwordRuleLowercase'
+        ? 'Al menos una letra minúscula'
+        : rule.key === 'passwordRuleUppercase'
+          ? 'Al menos una letra mayúscula'
+          : rule.key === 'passwordRuleNumber'
+            ? 'Al menos un número'
+            : rule.key === 'passwordRuleSpecialChar'
+              ? 'Al menos un carácter especial'
+              : 'Más de 8 caracteres',
+  }));
   const passwordScore = passwordValidation.score;
   const isPasswordValid = passwordValidation.isValid;
   const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword;
 
   const getPasswordStrength = () => {
-    return t(getPasswordStrengthKey(passwordScore));
+    const key = getPasswordStrengthKey(passwordScore);
+    if (key === 'passwordStrengthWeak') return 'Débil';
+    if (key === 'passwordStrengthMedium') return 'Media';
+    return 'Fuerte';
+  };
 
-  const [passwordError, setPasswordError] = useState('');
-  const [confirmPasswordError, setConfirmPasswordError] = useState('');
+  const passwordRequirementsMessage =
+    'La contraseña debe incluir minúscula, mayúscula, número, carácter especial y tener más de 8 caracteres';
 
   const handlePasswordChange = (text: string) => {
     setPassword(text);
-    if (text.length > 0 && text.length < 6) {
-      setPasswordError('La contraseña debe tener al menos 6 caracteres');
+
+    if (text.length > 0 && !validatePassword(text).isValid) {
+      setPasswordError(passwordRequirementsMessage);
     } else {
       setPasswordError('');
     }
+
     if (confirmPassword.length > 0 && text !== confirmPassword) {
       setConfirmPasswordError('Las contraseñas no coinciden');
     } else if (confirmPassword.length > 0) {
@@ -55,21 +93,16 @@ export default function Register() {
       setConfirmPasswordError('');
     }
   };
-  
-  // Computed property to check if form is valid
-  const isFormValid = fullName.trim() && 
-                     email.trim() && 
-                     isPasswordValid && 
-                     confirmPassword && 
-                     passwordsMatch && 
 
-                     password === confirmPassword && 
-                     !passwordError &&
-                     !confirmPasswordError &&
-                     acceptTerms;
-
-  const { register } = useAuth();
-  const { t } = useLanguage();
+  const isFormValid =
+    !!fullName.trim() &&
+    !!email.trim() &&
+    isPasswordValid &&
+    !!confirmPassword &&
+    passwordsMatch &&
+    !passwordError &&
+    !confirmPasswordError &&
+    acceptTerms;
 
   const handlePrivacyPress = () => {
     router.push('/legal/privacy-policy');
@@ -90,13 +123,8 @@ export default function Register() {
       return;
     }
 
-    if (password.length <= PASSWORD_MIN_LENGTH_EXCLUSIVE) {
-      Alert.alert('Error', t('passwordTooShort'));
-      return;
-    }
-
     if (!isPasswordValid) {
-      Alert.alert('Error', t('passwordRequirementsNotMet'));
+      Alert.alert('Error', passwordRequirementsMessage);
       return;
     }
 
@@ -117,14 +145,12 @@ export default function Register() {
       console.log('Step 1: Creating user with Supabase Auth...');
       const { data: authData, error: authError } = await supabaseClient.auth.signUp({
         email: trimmedEmail,
-        password: password,
+        password,
         options: {
           data: {
             full_name: trimmedName,
           },
           emailRedirectTo: undefined,
-          // Disable Supabase's automatic email confirmation
-          // We handle email confirmation manually via our API
           shouldCreateUser: true,
         },
       });
@@ -162,10 +188,10 @@ export default function Register() {
       );
 
       if (!emailResult.success) {
-        console.error('❌ Email sending failed:', emailResult.error);
+        console.error('Email sending failed:', emailResult.error);
         console.warn('User registered but email not sent. Manual intervention may be needed.');
       } else {
-        console.log('✅ Email sent successfully!');
+        console.log('Email sent successfully');
         if (emailResult.log_id) {
           console.log('Email log ID:', emailResult.log_id);
         }
@@ -174,12 +200,12 @@ export default function Register() {
       console.log('=== REGISTRATION COMPLETED ===');
 
       Alert.alert(
-        '¡Registro exitoso! 🎉',
-        `Tu cuenta ha sido creada exitosamente.\n\n📧 Hemos enviado un correo de confirmación a:\n${trimmedEmail}\n\nPor favor revisa tu bandeja de entrada (y la carpeta de spam) y haz clic en el enlace de confirmación.\n\n⏰ El enlace expira en 24 horas.`,
+        'Registro exitoso',
+        `Tu cuenta ha sido creada exitosamente.\n\nHemos enviado un correo de confirmación a:\n${trimmedEmail}\n\nPor favor revisa tu bandeja de entrada y la carpeta de spam, y haz clic en el enlace de confirmación.\n\nEl enlace expira en 24 horas.`,
         [{ text: 'ENTENDIDO', onPress: () => router.replace('/auth/login') }]
       );
     } catch (error: any) {
-      console.error('❌ Registration error:', error);
+      console.error('Registration error:', error);
       console.error('Error stack:', error.stack);
       Alert.alert('Error', error.message || 'Error al crear la cuenta');
     } finally {
@@ -199,6 +225,7 @@ export default function Register() {
         keyboardShouldPersistTaps="handled"
       >
         <Stack.Screen options={{ headerShown: false }} />
+
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#111827" />
@@ -210,129 +237,135 @@ export default function Register() {
         </View>
 
         <View style={styles.form}>
-        <Text style={styles.title}>¡Únete a DogCatiFy! 🐾</Text>
-        <Text style={styles.subtitle}>{t('createAccountSubtitle')}</Text>
+          <Text style={styles.title}>¡Únete a DogCatiFy! 🐾</Text>
+          <Text style={styles.subtitle}>{t('createAccountSubtitle')}</Text>
 
-        <Input
-          label={t('fullName')}
-          placeholder="Tu nombre completo"
-          value={fullName}
-          onChangeText={setFullName}
-          leftIcon={<User size={20} color="#6B7280" />}
-        />
+          <Input
+            label={t('fullName')}
+            placeholder="Tu nombre completo"
+            value={fullName}
+            onChangeText={setFullName}
+            leftIcon={<User size={20} color="#6B7280" />}
+          />
 
-        <Input
-          label={t('email')}
-          placeholder="tu@email.com"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          leftIcon={<Mail size={20} color="#6B7280" />}
-        />
+          <Input
+            label={t('email')}
+            placeholder="tu@email.com"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            leftIcon={<Mail size={20} color="#6B7280" />}
+          />
 
-        <Input
-          label={t('password')}
-          placeholder={`Mínimo ${PASSWORD_MIN_LENGTH_EXCLUSIVE + 1} caracteres`}
-          value={password}
-          onChangeText={handlePasswordChange}
-          secureTextEntry={!showPassword}
-          leftIcon={<Lock size={20} color="#6B7280" />}
-          showPasswordToggle={true}
-          isPasswordVisible={showPassword}
-          onTogglePasswordVisibility={() => setShowPassword(!showPassword)}
-          error={passwordError}
-        />
+          <Input
+            label={t('password')}
+            placeholder={`Mínimo ${PASSWORD_MIN_LENGTH_EXCLUSIVE + 1} caracteres`}
+            value={password}
+            onChangeText={handlePasswordChange}
+            secureTextEntry={!showPassword}
+            leftIcon={<Lock size={20} color="#6B7280" />}
+            showPasswordToggle={true}
+            isPasswordVisible={showPassword}
+            onTogglePasswordVisibility={() => setShowPassword(!showPassword)}
+            error={passwordError}
+          />
 
-        {password.length > 0 && (
-          <View style={styles.passwordFeedbackContainer}>
-            <View style={styles.passwordStrengthHeader}>
-              <Text style={styles.passwordStrengthLabel}>{t('passwordStrength')}</Text>
-              <Text style={styles.passwordStrengthValue}>{getPasswordStrength()}</Text>
-            </View>
-            <View style={styles.passwordStrengthBarBackground}>
-              <View
-                style={[
-                  styles.passwordStrengthBarFill,
-                  { width: `${(passwordScore / passwordRules.length) * 100}%` },
-                ]}
-              />
-            </View>
+          {password.length > 0 && (
+            <View style={styles.passwordFeedbackContainer}>
+              <View style={styles.passwordStrengthHeader}>
+                <Text style={styles.passwordStrengthLabel}>Fortaleza</Text>
+                <Text style={styles.passwordStrengthValue}>{getPasswordStrength()}</Text>
+              </View>
 
-            <View style={styles.passwordRulesList}>
-              {passwordRules.map((rule) => (
-                <Text
-                  key={rule.key}
+              <View style={styles.passwordStrengthBarBackground}>
+                <View
                   style={[
-                    styles.passwordRuleText,
-                    rule.valid ? styles.passwordRuleValid : styles.passwordRulePending,
+                    styles.passwordStrengthBarFill,
+                    { width: `${(passwordScore / passwordRules.length) * 100}%` },
                   ]}
-                >
-                  {rule.valid ? '✓' : '○'} {t(rule.key)}
+                />
+              </View>
+
+              <View style={styles.passwordRulesList}>
+                {passwordRules.map((rule) => (
+                  <Text
+                    key={rule.label}
+                    style={[
+                      styles.passwordRuleText,
+                      rule.valid ? styles.passwordRuleValid : styles.passwordRulePending,
+                    ]}
+                  >
+                    {rule.valid ? '✓' : '○'} {rule.label}
+                  </Text>
+                ))}
+              </View>
+            </View>
+          )}
+
+          <Input
+            label={t('confirmPassword')}
+            placeholder="Repite tu contraseña"
+            value={confirmPassword}
+            onChangeText={handleConfirmPasswordChange}
+            secureTextEntry={!showConfirmPassword}
+            leftIcon={<Lock size={20} color="#6B7280" />}
+            showPasswordToggle={true}
+            isPasswordVisible={showConfirmPassword}
+            onTogglePasswordVisibility={() => setShowConfirmPassword(!showConfirmPassword)}
+            error={confirmPasswordError}
+          />
+
+          {confirmPassword.length > 0 && (
+            <Text
+              style={[
+                styles.confirmPasswordStatus,
+                passwordsMatch ? styles.passwordRuleValid : styles.confirmPasswordError,
+              ]}
+            >
+              {passwordsMatch ? 'Las contraseñas coinciden' : 'Las contraseñas no coinciden'}
+            </Text>
+          )}
+
+          <View style={styles.termsContainer}>
+            <View style={styles.checkbox}>
+              <TouchableOpacity
+                onPress={() => setAcceptTerms(!acceptTerms)}
+                style={[styles.checkboxBox, acceptTerms && styles.checkboxChecked]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                {acceptTerms && <Text style={styles.checkmark}>✓</Text>}
+              </TouchableOpacity>
+
+              <Text style={styles.termsText}>
+                Acepto las{' '}
+                <Text style={styles.termsLink} onPress={handlePrivacyPress}>
+                  políticas de privacidad
+                </Text>{' '}
+                y los{' '}
+                <Text style={styles.termsLink} onPress={handleTermsPress}>
+                  términos de servicio
                 </Text>
-              ))}
+              </Text>
             </View>
           </View>
-        )}
 
-        <Input
-          label={t('confirmPassword')}
-          placeholder="Repite tu contraseña"
-          value={confirmPassword}
-          onChangeText={handleConfirmPasswordChange}
-          secureTextEntry={!showConfirmPassword}
-          leftIcon={<Lock size={20} color="#6B7280" />}
-          showPasswordToggle={true}
-          isPasswordVisible={showConfirmPassword}
-          onTogglePasswordVisibility={() => setShowConfirmPassword(!showConfirmPassword)}
-          error={confirmPasswordError}
-        />
+          <Button
+            title={loading ? 'Creando cuenta...' : t('createAccount')}
+            onPress={handleRegister}
+            loading={loading}
+            disabled={!isFormValid || loading}
+            size="large"
+          />
 
-        {confirmPassword.length > 0 && (
-          <Text
-            style={[
-              styles.confirmPasswordStatus,
-              passwordsMatch ? styles.passwordRuleValid : styles.confirmPasswordError,
-            ]}
+          <TouchableOpacity
+            style={styles.loginButton}
+            onPress={() => router.replace('/auth/login')}
           >
-            {passwordsMatch ? t('passwordsMatch') : t('passwordsDontMatch')}
-          </Text>
-        )}
-
-        <View style={styles.termsContainer}>
-          <View style={styles.checkbox}>
-            <TouchableOpacity
-              onPress={() => setAcceptTerms(!acceptTerms)}
-              style={[styles.checkboxBox, acceptTerms && styles.checkboxChecked]}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              {acceptTerms && <Text style={styles.checkmark}>✓</Text>}
-            </TouchableOpacity>
-            <Text style={styles.termsText}>
-              Acepto las{' '}
-              <Text style={styles.termsLink} onPress={handlePrivacyPress}>políticas de privacidad</Text>
-              {' '}y los{' '}
-              <Text style={styles.termsLink} onPress={handleTermsPress}>términos de servicio</Text>
+            <Text style={styles.loginText}>
+              {t('alreadyHaveAccount')} <Text style={styles.loginLink}>{t('signIn')}</Text>
             </Text>
-          </View>
-        </View>
-
-        <Button
-          title={loading ? "Creando cuenta..." : t('createAccount')}
-          onPress={handleRegister}
-          loading={loading}
-          disabled={!isFormValid || loading}
-          size="large"
-        />
-
-        <TouchableOpacity
-          style={styles.loginButton}
-          onPress={() => router.replace('/auth/login')}
-        >
-          <Text style={styles.loginText}>
-            {t('alreadyHaveAccount')} <Text style={styles.loginLink}>{t('signIn')}</Text>
-          </Text>
-        </TouchableOpacity>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -388,47 +421,48 @@ const styles = StyleSheet.create({
   },
   passwordFeedbackContainer: {
     marginTop: -4,
-    marginBottom: 12,
-    padding: 12,
+    marginBottom: 16,
+    padding: 16,
     borderWidth: 1,
     borderColor: '#D1D5DB',
-    borderRadius: 10,
+    borderRadius: 16,
     backgroundColor: '#FFFFFF',
   },
   passwordStrengthHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   passwordStrengthLabel: {
-    fontSize: 13,
+    fontSize: 15,
     fontFamily: 'Inter-Medium',
     color: '#374151',
   },
   passwordStrengthValue: {
-    fontSize: 13,
+    fontSize: 15,
     fontFamily: 'Inter-SemiBold',
     color: '#2D6A6F',
   },
   passwordStrengthBarBackground: {
-    height: 6,
-    borderRadius: 99,
+    height: 10,
+    borderRadius: 999,
     backgroundColor: '#D1D5DB',
     overflow: 'hidden',
-    marginBottom: 10,
+    marginBottom: 16,
   },
   passwordStrengthBarFill: {
     height: '100%',
-    borderRadius: 99,
+    borderRadius: 999,
     backgroundColor: '#2D6A6F',
   },
   passwordRulesList: {
-    gap: 6,
+    gap: 8,
   },
   passwordRuleText: {
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: 'Inter-Regular',
+    lineHeight: 20,
   },
   passwordRuleValid: {
     color: '#2D6A6F',
@@ -437,13 +471,14 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   confirmPasswordStatus: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
     marginTop: -4,
-    marginBottom: 14,
+    marginBottom: 16,
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    lineHeight: 20,
   },
   confirmPasswordError: {
-    color: '#374151',
+    color: '#DC2626',
   },
   termsContainer: {
     marginBottom: 24,

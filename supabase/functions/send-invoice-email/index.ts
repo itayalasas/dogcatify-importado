@@ -70,6 +70,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
     // If this is a new-style request with template_name, forward it directly
     if (body.template_name && body.recipient_email) {
       console.log(`Forwarding template email: ${body.template_name} to ${body.recipient_email}`);
@@ -99,12 +101,22 @@ Deno.serve(async (req: Request) => {
       console.log(JSON.stringify(payload, null, 2));
       console.log('═══════════════════════════════════════════════════');
 
+      const isSupabaseFunctionTarget = invoiceApiUrl.includes('/functions/v1/');
+      const requestHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        // Compatibilidad hacia atrÃ¡s con integraciones existentes
+        'X-Integration-Key': invoiceApiKey,
+        // Algunos endpoints nuevos validan Authorization en lugar de X-Integration-Key
+        'Authorization': `Bearer ${invoiceApiKey}`,
+      };
+
+      if (isSupabaseFunctionTarget && supabaseServiceKey) {
+        requestHeaders['apikey'] = supabaseServiceKey;
+      }
+
       const response = await fetch(invoiceApiUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Integration-Key': invoiceApiKey,
-        },
+        headers: requestHeaders,
         body: JSON.stringify(payload),
       });
 

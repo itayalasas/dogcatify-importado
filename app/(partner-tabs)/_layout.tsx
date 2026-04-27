@@ -18,6 +18,7 @@ export default function PartnerTabLayout() {
   const [partnerProfile, setPartnerProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasActiveSchedule, setHasActiveSchedule] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   useEffect(() => {
     if (authInitialized && !currentUser) {
@@ -31,17 +32,29 @@ export default function PartnerTabLayout() {
   };
 
   useEffect(() => {
-    if (businessId) {
+    if (!authInitialized) return;
+
+    if (businessId && currentUser) {
+      setLoading(true);
+      setAccessDenied(false);
       fetchPartnerProfile(businessId as string);
       console.log('PartnerTabLayout - Fetching profile for business ID:', businessId);
     } else {
+      setPartnerProfile(null);
+      setHasActiveSchedule(false);
+      setAccessDenied(false);
       setLoading(false);
       console.log('PartnerTabLayout - No business ID provided');
     }
-  }, [businessId]);
+  }, [businessId, currentUser?.id, authInitialized]);
 
   const fetchPartnerProfile = async (businessId: string) => {
     try {
+      if (!currentUser) {
+        setAccessDenied(true);
+        return;
+      }
+
       // Fetch partner profile
       const { data: partnerDoc, error } = await supabaseClient
         .from('partners')
@@ -55,6 +68,17 @@ export default function PartnerTabLayout() {
       }
       
       if (partnerDoc) {
+        const isAdmin = currentUser.isAdmin || currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
+        const isOwner = partnerDoc.user_id === currentUser.id;
+
+        if (!isOwner && !isAdmin) {
+          console.warn('PartnerTabLayout - Access denied for business:', businessId);
+          setPartnerProfile(null);
+          setHasActiveSchedule(false);
+          setAccessDenied(true);
+          return;
+        }
+
         const profileData = {
           id: partnerDoc.id,
           ...partnerDoc
@@ -110,6 +134,55 @@ export default function PartnerTabLayout() {
   }
 
   // Determinar qué características están habilitadas
+  if (accessDenied) {
+    return (
+      <View style={{
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+        backgroundColor: '#F8FAFC',
+      }}>
+        <Text style={{
+          fontSize: 22,
+          fontFamily: 'Inter-Bold',
+          color: '#111827',
+          textAlign: 'center',
+          marginBottom: 8,
+        }}>
+          Acceso no autorizado
+        </Text>
+        <Text style={{
+          fontSize: 15,
+          fontFamily: 'Inter-Regular',
+          color: '#6B7280',
+          textAlign: 'center',
+          lineHeight: 22,
+          marginBottom: 20,
+        }}>
+          Este negocio no está asociado a tu cuenta.
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.replace('/(partner-tabs)/business-selector')}
+          style={{
+            backgroundColor: '#2D6A6F',
+            borderRadius: 14,
+            paddingHorizontal: 18,
+            paddingVertical: 12,
+          }}
+        >
+          <Text style={{
+            color: '#FFFFFF',
+            fontFamily: 'Inter-SemiBold',
+            fontSize: 15,
+          }}>
+            Volver a mis negocios
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   const businessType = partnerProfile?.business_type || '';
   const features = partnerProfile?.features || {};
   

@@ -6,6 +6,8 @@ import { ArrowLeft, ShoppingCart, Trash2, Plus, Minus, MapPin, ChevronDown, Chev
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { PaymentMethodModal } from '../../components/PaymentMethodModal';
+import { MercadoPagoRedirectModal } from '../../components/MercadoPagoRedirectModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import { createMultiPartnerOrder, openMercadoPagoPayment } from '../../utils/mercadoPago';
@@ -899,117 +901,21 @@ export default function Cart() {
         )}
       </ScrollView>
 
-      {/* Modal de Métodos de Pago */}
-      <Modal
+      <PaymentMethodModal
         visible={showPaymentMethodModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPaymentMethodModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Método de Pago</Text>
-              <TouchableOpacity onPress={() => setShowPaymentMethodModal(false)} style={styles.closeButton}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
+        totalLabel={formatCurrency(getCartTotal() + getEffectiveShippingCost())}
+        onClose={() => setShowPaymentMethodModal(false)}
+        onMercadoPago={handlePayWithMercadoPago}
+        loadingMercadoPago={paymentLoading}
+        secureNote="Seras redirigido para completar el pago de forma segura"
+      />
 
-            <View style={styles.methodsContent}>
-              <View style={styles.methodsHeader}>
-                <CreditCard size={40} color="#2D6A6F" />
-                <Text style={styles.methodsTitle}>Selecciona tu método de pago</Text>
-                <Text style={styles.methodsSubtitle}>
-                  Total: {formatCurrency(getCartTotal() + getEffectiveShippingCost())}
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={styles.paymentMethodCard}
-                onPress={handlePayWithMercadoPago}
-              >
-                <View style={styles.paymentMethodIcon}>
-                  <Image
-                    source={require('@/assets/images/mercadopago.png')}
-                    style={styles.mercadoPagoIcon}
-                    resizeMode="contain"
-                  />
-                </View>
-                <View style={styles.paymentMethodInfo}>
-                  <Text style={styles.paymentMethodTitle}>Mercado Pago</Text>
-                  <Text style={styles.paymentMethodDescription}>
-                    Pago seguro con tarjetas, transferencias y más
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.paymentMethodCard, styles.disabledMethod]}
-                disabled
-              >
-                <View style={[styles.paymentMethodIcon, { backgroundColor: '#F3F4F6' }]}>
-                  <CreditCard size={32} color="#9CA3AF" />
-                </View>
-                <View style={styles.paymentMethodInfo}>
-                  <Text style={[styles.paymentMethodTitle, { color: '#9CA3AF' }]}>Tarjeta de Crédito/Débito</Text>
-                  <Text style={[styles.paymentMethodDescription, { color: '#9CA3AF' }]}>
-                    Visa, Mastercard, American Express
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              <Text style={styles.paymentNote}>
-                Serás redirigido para completar el pago de forma segura
-              </Text>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Payment Loading Overlay con Barra de Progreso */}
-      {paymentLoading && (
-        <Modal
-          visible={paymentLoading}
-          transparent
-          animationType="fade"
-          statusBarTranslucent
-        >
-          <View style={styles.paymentLoadingOverlay}>
-            <View style={styles.paymentLoadingContent}>
-              {/* Logo de Mercado Pago */}
-              <View style={styles.mpLogoContainer}>
-                <Image
-                  source={require('@/assets/images/mercadopago.png')}
-                  style={styles.mpLoadingLogo}
-                  resizeMode="contain"
-                />
-              </View>
-
-              <Text style={styles.paymentLoadingTitle}>Procesando pago...</Text>
-              <Text style={styles.paymentLoadingSubtitle}>
-                {paymentMessage}
-              </Text>
-
-              {/* Barra de progreso animada */}
-              <View style={styles.progressBarContainer}>
-                <Animated.View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: progressAnim.interpolate({
-                        inputRange: [0, 100],
-                        outputRange: ['0%', '100%'],
-                      }),
-                    },
-                  ]}
-                />
-              </View>
-
-              <Text style={styles.loadingHint}>Serás redirigido a Mercado Pago</Text>
-            </View>
-          </View>
-        </Modal>
-      )}
+      <MercadoPagoRedirectModal
+        visible={paymentLoading}
+        message={paymentMessage}
+        progress={progressAnim}
+        hint="Seras redirigido a Mercado Pago"
+      />
     </SafeAreaView>
   );
 }
@@ -1422,71 +1328,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
     lineHeight: 16,
-  },
-  paymentLoadingOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  paymentLoadingContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 40,
-    alignItems: 'center',
-    width: 320,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  mpLogoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#009EE3',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  mpLoadingLogo: {
-    width: 50,
-    height: 50,
-  },
-  paymentLoadingTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#1F2937',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  paymentLoadingSubtitle: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#00A650',
-    marginBottom: 24,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  progressBarContainer: {
-    width: '100%',
-    height: 6,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 3,
-    overflow: 'hidden',
-    marginBottom: 16,
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#00A650',
-    borderRadius: 3,
-  },
-  loadingHint: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    textAlign: 'center',
   },
   pickupNotice: {
     backgroundColor: '#DBEAFE',

@@ -36,7 +36,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isEmailConfirmed, setIsEmailConfirmed] = useState(false);
   const [authInitialized, setAuthInitialized] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const tokenCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const tokenCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appState = useRef(AppState.currentState);
   const isHandlingExpirationRef = useRef(false);
   const lastValidationRef = useRef<number>(0);
@@ -65,17 +65,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, 10000);
 
     // Set up auth state listener
-    const subscription = supabaseClient.auth.onAuthStateChange(
+    const { data: authListener } = supabaseClient.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
-        
-        // Handle different auth events
-        if (event === 'SIGNED_UP') {
-          // Since we're not using signUp anymore, this shouldn't happen
-          // But if it does, just ignore it
-          return;
-        }
-        
+
         if (event === 'SIGNED_OUT' || !session) {
           if (!mounted) return;
           setCurrentUser(null);
@@ -192,7 +185,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           }
         }
-        else if (session?.user && event !== 'SIGNED_UP') {
+        else if (session?.user) {
           // For other events, load profile without email validation
           try {
             await loadUserProfile(session.user.id, session.user.email!);
@@ -233,8 +226,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             email: userEmail,
             displayName: profile.display_name || '',
             photoURL: profile.photo_url,
-            isOwner: profile.is_owner || true,
-            isPartner: profile.is_partner || false,
+            isOwner: profile.is_owner ?? true,
+            isPartner: profile.is_partner ?? false,
+            isAdmin: profile.is_admin ?? false,
             location: profile.location,
             bio: profile.bio,
             phone: profile.phone,
@@ -264,6 +258,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             photoURL: undefined,
             isOwner: true,
             isPartner: false,
+            isAdmin: false,
             createdAt: new Date(),
             followers: [],
             following: [],
@@ -380,8 +375,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (tokenCheckIntervalRef.current) {
         clearInterval(tokenCheckIntervalRef.current);
       }
-      if (subscription && typeof subscription.unsubscribe === 'function') {
-        subscription.unsubscribe();
+      if (authListener?.subscription) {
+        authListener.subscription.unsubscribe();
       }
     };
   }, []);
@@ -749,8 +744,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             email: data.user.email!,
             displayName: profile.display_name || '',
             photoURL: profile.photo_url,
-            isOwner: profile.is_owner || true,
-            isPartner: profile.is_partner || false,
+            isOwner: profile.is_owner ?? true,
+            isPartner: profile.is_partner ?? false,
+            isAdmin: profile.is_admin ?? false,
             location: profile.location,
             bio: profile.bio,
             phone: profile.phone,
