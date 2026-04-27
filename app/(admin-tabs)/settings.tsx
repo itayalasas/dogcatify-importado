@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Switch, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Switch, Alert, Modal, ActivityIndicator } from 'react-native';
 import { Bell, Shield, DollarSign, Globe, Database, LogOut, CreditCard, Crown } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -36,6 +36,7 @@ export default function AdminSettings() {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [testEmail, setTestEmail] = useState('');
   const [testEmailLoading, setTestEmailLoading] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showMercadoPagoModal, setShowMercadoPagoModal] = useState(false);
   const [adminMpConfig, setAdminMpConfig] = useState({
     isConnected: false,
@@ -478,7 +479,21 @@ export default function AdminSettings() {
     }
   };
 
+  const performLogout = async () => {
+    try {
+      setIsLoggingOut(true);
+      await logout();
+      router.replace('/auth/login');
+    } catch (error: any) {
+      console.error('Error logging out:', error);
+      setIsLoggingOut(false);
+      Alert.alert('Error', error?.message || 'No se pudo cerrar sesion. Intenta nuevamente.');
+    }
+  };
+
   const handleLogout = async () => {
+    if (isLoggingOut) return;
+
     Alert.alert(
       'Cerrar Sesión',
       '¿Estás seguro que quieres cerrar sesión?',
@@ -487,10 +502,7 @@ export default function AdminSettings() {
         {
           text: 'Cerrar Sesión',
           style: 'destructive',
-          onPress: async () => {
-            await logout();
-            router.replace('/auth/login');
-          }
+          onPress: performLogout
         }
       ]
     );
@@ -1080,12 +1092,29 @@ export default function AdminSettings() {
           <Button
             title="Cerrar Sesión"
             onPress={handleLogout}
+            disabled={isLoggingOut}
+            loading={isLoggingOut}
             variant="primary"
             size="large"
             style={styles.logoutButton}
           />
         </Card>
       </ScrollView>
+
+      <Modal
+        visible={isLoggingOut}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.logoutOverlay}>
+          <View style={styles.logoutOverlayCard}>
+            <ActivityIndicator size="large" color="#2D6A6F" />
+            <Text style={styles.logoutOverlayTitle}>Cerrando sesion</Text>
+            <Text style={styles.logoutOverlayText}>Estamos cerrando tu cuenta de forma segura.</Text>
+          </View>
+        </View>
+      </Modal>
       
       {/* Email Configuration Modal */}
       <Modal
@@ -1845,6 +1874,40 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     marginTop: 8,
+  },
+  logoutOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.42)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  logoutOverlayCard: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  logoutOverlayTitle: {
+    marginTop: 16,
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+  },
+  logoutOverlayText: {
+    marginTop: 8,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   adminEmail: {
     fontSize: 16,

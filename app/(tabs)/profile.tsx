@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, ActivityIndicator } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, Shield, CircleHelp as HelpCircle, Building, CreditCard, Fingerprint, ChevronRight, ArrowRight, Trash2, Crown, Truck } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
@@ -35,6 +35,7 @@ export default function Profile() {
   const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
   const [userSubscription, setUserSubscription] = useState<any>(null);
   const [isDottyEnabled, setIsDottyEnabled] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
@@ -493,7 +494,20 @@ export default function Profile() {
     }
   };
 
+  const performLogout = async () => {
+    try {
+      setIsLoggingOut(true);
+      await logout();
+    } catch (error: any) {
+      console.error('Error logging out:', error);
+      setIsLoggingOut(false);
+      Alert.alert('Error', error?.message || 'No se pudo cerrar sesion. Intenta nuevamente.');
+    }
+  };
+
   const handleLogout = () => {
+    if (isLoggingOut) return;
+
     Alert.alert(
       'Cerrar sesión',
       '¿Estás seguro de que quieres cerrar sesión?',
@@ -502,7 +516,7 @@ export default function Profile() {
         { 
           text: 'Cerrar sesión', 
           style: 'destructive',
-          onPress: logout
+          onPress: performLogout
         }
       ]
     );
@@ -817,12 +831,32 @@ export default function Profile() {
         </Card>
         {/* Logout */}
         <Card style={styles.logoutCard}>
-          <TouchableOpacity style={styles.logoutOption} onPress={handleLogout}>
-            <LogOut size={20} color="#10B981" />
-            <Text style={[styles.logoutText, styles.logoutTextGreen]}>{t('signOut')}</Text>
+          <TouchableOpacity
+            style={[styles.logoutOption, isLoggingOut ? styles.logoutOptionDisabled : null]}
+            onPress={handleLogout}
+            disabled={isLoggingOut}
+          >
+            {isLoggingOut ? (
+              <ActivityIndicator size="small" color="#10B981" />
+            ) : (
+              <LogOut size={20} color="#10B981" />
+            )}
+            <Text style={[styles.logoutText, styles.logoutTextGreen]}>
+              {isLoggingOut ? 'Cerrando sesion...' : t('signOut')}
+            </Text>
           </TouchableOpacity>
         </Card>
       </ScrollView>
+
+      {isLoggingOut && (
+        <View style={styles.logoutOverlay}>
+          <View style={styles.logoutOverlayCard}>
+            <ActivityIndicator size="large" color="#10B981" />
+            <Text style={styles.logoutOverlayTitle}>Cerrando sesion</Text>
+            <Text style={styles.logoutOverlayText}>Estamos cerrando tu cuenta de forma segura.</Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -1115,6 +1149,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 16,
   },
+  logoutOptionDisabled: {
+    opacity: 0.75,
+  },
   logoutText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
@@ -1123,6 +1160,40 @@ const styles = StyleSheet.create({
   },
   logoutTextGreen: {
     color: '#10B981',
+  },
+  logoutOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(17, 24, 39, 0.42)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  logoutOverlayCard: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  logoutOverlayTitle: {
+    marginTop: 16,
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+  },
+  logoutOverlayText: {
+    marginTop: 8,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   dangerText: {
     color: '#EF4444',
