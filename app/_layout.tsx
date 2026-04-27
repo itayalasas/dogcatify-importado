@@ -20,6 +20,7 @@ import { FloatingVoiceBot } from '../components/FloatingVoiceBot';
 
 const { width } = Dimensions.get('window');
 const SYSTEM_CONFIG_KEY = 'system_config';
+const APP_DEEP_LINK_SCHEME = 'dogcatify';
 
 type RuntimeSystemConfig = {
   maintenanceMode: boolean;
@@ -36,6 +37,43 @@ const DEFAULT_SYSTEM_CONFIG: RuntimeSystemConfig = {
   pushNotifications: true,
   autoApprovePartners: false,
 };
+
+const normalizeDeepLinkPath = ({
+  scheme,
+  hostname,
+  path,
+}: {
+  scheme?: string | null;
+  hostname?: string | null;
+  path?: string | null;
+}) => {
+  const cleanPath = (path || '').replace(/^\/+/, '');
+
+  if (scheme === APP_DEEP_LINK_SCHEME && hostname) {
+    return [hostname, cleanPath].filter(Boolean).join('/');
+  }
+
+  return cleanPath;
+};
+
+const buildRouteWithQuery = (routePath: string, queryParams?: Record<string, any> | null) => {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(queryParams || {}).forEach(([key, value]) => {
+    if (value == null) return;
+
+    const values = Array.isArray(value) ? value : [value];
+    values.forEach((item) => {
+      if (item != null && String(item).length > 0) {
+        searchParams.append(key, String(item));
+      }
+    });
+  });
+
+  const queryString = searchParams.toString();
+  return `/${routePath}${queryString ? `?${queryString}` : ''}`;
+};
+
 // Global error handler test
 if (typeof ErrorUtils !== 'undefined') {
   const originalHandler = ErrorUtils.getGlobalHandler();
@@ -179,11 +217,12 @@ function RootLayout() {
       console.log('Deep link received:', url);
 
       try {
-        const { hostname, path, queryParams } = Linking.parse(url);
-        console.log('Parsed URL:', { hostname, path, queryParams });
+        const { hostname, path, queryParams, scheme } = Linking.parse(url);
+        const routePath = normalizeDeepLinkPath({ scheme, hostname, path });
+        console.log('Parsed URL:', { hostname, path, queryParams, scheme, routePath });
 
-        if (path?.startsWith('album/')) {
-          const albumId = path.replace('album/', '');
+        if (routePath.startsWith('album/')) {
+          const albumId = routePath.replace('album/', '');
           console.log('Navigating to album:', albumId);
 
           setTimeout(() => {
@@ -191,8 +230,8 @@ function RootLayout() {
             router.push(`/pets/albums/${albumId}`);
           }, 500);
         }
-        else if (path?.startsWith('post/')) {
-          const postId = path.replace('post/', '');
+        else if (routePath.startsWith('post/')) {
+          const postId = routePath.replace('post/', '');
           console.log('Navigating to post:', postId);
 
           setTimeout(() => {
@@ -200,8 +239,8 @@ function RootLayout() {
             router.push('/(tabs)');
           }, 500);
         }
-        else if (path?.startsWith('pet-share/')) {
-          const shareId = path.replace('pet-share/', '');
+        else if (routePath.startsWith('pet-share/')) {
+          const shareId = routePath.replace('pet-share/', '');
           console.log('Navigating to pet share invitation:', shareId);
 
           setTimeout(() => {
@@ -209,8 +248,8 @@ function RootLayout() {
             router.push(`/pet-share/${shareId}`);
           }, 500);
         }
-        else if (path?.startsWith('pets/')) {
-          const petId = path.replace('pets/', '');
+        else if (routePath.startsWith('pets/')) {
+          const petId = routePath.replace('pets/', '');
           console.log('Navigating to pet details:', petId);
 
           setTimeout(() => {
@@ -218,28 +257,31 @@ function RootLayout() {
             router.push(`/pets/${petId}`);
           }, 500);
         }
-        else if (path?.startsWith('payment/success')) {
+        else if (routePath.startsWith('payment/success')) {
           console.log('Payment success deep link detected');
 
           setTimeout(() => {
             const router = require('expo-router').router;
-            // Usar replace para limpiar el stack y que no se pueda volver al carrito
-            router.replace(url.replace('dogcatify://', '/'));
+            router.replace(buildRouteWithQuery('payment/success', queryParams));
           }, 500);
         }
-        else if (path?.startsWith('payment/failure')) {
+        else if (routePath.startsWith('payment/failure')) {
           console.log('Payment failure deep link detected');
 
           setTimeout(() => {
             const router = require('expo-router').router;
-            // Usar replace para limpiar el stack
-            router.replace(url.replace('dogcatify://', '/'));
+            router.replace(buildRouteWithQuery('payment/failure', queryParams));
           }, 500);
         }
-        else if (
-          path?.startsWith('profile/subscription') ||
-          (hostname === 'profile' && path?.startsWith('subscription'))
-        ) {
+        else if (routePath.startsWith('payment/pending')) {
+          console.log('Payment pending deep link detected');
+
+          setTimeout(() => {
+            const router = require('expo-router').router;
+            router.replace(buildRouteWithQuery('payment/pending', queryParams));
+          }, 500);
+        }
+        else if (routePath.startsWith('profile/subscription')) {
           console.log('Subscription deep link detected');
 
           setTimeout(() => {

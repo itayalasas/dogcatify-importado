@@ -9,13 +9,21 @@ import { useCart } from '../../contexts/CartContext';
 import { logResourceAction } from '../../services/auditService';
 import { envConfig } from '../../utils/envConfig';
 
+const getSingleParam = (value?: string | string[]) =>
+  Array.isArray(value) ? value[0] : value;
+
 export default function PaymentSuccess() {
-  const { order_id, type, payment_id } = useLocalSearchParams<{
-    order_id: string;
+  const { order_id, external_reference, type, payment_id, collection_id } = useLocalSearchParams<{
+    order_id?: string;
+    external_reference?: string;
     type?: string;
     payment_id?: string;
+    collection_id?: string;
   }>();
 
+  const orderId = getSingleParam(order_id) || getSingleParam(external_reference) || '';
+  const paymentId = getSingleParam(payment_id) || getSingleParam(collection_id) || '';
+  const paymentType = getSingleParam(type);
   const { clearCart } = useCart();
   const [orderDetails, setOrderDetails] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -25,10 +33,10 @@ export default function PaymentSuccess() {
     loadOrderDetails();
     // Limpiar el carrito cuando llegamos a la pantalla de éxito
     clearCart();
-  }, [order_id, type]);
+  }, [orderId, paymentId, paymentType]);
 
   const loadOrderDetails = async () => {
-    if (!order_id) {
+    if (!orderId) {
       console.error('No order_id provided');
       setError('No se encontró el ID de la orden');
       setLoading(false);
@@ -36,13 +44,13 @@ export default function PaymentSuccess() {
     }
 
     try {
-      console.log('Loading order details:', { order_id, type, payment_id });
+      console.log('Loading order details:', { orderId, type: paymentType, paymentId });
 
       // Load order from database
       const { data: initialOrder, error: orderError } = await supabaseClient
         .from('orders')
         .select('*')
-        .eq('id', order_id)
+        .eq('id', orderId)
         .single();
 
       if (orderError) {
@@ -56,7 +64,7 @@ export default function PaymentSuccess() {
 
       let order = initialOrder;
 
-      const deepLinkPaymentId = Array.isArray(payment_id) ? payment_id[0] : payment_id;
+      const deepLinkPaymentId = paymentId;
       const shouldSyncFromDeepLink = (!order.payment_id || order.status === 'pending');
 
       if (shouldSyncFromDeepLink) {
@@ -71,7 +79,7 @@ export default function PaymentSuccess() {
                 data: { id: String(deepLinkPaymentId) }
               }
             : {
-                order_id: String(order_id)
+                order_id: String(orderId)
               };
 
           const controller = new AbortController();
@@ -95,7 +103,7 @@ export default function PaymentSuccess() {
           const { data: refreshedOrder } = await supabaseClient
             .from('orders')
             .select('*')
-            .eq('id', order_id)
+            .eq('id', orderId)
             .single();
 
           if (refreshedOrder) {
@@ -162,12 +170,12 @@ export default function PaymentSuccess() {
 
       // Fallback: use provided parameters
       setOrderDetails({
-        id: order_id,
-        displayId: `#${order_id.slice(-6)}`,
+        id: orderId,
+        displayId: `#${orderId.slice(-6)}`,
         total: '$430.00',
         status: 'Confirmado',
-        paymentId: payment_id ? `#mp${payment_id}` : 'Procesando...',
-        isBooking: type === 'booking'
+        paymentId: paymentId ? `#mp${paymentId}` : 'Procesando...',
+        isBooking: paymentType === 'booking'
       });
       setLoading(false);
     }
@@ -245,7 +253,10 @@ export default function PaymentSuccess() {
           </View>
         </Card>
 
-        <Card style={[styles.successCard, orderDetails?.isPendingValidation && styles.pendingCard]}>
+        <Card style={orderDetails?.isPendingValidation
+          ? { ...styles.successCard, ...styles.pendingCard }
+          : styles.successCard}
+        >
           <Text style={styles.successTitle}>¡Gracias por tu {orderDetails?.isBooking ? 'reserva' : 'compra'}!</Text>
           <View style={styles.successList}>
             {orderDetails?.isBooking ? (
