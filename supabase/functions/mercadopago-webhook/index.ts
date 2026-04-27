@@ -3,7 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
@@ -48,6 +48,23 @@ async function getMercadoPagoTokenCandidates(supabase: any): Promise<string[]> {
   }
 
   return tokenCandidates;
+}
+
+async function readJsonBody(req: Request): Promise<any> {
+  try {
+    const rawBody = await req.text();
+
+    if (!rawBody.trim()) {
+      return {};
+    }
+
+    return JSON.parse(rawBody);
+  } catch (error) {
+    console.warn('Could not parse Mercado Pago webhook body as JSON:', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return {};
+  }
 }
 
 async function syncOrderPaymentByOrderId(supabase: any, orderId: string): Promise<boolean> {
@@ -229,7 +246,7 @@ serve(async (req: Request) => {
 
     console.log('Webhook URL params:', urlParams);
 
-    const requestBody = await req.json();
+    const requestBody = await readJsonBody(req);
 
     if (requestBody?.order_id && !requestBody?.type) {
       const synced = await syncOrderPaymentByOrderId(supabase, String(requestBody.order_id));
