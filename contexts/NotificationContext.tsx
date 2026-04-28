@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { useAuth } from './AuthContext';
 import { supabaseClient } from '../lib/supabase';
@@ -10,6 +10,14 @@ const isExpoGo = Constants.appOwnership === 'expo';
 
 let Notifications: any = null;
 let Device: any = null;
+
+type IOSFCMTokenModule = {
+  getFCMToken: () => Promise<string>;
+};
+
+const { FCMTokenModule } = NativeModules as {
+  FCMTokenModule?: IOSFCMTokenModule;
+};
 
 if (!isExpoGo && Platform.OS !== 'web') {
   Notifications = require('expo-notifications');
@@ -23,6 +31,40 @@ if (!isExpoGo && Platform.OS !== 'web') {
     }),
   });
 }
+
+const getNativeFcmToken = async (): Promise<string | null> => {
+  if (!Notifications) {
+    return null;
+  }
+
+  if (Platform.OS === 'android') {
+    const devicePushToken = await Notifications.getDevicePushTokenAsync();
+    return devicePushToken?.data || null;
+  }
+
+  if (Platform.OS !== 'ios') {
+    return null;
+  }
+
+  try {
+    const devicePushToken = await Notifications.getDevicePushTokenAsync();
+    const apnsToken = devicePushToken?.data || null;
+
+    if (apnsToken) {
+      console.log('Apple APNs token obtained for Firebase:', apnsToken.substring(0, 30) + '...');
+    }
+  } catch (apnsError) {
+    console.warn('Could not obtain APNs token before requesting Firebase token:', apnsError);
+  }
+
+  if (!FCMTokenModule?.getFCMToken) {
+    console.warn('FCMTokenModule is not available on iOS.');
+    return null;
+  }
+
+  const fcmToken = await FCMTokenModule.getFCMToken();
+  return fcmToken || null;
+};
 
 interface NotificationContextType {
   expoPushToken: string | null;
@@ -268,48 +310,49 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           }
         }
 
-        // Get native device token (FCM en Android / APNs en iOS)
+        // Get the real FCM token used by Firebase v1 on both Android and iOS.
         // IMPORTANTE: se guarda en fcm_token para priorizar envío v1
         let fcmToken: string | null = null;
         try {
-          console.log('🔑 Getting native device push token (PRIORITARIO)...');
-          const devicePushToken = await Notifications.getDevicePushTokenAsync();
-          fcmToken = devicePushToken?.data || null;
+          console.log('🔑 Getting Firebase Cloud Messaging token...');
+          fcmToken = await getNativeFcmToken();
 
-          const tokenType = Platform.OS === 'android' ? 'FCM' : 'APNs';
+          const tokenType = 'FCM';
           console.log(`✅ ${tokenType} token obtained:`, fcmToken ? fcmToken.substring(0, 30) + '...' : 'null');
 
-          if (!fcmToken && Platform.OS === 'android') {
-            console.error('❌ CRÍTICO: No se pudo obtener FCM token en Android');
+          if (!fcmToken) {
+            console.error('❌ CRÍTICO: No se pudo obtener un FCM token');
             throw new Error('No se pudo obtener el token FCM. Las notificaciones podrían no funcionar.');
           }
         } catch (fcmError: any) {
-          console.error('❌ Error obteniendo token nativo del dispositivo:', fcmError);
-          if (Platform.OS === 'android') {
-            throw new Error('Error al obtener token FCM: ' + fcmError.message);
-          }
+          console.error('❌ Error obteniendo token FCM:', fcmError);
+          throw new Error('Error al obtener token FCM: ' + fcmError.message);
         }
 
         // Store tokens in user profile if user is logged in
         if (currentUser) {
           console.log('💾 Storing push tokens in user profile...');
 
-          // En Android, fcm_token es OBLIGATORIO
-          if (Platform.OS === 'android' && !fcmToken) {
-            console.error('❌ CRÍTICO: No se puede registrar notificaciones sin FCM token en Android');
+          // iOS y Android necesitan un FCM token real para usar el sender v1.
+          if (!fcmToken) {
+            console.error('❌ CRÍTICO: No se puede registrar notificaciones sin FCM token');
             throw new Error('No se pudo obtener el token FCM requerido para notificaciones.');
           }
 
+          const fcmTokenToStore = fcmToken;
+
           console.log('- Expo Push Token (legacy):', tokenData.data ? tokenData.data.substring(0, 30) + '...' : 'null');
-          if (fcmToken) {
+          if (fcmTokenToStore) {
             console.log('- FCM Token (PRIORITARIO):', fcmToken.substring(0, 30) + '...');
+          } else if (fcmToken && Platform.OS === 'ios') {
+            console.log('- APNs Token detectado en iOS:', fcmToken.substring(0, 30) + '...');
           }
 
           const { error: updateError } = await supabaseClient
             .from('profiles')
             .update({
               push_token: tokenData.data,
-              fcm_token: fcmToken,
+              fcm_token: fcmTokenToStore,
               notification_preferences: {
                 push: true,
                 email: true
@@ -324,8 +367,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           }
 
           console.log('✅ Push tokens saved successfully');
-          if (fcmToken) {
-            console.log('✅ FCM v1 API ready for Android (método preferido)');
+          if (fcmTokenToStore) {
+            console.log('✅ FCM v1 API ready on', Platform.OS);
           } else {
             console.warn('⚠️ Sin FCM token - usando Expo legacy API (descontinuada)');
           }
@@ -355,11 +398,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       // Check if target user has notifications enabled and get FCM token
       const { data: profile } = await supabaseClient
         .from('profiles')
-        .select('fcm_token, notification_preferences')
+        .select('push_token, fcm_token, notification_preferences')
         .eq('id', userId)
         .single();
 
-      if (!profile?.fcm_token) {
+      if (!profile?.fcm_token && !profile?.push_token) {
         console.log('❌ User does not have FCM token');
         return;
       }
@@ -391,7 +434,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           'Authorization': `Bearer ${anonKey}`,
         },
         body: JSON.stringify({
-          token: profile.fcm_token,
+          token: profile.fcm_token || profile.push_token,
+          expoPushToken: profile.push_token || undefined,
           title,
           body,
           data: data || {}
@@ -566,10 +610,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
 
       try {
-        const devicePushToken = await Notifications.getDevicePushTokenAsync();
-        currentFcmToken = devicePushToken?.data || null;
+        currentFcmToken = await getNativeFcmToken();
 
-        const tokenType = Platform.OS === 'android' ? 'FCM' : 'APNs';
+        const tokenType = 'FCM';
         console.log(`✅ ${tokenType} token actual:`, currentFcmToken ? currentFcmToken.substring(0, 30) + '...' : 'null');
 
         if (currentFcmToken !== storedFcmToken) {

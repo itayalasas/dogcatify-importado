@@ -99,6 +99,7 @@ Deno.serve(async (req: Request) => {
             },
             body: JSON.stringify({
               token: userProfile.fcm_token,
+              expoPushToken: userProfile.push_token || undefined,
               title,
               body,
               data: dataPayload,

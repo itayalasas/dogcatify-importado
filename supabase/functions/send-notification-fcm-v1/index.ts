@@ -1,3 +1,4 @@
+import { createClient } from 'npm:@supabase/supabase-js@2.43.2';
 import { getAccessToken, parseServiceAccount } from '../_shared/firebase-auth.ts';
 
 const corsHeaders = {
@@ -8,6 +9,7 @@ const corsHeaders = {
 
 interface NotificationPayload {
   token: string;
+  expoPushToken?: string;
   title: string;
   body: string;
   data?: Record<string, string>;
@@ -16,6 +18,8 @@ interface NotificationPayload {
   badge?: number;
   channelId?: string;
 }
+
+type PushTokenType = 'fcm' | 'expo' | 'apns' | 'unknown';
 
 interface FCMMessage {
   message: {
@@ -51,6 +55,150 @@ interface FCMMessage {
   };
 }
 
+function detectPushTokenType(token?: string | null): PushTokenType {
+  if (!token) {
+    return 'unknown';
+  }
+
+  if (token.startsWith('ExponentPushToken[') || token.startsWith('ExpoPushToken[')) {
+    return 'expo';
+  }
+
+  if (/^[a-f0-9]{64}$/i.test(token)) {
+    return 'apns';
+  }
+
+  if (token.includes(':') || token.length > 80) {
+    return 'fcm';
+  }
+
+  return 'unknown';
+}
+
+async function parseJsonRequest(req: Request): Promise<{ payload?: NotificationPayload; errorResponse?: Response }> {
+  const rawBody = await req.text();
+
+  if (!rawBody.trim()) {
+    return {
+      errorResponse: new Response(
+        JSON.stringify({
+          error: 'Request body is required',
+          message: 'Expected a JSON payload with token, title and body',
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      ),
+    };
+  }
+
+  try {
+    return {
+      payload: JSON.parse(rawBody) as NotificationPayload,
+    };
+  } catch (error) {
+    return {
+      errorResponse: new Response(
+        JSON.stringify({
+          error: 'Invalid JSON body',
+          message: error instanceof Error ? error.message : 'Failed to parse request body as JSON',
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      ),
+    };
+  }
+}
+
+async function parseResponseBody(response: Response): Promise<any> {
+  const responseText = await response.text();
+
+  if (!responseText.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(responseText);
+  } catch {
+    return {
+      raw: responseText,
+    };
+  }
+}
+
+async function sendViaExpo(
+  expoPushToken: string,
+  payload: NotificationPayload,
+): Promise<{ response: Response; result: any; ticket: any }> {
+  const expoAccessToken = Deno.env.get('EXPO_ACCESS_TOKEN');
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  };
+
+  if (expoAccessToken) {
+    headers['Authorization'] = `Bearer ${expoAccessToken}`;
+  }
+
+  const response = await fetch('https://exp.host/--/api/v2/push/send', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      to: expoPushToken,
+      sound: payload.sound || 'default',
+      title: payload.title,
+      body: payload.body,
+      data: payload.data || {},
+      priority: 'high',
+      channelId: payload.channelId || 'default',
+    }),
+  });
+
+  const result = await parseResponseBody(response);
+  const ticket = Array.isArray(result?.data) ? result.data[0] : (result?.data ?? result);
+
+  return {
+    response,
+    result,
+    ticket,
+  };
+}
+
+async function resolveExpoPushTokenFromProfiles(apnsToken: string): Promise<string | null> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    return null;
+  }
+
+  try {
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('push_token')
+      .eq('fcm_token', apnsToken)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('Could not resolve Expo push token from profiles:', error.message);
+      return null;
+    }
+
+    const pushToken = profile?.push_token ?? null;
+    return detectPushTokenType(pushToken) === 'expo' ? pushToken : null;
+  } catch (error) {
+    console.warn(
+      'Unexpected error resolving Expo push token from profiles:',
+      error instanceof Error ? error.message : error,
+    );
+    return null;
+  }
+}
+
 function buildServiceAccountFromEnv() {
   const projectId = Deno.env.get('FIREBASE_PROJECT_ID');
   const privateKey = Deno.env.get('FIREBASE_PRIVATE_KEY');
@@ -77,6 +225,42 @@ function buildServiceAccountFromEnv() {
   };
 }
 
+function buildFcmMessage(payload: NotificationPayload): FCMMessage {
+  return {
+    message: {
+      token: payload.token,
+      notification: {
+        title: payload.title,
+        body: payload.body,
+        ...(payload.imageUrl && { image: payload.imageUrl }),
+      },
+      data: payload.data || {},
+      android: {
+        priority: 'high',
+        notification: {
+          sound: payload.sound || 'default',
+          channelId: payload.channelId || 'default',
+          defaultSound: true,
+          defaultVibrateTimings: true,
+        },
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: payload.sound || 'default',
+            badge: payload.badge || 0,
+            alert: {
+              title: payload.title,
+              body: payload.body,
+            },
+            contentAvailable: true,
+          },
+        },
+      },
+    },
+  };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -86,13 +270,114 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    const { payload, errorResponse } = await parseJsonRequest(req);
+
+    if (errorResponse) {
+      return errorResponse;
+    }
+
+    if (!payload) {
+      return new Response(
+        JSON.stringify({
+          error: 'Invalid request payload',
+          message: 'Notification payload could not be read',
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    if (!payload.token) {
+      return new Response(
+        JSON.stringify({ error: 'Token is required' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    if (!payload.title || !payload.body) {
+      return new Response(
+        JSON.stringify({ error: 'Title and body are required' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    const primaryTokenType = detectPushTokenType(payload.token);
+    let expoPushToken = detectPushTokenType(payload.expoPushToken) === 'expo'
+      ? payload.expoPushToken!
+      : (primaryTokenType === 'expo' ? payload.token : null);
+
+    if (!expoPushToken && primaryTokenType === 'apns') {
+      expoPushToken = await resolveExpoPushTokenFromProfiles(payload.token);
+    }
+
+    if (primaryTokenType === 'apns' && !expoPushToken) {
+      return new Response(
+        JSON.stringify({
+          error: 'APNs token is not supported by this endpoint',
+          message: 'The provided token looks like an iOS APNs token. Use the Expo push token from profiles.push_token or a real Android FCM token.',
+          tokenType: primaryTokenType,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    if (primaryTokenType === 'expo' || (primaryTokenType === 'apns' && expoPushToken)) {
+      console.log('Sending notification via Expo Push Service...');
+
+      const { response, result, ticket } = await sendViaExpo(expoPushToken!, payload);
+      const normalizedExpoResult = result ?? {
+        emptyBody: true,
+        status: response.status,
+        statusText: response.statusText,
+      };
+
+      if (!response.ok || ticket?.status === 'error') {
+        return new Response(
+          JSON.stringify({
+            error: 'Failed to send notification',
+            details: ticket ?? normalizedExpoResult,
+            provider: 'expo',
+            status: response.ok ? 400 : response.status,
+          }),
+          {
+            status: response.ok ? 400 : response.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          provider: 'expo',
+          messageId: ticket?.id ?? null,
+          result: normalizedExpoResult,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
     const serviceAccountJson = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
     let serviceAccount: any = null;
 
     if (serviceAccountJson) {
       try {
         serviceAccount = parseServiceAccount(serviceAccountJson);
-      } catch (parseError) {
+      } catch {
         console.warn('Invalid FIREBASE_SERVICE_ACCOUNT JSON, trying split FIREBASE_* secrets fallback');
       }
     }
@@ -116,67 +401,11 @@ Deno.serve(async (req: Request) => {
 
     const projectId = serviceAccount.project_id;
 
-    const payload: NotificationPayload = await req.json();
-
-    if (!payload.token) {
-      return new Response(
-        JSON.stringify({ error: 'Token is required' }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      );
-    }
-
-    if (!payload.title || !payload.body) {
-      return new Response(
-        JSON.stringify({ error: 'Title and body are required' }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      );
-    }
-
     console.log('Getting access token...');
     const accessToken = await getAccessToken(serviceAccount);
     console.log('Access token obtained successfully');
 
-    const message: FCMMessage = {
-      message: {
-        token: payload.token,
-        notification: {
-          title: payload.title,
-          body: payload.body,
-          ...(payload.imageUrl && { image: payload.imageUrl }),
-        },
-        data: payload.data || {},
-        android: {
-          priority: 'high',
-          notification: {
-            sound: payload.sound || 'default',
-            channelId: payload.channelId || 'default',
-            defaultSound: true,
-            defaultVibrateTimings: true,
-          },
-        },
-        apns: {
-          payload: {
-            aps: {
-              sound: payload.sound || 'default',
-              badge: payload.badge || 0,
-              alert: {
-                title: payload.title,
-                body: payload.body,
-              },
-              contentAvailable: true,
-            },
-          },
-        },
-      },
-    };
-
-   const fcmUrl = `https://api.flowbridge.site/functions/v1/api-gateway/47256d34-2e5f-4b33-ac5d-5d2723bfd917`;
+    const fcmUrl = 'https://api.flowbridge.site/functions/v1/api-gateway/47256d34-2e5f-4b33-ac5d-5d2723bfd917';
     console.log('Sending notification to FCM v1 API...');
     const response = await fetch(fcmUrl, {
       method: 'POST',
@@ -186,17 +415,56 @@ Deno.serve(async (req: Request) => {
         'X-Integration-Key': 'int_b0009562b2f8091143508c3603abb199252ebfc071f6eb51d3042007b02c9ba6',
         'Authorization': `Bearer ${accessToken}`
       },
-      body: JSON.stringify(message)
+      body: JSON.stringify(buildFcmMessage(payload))
     });
 
-    const result = await response.json();
+    const result = await parseResponseBody(response);
+    const normalizedResult = result ?? {
+      emptyBody: true,
+      status: response.status,
+      statusText: response.statusText,
+    };
 
     if (!response.ok) {
-      console.error('FCM Error:', result);
+      if (expoPushToken) {
+        const fcmErrorMessage = normalizedResult?.error?.message || '';
+
+        if (
+          typeof fcmErrorMessage === 'string'
+          && fcmErrorMessage.toLowerCase().includes('not a valid fcm registration token')
+        ) {
+          console.warn('Invalid FCM token detected, trying Expo fallback...');
+
+          const { response: expoResponse, result: expoResult, ticket } = await sendViaExpo(expoPushToken, payload);
+          const normalizedExpoResult = expoResult ?? {
+            emptyBody: true,
+            status: expoResponse.status,
+            statusText: expoResponse.statusText,
+          };
+
+          if (expoResponse.ok && ticket?.status !== 'error') {
+            return new Response(
+              JSON.stringify({
+                success: true,
+                provider: 'expo-fallback',
+                messageId: ticket?.id ?? null,
+                result: normalizedExpoResult,
+              }),
+              {
+                status: 200,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+              }
+            );
+          }
+        }
+      }
+
+      console.error('FCM Error:', normalizedResult);
       return new Response(
         JSON.stringify({
           error: 'Failed to send notification',
-          details: result,
+          details: normalizedResult,
+          provider: 'fcm-v1',
           status: response.status
         }),
         {
@@ -206,13 +474,16 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log('Notification sent successfully:', result.name);
+    const messageId = normalizedResult?.name ?? null;
+
+    console.log('Notification sent successfully:', messageId ?? `HTTP ${response.status} ${response.statusText}`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        messageId: result.name,
-        result
+        provider: 'fcm-v1',
+        messageId,
+        result: normalizedResult
       }),
       {
         status: 200,
@@ -225,8 +496,8 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         error: 'Internal server error',
-        message: error.message,
-        stack: error.stack
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
       }),
       {
         status: 500,

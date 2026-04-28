@@ -752,11 +752,11 @@ export default function ServiceBooking() {
         } else {
           const { data: profileData, error: profileError } = await supabaseClient
             .from('profiles')
-            .select('fcm_token')
+            .select('push_token, fcm_token')
             .eq('id', partnerData.user_id)
             .single();
 
-          if (profileError || !profileData?.fcm_token) {
+          if (profileError || (!profileData?.fcm_token && !profileData?.push_token)) {
             console.warn('Partner has no fcm_token for booking notification:', profileError);
           } else {
             await fetch(`${supabaseUrl}/functions/v1/send-notification-fcm-v1`, {
@@ -766,7 +766,8 @@ export default function ServiceBooking() {
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
-                token: profileData.fcm_token,
+                token: profileData.fcm_token || profileData.push_token,
+                expoPushToken: profileData.push_token || undefined,
                 title: '🎉 Nueva Reserva',
                 body: `${currentUser.displayName || 'Un cliente'} ha reservado ${service.name} para el ${bookingDate.toLocaleDateString()}`,
                 data: {

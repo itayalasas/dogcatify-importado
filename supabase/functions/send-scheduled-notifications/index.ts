@@ -142,6 +142,7 @@ Deno.serve(async (req: Request) => {
                 },
                 body: JSON.stringify({
                   token: profile.fcm_token,
+                  expoPushToken: profile.push_token || undefined,
                   title: notification.title,
                   body: notification.body,
                   data: serializedData,
@@ -171,6 +172,15 @@ Deno.serve(async (req: Request) => {
                   message: 'FCM v1 auth failed (Invalid JWT). Verify SUPABASE_SERVICE_ROLE_KEY secret in send-scheduled-notifications.',
                   details: {
                     status: 401,
+                    response: errorData,
+                  },
+                };
+              } else {
+                ticket = {
+                  status: 'error',
+                  message: errorData?.message || errorData?.error || 'FCM v1 request failed',
+                  details: {
+                    status: fcmResponse.status,
                     response: errorData,
                   },
                 };
