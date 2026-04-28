@@ -426,9 +426,10 @@ Deno.serve(async (req: Request) => {
     };
 
     if (!response.ok) {
-      if (expoPushToken) {
-        const fcmErrorMessage = normalizedResult?.error?.message || '';
+      const fcmErrorMessage = normalizedResult?.error?.message || '';
+      const fcmErrorCode = normalizedResult?.error?.details?.[0]?.errorCode || null;
 
+      if (expoPushToken) {
         if (
           typeof fcmErrorMessage === 'string'
           && fcmErrorMessage.toLowerCase().includes('not a valid fcm registration token')
@@ -459,13 +460,39 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      if (fcmErrorCode === 'SENDER_ID_MISMATCH') {
+        console.error('FCM SenderId mismatch detected:', {
+          firebaseProjectId: projectId,
+          tokenType: primaryTokenType,
+          details: normalizedResult,
+        });
+
+        return new Response(
+          JSON.stringify({
+            error: 'Failed to send notification',
+            provider: 'fcm-v1',
+            status: response.status,
+            firebaseProjectId: projectId,
+            tokenType: primaryTokenType,
+            details: normalizedResult,
+            message: 'The device token belongs to a different Firebase project than the service account configured in this function.',
+          }),
+          {
+            status: response.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+
       console.error('FCM Error:', normalizedResult);
       return new Response(
         JSON.stringify({
           error: 'Failed to send notification',
           details: normalizedResult,
           provider: 'fcm-v1',
-          status: response.status
+          status: response.status,
+          firebaseProjectId: projectId,
+          tokenType: primaryTokenType,
         }),
         {
           status: response.status,
