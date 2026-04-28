@@ -72,7 +72,7 @@
     "android": {
       "package": "com.dogcatify.app2",
       "versionCode": 1,
-      "googleServicesFile": "./google-services.json",
+      "googleServicesFile": "./android/app/google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#FFFFFF"
