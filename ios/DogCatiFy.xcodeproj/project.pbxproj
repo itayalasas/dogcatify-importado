@@ -12,6 +12,9 @@
 		474E18B225BA1C3B9B7B32F5 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C67D2772E47C4920E482CBA /* ExpoModulesProvider.swift */; };
 		671709F9F16BC367B7C821A5 /* libPods-DogCatiFy.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DAB6FEE05BC78CD90AC94700 /* libPods-DogCatiFy.a */; };
 		6A6B8DC8D11C7DF3480437E1 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3513127700D5CEF0E0A296AB /* PrivacyInfo.xcprivacy */; };
+		7D915E6A432B4A7981B8C57F /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 7D915E6C432B4A7981B8C57F /* GoogleService-Info.plist */; };
+		7D915E6B432B4A7981B8C57F /* FCMTokenModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D915E6D432B4A7981B8C57F /* FCMTokenModule.swift */; };
+		7D915E6E432B4A7981B8C57F /* FCMTokenModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 7D915E6F432B4A7981B8C57F /* FCMTokenModule.m */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
@@ -22,6 +25,9 @@
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = DogCatiFy/Info.plist; sourceTree = "<group>"; };
 		3513127700D5CEF0E0A296AB /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = DogCatiFy/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		6C67D2772E47C4920E482CBA /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-DogCatiFy/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		7D915E6C432B4A7981B8C57F /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		7D915E6D432B4A7981B8C57F /* FCMTokenModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogCatiFy/FCMTokenModule.swift; sourceTree = "<group>"; };
+		7D915E6F432B4A7981B8C57F /* FCMTokenModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = DogCatiFy/FCMTokenModule.m; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = DogCatiFy/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
 		C93898D1619EF1EA7395FB19 /* Pods-DogCatiFy.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-DogCatiFy.debug.xcconfig"; path = "Target Support Files/Pods-DogCatiFy/Pods-DogCatiFy.debug.xcconfig"; sourceTree = "<group>"; };
@@ -48,7 +54,10 @@
 			isa = PBXGroup;
 			children = (
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
+				7D915E6D432B4A7981B8C57F /* FCMTokenModule.swift */,
+				7D915E6F432B4A7981B8C57F /* FCMTokenModule.m */,
 				F11748442D0722820044C1D9 /* DogCatiFy-Bridging-Header.h */,
+				7D915E6C432B4A7981B8C57F /* GoogleService-Info.plist */,
 				BB2F792B24A3F905000567C9 /* Supporting */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
@@ -194,6 +203,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
+				7D915E6A432B4A7981B8C57F /* GoogleService-Info.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
 				6A6B8DC8D11C7DF3480437E1 /* PrivacyInfo.xcprivacy in Resources */,
@@ -340,6 +350,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
+				7D915E6B432B4A7981B8C57F /* FCMTokenModule.swift in Sources */,
+				7D915E6E432B4A7981B8C57F /* FCMTokenModule.m in Sources */,
 				474E18B225BA1C3B9B7B32F5 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
