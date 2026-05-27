@@ -1,19 +1,20 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle } from 'react-native';
+import { View, StyleSheet, ViewStyle, StyleProp, ViewProps } from 'react-native';
 
-interface CardProps {
+interface CardProps extends ViewProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   padding?: boolean;
 }
 
 const Card: React.FC<CardProps> = ({ 
   children, 
   style, 
-  padding = true 
+  padding = true,
+  ...rest
 }) => {
   return (
-    <View style={[styles.card, padding && styles.padding, style]}>
+    <View {...rest} style={[styles.card, padding && styles.padding, style]}>
       {children}
     </View>
   );

@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Image, Alert, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Calendar, DollarSign, Users, Package, TrendingUp, Clock, MessageCircle, ChartBar as BarChart3, Settings, Filter } from 'lucide-react-native';
+import { Calendar, DollarSign, Users, Package, TrendingUp, Clock, MessageCircle, ChartBar as BarChart3, Settings, Filter, CreditCard } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { Button } from '../../components/ui/Button';
+import {
+  canAccessPartnerModule,
+  getPartnerLockedActionLabel,
+  getPartnerPlan,
+  resolvePartnerPlanTier,
+} from '../../utils/partnerPlans';
 
 type DateFilter = 'today' | 'week' | 'month' | 'all';
 
@@ -472,6 +478,42 @@ export default function PartnerDashboard() {
   const shouldShowAgenda = (): boolean => {
     return isFeatureEnabled('agenda') || ['veterinary', 'grooming', 'boarding'].includes(partnerProfile?.businessType);
   };
+  const effectivePartnerTier = resolvePartnerPlanTier(
+    partnerProfile?.subscription_plan_tier,
+    partnerProfile?.subscription_plan_status,
+    partnerProfile?.subscription_plan_expires_at,
+  );
+  const partnerPlan = getPartnerPlan(effectivePartnerTier);
+  const canViewClients = canAccessPartnerModule(
+    partnerProfile?.subscription_plan_tier,
+    'clients',
+    partnerProfile?.businessType,
+    partnerProfile?.subscription_plan_status,
+    partnerProfile?.subscription_plan_expires_at,
+  );
+  const canViewInsights = canAccessPartnerModule(
+    partnerProfile?.subscription_plan_tier,
+    'insights',
+    partnerProfile?.businessType,
+    partnerProfile?.subscription_plan_status,
+    partnerProfile?.subscription_plan_expires_at,
+  );
+  const canViewAdoptions = canAccessPartnerModule(
+    partnerProfile?.subscription_plan_tier,
+    'adoptions',
+    partnerProfile?.businessType,
+    partnerProfile?.subscription_plan_status,
+    partnerProfile?.subscription_plan_expires_at,
+  );
+
+  const showPlanUpgradeAlert = (module: 'clients' | 'insights' | 'adoptions') => {
+    Alert.alert(
+      'Plan requerido',
+      `${getPartnerLockedActionLabel(module)} para este negocio.`,
+      [{ text: 'Entendido' }]
+    );
+  };
+
   const getBusinessTypeIcon = (type: string) => { 
     switch (type) {
       case 'veterinary': return '🏥';
@@ -531,10 +573,17 @@ export default function PartnerDashboard() {
             </Text>
           </View>
         </View>
-        <View style={styles.statusBadge}>
-          <Text style={styles.statusText}>
-            {partnerProfile.isVerified ? '✅ Verificado' : '⏳ Pendiente'}
-          </Text>
+        <View style={styles.headerBadges}>
+          <View style={styles.statusBadge}>
+            <Text style={styles.statusText}>
+              {partnerProfile.isVerified ? '✅ Verificado' : '⏳ Pendiente'}
+            </Text>
+          </View>
+          <View style={[styles.planBadge, { backgroundColor: partnerPlan.surface, borderColor: partnerPlan.border }]}>
+            <Text style={[styles.planBadgeText, { color: partnerPlan.accent }]}>
+              Plan {partnerPlan.name}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -620,48 +669,107 @@ export default function PartnerDashboard() {
               <Text style={styles.quickActionText}>Gestionar Servicios</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={styles.quickAction} 
-              onPress={handleViewClients}
+            <TouchableOpacity
+              style={[
+                styles.quickAction,
+                !canViewClients ? styles.quickActionLocked : null,
+              ]}
+              onPress={canViewClients ? handleViewClients : () => showPlanUpgradeAlert('clients')}
             >
-              <Users size={24} color="#F59E0B" />
+              <Users size={24} color={canViewClients ? '#F59E0B' : '#A855F7'} />
               <Text style={styles.quickActionText}>Ver Clientes</Text>
+              {!canViewClients && (
+                <Text style={styles.quickActionSubtext}>
+                  {getPartnerLockedActionLabel('clients')}
+                </Text>
+              )}
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={styles.quickAction} 
-              onPress={() => router.push({
+            <TouchableOpacity
+              style={[
+                styles.quickAction,
+                !canViewInsights ? styles.quickActionLocked : null,
+              ]}
+              onPress={canViewInsights ? () => router.push({
                 pathname: '/partner/business-insights',
                 params: { partnerId: partnerProfile?.id }
-              })}
+              }) : () => showPlanUpgradeAlert('insights')}
             >
-              <BarChart3 size={24} color="#8B5CF6" />
+              <BarChart3 size={24} color={canViewInsights ? '#8B5CF6' : '#A855F7'} />
               <Text style={styles.quickActionText}>Inteligencia de Negocio</Text>
+              {!canViewInsights && (
+                <Text style={styles.quickActionSubtext}>
+                  {getPartnerLockedActionLabel('insights')}
+                </Text>
+              )}
             </TouchableOpacity>
 
             {shouldShowProducts() && (
-              <TouchableOpacity 
-                style={styles.quickAction}
-                onPress={handleViewOrders}
-              >
-                <Package size={24} color="#8B5CF6" />
+            <TouchableOpacity 
+              style={styles.quickAction}
+              onPress={handleViewOrders}
+            >
+              <Package size={24} color="#8B5CF6" />
                 <Text style={styles.quickActionText}>
                   Ver Pedidos
                 </Text>
               </TouchableOpacity>
             )}
 
+            <TouchableOpacity
+              style={[
+                styles.quickAction,
+                partnerProfile?.mercadopago_config?.is_oauth ? styles.quickActionSuccess : null,
+              ]}
+              onPress={() => router.push('/profile/mercadopago-config')}
+            >
+              <CreditCard
+                size={24}
+                color={partnerProfile?.mercadopago_config?.is_oauth ? '#10B981' : '#F59E0B'}
+              />
+              <Text style={styles.quickActionText}>Mercado Pago</Text>
+              <Text style={styles.quickActionSubtext}>
+                {partnerProfile?.mercadopago_config?.is_oauth
+                  ? 'OAuth activo'
+                  : partnerProfile?.mercadopago_connected
+                    ? 'Conexión pendiente'
+                    : 'Conectar cobros'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickAction}
+              onPress={() => router.push({
+                pathname: '/partner/subscription',
+                params: { businessId: partnerProfile.id },
+              })}
+            >
+              <DollarSign size={24} color="#10B981" />
+              <Text style={styles.quickActionText}>Planes</Text>
+              <Text style={styles.quickActionSubtext}>
+                Gestiona tu plan y tu prueba
+              </Text>
+            </TouchableOpacity>
+
             {/* Mostrar contactos de adopción solo para refugios */}
             {partnerProfile?.businessType === 'shelter' && (
               <TouchableOpacity 
-                style={styles.quickAction}
-                onPress={() => router.push({
+                style={[
+                  styles.quickAction,
+                  !canViewAdoptions ? styles.quickActionLocked : null,
+                ]}
+                onPress={canViewAdoptions ? () => router.push({
                   pathname: '/(partner-tabs)/chat-contacts',
                   params: { businessId: partnerProfile.id }
-                })}
+                }) : () => showPlanUpgradeAlert('adoptions')}
               >
-                <MessageCircle size={24} color="#8B5CF6" />
+                <MessageCircle size={24} color={canViewAdoptions ? '#8B5CF6' : '#A855F7'} />
                 <Text style={styles.quickActionText}>Contactos Adopción</Text>
+                {!canViewAdoptions && (
+                  <Text style={styles.quickActionSubtext}>
+                    {getPartnerLockedActionLabel('adoptions')}
+                  </Text>
+                )}
               </TouchableOpacity>
             )}
           </View>
@@ -896,11 +1004,25 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginTop: 2,
   },
+  headerBadges: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
   statusBadge: {
     backgroundColor: '#F3F4F6',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
+  },
+  planBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  planBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
   },
   statusText: {
     fontSize: 12,
@@ -972,6 +1094,11 @@ const styles = StyleSheet.create({
     elevation: 2,
     minHeight: 108,
   },
+  quickActionLocked: {
+    backgroundColor: '#FAF5FF',
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+  },
   quickActionText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
@@ -979,6 +1106,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
     lineHeight: 16,
+  },
+  quickActionSubtext: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 4,
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  quickActionSuccess: {
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    backgroundColor: '#ECFDF5',
   },
   disabledQuickAction: {
     opacity: 0.5,

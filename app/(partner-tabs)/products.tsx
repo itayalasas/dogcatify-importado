@@ -568,7 +568,7 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: '#F9FAFB',
   },
-  errorText: {
+  debugErrorText: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#EF4444',

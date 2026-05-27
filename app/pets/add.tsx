@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { supabaseClient } from '../../lib/supabase';
 import { uploadImage } from '../../utils/imageUpload';
+import { resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
 
 interface BreedInfo {
   name: string;
@@ -289,6 +290,50 @@ export default function AddPet() {
     setIsLoading(true);
     
     try {
+      const { data: subscriptionData, error: subscriptionError } = await supabaseClient
+        .from('user_subscriptions')
+        .select(`
+          status,
+          subscription_plans (
+            tier,
+            audience_target,
+            limits
+          )
+        `)
+        .eq('user_id', currentUser.id)
+        .in('status', ['active', 'trialing', 'pending', 'paused'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (subscriptionError) {
+        console.error('Error loading user subscription limits:', subscriptionError);
+      }
+
+      const userPlanLimits = resolveSubscriptionPlanLimits(subscriptionData?.subscription_plans || null);
+      const maxPetsAllowed = userPlanLimits.users.maxPets;
+
+      if (maxPetsAllowed !== null) {
+        const { count: petsCount, error: petsCountError } = await supabaseClient
+          .from('pets')
+          .select('id', { count: 'exact', head: true })
+          .eq('owner_id', currentUser.id);
+
+        if (petsCountError) {
+          console.error('Error counting pets for plan limit:', petsCountError);
+        } else if ((petsCount || 0) >= maxPetsAllowed) {
+          Alert.alert(
+            'Límite alcanzado',
+            `Tu plan actual permite hasta ${maxPetsAllowed} mascota${maxPetsAllowed === 1 ? '' : 's'}. Actualiza tu suscripción para registrar más.`,
+            [
+              { text: 'Ver suscripción', onPress: () => router.push('/profile/subscription') },
+              { text: 'OK', style: 'cancel' },
+            ]
+          );
+          return;
+        }
+      }
+
       // Check if a pet with the same name, species, and breed already exists for this user
       const { data: existingPets, error: checkError } = await supabaseClient
         .from('pets')

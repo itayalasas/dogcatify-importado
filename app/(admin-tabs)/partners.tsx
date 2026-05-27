@@ -6,6 +6,12 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import {
+  PARTNER_PLAN_ORDER,
+  getPartnerPlan,
+  getPartnerPlanDisplayPrice,
+  normalizePartnerPlanTier,
+} from '../../utils/partnerPlans';
 
 interface Subscription {
   id: string;
@@ -25,6 +31,7 @@ export default function AdminPartners() {
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showCommissionModal, setShowCommissionModal] = useState(false);
   const [selectedPartner, setSelectedPartner] = useState<any>(null);
+  const [selectedPlanTier, setSelectedPlanTier] = useState<'starter' | 'growth' | 'pro'>('starter');
   
   // Subscription form
   const [subName, setSubName] = useState('');
@@ -80,6 +87,8 @@ export default function AdminPartners() {
           business_name, 
           business_type, 
           commission_percentage, 
+          subscription_plan_tier,
+          subscription_plan_status,
           is_verified, 
           is_active, 
           created_at, 
@@ -130,6 +139,8 @@ export default function AdminPartners() {
         businessName: partner.business_name,
         businessType: partner.business_type,
         commissionPercentage: partner.commission_percentage || 5.0,
+        subscriptionPlanTier: normalizePartnerPlanTier(partner.subscription_plan_tier),
+        subscriptionPlanStatus: partner.subscription_plan_status || 'active',
         servicesCount: partner.servicesCount || 0,
         createdAt: new Date(partner.created_at),
         updatedAt: partner.updated_at ? new Date(partner.updated_at) : null,
@@ -193,6 +204,48 @@ export default function AdminPartners() {
     } catch (error) {
       console.error('Error updating commission:', error);
       Alert.alert('Error', 'No se pudo actualizar la comisión');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateSubscriptionPlan = async () => {
+    if (!selectedPartner || !selectedPlanTier) {
+      Alert.alert('Error', 'Por favor selecciona un plan');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabaseClient
+        .from('partners')
+        .update({
+          subscription_plan_tier: selectedPlanTier,
+          subscription_plan_status: 'active',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', selectedPartner.id);
+
+      if (error) throw error;
+
+      setPartners(prevPartners =>
+        prevPartners.map(partner =>
+          partner.id === selectedPartner.id
+            ? {
+                ...partner,
+                subscriptionPlanTier: selectedPlanTier,
+                subscriptionPlanStatus: 'active',
+              }
+            : partner
+        )
+      );
+
+      setSelectedPartner(null);
+      setShowSubscriptionModal(false);
+      Alert.alert('Éxito', 'Plan actualizado correctamente');
+    } catch (error) {
+      console.error('Error updating subscription plan:', error);
+      Alert.alert('Error', 'No se pudo actualizar el plan');
     } finally {
       setLoading(false);
     }
@@ -285,20 +338,34 @@ export default function AdminPartners() {
                     </Text>
                   </View>
                 </View>
-                
-                <TouchableOpacity
-                  style={styles.commissionButton}
-                  onPress={() => {
-                    setSelectedPartner(partner);
-                    setNewCommission(partner.commissionPercentage?.toString() || '5.0');
-                    setShowCommissionModal(true);
-                  }}
-                >
-                  <Percent size={16} color="#3B82F6" />
-                  <Text style={styles.commissionButtonText}>
-                    {partner.commissionPercentage || 5.0}%
-                  </Text>
-                </TouchableOpacity>
+                <View style={styles.partnerActions}>
+                  <TouchableOpacity
+                    style={styles.planButton}
+                    onPress={() => {
+                      setSelectedPartner(partner);
+                      setSelectedPlanTier(normalizePartnerPlanTier(partner.subscriptionPlanTier));
+                      setShowSubscriptionModal(true);
+                    }}
+                  >
+                    <Text style={styles.planButtonText}>
+                      {getPartnerPlan(partner.subscriptionPlanTier).name}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.commissionButton}
+                    onPress={() => {
+                      setSelectedPartner(partner);
+                      setNewCommission(partner.commissionPercentage?.toString() || '5.0');
+                      setShowCommissionModal(true);
+                    }}
+                  >
+                    <Percent size={16} color="#3B82F6" />
+                    <Text style={styles.commissionButtonText}>
+                      {partner.commissionPercentage || 5.0}%
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
               
               <View style={styles.partnerStats}>
@@ -312,6 +379,11 @@ export default function AdminPartners() {
                   <Calendar size={16} color="#6B7280" />
                   <Text style={styles.partnerStatText}>
                     Desde {partner.createdAt.toLocaleDateString()}
+                  </Text>
+                </View>
+                <View style={styles.partnerStat}>
+                  <Text style={styles.partnerPlanStatus}>
+                    Estado: {partner.subscriptionPlanStatus === 'active' ? 'Activo' : partner.subscriptionPlanStatus}
                   </Text>
                 </View>
               </View>
@@ -363,6 +435,78 @@ export default function AdminPartners() {
               <Button
                 title="Actualizar"
                 onPress={handleUpdateCommission}
+                loading={loading}
+                size="large"
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showSubscriptionModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSubscriptionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              Cambiar plan - {selectedPartner?.businessName}
+            </Text>
+
+            <Text style={styles.planModalSubtitle}>
+              Selecciona el plan comercial para este aliado
+            </Text>
+
+            <View style={styles.planList}>
+              {PARTNER_PLAN_ORDER.map((tier) => {
+                const plan = getPartnerPlan(tier);
+                const isSelected = selectedPlanTier === tier;
+
+                return (
+                  <TouchableOpacity
+                    key={tier}
+                    style={[
+                      styles.planOption,
+                      {
+                        backgroundColor: isSelected ? plan.surface : '#FFFFFF',
+                        borderColor: isSelected ? plan.border : '#E5E7EB',
+                      },
+                    ]}
+                    onPress={() => setSelectedPlanTier(tier)}
+                  >
+                    <View style={styles.planOptionHeader}>
+                      <View>
+                        <Text style={styles.planOptionName}>{plan.name}</Text>
+                        <Text style={styles.planOptionSubtitle}>{plan.subtitle}</Text>
+                      </View>
+                      <Text style={[styles.planOptionPrice, { color: plan.accent }]}>
+                        {getPartnerPlanDisplayPrice(tier)}
+                      </Text>
+                    </View>
+                    <Text style={styles.planOptionDescription}>{plan.description}</Text>
+                    <Text style={[styles.planOptionFeatures, { color: plan.accent }]}>
+                      {plan.features.length} beneficios activos
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancelar"
+                onPress={() => {
+                  setShowSubscriptionModal(false);
+                  setSelectedPartner(null);
+                }}
+                variant="outline"
+                size="large"
+              />
+              <Button
+                title="Guardar plan"
+                onPress={handleUpdateSubscriptionPlan}
                 loading={loading}
                 size="large"
               />
@@ -490,6 +634,24 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
+  partnerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  planButton: {
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    backgroundColor: '#F5F3FF',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  planButtonText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#7C3AED',
+  },
   commissionButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
@@ -508,6 +670,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
+    marginLeft: 4,
+  },
+  partnerPlanStatus: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#7C3AED',
     marginLeft: 4,
   },
   emptyCard: {
@@ -576,6 +744,53 @@ const styles = StyleSheet.create({
     color: '#111827',
     textAlign: 'center',
     marginBottom: 20,
+  },
+  planModalSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  planList: {
+    gap: 12,
+  },
+  planOption: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+  },
+  planOptionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  planOptionName: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  planOptionSubtitle: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  planOptionPrice: {
+    fontSize: 14,
+    fontFamily: 'Inter-Bold',
+  },
+  planOptionDescription: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  planOptionFeatures: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
   },
   modalActions: {
     flexDirection: 'row',

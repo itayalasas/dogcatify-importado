@@ -10,7 +10,6 @@ import { supabaseClient } from '../../lib/supabase';
 import { envConfig } from '../../utils/envConfig';
 
 const SYSTEM_CONFIG_KEY = 'system_config';
-
 type SystemToggleKey =
   | 'pushNotifications'
   | 'maintenanceMode'
@@ -42,6 +41,7 @@ export default function AdminSettings() {
     isConnected: false,
     accessToken: '',
     publicKey: '',
+    clientId: envConfig.get('EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID') || '',
     isTestMode: false,
     accountId: '',
     email: ''
@@ -56,7 +56,6 @@ export default function AdminSettings() {
   const [broadcastProgress, setBroadcastProgress] = useState({ sent: 0, total: 0 });
   const [batchSize, setBatchSize] = useState('20');
   const [savingSystemSetting, setSavingSystemSetting] = useState<SystemToggleKey | null>(null);
-
   const isAdmin = currentUser?.isAdmin || currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
 
   useEffect(() => {
@@ -223,6 +222,7 @@ export default function AdminSettings() {
           isConnected: config.is_connected || false,
           accessToken: config.access_token || '',
           publicKey: config.public_key || '',
+          clientId: config.client_id || config.clientId || config.app_id || config.oauth_client_id || envConfig.get('EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID') || '',
           isTestMode: config.is_test_mode || false,
           accountId: config.account_id || '',
           email: config.email || ''
@@ -299,6 +299,24 @@ export default function AdminSettings() {
 
     setMpLoading(true);
     try {
+      const { data: currentConfigData } = await supabaseClient
+        .from('admin_settings')
+        .select('value')
+        .eq('key', 'mercadopago_config')
+        .maybeSingle();
+
+      const currentConfig = currentConfigData?.value || {};
+      const {
+        client_secret: _legacyClientSecret,
+        clientSecret: _legacyClientSecretCamel,
+        ...safeCurrentConfig
+      } = currentConfig;
+      const currentClientId =
+        safeCurrentConfig.client_id ||
+        safeCurrentConfig.clientId ||
+        envConfig.get('EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID') ||
+        '';
+
       const validation = await validateAdminMpCredentials(
         adminMpConfig.accessToken.trim(), 
         adminMpConfig.publicKey.trim(),
@@ -315,9 +333,11 @@ export default function AdminSettings() {
       }
 
       const config = {
+        ...safeCurrentConfig,
         is_connected: true,
         access_token: adminMpConfig.accessToken.trim(),
         public_key: adminMpConfig.publicKey.trim(),
+        client_id: adminMpConfig.clientId.trim() || currentClientId,
         is_test_mode: adminMpConfig.isTestMode,
         credential_mode: validation.credentialMode || (adminMpConfig.isTestMode ? 'test' : 'production'),
         account_id: validation.accountId || '',
@@ -347,7 +367,7 @@ export default function AdminSettings() {
 
       Alert.alert(
         '¡Éxito!',
-        'La cuenta de Mercado Pago del administrador ha sido configurada correctamente. Ahora la app puede recibir comisiones automáticamente.',
+        'La configuración legacy de Mercado Pago quedó guardada correctamente.',
         [{ text: 'Continuar', onPress: () => setShowMercadoPagoModal(false) }]
       );
     } catch (error) {
@@ -358,10 +378,67 @@ export default function AdminSettings() {
     }
   };
 
+  const handleSaveMercadoPagoClientId = async () => {
+    const clientId = adminMpConfig.clientId.trim();
+
+    if (!clientId) {
+      Alert.alert('Error', 'Por favor completa el Client ID / N° de aplicación');
+      return;
+    }
+
+    setMpLoading(true);
+    try {
+      const { data: currentConfigData } = await supabaseClient
+        .from('admin_settings')
+        .select('value')
+        .eq('key', 'mercadopago_config')
+        .maybeSingle();
+
+      const currentConfig = currentConfigData?.value || {};
+      const {
+        client_secret: _legacyClientSecret,
+        clientSecret: _legacyClientSecretCamel,
+        ...safeCurrentConfig
+      } = currentConfig;
+
+      const config = {
+        ...safeCurrentConfig,
+        client_id: clientId,
+        app_id: clientId,
+        oauth_client_id: clientId,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabaseClient
+        .from('admin_settings')
+        .upsert({
+          key: 'mercadopago_config',
+          value: config,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'key'
+        });
+
+      if (error) throw error;
+
+      setAdminMpConfig(prev => ({
+        ...prev,
+        clientId,
+      }));
+
+      Alert.alert('¡Éxito!', 'El Client ID quedó guardado correctamente.');
+    } catch (error) {
+      console.error('Error saving Mercado Pago client ID:', error);
+      Alert.alert('Error', 'No se pudo guardar el Client ID.');
+    } finally {
+      setMpLoading(false);
+    }
+  };
+
   const handleDisconnectAdminMp = () => {
     Alert.alert(
       'Desconectar Mercado Pago',
-      '¿Estás seguro? Esto deshabilitará la recepción de comisiones en toda la plataforma.',
+      '¿Estás seguro? Esto deshabilitará la configuración legacy de Mercado Pago.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -369,11 +446,32 @@ export default function AdminSettings() {
           style: 'destructive',
           onPress: async () => {
             try {
+              const { data: currentConfigData } = await supabaseClient
+                .from('admin_settings')
+                .select('value')
+                .eq('key', 'mercadopago_config')
+                .maybeSingle();
+
+              const currentConfig = currentConfigData?.value || {};
+              const {
+                client_secret: _legacyClientSecret,
+                clientSecret: _legacyClientSecretCamel,
+                ...safeCurrentConfig
+              } = currentConfig;
+
               const { error } = await supabaseClient
                 .from('admin_settings')
                 .upsert({
                   key: 'mercadopago_config',
-                  value: { is_connected: false },
+                  value: {
+                    ...safeCurrentConfig,
+                    is_connected: false,
+                    access_token: null,
+                    public_key: null,
+                    account_id: '',
+                    email: '',
+                    is_test_mode: false,
+                  },
                   updated_at: new Date().toISOString()
                 }, {
                   onConflict: 'key'
@@ -883,7 +981,7 @@ export default function AdminSettings() {
             <View style={styles.settingItem}>
               <View style={styles.settingInfo}>
                 <CreditCard size={20} color="#00A650" />
-                <Text style={styles.settingLabel}>Cuenta Mercado Pago Admin</Text>
+                <Text style={styles.settingLabel}>Cuenta Mercado Pago Legacy</Text>
               </View>
               <TouchableOpacity
                 style={[
@@ -1207,7 +1305,7 @@ export default function AdminSettings() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {adminMpConfig.isConnected ? 'Gestionar Mercado Pago' : 'Configurar Mercado Pago Admin'}
+                {adminMpConfig.isConnected ? 'Gestionar Mercado Pago' : 'Configurar Mercado Pago'}
               </Text>
               <TouchableOpacity onPress={() => setShowMercadoPagoModal(false)}>
                 <Text style={styles.modalCloseText}>✕</Text>
@@ -1231,6 +1329,32 @@ export default function AdminSettings() {
                 </View>
                 
                 <View style={styles.mpAccountInfo}>
+                  <Text style={styles.mpAccountLabel}>Client ID:</Text>
+                  <Text style={styles.mpAccountValue}>{adminMpConfig.clientId || 'No disponible'}</Text>
+                </View>
+
+                <Text style={styles.mpInfoText}>
+                  Si el Client ID no aparece aquí, puedes completarlo sin desconectar la cuenta.
+                </Text>
+
+                <Input
+                  label="N° de aplicación / App ID (client_id)"
+                  placeholder="Tu client_id de Mercado Pago"
+                  value={adminMpConfig.clientId}
+                  onChangeText={(value) => setAdminMpConfig(prev => ({ ...prev, clientId: value }))}
+                  autoCapitalize="none"
+                />
+
+                <Button
+                  title={mpLoading ? 'Guardando...' : 'Guardar App ID'}
+                  onPress={handleSaveMercadoPagoClientId}
+                  loading={mpLoading}
+                  variant="secondary"
+                  size="large"
+                  style={styles.mpSaveActionButton}
+                />
+                
+                <View style={styles.mpAccountInfo}>
                   <Text style={styles.mpAccountLabel}>Modo:</Text>
                   <Text style={styles.mpAccountValue}>
                     {adminMpConfig.isTestMode ? '🧪 Prueba' : '🚀 Producción'}
@@ -1239,7 +1363,7 @@ export default function AdminSettings() {
                 
                 <View style={styles.mpWarning}>
                   <Text style={styles.mpWarningText}>
-                    ⚠️ Esta es la cuenta principal donde se reciben todas las comisiones de la plataforma.
+                    ⚠️ Esta cuenta quedó como respaldo de compatibilidad y ya no debería usarse para cobrar a clientes.
                   </Text>
                 </View>
                 
@@ -1253,19 +1377,28 @@ export default function AdminSettings() {
             ) : (
               <View style={styles.mpConfigSection}>
                 <View style={styles.mpInfoSection}>
-                  <Text style={styles.mpInfoTitle}>🏦 Cuenta Principal de Comisiones</Text>
+                  <Text style={styles.mpInfoTitle}>🏦 Configuración legacy de comisiones</Text>
                   <Text style={styles.mpInfoText}>
-                    Esta cuenta recibirá automáticamente las comisiones de todas las ventas realizadas en la plataforma.
+                    Esta configuración quedó como respaldo de compatibilidad y no es el flujo principal para cobrar a los clientes.
                   </Text>
                 </View>
                 
                 <View style={styles.mpHelpSection}>
-                  <Text style={styles.mpHelpTitle}>💡 ¿Cómo obtener las credenciales?</Text>
+                  <Text style={styles.mpHelpTitle}>💡 ¿Cómo obtener las credenciales legacy?</Text>
                   <Text style={styles.mpHelpStep}>1. Ve a developers.mercadopago.com</Text>
-                  <Text style={styles.mpHelpStep}>2. Inicia sesión con la cuenta admin de MP</Text>
+                  <Text style={styles.mpHelpStep}>2. Inicia sesión con tu cuenta de Mercado Pago</Text>
                   <Text style={styles.mpHelpStep}>3. Ve a "Tus integraciones" → "Credenciales"</Text>
-                  <Text style={styles.mpHelpStep}>4. Copia el Access Token y Public Key</Text>
+                  <Text style={styles.mpHelpStep}>4. Copia el Access Token y Public Key si necesitas respaldo legacy</Text>
+                  <Text style={styles.mpHelpStep}>5. Completa el N° de aplicación / App ID si vas a usar OAuth para aliados</Text>
                 </View>
+
+                <Input
+                  label="N° de aplicación / App ID (client_id)"
+                  placeholder="Tu client_id de Mercado Pago"
+                  value={adminMpConfig.clientId}
+                  onChangeText={(value) => setAdminMpConfig(prev => ({ ...prev, clientId: value }))}
+                  autoCapitalize="none"
+                />
 
                 <Input
                   label="Access Token *"
@@ -1305,7 +1438,7 @@ export default function AdminSettings() {
                   disabled={mpLoading}
                 >
                   <Text style={styles.mpSaveButtonText}>
-                    {mpLoading ? 'Validando...' : 'Conectar Cuenta Admin'}
+                    {mpLoading ? 'Validando...' : 'Guardar respaldo legacy'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1313,6 +1446,7 @@ export default function AdminSettings() {
           </View>
         </View>
       </Modal>
+      {false && (
       <Modal
         visible={showMercadoPagoModal}
         transparent
@@ -1323,7 +1457,7 @@ export default function AdminSettings() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {adminMpConfig.isConnected ? 'Gestionar Mercado Pago' : 'Configurar Mercado Pago Admin'}
+                {adminMpConfig.isConnected ? 'Gestionar Mercado Pago' : 'Configurar Mercado Pago'}
               </Text>
               <TouchableOpacity onPress={() => setShowMercadoPagoModal(false)}>
                 <Text style={styles.modalCloseText}>✕</Text>
@@ -1355,7 +1489,7 @@ export default function AdminSettings() {
                 
                 <View style={styles.mpWarning}>
                   <Text style={styles.mpWarningText}>
-                    ⚠️ Esta es la cuenta principal donde se reciben todas las comisiones de la plataforma.
+                    ⚠️ Esta cuenta quedó como respaldo de compatibilidad y ya no debería usarse para cobrar a clientes.
                   </Text>
                 </View>
                 
@@ -1369,18 +1503,18 @@ export default function AdminSettings() {
             ) : (
               <View style={styles.mpConfigSection}>
                 <View style={styles.mpInfoSection}>
-                  <Text style={styles.mpInfoTitle}>🏦 Cuenta Principal de Comisiones</Text>
+                  <Text style={styles.mpInfoTitle}>🏦 Configuración legacy de comisiones</Text>
                   <Text style={styles.mpInfoText}>
-                    Esta cuenta recibirá automáticamente las comisiones de todas las ventas realizadas en la plataforma.
+                    Esta configuración quedó como respaldo de compatibilidad y no es el flujo principal para cobrar a los clientes.
                   </Text>
                 </View>
                 
                 <View style={styles.mpHelpSection}>
                   <Text style={styles.mpHelpTitle}>💡 ¿Cómo obtener las credenciales?</Text>
                   <Text style={styles.mpHelpStep}>1. Ve a developers.mercadopago.com</Text>
-                  <Text style={styles.mpHelpStep}>2. Inicia sesión con la cuenta admin de MP</Text>
+                  <Text style={styles.mpHelpStep}>2. Inicia sesión con tu cuenta de Mercado Pago</Text>
                   <Text style={styles.mpHelpStep}>3. Ve a "Tus integraciones" → "Credenciales"</Text>
-                  <Text style={styles.mpHelpStep}>4. Copia el Access Token y Public Key</Text>
+                  <Text style={styles.mpHelpStep}>4. Copia el Access Token y Public Key si necesitas respaldo legacy</Text>
                 </View>
 
                 <Input
@@ -1421,7 +1555,7 @@ export default function AdminSettings() {
                   disabled={mpLoading}
                 >
                   <Text style={styles.mpSaveButtonText}>
-                    {mpLoading ? 'Validando...' : 'Conectar Cuenta Admin'}
+                    {mpLoading ? 'Validando...' : 'Guardar respaldo legacy'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1429,6 +1563,7 @@ export default function AdminSettings() {
           </View>
         </View>
       </Modal>
+      )}
 
       {/* Broadcast Notification Modal */}
       <Modal
@@ -2160,6 +2295,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter-Bold',
     color: '#FFFFFF',
+  },
+  mpSaveActionButton: {
+    marginTop: 8,
+    marginBottom: 12,
   },
   broadcastButton: {
     flexDirection: 'row',

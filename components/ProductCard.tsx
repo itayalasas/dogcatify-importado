@@ -5,8 +5,19 @@ import { Card } from './ui/Card';
 import { Product } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
 
+type ProductCardProduct = Product & {
+  stock?: number;
+  images?: string[];
+  hasDiscount?: boolean;
+  originalPrice?: number;
+  discountedPrice?: number;
+  activePromotion?: {
+    discount_percentage?: number;
+  };
+};
+
 interface ProductCardProps {
-  product: Product;
+  product: ProductCardProduct;
   onPress: () => void;
   onAddToCart: () => void;
   currentCartQuantity?: number;
@@ -24,8 +35,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 }) => {
   const { t } = useLanguage();
 
-  const availableStock = product.stock - currentCartQuantity;
-  const canAddMore = availableStock > 0;
+  const availableStock = typeof product.stock === 'number'
+    ? product.stock - currentCartQuantity
+    : 0;
+  const canAddMore = typeof product.stock === 'number'
+    ? availableStock > 0
+    : product.inStock;
+  const discountPercentage = product.activePromotion?.discount_percentage ?? 0;
 
   const handleToggleFavorite = (e: any) => {
     e.stopPropagation();
@@ -47,8 +63,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         <View style={styles.imageContainer}>
           <Image 
             source={{ 
-              uri: product.images && product.images.length > 0 
-                ? product.images[0] 
+              uri: product.images && product.images.length > 0
+                ? product.images[0]
                 : product.imageURL || 'https://images.pexels.com/photos/1459244/pexels-photo-1459244.jpeg?auto=compress&cs=tinysrgb&w=400'
             }} 
             style={styles.productImage} 
@@ -73,9 +89,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               <>
                 <View style={styles.priceRow}>
                   <Text style={styles.discountedPrice}>{formatPrice(product.discountedPrice)}</Text>
-                  {product.activePromotion?.discount_percentage > 0 && (
+                  {discountPercentage > 0 && (
                     <View style={styles.discountBadge}>
-                      <Text style={styles.discountBadgeText}>-{product.activePromotion.discount_percentage}%</Text>
+                      <Text style={styles.discountBadgeText}>-{discountPercentage}%</Text>
                     </View>
                   )}
                 </View>

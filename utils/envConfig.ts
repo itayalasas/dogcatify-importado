@@ -19,6 +19,7 @@ interface EnvironmentVariables {
   FIREBASE_CLIENT_CERT_URL: string;
   EXPO_PUBLIC_EMAIL_API_URL: string;
   EXPO_PUBLIC_EMAIL_API_KEY: string;
+  EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID: string;
   [key: string]: string;
 }
 
@@ -343,6 +344,7 @@ class EnvConfigService {
           FIREBASE_CLIENT_CERT_URL: process.env.FIREBASE_CLIENT_CERT_URL || '',
           EXPO_PUBLIC_EMAIL_API_URL: process.env.EXPO_PUBLIC_EMAIL_API_URL || '',
           EXPO_PUBLIC_EMAIL_API_KEY: process.env.EXPO_PUBLIC_EMAIL_API_KEY || '',
+          EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID: process.env.EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID || '',
         };
       }
     } catch (error) {
@@ -410,18 +412,6 @@ class EnvConfigService {
     this.initialized = false;
     this.config = null;
     await this.initialize();
-  }
-
-  /**
-   * Limpia la caché
-   */
-  public async clearCache(): Promise<void> {
-    try {
-      await AsyncStorage.removeItem('@env_config');
-      console.log('[EnvConfig] 🗑️ Cache cleared');
-    } catch (error) {
-      console.warn('[EnvConfig] ⚠️ Error clearing cache:', error);
-    }
   }
 }
 

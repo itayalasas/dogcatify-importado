@@ -31,6 +31,7 @@ interface MedicalRecord {
 
 interface Pet {
   id: string;
+  owner_id?: string;
   name: string;
   species: string;
   breed: string;
@@ -49,6 +50,7 @@ interface Pet {
 }
 
 interface Owner {
+  id: string;
   display_name: string;
   email: string;
   phone?: string;
@@ -87,7 +89,7 @@ export default function MedicalHistoryShared() {
 
   // Form states for adding new records
   const [currentFormType, setCurrentFormType] = useState<string | null>(null);
-  const [formData, setFormData] = useState<any>({});
+  const [formData, setFormData] = useState<Record<string, any>>({});
   
   // Modal states
   const [showVaccineModal, setShowVaccineModal] = useState(false);
@@ -364,6 +366,18 @@ export default function MedicalHistoryShared() {
   const [loadingDewormers, setLoadingDewormers] = useState(false);
   const [loadingVeterinarians, setLoadingVeterinarians] = useState(false);
 
+  const createSupabaseHeaders = (apiKey: string): Record<string, string> => ({
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${apiKey}`,
+    apikey: apiKey,
+  });
+
+  const getErrorMessage = (error: unknown): string => {
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string') return error;
+    return String(error);
+  };
+
   // Check if this is being accessed from web without authentication
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -380,18 +394,14 @@ export default function MedicalHistoryShared() {
       
       // Call the Edge Function directly for web access
       const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
-      const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+      const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY') ?? '';
       const apiUrl = `${supabaseUrl}/functions/v1/medical-history/${id}${token ? `?token=${token}` : ''}`;
       
       console.log('Fetching from Edge Function:', apiUrl);
       
       const response = await fetch(apiUrl, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseAnonKey}`,
-          'apikey': supabaseAnonKey,
-        },
+        headers: createSupabaseHeaders(supabaseAnonKey),
       });
       
       if (!response.ok) {
@@ -493,18 +503,14 @@ export default function MedicalHistoryShared() {
         try {
           console.log('=== CALLING EDGE FUNCTION FOR ALL DATA ===');
           const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
-          const supabaseKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+          const supabaseKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY') ?? '';
           
           const edgeFunctionUrl = `${supabaseUrl}/functions/v1/medical-history-data/${id}?token=${token}`;
           console.log('Edge Function URL:', edgeFunctionUrl);
           
           const response = await fetch(edgeFunctionUrl, {
             method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseKey}`,
-              'apikey': supabaseKey,
-            },
+            headers: createSupabaseHeaders(supabaseKey),
           });
           
           console.log('Edge Function response status:', response.status);
@@ -559,6 +565,10 @@ export default function MedicalHistoryShared() {
     }
   };
 
+  const fetchMedicalData = async () => {
+    await verifyTokenAndFetchData();
+  };
+
   const fetchMedicalHistoryDirectly = async () => {
     try {
       console.log('=== FETCHING MEDICAL DATA FOR REACT COMPONENTS ===');
@@ -582,7 +592,7 @@ export default function MedicalHistoryShared() {
       // Fetch owner data
       const { data: ownerData, error: ownerError } = await supabaseClient
         .from('profiles')
-        .select('display_name, email, phone')
+        .select('id, display_name, email, phone')
         .eq('id', petData.owner_id)
         .single();
       
@@ -669,12 +679,10 @@ export default function MedicalHistoryShared() {
 
       // Call Edge Function to save record
       const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+      const supabaseKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY') ?? '';
       const response = await fetch(`${supabaseUrl}/functions/v1/save-medical-record`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY')}`,
-        },
+        headers: createSupabaseHeaders(supabaseKey),
         body: JSON.stringify({
           recordData,
           token: token
@@ -718,13 +726,13 @@ export default function MedicalHistoryShared() {
 
   const handleSelectVaccine = (vaccine: any) => {
     setSelectedVaccine(vaccine);
-    setFormData(prev => ({ ...prev, name: vaccine.name }));
+    setFormData((prev: Record<string, any>) => ({ ...prev, name: vaccine.name }));
     setShowVaccineModal(false);
   };
 
   const handleSelectCondition = (condition: any) => {
     setSelectedCondition(condition);
-    setFormData(prev => ({ ...prev, name: condition.name }));
+    setFormData((prev: Record<string, any>) => ({ ...prev, name: condition.name }));
     setShowConditionModal(false);
     
     // Load treatments for this condition
@@ -733,25 +741,25 @@ export default function MedicalHistoryShared() {
 
   const handleSelectTreatment = (treatment: any) => {
     setSelectedTreatment(treatment);
-    setFormData(prev => ({ ...prev, treatment: treatment.name }));
+    setFormData((prev: Record<string, any>) => ({ ...prev, treatment: treatment.name }));
     setShowTreatmentModal(false);
   };
 
   const handleSelectAllergy = (allergy: any) => {
     setSelectedAllergy(allergy);
-    setFormData(prev => ({ ...prev, name: allergy.name }));
+    setFormData((prev: Record<string, any>) => ({ ...prev, name: allergy.name }));
     setShowAllergyModal(false);
   };
 
   const handleSelectDewormer = (dewormer: any) => {
     setSelectedDewormer(dewormer);
-    setFormData(prev => ({ ...prev, product_name: dewormer.name }));
+    setFormData((prev: Record<string, any>) => ({ ...prev, product_name: dewormer.name }));
     setShowDewormerModal(false);
   };
 
   const handleSelectVeterinarian = (vet: any) => {
     setSelectedVeterinarian(vet);
-    setFormData(prev => ({ ...prev, veterinarian: vet.business_name }));
+    setFormData((prev: Record<string, any>) => ({ ...prev, veterinarian: vet.business_name }));
     setShowVetModal(false);
   };
 
@@ -1028,15 +1036,11 @@ export default function MedicalHistoryShared() {
   const saveRecord = async (recordData: any) => {
     try {
       const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
-      const supabaseKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+      const supabaseKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY') ?? '';
       
       const response = await fetch(`${supabaseUrl}/functions/v1/save-medical-record`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseKey}`,
-          'apikey': supabaseKey,
-        },
+        headers: createSupabaseHeaders(supabaseKey),
         body: JSON.stringify({
           recordData,
           token
@@ -1648,7 +1652,7 @@ export default function MedicalHistoryShared() {
             </View>
             
             <TextInput
-              style={styles.searchInput}
+              style={styles.searchInputOutlined}
               placeholder="Buscar vacuna..."
               onChangeText={(text) => {
                 // Filter vaccines based on search
@@ -2991,7 +2995,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     padding: 4,
   },
-  searchContainer: {
+  searchContainerLegacy: {
     marginBottom: 16,
   },
   searchBar: {
@@ -3062,7 +3066,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginRight: 4,
   },
-  methodText: {
+  methodTextLegacy: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
   },
@@ -3131,7 +3135,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#166534',
   },
-  searchInput: {
+  searchInputOutlined: {
     borderWidth: 1,
     borderColor: '#D1D5DB',
     borderRadius: 8,
@@ -3588,12 +3592,12 @@ const styles = StyleSheet.create({
   },
   webViewContainer: {
     flex: 1,
-    height: '100vh',
-    overflow: 'auto',
+    height: '100%',
+    overflow: 'scroll',
   },
   webView: {
     flex: 1,
     height: '100%',
     width: '100%',
   },
-});
+}) as any;

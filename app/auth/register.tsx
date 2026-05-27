@@ -151,7 +151,6 @@ export default function Register() {
             full_name: trimmedName,
           },
           emailRedirectTo: undefined,
-          shouldCreateUser: true,
         },
       });
 

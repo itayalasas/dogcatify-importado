@@ -3,8 +3,10 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Ima
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, User, Phone, Mail, Calendar, Heart } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { canAccessPartnerModule, getPartnerLockedActionLabel, getPartnerPlan, resolvePartnerPlanTier } from '../../utils/partnerPlans';
 
 export default function PartnerClients() {
   const { partnerId } = useLocalSearchParams<{ partnerId: string }>();
@@ -32,10 +34,29 @@ export default function PartnerClients() {
             id: data.id,
             businessName: data.business_name,
             businessType: data.business_type,
+            subscriptionPlanTier: resolvePartnerPlanTier(
+              data.subscription_plan_tier,
+              data.subscription_plan_status,
+              data.subscription_plan_expires_at,
+            ),
+            subscriptionPlanStatus: data.subscription_plan_status || null,
+            subscriptionPlanExpiresAt: data.subscription_plan_expires_at || null,
             ...data
           });
         }
-        
+
+        const planTier = data?.subscription_plan_tier || 'starter';
+        if (!canAccessPartnerModule(
+          planTier,
+          'clients',
+          data?.business_type,
+          data?.subscription_plan_status,
+          data?.subscription_plan_expires_at,
+        )) {
+          setLoading(false);
+          return;
+        }
+
         fetchClients();
       } catch (error) {
         console.error('Error fetching partner profile:', error);
@@ -300,6 +321,28 @@ export default function PartnerClients() {
         <View style={styles.placeholder} />
       </View>
 
+      {!canAccessPartnerModule(
+        partnerProfile?.subscriptionPlanTier,
+        'clients',
+        partnerProfile?.businessType,
+        partnerProfile?.subscriptionPlanStatus,
+        partnerProfile?.subscriptionPlanExpiresAt,
+      ) ? (
+        <View style={styles.lockedContainer}>
+          <Card style={styles.lockedCard}>
+            <Text style={styles.lockedTitle}>Clientes disponibles en Growth</Text>
+            <Text style={styles.lockedText}>
+              {getPartnerLockedActionLabel('clients')}
+            </Text>
+            <Button
+              title="Ver planes"
+              onPress={() => Alert.alert('Plan Growth', 'El plan Growth habilita clientes e inteligencia de negocio.')}
+              size="medium"
+            />
+          </Card>
+        </View>
+      ) : (
+        <>
       <View style={styles.statsHeader}>
         <Card style={styles.statsCard}>
           <View style={styles.statsContent}>
@@ -344,6 +387,8 @@ export default function PartnerClients() {
           clients.map(renderClient)
         )}
       </ScrollView>
+        </>
+      )}
     </SafeAreaView>
   );
 }
@@ -448,6 +493,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
+  },
+  lockedContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 24,
+  },
+  lockedCard: {
+    alignItems: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+  },
+  lockedTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  lockedText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 20,
   },
   emptyCard: {
     alignItems: 'center',

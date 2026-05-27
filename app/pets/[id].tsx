@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { extractMedicalRecordsFromImage, ExtractedMedicalRecord } from '../../utils/medicalCardOCR';
 import { envConfig } from '../../utils/envConfig';
+import { resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
 
 export default function PetDetail() {
   const { id, refresh, activeTab: initialTab, permissionLevel } = useLocalSearchParams<{
@@ -323,6 +324,62 @@ export default function PetDetail() {
     setLostAdditionalNotes('');
   };
 
+  const ensureDailyPostLimit = async () => {
+    if (!currentUser) {
+      return false;
+    }
+
+    const { data: subscriptionData, error: subscriptionError } = await supabaseClient
+      .from('user_subscriptions')
+      .select(`
+        status,
+        subscription_plans (
+          tier,
+          audience_target,
+          limits
+        )
+      `)
+      .eq('user_id', currentUser.id)
+      .in('status', ['active', 'trialing', 'pending', 'paused'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (subscriptionError) {
+      throw subscriptionError;
+    }
+
+    const userPlanLimits = resolveSubscriptionPlanLimits(subscriptionData?.subscription_plans || null);
+    const maxPostsPerDay = userPlanLimits.users.maxPostsPerDay;
+
+    if (maxPostsPerDay === null) {
+      return true;
+    }
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const { count, error: countError } = await supabaseClient
+      .from('posts')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', currentUser.id)
+      .gte('created_at', startOfDay.toISOString())
+      .lt('created_at', endOfDay.toISOString());
+
+    if (countError) {
+      throw countError;
+    }
+
+    if ((count || 0) >= maxPostsPerDay) {
+      return false;
+    }
+
+    return true;
+  };
+
   const handleReportLostPet = async () => {
     if (!currentUser || !pet) {
       Alert.alert('Error', 'No se pudo obtener la información para reportar la mascota');
@@ -382,6 +439,19 @@ export default function PetDetail() {
 
         if (updateError) throw updateError;
       } else {
+        const canCreatePost = await ensureDailyPostLimit();
+        if (!canCreatePost) {
+          Alert.alert(
+            'Límite alcanzado',
+            'Tu plan actual ya llego al limite diario de publicaciones. Actualiza tu suscripcion para poder publicar esta alerta.',
+            [
+              { text: 'Ver suscripcion', onPress: () => router.push('/profile/subscription') },
+              { text: 'OK', style: 'cancel' },
+            ]
+          );
+          return;
+        }
+
         const { error: insertError } = await supabaseClient
           .from('posts')
           .insert({

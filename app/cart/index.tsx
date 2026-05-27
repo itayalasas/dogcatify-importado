@@ -385,9 +385,9 @@ export default function Cart() {
         let paymentUrl: string | undefined;
 
         if (isTestMode) {
-          paymentUrl = preference.sandbox_init_point || preference.init_point;
-          if (!preference.sandbox_init_point) {
-            console.warn('⚠️ sandbox_init_point not available, falling back to init_point');
+          paymentUrl = preference.sandbox_init_point;
+          if (!paymentUrl) {
+            throw new Error('Mercado Pago no devolvió sandbox_init_point en modo prueba');
           }
         } else {
           paymentUrl = preference.init_point;
