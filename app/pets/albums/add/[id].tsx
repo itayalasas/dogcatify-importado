@@ -12,6 +12,7 @@ import { useAuth } from '../../../../contexts/AuthContext';
 import { detectPetInImage, validateImagesForPets, detectPetInVideo, validateVideoDuration } from '../../../../utils/petDetection';
 import { uploadImage } from '../../../../utils/imageUpload';
 import { logResourceAction } from '../../../../services/auditService';
+import { resolveSubscriptionPlanLimits } from '../../../../utils/subscriptionPlanLimits';
 
 export default function AddPhoto() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -24,6 +25,58 @@ export default function AddPhoto() {
   const [isShared, setIsShared] = useState(false);
   const [validatingImages, setValidatingImages] = useState(false);
   const [validatingVideo, setValidatingVideo] = useState(false);
+
+  const ensureDailyPostLimit = async () => {
+    if (!currentUser) {
+      return false;
+    }
+
+    const { data: subscriptionData, error: subscriptionError } = await supabaseClient
+      .from('user_subscriptions')
+      .select(`
+        status,
+        subscription_plans (
+          tier,
+          audience_target,
+          limits
+        )
+      `)
+      .eq('user_id', currentUser.id)
+      .in('status', ['active', 'trialing', 'pending', 'paused'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (subscriptionError) {
+      throw subscriptionError;
+    }
+
+    const userPlanLimits = resolveSubscriptionPlanLimits(subscriptionData?.subscription_plans || null);
+    const maxPostsPerDay = userPlanLimits.users.maxPostsPerDay;
+
+    if (maxPostsPerDay === null) {
+      return true;
+    }
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const { count, error: countError } = await supabaseClient
+      .from('posts')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', currentUser.id)
+      .gte('created_at', startOfDay.toISOString())
+      .lt('created_at', endOfDay.toISOString());
+
+    if (countError) {
+      throw countError;
+    }
+
+    return (count || 0) < maxPostsPerDay;
+  };
 
   const handleSelectPhoto = async () => {
     try {
@@ -328,6 +381,52 @@ export default function AddPhoto() {
 
     setLoading(true);
     try {
+      const { data: subscriptionData, error: subscriptionError } = await supabaseClient
+        .from('user_subscriptions')
+        .select(`
+          status,
+          subscription_plans (
+            tier,
+            audience_target,
+            limits
+          )
+        `)
+        .eq('user_id', currentUser.id)
+        .in('status', ['active', 'trialing', 'pending', 'paused'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (subscriptionError) {
+        throw subscriptionError;
+      }
+
+      const userPlanLimits = resolveSubscriptionPlanLimits(subscriptionData?.subscription_plans || null);
+      const maxAlbumsAllowed = userPlanLimits.users.maxPetAlbums;
+
+      if (maxAlbumsAllowed !== null) {
+        const { count: albumsCount, error: albumsCountError } = await supabaseClient
+          .from('pet_albums')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', currentUser.id);
+
+        if (albumsCountError) {
+          throw albumsCountError;
+        }
+
+        if ((albumsCount || 0) >= maxAlbumsAllowed) {
+          Alert.alert(
+            'Límite alcanzado',
+            `Tu plan actual permite hasta ${maxAlbumsAllowed} álbum${maxAlbumsAllowed === 1 ? '' : 'es'}. Actualiza tu suscripción para crear más.`,
+            [
+              { text: 'Ver suscripción', onPress: () => router.push('/profile/subscription') },
+              { text: 'OK', style: 'cancel' },
+            ]
+          );
+          return;
+        }
+      }
+
       console.log('Starting to save media, images:', selectedImages.length, 'videos:', selectedVideos.length);
 
       const mediaUrls: string[] = [];
@@ -470,6 +569,14 @@ export default function AddPhoto() {
       // If user wants to share as post, create a post
       if (isShared) {
         console.log('Creating post for shared album...');
+        const canCreatePost = await ensureDailyPostLimit();
+        if (!canCreatePost) {
+          Alert.alert(
+            'Límite alcanzado',
+            'El álbum se guardó correctamente, pero no se compartió en el feed porque ya alcanzaste el limite diario de publicaciones.',
+            [{ text: 'Entendido' }]
+          );
+        } else {
         const { data: petData, error: petError } = await supabaseClient
           .from('pets')
           .select('*')
@@ -561,6 +668,7 @@ export default function AddPhoto() {
               [{ text: 'Perfecto' }]
             );
           }
+        }
         }
       } else {
         // Si no se comparte, solo mostrar mensaje de éxito normal

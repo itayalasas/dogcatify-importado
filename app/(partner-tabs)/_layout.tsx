@@ -9,6 +9,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { supabaseClient } from '../../lib/supabase';
 import { LoadingScreen } from '../../components/ui/LoadingScreen';
+import { canAccessPartnerModule, resolvePartnerPlanTier } from '../../utils/partnerPlans';
 
 export default function PartnerTabLayout() {
   const { t } = useLanguage();
@@ -185,6 +186,18 @@ export default function PartnerTabLayout() {
 
   const businessType = partnerProfile?.business_type || '';
   const features = partnerProfile?.features || {};
+  const effectivePartnerTier = resolvePartnerPlanTier(
+    partnerProfile?.subscription_plan_tier,
+    partnerProfile?.subscription_plan_status,
+    partnerProfile?.subscription_plan_expires_at,
+  );
+  const canAccessAdoptions = canAccessPartnerModule(
+    effectivePartnerTier,
+    'adoptions',
+    businessType,
+    partnerProfile?.subscription_plan_status,
+    partnerProfile?.subscription_plan_expires_at,
+  );
   
   const hasProductsEnabled = features.products || businessType === 'shop';
   
@@ -269,7 +282,7 @@ export default function PartnerTabLayout() {
         name="chat-contacts"
         options={{
           title: 'Contactos',
-          href: partnerProfile?.business_type === 'shelter' && partnerProfile
+          href: partnerProfile?.business_type === 'shelter' && canAccessAdoptions && partnerProfile
             ? { pathname: '/chat-contacts', params: { businessId } }
             : null,
           tabBarIcon: ({ size, color }) => (

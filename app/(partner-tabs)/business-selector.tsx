@@ -7,6 +7,15 @@ import { LoadingScreen } from '../../components/ui/LoadingScreen';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { router } from 'expo-router';
+import {
+  canAccessPartnerModule,
+  getPartnerLockedActionLabel,
+  getPartnerPlan,
+  getPartnerPlanBadgeText,
+  getPartnerSubscriptionStatusLabel,
+  normalizePartnerPlanTier,
+  resolvePartnerPlanTier,
+} from '../../utils/partnerPlans';
 
 interface Business {
   id: string;
@@ -14,6 +23,9 @@ interface Business {
   businessType: 'veterinary' | 'grooming' | 'walking' | 'boarding' | 'shop' | 'shelter';
   isVerified: boolean;
   isActive: boolean;
+  subscriptionPlanTier: string;
+  subscriptionPlanStatus: string;
+  subscriptionPlanExpiresAt?: string | null;
   features: {
     agenda?: boolean;
     products?: boolean;
@@ -45,6 +57,9 @@ export default function BusinessSelector() {
           businessType: partner.business_type,
           isVerified: partner.is_verified,
           isActive: partner.is_active,
+          subscriptionPlanTier: partner.subscription_plan_tier || 'starter',
+          subscriptionPlanStatus: partner.subscription_plan_status || 'active',
+          subscriptionPlanExpiresAt: partner.subscription_plan_expires_at || null,
           features: partner.features || {}
         })) as Business[];
         
@@ -245,6 +260,29 @@ export default function BusinessSelector() {
 
   const handleToggleFeature = async (businessId: string, featureKey: string, currentValue: boolean, featureType: string) => {
     try {
+      const currentBusiness = businesses.find((business) => business.id === businessId);
+      if (!currentBusiness) {
+        throw new Error('Negocio no encontrado');
+      }
+
+      if (!currentValue && featureKey === 'adoptions') {
+        const planTier = normalizePartnerPlanTier(currentBusiness.subscriptionPlanTier);
+        if (!canAccessPartnerModule(
+          planTier,
+          'adoptions',
+          currentBusiness.businessType,
+          currentBusiness.subscriptionPlanStatus,
+          currentBusiness.subscriptionPlanExpiresAt,
+        )) {
+          Alert.alert(
+            'Plan requerido',
+            `${featureType} requiere el plan Pro para negocios tipo refugio.`,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+      }
+
       // Show confirmation dialog
       Alert.alert(
         `${currentValue ? 'Desactivar' : 'Activar'} ${featureType}`,
@@ -272,6 +310,19 @@ export default function BusinessSelector() {
       const currentBusiness = businesses.find(b => b.id === businessId);
       if (!currentBusiness) {
         throw new Error('Negocio no encontrado');
+      }
+
+      if (!currentValue && featureKey === 'adoptions') {
+        const planTier = normalizePartnerPlanTier(currentBusiness.subscriptionPlanTier);
+        if (!canAccessPartnerModule(
+          planTier,
+          'adoptions',
+          currentBusiness.businessType,
+          currentBusiness.subscriptionPlanStatus,
+          currentBusiness.subscriptionPlanExpiresAt,
+        )) {
+          throw new Error('PLAN_REQUIRED:adoptions');
+        }
       }
 
       const { error } = await supabaseClient
@@ -307,6 +358,15 @@ export default function BusinessSelector() {
 
     } catch (error) {
       console.error('Error updating feature:', error);
+      const errorMessage = String(error instanceof Error ? error.message : error || '');
+      if (errorMessage.includes('PLAN_REQUIRED:adoptions')) {
+        Alert.alert(
+          'Plan requerido',
+          'La gestion de adopciones esta disponible solo para el plan Pro de refugios.'
+        );
+        return;
+      }
+
       Alert.alert('Error', 'No se pudo actualizar la funcionalidad');
     }
   };
@@ -368,6 +428,16 @@ export default function BusinessSelector() {
 
         {businesses.map((business) => {
           const config = getBusinessTypeConfig(business.businessType);
+          const effectiveTier = resolvePartnerPlanTier(
+            business.subscriptionPlanTier,
+            business.subscriptionPlanStatus,
+            business.subscriptionPlanExpiresAt,
+          );
+          const plan = getPartnerPlan(effectiveTier);
+          const statusLabel = getPartnerSubscriptionStatusLabel(
+            business.subscriptionPlanStatus,
+            business.subscriptionPlanExpiresAt,
+          );
           
           return (
             <Card key={business.id} style={styles.businessCard}>
@@ -378,6 +448,12 @@ export default function BusinessSelector() {
                     <Text style={styles.businessName}>{business.businessName}</Text>
                     <Text style={styles.businessType}>{config.name}</Text>
                     <Text style={styles.businessDescription}>{config.description}</Text>
+                    <View style={[styles.planBadge, { backgroundColor: plan.surface, borderColor: plan.border }]}>
+                      <Text style={[styles.planBadgeText, { color: plan.accent }]}>
+                        {plan.name} · {getPartnerPlanBadgeText(effectiveTier)}
+                      </Text>
+                    </View>
+                    <Text style={styles.planStatusText}>{statusLabel}</Text>
                   </View>
                 </View>
                 
@@ -401,13 +477,33 @@ export default function BusinessSelector() {
                           {feature.name}
                         </Text>
                         <Text style={styles.featureDescription}>{feature.description}</Text>
+                        {feature.key === 'adoptions' && !canAccessPartnerModule(
+                          business.subscriptionPlanTier,
+                          'adoptions',
+                          business.businessType,
+                          business.subscriptionPlanStatus,
+                          business.subscriptionPlanExpiresAt,
+                        ) && (
+                          <Text style={styles.featureLockedText}>
+                            {getPartnerLockedActionLabel('adoptions')}
+                          </Text>
+                        )}
                       </View>
                     </View>
                     
                     <TouchableOpacity
                       style={[
                         styles.featureToggle,
-                        business.features[feature.key as keyof typeof business.features] && styles.featureToggleActive
+                        business.features[feature.key as keyof typeof business.features] && styles.featureToggleActive,
+                        feature.key === 'adoptions' && !canAccessPartnerModule(
+                          business.subscriptionPlanTier,
+                          'adoptions',
+                          business.businessType,
+                          business.subscriptionPlanStatus,
+                          business.subscriptionPlanExpiresAt,
+                        )
+                          ? styles.featureToggleLocked
+                          : null
                       ]}
                       onPress={() => handleToggleFeature(business.id, feature.key, business.features[feature.key as keyof typeof business.features] || false, feature.name)}
                     >
@@ -525,6 +621,24 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     lineHeight: 18,
   },
+  planBadge: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginTop: 8,
+  },
+  planBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
+  planStatusText: {
+    marginTop: 6,
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+  },
   configButton: {
     padding: 8,
     backgroundColor: '#F3F4F6',
@@ -571,6 +685,12 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     lineHeight: 16,
   },
+  featureLockedText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#7C3AED',
+    marginTop: 4,
+  },
   featureToggle: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 10,
@@ -585,6 +705,10 @@ const styles = StyleSheet.create({
   featureToggleActive: {
     backgroundColor: '#10B981',
     borderColor: '#10B981',
+  },
+  featureToggleLocked: {
+    backgroundColor: '#F5F3FF',
+    borderColor: '#DDD6FE',
   },
   featureToggleText: {
     fontSize: 12,

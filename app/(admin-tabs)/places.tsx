@@ -9,6 +9,12 @@ import { supabaseClient } from '../../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadImage as uploadImageUtil } from '../../utils/imageUpload';
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return String(error);
+};
+
 interface Place {
   id: string;
   name: string;
@@ -223,7 +229,7 @@ export default function AdminPlaces() {
       Alert.alert('Éxito', 'Lugar agregado correctamente');
       fetchPlaces();
     } catch (error) {
-      Alert.alert('Error', `No se pudo agregar el lugar: ${error.message || 'Error desconocido'}`);
+      Alert.alert('Error', `No se pudo agregar el lugar: ${getErrorMessage(error)}`);
     } finally {
       setLoading(false);
     }

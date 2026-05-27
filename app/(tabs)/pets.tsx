@@ -29,6 +29,67 @@ interface PetShareInvitation {
   };
 }
 
+const getFirstRecord = <T,>(value: T | T[] | null | undefined): T | null => {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] ?? null : value;
+};
+
+const normalizePetRecord = (pet: any, options: { isShared?: boolean; permissionLevel?: string } = {}) => {
+  if (!pet) return null;
+
+  return {
+    id: pet.id,
+    name: pet.name,
+    species: pet.species,
+    breed: pet.breed,
+    breedInfo: pet.breed_info,
+    age: pet.age,
+    ageDisplay: pet.age_display,
+    gender: pet.gender,
+    weight: pet.weight,
+    weightDisplay: pet.weight_display,
+    isNeutered: pet.is_neutered,
+    hasChip: pet.has_chip,
+    chipNumber: pet.chip_number,
+    photoURL: pet.photo_url,
+    ownerId: pet.owner_id,
+    personality: pet.personality || [],
+    medicalNotes: pet.medical_notes,
+    createdAt: new Date(pet.created_at),
+    photo_url: pet.photo_url,
+    isShared: options.isShared ?? false,
+    ...(options.permissionLevel ? { permissionLevel: options.permissionLevel } : {}),
+  };
+};
+
+const normalizeInvitation = (inv: any): PetShareInvitation | null => {
+  const pet = getFirstRecord(inv?.pets);
+  const owner = getFirstRecord(inv?.profiles);
+
+  if (!pet || !owner) {
+    return null;
+  }
+
+  return {
+    id: inv.id,
+    pet_id: inv.pet_id,
+    owner_id: inv.owner_id,
+    relationship_type: inv.relationship_type,
+    permission_level: inv.permission_level,
+    created_at: inv.created_at,
+    pet: {
+      id: pet.id,
+      name: pet.name,
+      species: pet.species,
+      photo_url: pet.photo_url ?? null,
+    },
+    owner: {
+      id: owner.id,
+      display_name: owner.display_name,
+    },
+  };
+};
+
 export default function Pets() {
   const [pets, setPets] = useState<Pet[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<PetShareInvitation[]>([]);
@@ -71,16 +132,10 @@ export default function Pets() {
         if (pendingError) {
           console.error('Error fetching pending invitations:', pendingError);
         } else {
-          const formattedInvitations = pendingData?.map(inv => ({
-            id: inv.id,
-            pet_id: inv.pet_id,
-            owner_id: inv.owner_id,
-            relationship_type: inv.relationship_type,
-            permission_level: inv.permission_level,
-            created_at: inv.created_at,
-            pet: inv.pets,
-            owner: inv.profiles
-          })) || [];
+          const formattedInvitations = ((pendingData as any[] | null) || [])
+            .map(normalizeInvitation)
+            .filter(Boolean) as PetShareInvitation[];
+
           setPendingInvitations(formattedInvitations);
         }
 
@@ -117,60 +172,21 @@ export default function Pets() {
           console.error('Error fetching shared pets:', sharedError);
         }
 
-        const sharedPets = sharedPetsData?.map(share => ({
-          ...share.pets,
-          permissionLevel: share.permission_level
-        })).filter(Boolean) || [];
+        const ownPets = ((petsData as any[] | null) || [])
+          .map((pet) => normalizePetRecord(pet, { isShared: false }))
+          .filter(Boolean);
 
-        // Transform data to match the expected format
-        const transformedPets = petsData?.map(pet => ({
-          id: pet.id,
-          name: pet.name,
-          species: pet.species,
-          breed: pet.breed,
-          breedInfo: pet.breed_info,
-          age: pet.age,
-          ageDisplay: pet.age_display,
-          gender: pet.gender,
-          weight: pet.weight,
-          weightDisplay: pet.weight_display,
-          isNeutered: pet.is_neutered,
-          hasChip: pet.has_chip,
-          chipNumber: pet.chip_number,
-          photoURL: pet.photo_url,
-          ownerId: pet.owner_id,
-          personality: pet.personality || [],
-          medicalNotes: pet.medical_notes,
-          createdAt: new Date(pet.created_at),
-          photo_url: pet.photo_url,
-          isShared: false,
-        })) || [];
+        const sharedPets = ((sharedPetsData as any[] | null) || [])
+          .map((share) => {
+            const pet = getFirstRecord(share?.pets);
+            return normalizePetRecord(pet, {
+              isShared: true,
+              permissionLevel: share?.permission_level,
+            });
+          })
+          .filter(Boolean);
 
-        const transformedSharedPets = sharedPets.map(pet => ({
-          id: pet.id,
-          name: pet.name,
-          species: pet.species,
-          breed: pet.breed,
-          breedInfo: pet.breed_info,
-          age: pet.age,
-          ageDisplay: pet.age_display,
-          gender: pet.gender,
-          weight: pet.weight,
-          weightDisplay: pet.weight_display,
-          isNeutered: pet.is_neutered,
-          hasChip: pet.has_chip,
-          chipNumber: pet.chip_number,
-          photoURL: pet.photo_url,
-          ownerId: pet.owner_id,
-          personality: pet.personality || [],
-          medicalNotes: pet.medical_notes,
-          createdAt: new Date(pet.created_at),
-          photo_url: pet.photo_url,
-          isShared: true,
-          permissionLevel: pet.permissionLevel,
-        }));
-
-        setPets([...transformedPets, ...transformedSharedPets]);
+        setPets([...(ownPets as Pet[]), ...(sharedPets as Pet[])]);
         setLoading(false);
       } catch (error) {
         console.error('Error fetching pets:', error);
@@ -264,30 +280,21 @@ export default function Pets() {
           .eq('shared_with_user_id', currentUser.id)
           .eq('status', 'accepted');
 
-        const sharedPets = sharedPetsData?.map(share => ({
-          ...share.pets,
-          permissionLevel: share.permission_level
-        })).filter(Boolean) || [];
-        const transformedPets = petsData?.map(pet => ({
-          id: pet.id, name: pet.name, species: pet.species, breed: pet.breed,
-          breedInfo: pet.breed_info, age: pet.age, ageDisplay: pet.age_display,
-          gender: pet.gender, weight: pet.weight, weightDisplay: pet.weight_display,
-          isNeutered: pet.is_neutered, hasChip: pet.has_chip, chipNumber: pet.chip_number,
-          photoURL: pet.photo_url, ownerId: pet.owner_id, personality: pet.personality || [],
-          medicalNotes: pet.medical_notes, createdAt: new Date(pet.created_at),
-          photo_url: pet.photo_url, isShared: false,
-        })) || [];
-        const transformedSharedPets = sharedPets.map(pet => ({
-          id: pet.id, name: pet.name, species: pet.species, breed: pet.breed,
-          breedInfo: pet.breed_info, age: pet.age, ageDisplay: pet.age_display,
-          gender: pet.gender, weight: pet.weight, weightDisplay: pet.weight_display,
-          isNeutered: pet.is_neutered, hasChip: pet.has_chip, chipNumber: pet.chip_number,
-          photoURL: pet.photo_url, ownerId: pet.owner_id, personality: pet.personality || [],
-          medicalNotes: pet.medical_notes, createdAt: new Date(pet.created_at),
-          photo_url: pet.photo_url, isShared: true,
-          permissionLevel: pet.permissionLevel,
-        }));
-        setPets([...transformedPets, ...transformedSharedPets]);
+        const transformedPets = ((petsData as any[] | null) || [])
+          .map((pet) => normalizePetRecord(pet, { isShared: false }))
+          .filter(Boolean);
+
+        const transformedSharedPets = ((sharedPetsData as any[] | null) || [])
+          .map((share) => {
+            const pet = getFirstRecord(share?.pets);
+            return normalizePetRecord(pet, {
+              isShared: true,
+              permissionLevel: share?.permission_level,
+            });
+          })
+          .filter(Boolean);
+
+        setPets([...(transformedPets as Pet[]), ...(transformedSharedPets as Pet[])]);
       }
     } catch (error) {
       console.error('Error accepting invitation:', error);
@@ -536,8 +543,7 @@ export default function Pets() {
               console.error('Error deleting pet:', error);
               
               // Handle JWT expiration specifically
-              if (error && typeof error === 'object' && 'message' in error && 
-                  error.message.includes('JWT expired')) {
+              if ((error instanceof Error ? error.message : String(error || '')).includes('JWT expired')) {
                 Alert.alert(
                   'Sesión expirada',
                   'Tu sesión ha expirado. Por favor inicia sesión nuevamente.',
@@ -553,7 +559,7 @@ export default function Pets() {
               
               // Show more specific error message for other errors
               let errorMessage = 'No se pudo eliminar la mascota';
-              if (error && typeof error === 'object' && 'message' in error) {
+              if (error instanceof Error) {
                 errorMessage = `Error: ${error.message}`;
               }
               

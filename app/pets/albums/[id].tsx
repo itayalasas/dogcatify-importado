@@ -11,6 +11,7 @@ import { supabaseClient } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { detectPetInVideo, validateVideoDuration } from '../../../utils/petDetection';
 import { envConfig } from '../../../utils/envConfig';
+import { resolveSubscriptionPlanLimits } from '../../../utils/subscriptionPlanLimits';
 import { Video } from 'expo-av';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
@@ -133,6 +134,62 @@ export default function AlbumDetail() {
   const [showMediaViewer, setShowMediaViewer] = useState(false);
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const videoRef = useRef<Video>(null);
+
+  const ensureDailyPostLimit = async () => {
+    if (!currentUser) {
+      return false;
+    }
+
+    const { data: subscriptionData, error: subscriptionError } = await supabaseClient
+      .from('user_subscriptions')
+      .select(`
+        status,
+        subscription_plans (
+          tier,
+          audience_target,
+          limits
+        )
+      `)
+      .eq('user_id', currentUser.id)
+      .in('status', ['active', 'trialing', 'pending', 'paused'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (subscriptionError) {
+      throw subscriptionError;
+    }
+
+    const userPlanLimits = resolveSubscriptionPlanLimits(subscriptionData?.subscription_plans || null);
+    const maxPostsPerDay = userPlanLimits.users.maxPostsPerDay;
+
+    if (maxPostsPerDay === null) {
+      return true;
+    }
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const { count, error: countError } = await supabaseClient
+      .from('posts')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', currentUser.id)
+      .gte('created_at', startOfDay.toISOString())
+      .lt('created_at', endOfDay.toISOString());
+
+    if (countError) {
+      throw countError;
+    }
+
+    if ((count || 0) >= maxPostsPerDay) {
+      return false;
+    }
+
+    return true;
+  };
 
   useEffect(() => {
     fetchAlbumDetails();
@@ -369,6 +426,11 @@ export default function AlbumDetail() {
       return;
     }
 
+    if (!currentUser) {
+      Alert.alert('Error', 'Usuario no autenticado');
+      return;
+    }
+
     setUploadingVideo(true);
     try {
       console.log('Starting to upload video...');
@@ -463,6 +525,11 @@ export default function AlbumDetail() {
       return;
     }
 
+    if (!currentUser) {
+      Alert.alert('Error', 'Usuario no autenticado');
+      return;
+    }
+
     setUploadingImages(true);
     try {
       console.log('Starting to upload', selectedImages.length, 'images...');
@@ -536,7 +603,15 @@ export default function AlbumDetail() {
         console.log('Album is shared, creating new post for added photos...');
         
         try {
-          // Get pet data
+          const canCreateFeedPost = await ensureDailyPostLimit();
+          if (!canCreateFeedPost) {
+            Alert.alert(
+              'Límite alcanzado',
+              'Las fotos se guardaron en el álbum, pero no se compartieron en el feed porque ya alcanzaste el limite diario de publicaciones.',
+              [{ text: 'Entendido' }]
+            );
+          } else {
+            // Get pet data
           const { data: petData, error: petError } = await supabaseClient
             .from('pets')
             .select('*')
@@ -589,6 +664,7 @@ export default function AlbumDetail() {
               );
             }
           }
+          }
         } catch (feedError) {
           console.error('Error creating feed post:', feedError);
           Alert.alert('Éxito', successMessage);
@@ -596,17 +672,16 @@ export default function AlbumDetail() {
       } else {
         Alert.alert('Éxito', successMessage);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error adding photos:', error);
       
-      let errorMessage = 'No se pudieron agregar las fotos';
-      if (error.message?.includes('conexión')) {
-        errorMessage = 'Error de conexión. Verifica tu internet e intenta nuevamente.';
-      } else if (error.message?.includes('cancelada')) {
-        errorMessage = 'Subida cancelada.';
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
+      const errorMessage = error instanceof Error
+        ? (error.message.includes('conexión')
+            ? 'Error de conexión. Verifica tu internet e intenta nuevamente.'
+            : error.message.includes('cancelada')
+              ? 'Subida cancelada.'
+              : error.message)
+        : 'No se pudieron agregar las fotos';
       
       Alert.alert('Error', errorMessage);
     } finally {
@@ -634,7 +709,13 @@ export default function AlbumDetail() {
       if (!wasShared && willBeShared) {
         // Album is now being shared - create post in feed
         console.log('Album is now shared, creating feed post...');
-        await createFeedPostFromAlbum();
+        const sharedInFeed = await createFeedPostFromAlbum();
+        if (!sharedInFeed) {
+          Alert.alert(
+            'Límite alcanzado',
+            'El álbum se guardó correctamente, pero no se compartió en el feed porque ya alcanzaste el limite diario de publicaciones.'
+          );
+        }
       } else if (wasShared && !willBeShared) {
         // Album is no longer shared - remove from feed
         console.log('Album is no longer shared, removing from feed...');
@@ -663,6 +744,10 @@ export default function AlbumDetail() {
 
   const createFeedPostFromAlbum = async () => {
     try {
+      if (!currentUser) {
+        return false;
+      }
+
       // Get pet data
       const { data: petData, error: petError } = await supabaseClient
         .from('pets')
@@ -684,6 +769,11 @@ export default function AlbumDetail() {
       
       if (userError) {
         console.error('Error fetching user data:', userError);
+      }
+      
+      const canCreateFeedPost = await ensureDailyPostLimit();
+      if (!canCreateFeedPost) {
+        return false;
       }
       
       // Create post from album
@@ -713,11 +803,14 @@ export default function AlbumDetail() {
       
       if (postError) {
         console.error('Error creating feed post:', postError);
+        return false;
       } else {
         console.log('Feed post created successfully');
+        return true;
       }
     } catch (error) {
       console.error('Error creating feed post from album:', error);
+      return false;
     }
   };
 

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, ScrollView, TouchableOpacity, SafeAreaView, Switch } from 'react-native';
+import { View, Text, StyleSheet, Alert, ScrollView, TouchableOpacity, SafeAreaView, Switch, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { ArrowLeft, CreditCard, CircleCheck as CheckCircle, CircleAlert as AlertCircle, ExternalLink, Eye, EyeOff } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
-import { validateCredentialsFormat } from '../../utils/mercadoPago';
+import { disconnectPartnerMercadoPago, generateOAuth2AuthorizationUrlWithConfig, validateCredentialsFormat } from '../../utils/mercadoPago';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -18,6 +18,7 @@ export default function MercadoPagoConfig() {
   const [manualPublicKey, setManualPublicKey] = useState('');
   const [isTestMode, setIsTestMode] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
+  const [connectLoading, setConnectLoading] = useState(false);
   const [showCredentials, setShowCredentials] = useState(false);
 
   useEffect(() => {
@@ -85,6 +86,32 @@ export default function MercadoPagoConfig() {
       Alert.alert('Error', 'No se pudo cargar la información del negocio');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleConnectOAuth = async () => {
+    if (!partner?.id) {
+      Alert.alert('Error', 'No encontramos un negocio válido para conectar Mercado Pago.');
+      return;
+    }
+
+    setConnectLoading(true);
+    try {
+      const authUrl = await generateOAuth2AuthorizationUrlWithConfig(partner.id);
+      console.log('Opening Mercado Pago OAuth URL for partner:', partner.id);
+      await Linking.openURL(authUrl);
+    } catch (error) {
+      console.error('Error starting Mercado Pago OAuth flow:', error);
+      const errorMessage = error instanceof Error ? error.message : 'No se pudo iniciar la conexión con Mercado Pago.';
+      const isMissingClientId = errorMessage.toLowerCase().includes('client id not configured');
+      Alert.alert(
+        isMissingClientId ? 'Falta configurar Mercado Pago' : 'Error',
+        isMissingClientId
+          ? 'El admin debe guardar el N° de aplicación / App ID (client_id) en Configuración del Sistema antes de conectar aliados.'
+          : errorMessage
+      );
+    } finally {
+      setConnectLoading(false);
     }
   };
 
@@ -167,7 +194,8 @@ export default function MercadoPagoConfig() {
         public_key: manualPublicKey.trim(),
         access_token: manualAccessToken.trim(),
         connected_at: new Date().toISOString(),
-        is_test_mode: isTestMode
+        is_test_mode: isTestMode,
+        is_oauth: false
       };
 
       console.log('💾 Saving NEW MP config:', {
@@ -225,16 +253,7 @@ export default function MercadoPagoConfig() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const { error } = await supabaseClient
-                .from('partners')
-                .update({
-                  mercadopago_connected: false,
-                  mercadopago_config: null,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('user_id', partner.user_id);
-
-              if (error) throw error;
+              await disconnectPartnerMercadoPago(partner.id);
 
               // Refresh partner data from database to ensure we have the latest
               await loadPartnerData();
@@ -337,6 +356,13 @@ export default function MercadoPagoConfig() {
               </View>
 
               <View style={styles.configRow}>
+                <Text style={styles.configLabel}>Conexión:</Text>
+                <Text style={styles.configValue}>
+                  {mpConfig.is_oauth ? 'OAuth del aliado' : 'Configuración legacy'}
+                </Text>
+              </View>
+
+              <View style={styles.configRow}>
                 <Text style={styles.configLabel}>Conectado:</Text>
                 <Text style={styles.configValue}>
                   {new Date(mpConfig.connected_at).toLocaleDateString()}
@@ -369,11 +395,29 @@ export default function MercadoPagoConfig() {
                 </Text>
               </View>
 
+              {mpConfig.user_id && (
+                <View style={styles.credentialItem}>
+                  <Text style={styles.credentialLabel}>User ID:</Text>
+                  <Text style={styles.credentialValue} selectable>
+                    {String(mpConfig.user_id)}
+                  </Text>
+                </View>
+              )}
+
               {mpConfig.access_token && (
                 <View style={styles.credentialItem}>
                   <Text style={styles.credentialLabel}>Access Token:</Text>
                   <Text style={styles.credentialValue} selectable={showCredentials}>
                     {showCredentials ? mpConfig.access_token : maskCredential(mpConfig.access_token)}
+                  </Text>
+                </View>
+              )}
+
+              {mpConfig.refresh_token && (
+                <View style={styles.credentialItem}>
+                  <Text style={styles.credentialLabel}>Refresh Token:</Text>
+                  <Text style={styles.credentialValue} selectable={showCredentials}>
+                    {showCredentials ? mpConfig.refresh_token : maskCredential(mpConfig.refresh_token)}
                   </Text>
                 </View>
               )}
@@ -383,11 +427,19 @@ export default function MercadoPagoConfig() {
               <Text style={styles.infoTitle}>¿Cómo funciona?</Text>
               <Text style={styles.infoText}>
                 • Los clientes pagan a través de Mercado Pago{'\n'}
-                • Recibes el 95% del monto directamente en tu cuenta{'\n'}
-                • DogCatiFy retiene el 5% como comisión{'\n'}
-                • Los fondos llegan automáticamente a tu cuenta MP
+                • El cobro queda asociado a la cuenta del aliado{'\n'}
+                • DogCatiFy aplica su comisión automáticamente{'\n'}
+                • Los fondos llegan directamente a tu cuenta MP
               </Text>
             </View>
+
+            <Button
+              title={mpConfig.is_oauth ? 'Reautorizar conexión' : 'Conectar con OAuth'}
+              onPress={handleConnectOAuth}
+              loading={connectLoading}
+              variant="outline"
+              size="large"
+            />
 
             <Button
               title="Desconectar Cuenta"
@@ -408,16 +460,23 @@ export default function MercadoPagoConfig() {
                 Para recibir pagos, necesitas conectar tu cuenta de Mercado Pago.
               </Text>
 
+              <Button
+                title="Conectar con OAuth"
+                onPress={handleConnectOAuth}
+                loading={connectLoading}
+                size="large"
+              />
+
               <View style={styles.benefitsList}>
                 <Text style={styles.benefitItem}>• Recibe pagos directamente en tu cuenta</Text>
-                <Text style={styles.benefitItem}>• Comisión automática del 5%</Text>
+                <Text style={styles.benefitItem}>• Comisión automática de DogCatiFy</Text>
                 <Text style={styles.benefitItem}>• Proceso seguro y confiable</Text>
                 <Text style={styles.benefitItem}>• Compatible con tarjetas, transferencias y más</Text>
               </View>
             </Card>
 
             <Card style={styles.manualConfigCard}>
-              <Text style={styles.manualConfigTitle}>Configuración Manual</Text>
+              <Text style={styles.manualConfigTitle}>Configuración Manual (legacy)</Text>
 
               <View style={styles.helpSection}>
                 <Text style={styles.helpTitle}>💡 ¿Cómo obtener las credenciales?</Text>

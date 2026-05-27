@@ -9,6 +9,12 @@ import { supabaseClient } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return String(error);
+};
+
 export default function AdminPromotions() {
   console.log('🚀 [AdminPromotions] Component loaded!');
 
@@ -577,8 +583,8 @@ export default function AdminPromotions() {
     } catch (error) {
       console.error('ERROR in handleCreatePromotion:', error);
       console.error('Error type:', typeof error);
-      console.error('Error message:', error?.message);
-      console.error('Error stack:', error?.stack);
+      console.error('Error message:', getErrorMessage(error));
+      console.error('Error stack:', error instanceof Error ? error.stack : undefined);
       Alert.alert('Error', 'Ocurrió un error inesperado');
     } finally {
       console.log('Finally: Cleaning up loading state');

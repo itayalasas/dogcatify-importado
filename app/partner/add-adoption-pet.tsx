@@ -9,16 +9,62 @@ import { useAuth } from '../../contexts/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
 import { supabaseClient } from '../../lib/supabase';
 import { uploadImage as uploadImageUtil } from '../../utils/imageUpload';
+import { canAccessPartnerModule, getPartnerLockedActionLabel, getPartnerPlan } from '../../utils/partnerPlans';
 
 export default function AddAdoptionPet() {
   const { partnerId } = useLocalSearchParams<{ partnerId: string }>();
   const { currentUser } = useAuth();
+  const [partnerProfile, setPartnerProfile] = useState<any>(null);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [initializing, setInitializing] = useState(true);
   
   // Debug logs
   useEffect(() => {
     console.log('AddAdoptionPet component loaded');
     console.log('Partner ID:', partnerId);
     console.log('Current user:', currentUser?.email);
+  }, [partnerId, currentUser]);
+
+  useEffect(() => {
+    if (!partnerId || !currentUser) return;
+
+    const loadPartner = async () => {
+      try {
+        const { data, error } = await supabaseClient
+          .from('partners')
+          .select('id, business_name, business_type, subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
+          .eq('id', partnerId)
+          .single();
+
+        if (error) throw error;
+
+        const planTier = data?.subscription_plan_tier || 'starter';
+        const allowed = canAccessPartnerModule(
+          planTier,
+          'adoptions',
+          data?.business_type,
+          data?.subscription_plan_status,
+          data?.subscription_plan_expires_at,
+        );
+
+        setPartnerProfile({
+          id: data.id,
+          businessName: data.business_name,
+          businessType: data.business_type,
+          subscriptionPlanTier: planTier,
+        });
+
+        if (!allowed) {
+          setAccessDenied(true);
+        }
+      } catch (error) {
+        console.error('Error loading adoption partner:', error);
+      } finally {
+        setInitializing(false);
+      }
+    };
+
+    loadPartner();
   }, [partnerId, currentUser]);
   
   // Datos básicos
@@ -250,6 +296,51 @@ export default function AddAdoptionPet() {
       setLoading(false);
     }
   };
+
+  if (initializing) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Cargando formulario de adopción...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (accessDenied) {
+    const plan = getPartnerPlan(partnerProfile?.subscriptionPlanTier);
+
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color="#111827" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Agregar Mascota en Adopción</Text>
+          <View style={styles.placeholder} />
+        </View>
+
+        <View style={styles.lockedContainer}>
+          <Card style={styles.lockedCard}>
+            <Text style={styles.lockedBadge}>{getPartnerLockedActionLabel('adoptions')}</Text>
+            <Text style={styles.lockedTitle}>Gestión de adopciones disponible en Pro</Text>
+            <Text style={styles.lockedText}>
+              {plan.name} no incluye este módulo para refugios.
+            </Text>
+            <Text style={styles.lockedTextSecondary}>
+              Desde el plan Pro puedes publicar mascotas, administrar requisitos y habilitar el contacto con adoptantes.
+            </Text>
+            <TouchableOpacity
+              style={styles.lockedButton}
+              onPress={() => router.back()}
+            >
+              <Text style={styles.lockedButtonText}>Volver</Text>
+            </TouchableOpacity>
+          </Card>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -1124,5 +1215,69 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     marginTop: 8,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  lockedContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 20,
+  },
+  lockedCard: {
+    alignItems: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+  },
+  lockedBadge: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#7C3AED',
+    backgroundColor: '#F5F3FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginBottom: 12,
+  },
+  lockedTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  lockedText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    textAlign: 'center',
+    lineHeight: 21,
+    marginBottom: 8,
+  },
+  lockedTextSecondary: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  lockedButton: {
+    backgroundColor: '#2D6A6F',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  lockedButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
   },
 });

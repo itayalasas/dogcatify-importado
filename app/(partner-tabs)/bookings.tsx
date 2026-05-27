@@ -697,6 +697,9 @@ const styles = StyleSheet.create({
     padding: 8,
     marginRight: 8,
   },
+  placeholder: {
+    width: 32,
+  },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',

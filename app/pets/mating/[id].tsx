@@ -7,6 +7,7 @@ import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient } from '../../../lib/supabase';
+import { resolveSubscriptionPlanLimits } from '../../../utils/subscriptionPlanLimits';
 
 export default function PetMatingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -272,6 +273,56 @@ export default function PetMatingScreen() {
 
     setActionLoading(true);
     try {
+      const { data: subscriptionData, error: subscriptionError } = await supabaseClient
+        .from('user_subscriptions')
+        .select(`
+          status,
+          subscription_plans (
+            tier,
+            audience_target,
+            limits
+          )
+        `)
+        .eq('user_id', currentUser.id)
+        .in('status', ['active', 'trialing', 'pending', 'paused'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (subscriptionError) {
+        throw subscriptionError;
+      }
+
+      const userPlanLimits = resolveSubscriptionPlanLimits(subscriptionData?.subscription_plans || null);
+      const maxDailySwipes = userPlanLimits.users.maxMatchSwipesPerDay;
+
+      if (maxDailySwipes !== null) {
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+
+        const { count: swipeCount, error: swipeCountError } = await supabaseClient
+          .from('pet_swipes')
+          .select('id', { count: 'exact', head: true })
+          .eq('owner_id', currentUser.id)
+          .gte('created_at', startOfDay.toISOString());
+
+        if (swipeCountError) {
+          throw swipeCountError;
+        }
+
+        if ((swipeCount || 0) >= maxDailySwipes) {
+          Alert.alert(
+            'Límite diario alcanzado',
+            `Tu plan actual permite hasta ${maxDailySwipes} intento${maxDailySwipes === 1 ? '' : 's'} de match por día. Espera hasta mañana o actualiza tu suscripción.`,
+            [
+              { text: 'Ver suscripción', onPress: () => router.push('/profile/subscription') },
+              { text: 'OK', style: 'cancel' },
+            ]
+          );
+          return;
+        }
+      }
+
       const { error } = await supabaseClient
         .from('pet_swipes')
         .upsert({

@@ -8,12 +8,24 @@ const corsHeaders = {
 };
 
 const MOBILE_APP_SCHEME = "dogcatify";
+const SUBSCRIPTION_SCOPES = ["user", "partner"] as const;
+
+type SubscriptionScope = typeof SUBSCRIPTION_SCOPES[number];
 
 const isUuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
-const buildDeepLink = (subscriptionId: string | null) => {
-  const url = new URL(`${MOBILE_APP_SCHEME}://profile/subscription`);
+const normalizeScope = (value?: string | null): SubscriptionScope => {
+  const normalized = String(value || "").toLowerCase();
+  return normalized === "partner" ? "partner" : "user";
+};
+
+const buildDeepLink = (subscriptionId: string | null, scope: SubscriptionScope = "user", target?: string | null) => {
+  const fallbackTarget = scope === "partner"
+    ? `${MOBILE_APP_SCHEME}://partner/subscription`
+    : `${MOBILE_APP_SCHEME}://profile/subscription`;
+
+  const url = new URL(target || fallbackTarget);
   if (subscriptionId) {
     url.searchParams.set("subscription_id", subscriptionId);
   }
@@ -48,6 +60,14 @@ const getAdminMercadoPagoConfig = async (supabase: any) => {
   }
 
   return config;
+};
+
+const buildExternalReferenceCandidates = (subscriptionId: string, scope: SubscriptionScope) => {
+  if (scope === "partner") {
+    return [`partner:${subscriptionId}`];
+  }
+
+  return [`user:${subscriptionId}`, subscriptionId];
 };
 
 const fetchMercadoPagoOptional = async (accessToken: string, path: string) => {
@@ -112,6 +132,7 @@ const getSearchResults = (body: any) =>
 const findMercadoPagoPreapprovalForSubscription = async (
   accessToken: string,
   subscription: any,
+  scope: SubscriptionScope = "user",
 ) => {
   const preapprovalId = String(subscription?.mercadopago_preapproval_id || "").trim();
   if (preapprovalId) {
@@ -121,12 +142,16 @@ const findMercadoPagoPreapprovalForSubscription = async (
 
   const externalReference = String(subscription?.id || "").trim();
   if (externalReference) {
-    const query = new URLSearchParams({ external_reference: externalReference });
-    const search = await fetchMercadoPagoOptional(accessToken, `/preapproval/search?${query.toString()}`);
-    const match = getSearchResults(search).find((item: any) =>
-      String(item?.external_reference || "") === externalReference
-    );
-    if (match) return match;
+    const referenceCandidates = buildExternalReferenceCandidates(externalReference, scope);
+
+    for (const candidate of referenceCandidates) {
+      const query = new URLSearchParams({ external_reference: candidate });
+      const search = await fetchMercadoPagoOptional(accessToken, `/preapproval/search?${query.toString()}`);
+      const match = getSearchResults(search).find((item: any) =>
+        String(item?.external_reference || "") === candidate
+      );
+      if (match) return match;
+    }
   }
 
   const mpPlanId = String(subscription?.mercadopago_preapproval_plan_id || "").trim();
@@ -147,7 +172,7 @@ const findMercadoPagoPreapprovalForSubscription = async (
   return null;
 };
 
-const syncSubscription = async (supabase: any, subscriptionId: string) => {
+const syncUserSubscription = async (supabase: any, subscriptionId: string) => {
   const { data: subscription, error } = await supabase
     .from("user_subscriptions")
     .select("*")
@@ -163,7 +188,7 @@ const syncSubscription = async (supabase: any, subscriptionId: string) => {
   }
 
   const mpConfig = await getAdminMercadoPagoConfig(supabase);
-  const preapproval = await findMercadoPagoPreapprovalForSubscription(mpConfig.access_token, subscription);
+  const preapproval = await findMercadoPagoPreapprovalForSubscription(mpConfig.access_token, subscription, "user");
 
   if (!preapproval) {
     console.warn("Subscription return could not find Mercado Pago preapproval:", {
@@ -222,6 +247,112 @@ const syncSubscription = async (supabase: any, subscriptionId: string) => {
   return true;
 };
 
+const syncPartnerSubscription = async (supabase: any, subscriptionId: string) => {
+  const { data: subscription, error } = await supabase
+    .from("partner_subscriptions")
+    .select("*")
+    .eq("id", subscriptionId)
+    .maybeSingle();
+
+  if (error || !subscription) {
+    console.warn("Partner subscription return could not load local subscription:", {
+      subscriptionId,
+      error: error?.message,
+    });
+    return false;
+  }
+
+  const mpConfig = await getAdminMercadoPagoConfig(supabase);
+  const preapproval = await findMercadoPagoPreapprovalForSubscription(mpConfig.access_token, subscription, "partner");
+
+  if (!preapproval) {
+    console.warn("Partner subscription return could not find Mercado Pago preapproval:", {
+      subscriptionId,
+    });
+    return false;
+  }
+
+  const now = new Date().toISOString();
+  const mappedStatus = mapPreapprovalStatus(preapproval?.status);
+  const updatePayload: Record<string, unknown> = {
+    status: mappedStatus === "active" && subscription.trial_ends_at && new Date(subscription.trial_ends_at).getTime() > Date.now()
+      ? "trialing"
+      : mappedStatus,
+    crm_subscription_id: preapproval?.id || subscription.crm_subscription_id || null,
+    mercadopago_preapproval_id: preapproval?.id || subscription.mercadopago_preapproval_id || null,
+    mercadopago_preapproval_plan_id: preapproval?.preapproval_plan_id || subscription.mercadopago_preapproval_plan_id || null,
+    mercadopago_status: preapproval?.status || subscription.mercadopago_status || "pending",
+    payment_url: preapproval?.init_point || subscription.payment_url || null,
+    last_synced_at: now,
+    metadata: {
+      ...(subscription.metadata || {}),
+      mp_preapproval: preapproval,
+      last_return_sync: {
+        synced_at: now,
+      },
+    },
+    updated_at: now,
+  };
+
+  if (updatePayload.status === "trialing" && !subscription.started_at) {
+    updatePayload.started_at = preapproval?.date_created || now;
+  } else if (!subscription.started_at) {
+    updatePayload.started_at = preapproval?.date_created || now;
+  }
+
+  if (preapproval?.next_payment_date) {
+    updatePayload.expires_at = preapproval.next_payment_date;
+  } else if (subscription.trial_ends_at) {
+    updatePayload.expires_at = subscription.trial_ends_at;
+  }
+
+  const { error: updateError } = await supabase
+    .from("partner_subscriptions")
+    .update(updatePayload)
+    .eq("id", subscription.id);
+
+  if (updateError) {
+    console.warn("Partner subscription return sync update failed:", {
+      subscriptionId,
+      error: updateError.message,
+    });
+    return false;
+  }
+
+  console.log("Partner subscription return synced local subscription:", {
+    subscriptionId,
+    preapprovalId: preapproval?.id,
+    mpStatus: preapproval?.status,
+    localStatus: mappedStatus,
+  });
+
+  const { error: partnerUpdateError } = await supabase
+    .from("partners")
+    .update({
+      subscription_plan_tier: String(subscription.metadata?.plan_tier || "starter"),
+      subscription_plan_status: String(updatePayload.status || mappedStatus),
+      subscription_plan_started_at: String(updatePayload.started_at || subscription.started_at || now),
+      subscription_plan_expires_at: updatePayload.expires_at || null,
+      subscription_plan_metadata: {
+        ...(subscription.metadata || {}),
+        mp_preapproval: preapproval,
+        last_return_sync: {
+          synced_at: now,
+        },
+      },
+      updated_at: now,
+    })
+    .eq("id", String(subscription.partner_id || ""));
+
+  if (partnerUpdateError) {
+    console.warn("Partner subscription return partner sync failed:", {
+      subscriptionId,
+      error: partnerUpdateError.message,
+    });
+  }
+  return true;
+};
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -230,13 +361,15 @@ Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
   const externalReference = String(url.searchParams.get("external_reference") || "");
   const subscriptionIdParam = String(url.searchParams.get("subscription_id") || "");
+  const scope = normalizeScope(url.searchParams.get("scope") || (externalReference.startsWith("partner:") ? "partner" : "user"));
+  const target = String(url.searchParams.get("target") || "").trim() || null;
   const rawSubscriptionId = subscriptionIdParam || externalReference || null;
   const subscriptionId = isUuid(subscriptionIdParam)
     ? subscriptionIdParam
     : isUuid(externalReference)
       ? externalReference
       : null;
-  const deepLink = buildDeepLink(rawSubscriptionId);
+  const deepLink = buildDeepLink(rawSubscriptionId, scope, target);
 
   try {
     if (subscriptionId) {
@@ -244,8 +377,12 @@ Deno.serve(async (req: Request) => {
       const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
       if (supabaseUrl && supabaseServiceKey) {
-        const supabase = createClient(supabaseUrl, supabaseServiceKey);
-        await syncSubscription(supabase, subscriptionId);
+      const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        if (scope === "partner") {
+          await syncPartnerSubscription(supabase, subscriptionId);
+        } else {
+          await syncUserSubscription(supabase, subscriptionId);
+        }
       }
     }
   } catch (error) {

@@ -133,7 +133,8 @@ export default function Shop() {
     }
 
     router.push({
-      pathname: `/products/${productId}`,
+      pathname: '/products/[id]',
+      params: { id: productId },
     });
   };
 
@@ -406,31 +407,6 @@ const styles = StyleSheet.create({
   cartBadgeText: {
     color: '#FFFFFF',
     fontSize: 10,
-    fontFamily: 'Inter-Bold',
-  },
-  cartButton: {
-    position: 'relative',
-    padding: 6,
-    marginRight: 6,
-    minWidth: 32,
-    minHeight: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cartBadge: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    backgroundColor: '#EF4444',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cartBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
     fontFamily: 'Inter-Bold',
   },
   searchButton: {

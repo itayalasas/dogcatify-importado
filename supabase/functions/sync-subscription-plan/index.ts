@@ -292,8 +292,9 @@ const buildPreapprovalPlanPayload = (plan: any, cycle: BillingCycle) => {
   const fields = getCycleFields(cycle);
   const amount = toNumber(plan[fields.price]);
   const currency = String(plan.currency || "UYU").toUpperCase();
+  const trialDays = Math.max(0, Math.trunc(Number(plan.trial_days || 0)));
 
-  return {
+  const payload: Record<string, unknown> = {
     reason: `${plan.name} ${cycleLabel(cycle)}`.slice(0, 255),
     auto_recurring: {
       frequency: cycle === "monthly" ? 1 : 12,
@@ -304,6 +305,18 @@ const buildPreapprovalPlanPayload = (plan: any, cycle: BillingCycle) => {
     back_url: buildSubscriptionReturnUrl(),
     external_reference: `${plan.id}:${cycle}`,
   };
+
+  if (trialDays > 0) {
+    payload.auto_recurring = {
+      ...(payload.auto_recurring as Record<string, unknown>),
+      free_trial: {
+        frequency: trialDays,
+        frequency_type: "days",
+      },
+    };
+  }
+
+  return payload;
 };
 
 const compactPlanSnapshot = (remotePlan: any) => ({
@@ -477,6 +490,8 @@ Deno.serve(async (req: Request) => {
       currency: plan.currency,
       priceMonthly: plan.price_monthly,
       priceYearly: plan.price_yearly,
+      trialDays: plan.trial_days || 0,
+      audienceTarget: plan.audience_target || null,
       monthlyMpPlanId: plan.mercadopago_monthly_plan_id || null,
       yearlyMpPlanId: plan.mercadopago_yearly_plan_id || null,
     });

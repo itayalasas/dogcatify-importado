@@ -834,6 +834,12 @@ function getPreapprovalPayerEmail(preapproval: any): string | null {
   return email ? String(email).trim().toLowerCase() : null;
 }
 
+function isValidDate(value?: string | null): boolean {
+  if (!value) return false;
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime());
+}
+
 async function findPlanByMercadoPagoPlanId(supabase: any, mpPlanId: string): Promise<any | null> {
   if (!mpPlanId) return null;
 
@@ -885,12 +891,17 @@ async function findOrCreateLocalSubscriptionForPreapproval(supabase: any, preapp
   const preapprovalId = String(preapproval?.id || '');
   const externalReference = String(preapproval?.external_reference || '');
   const mpPlanId = String(preapproval?.preapproval_plan_id || '');
+  const referenceInfo = getSubscriptionReferenceInfo(externalReference);
 
-  if (externalReference && isUuid(externalReference)) {
+  if (referenceInfo.scope === 'partner') {
+    return null;
+  }
+
+  if (referenceInfo.id && isUuid(referenceInfo.id)) {
     const { data: byExternalReference } = await supabase
       .from('user_subscriptions')
       .select('*')
-      .eq('id', externalReference)
+      .eq('id', referenceInfo.id)
       .maybeSingle();
 
     if (byExternalReference) {
@@ -977,6 +988,46 @@ async function findOrCreateLocalSubscriptionForPreapproval(supabase: any, preapp
   return createdSubscription;
 }
 
+async function findOrCreateLocalPartnerSubscriptionForPreapproval(supabase: any, preapproval: any): Promise<any | null> {
+  const preapprovalId = String(preapproval?.id || '');
+  const externalReference = String(preapproval?.external_reference || '');
+  const referenceInfo = getSubscriptionReferenceInfo(externalReference);
+
+  if (referenceInfo.scope !== 'partner') {
+    return null;
+  }
+
+  if (referenceInfo.id && isUuid(referenceInfo.id)) {
+    const { data: byExternalReference } = await supabase
+      .from('partner_subscriptions')
+      .select('*')
+      .eq('id', referenceInfo.id)
+      .maybeSingle();
+
+    if (byExternalReference) {
+      return byExternalReference;
+    }
+  }
+
+  if (preapprovalId) {
+    const { data: byPreapprovalId } = await supabase
+      .from('partner_subscriptions')
+      .select('*')
+      .eq('mercadopago_preapproval_id', preapprovalId)
+      .maybeSingle();
+
+    if (byPreapprovalId) {
+      return byPreapprovalId;
+    }
+  }
+
+  console.warn('Could not match Mercado Pago partner subscription to local record:', {
+    preapproval_id: preapprovalId,
+    external_reference: externalReference,
+  });
+  return null;
+}
+
 async function processSubscriptionPreapprovalNotification(supabase: any, notification: WebhookNotification) {
   const preapprovalId = notification.data?.id;
 
@@ -1002,7 +1053,10 @@ async function processSubscriptionPreapprovalNotification(supabase: any, notific
     return;
   }
 
-  const localSubscription = await findOrCreateLocalSubscriptionForPreapproval(supabase, preapproval);
+  const referenceInfo = getSubscriptionReferenceInfo(String(preapproval.external_reference || ''));
+  const localSubscription = referenceInfo.scope === 'partner'
+    ? await findOrCreateLocalPartnerSubscriptionForPreapproval(supabase, preapproval)
+    : await findOrCreateLocalSubscriptionForPreapproval(supabase, preapproval);
   if (!localSubscription) {
     console.warn('No local subscription matched for preapproval:', {
       id: preapproval.id,
@@ -1015,6 +1069,104 @@ async function processSubscriptionPreapprovalNotification(supabase: any, notific
 
   const now = new Date().toISOString();
   const localStatus = mapPreapprovalStatusToLocalStatus(preapproval.status);
+
+  if (referenceInfo.scope === 'partner') {
+    const trialEndsAt = isValidDate(String(localSubscription.trial_ends_at || '')) ? String(localSubscription.trial_ends_at) : null;
+    const effectiveStatus = localSubscription.trial_used && trialEndsAt && new Date(trialEndsAt).getTime() > Date.now() && localStatus === 'active'
+      ? 'trialing'
+      : localStatus;
+
+    const metadata = {
+      ...(localSubscription.metadata || {}),
+      mp_preapproval: preapproval,
+      last_webhook: {
+        type: notification.type,
+        action: notification.action,
+        received_at: now,
+      },
+    };
+
+    const updatePayload: any = {
+      status: effectiveStatus,
+      crm_subscription_id: preapproval.id,
+      mercadopago_preapproval_id: preapproval.id,
+      mercadopago_preapproval_plan_id: preapproval.preapproval_plan_id || localSubscription.mercadopago_preapproval_plan_id,
+      mercadopago_status: preapproval.status,
+      payment_url: preapproval.init_point || localSubscription.payment_url,
+      billing_cycle: localSubscription.billing_cycle,
+      metadata,
+      last_synced_at: now,
+      updated_at: now,
+    };
+
+    if (!localSubscription.started_at) {
+      updatePayload.started_at = preapproval.date_created || now;
+    }
+
+    if (preapproval.next_payment_date) {
+      updatePayload.expires_at = preapproval.next_payment_date;
+    } else if (trialEndsAt) {
+      updatePayload.expires_at = trialEndsAt;
+    }
+
+    const { error: updateError } = await supabase
+      .from('partner_subscriptions')
+      .update(updatePayload)
+      .eq('id', localSubscription.id);
+
+    if (updateError) {
+      console.error('Error updating local partner subscription from preapproval:', updateError);
+      return;
+    }
+
+    const partnerId = String(localSubscription.partner_id || '');
+    const planTier = String(localSubscription.metadata?.plan_tier || 'starter');
+    const { data: partnerForUpdate, error: partnerLookupError } = await supabase
+      .from('partners')
+      .select('user_id')
+      .eq('id', partnerId)
+      .maybeSingle();
+
+    if (partnerLookupError) {
+      console.error('Error reading partner for subscription sync:', partnerLookupError);
+    }
+
+    const partnerUserId = partnerForUpdate?.user_id || null;
+    const { error: partnerUpdateError } = partnerUserId
+      ? await supabase
+        .from('partners')
+        .update({
+          subscription_plan_tier: planTier,
+          subscription_plan_status: effectiveStatus,
+          subscription_plan_started_at: preapproval.date_created || now,
+          subscription_plan_expires_at: preapproval.next_payment_date || trialEndsAt || null,
+          subscription_plan_metadata: {
+            ...(localSubscription.metadata || {}),
+            mp_preapproval: preapproval,
+            last_webhook: {
+              type: notification.type,
+              action: notification.action,
+              received_at: now,
+            },
+          },
+          updated_at: now,
+        })
+        .eq('user_id', partnerUserId)
+      : { error: null };
+
+    if (partnerUpdateError) {
+      console.error('Error updating partner profile from preapproval:', partnerUpdateError);
+    }
+
+    console.log('Local partner subscription synced from Mercado Pago preapproval:', {
+      local_subscription_id: localSubscription.id,
+      preapproval_id: preapproval.id,
+      mp_status: preapproval.status,
+      local_status: effectiveStatus,
+    });
+    return;
+  }
+
   const metadata = {
     ...(localSubscription.metadata || {}),
     mp_preapproval: preapproval,
@@ -1101,13 +1253,23 @@ async function processSubscriptionAuthorizedPaymentNotification(supabase: any, n
     } as WebhookNotification);
   }
 
-  const { data: localSubscription } = preapprovalId
+  const { data: userSubscription } = preapprovalId
     ? await supabase
       .from('user_subscriptions')
       .select('*')
       .eq('mercadopago_preapproval_id', String(preapprovalId))
       .maybeSingle()
     : { data: null };
+
+  const { data: partnerSubscription } = preapprovalId
+    ? await supabase
+      .from('partner_subscriptions')
+      .select('*')
+      .eq('mercadopago_preapproval_id', String(preapprovalId))
+      .maybeSingle()
+    : { data: null };
+
+  const localSubscription = partnerSubscription || userSubscription;
 
   if (!localSubscription) {
     console.warn('Authorized payment did not match a local subscription:', {
@@ -1128,15 +1290,22 @@ async function processSubscriptionAuthorizedPaymentNotification(supabase: any, n
     },
   };
 
-  const { error: updateError } = await supabase
-    .from('user_subscriptions')
-    .update({
-      status: 'active',
-      metadata,
-      last_synced_at: now,
-      updated_at: now,
-    })
-    .eq('id', localSubscription.id);
+  const updatePayload = {
+    status: 'active',
+    metadata,
+    last_synced_at: now,
+    updated_at: now,
+  };
+
+  const { error: updateError } = partnerSubscription
+    ? await supabase
+      .from('partner_subscriptions')
+      .update(updatePayload)
+      .eq('id', localSubscription.id)
+    : await supabase
+      .from('user_subscriptions')
+      .update(updatePayload)
+      .eq('id', localSubscription.id);
 
   if (updateError) {
     console.error('Error updating subscription from authorized payment:', updateError);

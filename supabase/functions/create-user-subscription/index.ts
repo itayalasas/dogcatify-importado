@@ -232,6 +232,7 @@ const getSubscriptionReturnUrl = (supabaseUrl?: string) => {
 const buildBackUrl = (subscriptionId: string, supabaseUrl?: string) => {
   const url = getSubscriptionReturnUrl(supabaseUrl);
   url.searchParams.set("subscription_id", subscriptionId);
+  url.searchParams.set("scope", "user");
   url.searchParams.set("target", buildMobileSubscriptionDeepLink(subscriptionId));
   return url.toString();
 };
@@ -557,7 +558,7 @@ Deno.serve(async (req: Request) => {
     const preapprovalPayload = {
       preapproval_plan_id: mpPlanId,
       reason: String(plan.name || "DogCatiFy").slice(0, 255),
-      external_reference: localSubscription.id,
+      external_reference: `user:${localSubscription.id}`,
       payer_email: payerEmail,
       back_url: buildBackUrl(localSubscription.id, supabaseUrl),
       notification_url: `${supabaseUrl}/functions/v1/mercadopago-webhook`,

@@ -52,6 +52,18 @@ export default function Home() {
 
   useEffect(() => {
     if (currentUser) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      router.replace('/auth/login');
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (currentUser) {
       fetchFeedData();
     }
   }, [currentUser]);
@@ -328,9 +340,9 @@ export default function Home() {
         const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
         const supabaseKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
         
-        const headers = {
+        const headers: Record<string, string> = {
           'Content-Type': 'application/json',
-          'apikey': supabaseKey,
+          'apikey': supabaseKey || '',
           'Prefer': 'return=representation'
         };
         
@@ -364,11 +376,13 @@ export default function Home() {
         
         // Verify the update worked
         console.log('Verifying update in database...');
+        const verifyHeaders: Record<string, string> = {
+          'apikey': supabaseKey || '',
+          'Authorization': accessToken ? `Bearer ${accessToken}` : `Bearer ${supabaseKey || ''}`
+        };
+
         const verifyResponse = await fetch(`${supabaseUrl}/rest/v1/promotions?id=eq.${promotion.id}&select=clicks`, {
-          headers: {
-            'apikey': supabaseKey,
-            'Authorization': accessToken ? `Bearer ${accessToken}` : `Bearer ${supabaseKey}`
-          }
+          headers: verifyHeaders
         });
         
         if (verifyResponse.ok) {
@@ -474,7 +488,8 @@ export default function Home() {
       console.log('=== END PROMOTION CLICK DEBUG ===');
     } catch (error) {
       console.error('Error handling promotion press:', error);
-      Alert.alert('Error', `Error al procesar la promoción: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      Alert.alert('Error', `Error al procesar la promoción: ${errorMessage}`);
     }
   };
 
@@ -486,14 +501,6 @@ export default function Home() {
 
   if (!currentUser) {
     // Si no hay usuario, redirigir al login con delay para evitar errores de navegación
-    React.useEffect(() => {
-      const timer = setTimeout(() => {
-        router.replace('/auth/login');
-      }, 100);
-      
-      return () => clearTimeout(timer);
-    }, []);
-    
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingText}>Redirigiendo...</Text>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, ActivityIndicator } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, Shield, CircleHelp as HelpCircle, Building, CreditCard, Fingerprint, ChevronRight, ArrowRight, Trash2, Crown, Truck } from 'lucide-react-native';
+import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, Shield, CircleHelp as HelpCircle, Building, CreditCard, Fingerprint, ChevronRight, ArrowRight, Trash2, Crown } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
@@ -10,6 +10,52 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { useBiometric } from '../../contexts/BiometricContext';
 import { supabaseClient } from '../../lib/supabase';
+import {
+  getPartnerPlan,
+  getPartnerSubscriptionStatusLabel,
+  resolvePartnerPlanTier,
+} from '../../utils/partnerPlans';
+import { resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
+
+const partnerPlanOrder = ['starter', 'growth', 'pro'] as const;
+
+const resolvePartnerAccountPlan = (partnerRows: any[]) => {
+  return (partnerRows || []).reduce((best: any, row: any) => {
+    const resolvedTier = resolvePartnerPlanTier(
+      row.subscription_plan_tier,
+      row.subscription_plan_status,
+      row.subscription_plan_expires_at,
+    ) as 'starter' | 'growth' | 'pro';
+
+    if (!best) {
+      return {
+        id: row.id,
+        businessName: row.business_name,
+        businessType: row.business_type,
+        subscriptionPlanTier: resolvedTier,
+        subscriptionPlanStatus: row.subscription_plan_status,
+        subscriptionPlanExpiresAt: row.subscription_plan_expires_at,
+      };
+    }
+
+    const currentBestTier = best.subscriptionPlanTier || 'starter';
+    const currentBestIndex = partnerPlanOrder.indexOf(currentBestTier);
+    const resolvedIndex = partnerPlanOrder.indexOf(resolvedTier);
+
+    if (resolvedIndex > currentBestIndex) {
+      return {
+        id: row.id,
+        businessName: row.business_name,
+        businessType: row.business_type,
+        subscriptionPlanTier: resolvedTier,
+        subscriptionPlanStatus: row.subscription_plan_status,
+        subscriptionPlanExpiresAt: row.subscription_plan_expires_at,
+      };
+    }
+
+    return best;
+  }, null);
+};
 
 export default function Profile() {
   const { currentUser, logout } = useAuth();
@@ -30,18 +76,17 @@ export default function Profile() {
     followingCount: 0
   });
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
-  const [deliveryProfile, setDeliveryProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
   const [userSubscription, setUserSubscription] = useState<any>(null);
   const [isDottyEnabled, setIsDottyEnabled] = useState(true);
+  const [dottyPlanEnabled, setDottyPlanEnabled] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
       fetchUserStats();
       fetchPartnerProfile();
-      fetchDeliveryProfile();
       checkSubscriptionSettings();
       fetchUserSubscription();
       fetchDottyStatus();
@@ -54,20 +99,64 @@ export default function Profile() {
         return;
       }
 
-      fetchDeliveryProfile();
+      fetchPartnerProfile();
+      fetchUserSubscription();
+      fetchDottyStatus();
+      checkSubscriptionSettings();
     }, [currentUser?.id])
   );
 
   const fetchDottyStatus = async () => {
+    if (!currentUser?.id) {
+      return;
+    }
+
+    const userId = currentUser.id;
+
     try {
+      const { data: subscriptionData, error: subscriptionError } = await supabaseClient
+        .from('user_subscriptions')
+        .select(`
+          status,
+          subscription_plans (
+            tier,
+            audience_target,
+            limits
+          )
+        `)
+        .eq('user_id', userId)
+        .in('status', ['active', 'trialing', 'pending', 'paused'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (subscriptionError) {
+        console.error('Error fetching Dotty subscription limits:', subscriptionError);
+      }
+
+      const userPlanLimits = resolveSubscriptionPlanLimits(subscriptionData?.subscription_plans || null);
+      const planAllowsDotty = userPlanLimits.users.dottyEnabled;
+      setDottyPlanEnabled(planAllowsDotty);
+
       const { data } = await supabaseClient
         .from('profiles')
         .select('dotty_enabled')
-        .eq('id', currentUser.id)
+        .eq('id', userId)
         .single();
 
       if (data) {
-        setIsDottyEnabled(data.dotty_enabled !== false);
+        const shouldEnableDotty = data.dotty_enabled !== false;
+
+        if (!planAllowsDotty && shouldEnableDotty) {
+          await supabaseClient
+            .from('profiles')
+            .update({ dotty_enabled: false })
+            .eq('id', userId);
+          setIsDottyEnabled(false);
+          return;
+        }
+
+        setIsDottyEnabled(shouldEnableDotty);
       }
     } catch (error) {
       console.error('Error fetching Dotty status:', error);
@@ -97,6 +186,12 @@ export default function Profile() {
   };
 
   const fetchUserSubscription = async () => {
+    if (!currentUser?.id) {
+      return;
+    }
+
+    const userId = currentUser.id;
+
     try {
       const { data, error } = await supabaseClient
         .from('user_subscriptions')
@@ -105,10 +200,11 @@ export default function Profile() {
           subscription_plans (
             name,
             description,
-            features
+            features,
+            limits
           )
         `)
-        .eq('user_id', currentUser.id)
+        .eq('user_id', userId)
         .eq('status', 'active')
         .maybeSingle();
 
@@ -273,25 +369,41 @@ export default function Profile() {
   };
 
   const fetchPartnerProfile = async () => {
+    if (!currentUser?.id) {
+      setPartnerProfile(null);
+      return;
+    }
+
+    const userId = currentUser.id;
+
     try {
-      console.log('Fetching partner profile for user:', currentUser!.id);
-      
+      console.log('Fetching partner profile for user:', userId);
+
       const { data, error } = await supabaseClient
         .from('partners')
-        .select('*')
-        .eq('user_id', currentUser!.id)
-        .eq('is_verified', true);
+        .select('id, business_name, business_type, subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at, is_verified, is_active')
+        .eq('user_id', userId)
+        .eq('is_verified', true)
+        .order('created_at', { ascending: false });
       
       console.log('Partner query result:', { data, error });
 
       if (data && data.length > 0 && !error) {
         console.log('Partner profile found:', data[0]);
+        const accountPlan = resolvePartnerAccountPlan(data as any[]);
+        const primaryPartner = data[0];
+
         setPartnerProfile({
-          id: data[0].id,
-          businessName: data[0].business_name,
-          businessType: data[0].business_type,
-          isVerified: data[0].is_verified,
-          isActive: data[0].is_active
+          id: primaryPartner.id,
+          businessName: primaryPartner.business_name,
+          businessType: primaryPartner.business_type,
+          businessCount: data.length,
+          subscriptionPlanTier: accountPlan?.subscriptionPlanTier || primaryPartner.subscription_plan_tier,
+          subscriptionPlanStatus: accountPlan?.subscriptionPlanStatus || primaryPartner.subscription_plan_status,
+          subscriptionPlanExpiresAt: accountPlan?.subscriptionPlanExpiresAt || primaryPartner.subscription_plan_expires_at,
+          activeBusinessName: accountPlan?.businessName || primaryPartner.business_name,
+          isVerified: primaryPartner.is_verified,
+          isActive: primaryPartner.is_active
         });
       } else {
         console.log('No partner profile found or error:', error);
@@ -304,11 +416,18 @@ export default function Profile() {
   };
 
   const fetchDeliveryProfile = async () => {
+    if (!currentUser?.id) {
+      setDeliveryProfile(null);
+      return;
+    }
+
+    const userId = currentUser.id;
+
     try {
       const { data, error } = await supabaseClient
         .from('delivery_profiles')
         .select('id, delivery_mode, is_active, approval_status')
-        .eq('user_id', currentUser!.id)
+        .eq('user_id', userId)
         .maybeSingle();
 
       if (error) {
@@ -341,21 +460,41 @@ export default function Profile() {
     }
   };
 
+  const handleMercadoPagoConfig = () => {
+    router.push('/profile/mercadopago-config');
+  };
+
+  const handlePartnerSubscription = () => {
+    if (!partnerProfile?.id) {
+      router.push('/(tabs)/partner-register');
+      return;
+    }
+
+    router.push('/partner/subscription');
+  };
+
   const handleAdminMode = () => {
     router.push('/(admin-tabs)/requests');
-  };
-
-  const handleDeliveryMode = () => {
-    router.push('/delivery-register');
-  };
-
-  const handleDeliveryOrders = () => {
-    router.push('/delivery/orders');
   };
 
   const handleMyOrders = () => {
     router.push('/orders');
   };
+
+  const partnerPlanTier = partnerProfile
+    ? resolvePartnerPlanTier(
+        partnerProfile.subscriptionPlanTier,
+        partnerProfile.subscriptionPlanStatus,
+        partnerProfile.subscriptionPlanExpiresAt,
+      )
+    : null;
+  const partnerPlan = partnerPlanTier ? getPartnerPlan(partnerPlanTier) : null;
+  const partnerPlanStatusLabel = partnerProfile
+    ? getPartnerSubscriptionStatusLabel(
+        partnerProfile.subscriptionPlanStatus,
+        partnerProfile.subscriptionPlanExpiresAt,
+      )
+    : null;
 
   const handleToggleBiometric = async () => {
     try {
@@ -392,6 +531,20 @@ export default function Profile() {
 
   const handleToggleDottyAssistant = async () => {
     try {
+      if (!currentUser?.id) {
+        return;
+      }
+
+      if (!dottyPlanEnabled && !isDottyEnabled) {
+        Alert.alert(
+          'Dotty no incluido',
+          'Tu plan actual no incluye el asistente Dotty. Actualiza tu suscripción para activarlo.'
+        );
+        return;
+      }
+
+      const userId = currentUser.id;
+
       if (isDottyEnabled) {
         Alert.alert(
           'Ocultar Asistente Dotty',
@@ -403,11 +556,11 @@ export default function Profile() {
               style: 'destructive',
               onPress: async () => {
                 try {
-                  console.log('[Profile] Updating dotty_enabled to false for user:', currentUser.id);
+                  console.log('[Profile] Updating dotty_enabled to false for user:', userId);
                   const { data, error } = await supabaseClient
                     .from('profiles')
                     .update({ dotty_enabled: false })
-                    .eq('id', currentUser.id)
+                    .eq('id', userId)
                     .select();
 
                   if (error) {
@@ -436,11 +589,11 @@ export default function Profile() {
               text: 'Mostrar',
               onPress: async () => {
                 try {
-                  console.log('[Profile] Updating dotty_enabled to true for user:', currentUser.id);
+                  console.log('[Profile] Updating dotty_enabled to true for user:', userId);
                   const { data, error } = await supabaseClient
                     .from('profiles')
                     .update({ dotty_enabled: true })
-                    .eq('id', currentUser.id)
+                    .eq('id', userId)
                     .select();
 
                   if (error) {
@@ -622,10 +775,35 @@ export default function Profile() {
           
           {partnerProfile ? (
             <View style={styles.partnerActive}>
+              <View style={styles.partnerSubscriptionBox}>
+              <View style={styles.partnerSubscriptionRow}>
+                  <View style={styles.partnerSubscriptionCopy}>
+                    <Text style={styles.partnerSubscriptionTitle}>Suscripción de Aliado</Text>
+                    <Text style={styles.partnerSubscriptionSubtitle}>
+                      {partnerPlan
+                        ? `Plan ${partnerPlan.name} · ${partnerPlanStatusLabel || 'Activa'}`
+                        : 'Sin plan asignado todavía'}
+                    </Text>
+                  </View>
+                  <Crown size={22} color="#2D6A6F" />
+                </View>
+                <Text style={styles.partnerSubscriptionDescription}>
+                  Tu suscripción de aliado se aplica a todos tus negocios verificados.
+                  {partnerProfile.businessCount > 1 ? ` Tienes ${partnerProfile.businessCount} negocios vinculados.` : ''}
+                </Text>
+              </View>
+
               <View style={styles.partnerButtons}>
                 <Button
                   title="Ir al Dashboard de Aliado"
                   onPress={handlePartnerMode}
+                  size="large"
+                  style={styles.partnerButton}
+                />
+                <Button
+                  title="Mi Suscripción de Aliado"
+                  onPress={handlePartnerSubscription}
+                  variant="outline"
                   size="large"
                   style={styles.partnerButton}
                 />
@@ -636,37 +814,9 @@ export default function Profile() {
                   size="large"
                   style={styles.partnerButton}
                 />
-              </View>
-            </View>
-          ) : (
-            <View style={styles.partnerInactive}>
-              <Button
-                title={t('registerBusiness')}
-                onPress={handlePartnerMode}
-                size="large"
-              />
-            </View>
-          )}
-        </Card>
-
-        <Card style={styles.partnerCard}>
-          <View style={styles.partnerHeader}>
-            <Truck size={24} color="#2D6A6F" />
-            <Text style={styles.partnerTitle}>Modo Repartidor</Text>
-          </View>
-
-          {deliveryProfile ? (
-            <View style={styles.partnerActive}>
-              <View style={styles.partnerButtons}>
                 <Button
-                  title="Gestionar Reparto"
-                  onPress={handleDeliveryMode}
-                  size="large"
-                  style={styles.partnerButton}
-                />
-                <Button
-                  title="Ver Pedidos de Reparto"
-                  onPress={handleDeliveryOrders}
+                  title="Configurar Mercado Pago"
+                  onPress={handleMercadoPagoConfig}
                   variant="outline"
                   size="large"
                   style={styles.partnerButton}
@@ -676,10 +826,13 @@ export default function Profile() {
           ) : (
             <View style={styles.partnerInactive}>
               <Button
-                title="Convertirse en Repartidor"
-                onPress={handleDeliveryMode}
+                title="Registrar negocio y suscripción de aliado"
+                onPress={handlePartnerMode}
                 size="large"
               />
+              <Text style={styles.partnerInactiveText}>
+                Si también eres aliado, primero registra tu negocio para activar la suscripción de tu cuenta de aliado.
+              </Text>
             </View>
           )}
         </Card>
@@ -697,12 +850,12 @@ export default function Profile() {
                 </View>
                 <View style={styles.premiumTextContainer}>
                   <Text style={styles.premiumTitle}>
-                    {userSubscription ? 'Mi Suscripción Premium' : '👑 Hazte Premium'}
+                    {userSubscription ? 'Mi Suscripción de Mascota' : '👑 Suscripción de Mascota'}
                   </Text>
                   <Text style={styles.premiumSubtitle}>
                     {userSubscription
                       ? `Plan ${userSubscription.subscription_plans?.name || 'Premium'} Activo`
-                      : 'Desbloquea funciones exclusivas'}
+                      : 'Desbloquea funciones para el perfil personal y tus mascotas'}
                   </Text>
                 </View>
                 <ArrowRight size={20} color="#F59E0B" />
@@ -802,6 +955,9 @@ export default function Profile() {
               <ChevronRight size={16} color="#6B7280" />
             </View>
           </TouchableOpacity>
+          {!dottyPlanEnabled && (
+            <Text style={styles.planHintText}>Dotty no está incluido en tu plan actual.</Text>
+          )}
 
           <TouchableOpacity 
             style={styles.menuOption} 
@@ -1015,6 +1171,42 @@ const styles = StyleSheet.create({
   partnerActive: {
     alignItems: 'center',
   },
+  partnerSubscriptionBox: {
+    width: '100%',
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1,
+    borderColor: '#CCFBF1',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+  },
+  partnerSubscriptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 6,
+  },
+  partnerSubscriptionCopy: {
+    flex: 1,
+  },
+  partnerSubscriptionTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#134E4A',
+    marginBottom: 2,
+  },
+  partnerSubscriptionSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#0F766E',
+  },
+  partnerSubscriptionDescription: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#155E75',
+    lineHeight: 17,
+  },
   partnerActiveText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
@@ -1207,6 +1399,14 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#059669',
     marginRight: 8,
+  },
+  planHintText: {
+    marginTop: -4,
+    marginBottom: 8,
+    marginLeft: 40,
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#B45309',
   },
   benefitsTitle: {
     fontSize: 14,

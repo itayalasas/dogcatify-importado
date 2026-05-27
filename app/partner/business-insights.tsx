@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Dimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, TrendingUp, Users, MapPin, Calendar, Target, Award, ChartBar as BarChart3, ChartPie as PieChart, Activity } from 'lucide-react-native';
+import { ArrowLeft, TrendingUp, Users, MapPin, Calendar, Target, Award, DollarSign, ChartBar as BarChart3, ChartPie as PieChart, Activity } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { canAccessPartnerModule, getPartnerLockedActionLabel, getPartnerPlan, resolvePartnerPlanTier } from '../../utils/partnerPlans';
 
 const { width } = Dimensions.get('window');
 
@@ -33,9 +34,15 @@ export default function BusinessInsights() {
   const [loading, setLoading] = useState(true);
   const [selectedTimeRange, setSelectedTimeRange] = useState<'1m' | '3m' | '6m' | '1y'>('3m');
   const [locationInsights, setLocationInsights] = useState<any>(null);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   useEffect(() => {
     if (normalizedPartnerId) {
+      setLoading(true);
+      setAccessDenied(false);
+      setInsights(null);
+      setLocationInsights(null);
+      setPartnerProfile(null);
       fetchPartnerProfile();
       fetchBusinessInsights();
       fetchLocationBasedInsights();
@@ -46,7 +53,7 @@ export default function BusinessInsights() {
     try {
       const { data, error } = await supabaseClient
         .from('partners')
-        .select('*')
+        .select('*, subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
         .eq('id', normalizedPartnerId)
         .single();
       
@@ -56,6 +63,13 @@ export default function BusinessInsights() {
         id: data.id,
         businessName: data.business_name,
         businessType: data.business_type,
+        subscriptionPlanTier: resolvePartnerPlanTier(
+          data.subscription_plan_tier,
+          data.subscription_plan_status,
+          data.subscription_plan_expires_at,
+        ),
+        subscriptionPlanStatus: data.subscription_plan_status || null,
+        subscriptionPlanExpiresAt: data.subscription_plan_expires_at || null,
         address: data.address,
         logo: data.logo,
         rating: data.rating || 0,
@@ -86,12 +100,29 @@ export default function BusinessInsights() {
       // 1. Obtener ubicación del negocio
       const { data: partnerData, error: partnerError } = await supabaseClient
         .from('partners')
-        .select('latitud, longitud, address, barrio, department_id, country_id')
+        .select('latitud, longitud, address, barrio, department_id, country_id, business_type, subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
         .eq('id', normalizedPartnerId)
         .single();
       
       if (partnerError) {
         console.error('Error fetching partner location:', partnerError);
+        return;
+      }
+
+      const planTier = partnerData?.subscription_plan_tier || 'starter';
+      if (!canAccessPartnerModule(
+        planTier,
+        'insights',
+        partnerData?.business_type,
+        partnerData?.subscription_plan_status,
+        partnerData?.subscription_plan_expires_at,
+      )) {
+        setLocationInsights({
+          nearbyPets: 0,
+          hasCoordinates: false,
+          locked: true,
+          message: getPartnerLockedActionLabel('insights'),
+        });
         return;
       }
       
@@ -320,11 +351,17 @@ export default function BusinessInsights() {
 
       const { data: partnerTypeData } = await supabaseClient
         .from('partners')
-        .select('business_type')
+        .select('business_type, subscription_plan_tier')
         .eq('id', normalizedPartnerId)
         .single();
 
       const businessType = partnerTypeData?.business_type || partnerProfile?.businessType;
+      const planTier = partnerTypeData?.subscription_plan_tier || partnerProfile?.subscriptionPlanTier || 'starter';
+      if (!canAccessPartnerModule(planTier, 'insights', businessType)) {
+        setAccessDenied(true);
+        setLoading(false);
+        return;
+      }
       const isShopBusiness = businessType === 'shop';
       
       // 1. Total de mascotas registradas
@@ -614,6 +651,13 @@ export default function BusinessInsights() {
     }
   };
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency: 'ARS',
+    }).format(amount);
+  };
+
   const renderMetricCard = (title: string, value: string | number, subtitle?: string, icon?: any, trend?: 'up' | 'down') => (
     <Card style={styles.metricCard}>
       <View style={styles.metricHeader}>
@@ -645,6 +689,49 @@ export default function BusinessInsights() {
         <View style={styles.loadingContainer}>
           <Activity size={48} color="#2D6A6F" />
           <Text style={styles.loadingText}>Analizando datos del mercado...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const canViewInsights = canAccessPartnerModule(
+    partnerProfile?.subscriptionPlanTier,
+    'insights',
+    partnerProfile?.businessType,
+    partnerProfile?.subscriptionPlanStatus,
+    partnerProfile?.subscriptionPlanExpiresAt,
+  );
+
+  if (accessDenied || (partnerProfile && !canViewInsights)) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color="#111827" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Inteligencia de Negocio</Text>
+          <View style={styles.placeholder} />
+        </View>
+
+        <View style={styles.lockedContainer}>
+          <Card style={styles.lockedCard}>
+            <Text style={styles.lockedPlanBadge}>
+              {getPartnerLockedActionLabel('insights')}
+            </Text>
+            <Text style={styles.lockedTitle}>Módulo disponible en Growth</Text>
+            <Text style={styles.lockedText}>
+              El análisis comercial y la información de rendimiento se habilitan a partir del plan Growth.
+            </Text>
+            <Text style={styles.lockedTextSecondary}>
+              Desde este plan también quedan habilitados los clientes y la inteligencia de negocio para tomar mejores decisiones.
+            </Text>
+            <TouchableOpacity
+              style={styles.lockedButton}
+              onPress={() => router.back()}
+            >
+              <Text style={styles.lockedButtonText}>Volver</Text>
+            </TouchableOpacity>
+          </Card>
         </View>
       </SafeAreaView>
     );
@@ -1697,5 +1784,59 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#FFFFFF',
     marginLeft: 6,
+  },
+  lockedContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 20,
+  },
+  lockedCard: {
+    alignItems: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+  },
+  lockedPlanBadge: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#7C3AED',
+    backgroundColor: '#F5F3FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginBottom: 12,
+  },
+  lockedTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  lockedText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    textAlign: 'center',
+    lineHeight: 21,
+    marginBottom: 8,
+  },
+  lockedTextSecondary: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  lockedButton: {
+    backgroundColor: '#2D6A6F',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  lockedButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
   },
 });

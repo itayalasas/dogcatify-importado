@@ -6,11 +6,15 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { canAccessPartnerModule, getPartnerLockedActionLabel, getPartnerPlan, resolvePartnerPlanTier } from '../../utils/partnerPlans';
 
 interface BusinessConfig {
   id: string;
   businessName: string;
   businessType: string;
+  subscriptionPlanTier: string;
+  subscriptionPlanStatus?: string | null;
+  subscriptionPlanExpiresAt?: string | null;
   features: {
     agenda?: boolean;
     products?: boolean;
@@ -44,6 +48,13 @@ export default function ConfigureBusiness() {
           id: data.id,
           businessName: data.business_name,
           businessType: data.business_type,
+          subscriptionPlanTier: resolvePartnerPlanTier(
+            data.subscription_plan_tier,
+            data.subscription_plan_status,
+            data.subscription_plan_expires_at,
+          ),
+          subscriptionPlanStatus: data.subscription_plan_status || null,
+          subscriptionPlanExpiresAt: data.subscription_plan_expires_at || null,
           features: data.features || {}
         });
       }
@@ -194,6 +205,14 @@ export default function ConfigureBusiness() {
   };
 
   const handleConfigureAdoptions = () => {
+    if (!business || !canAccessPartnerModule(business.subscriptionPlanTier, 'adoptions', business.businessType)) {
+      Alert.alert(
+        'Plan requerido',
+        'La gestion de adopciones esta disponible solo para refugios con plan Pro.'
+      );
+      return;
+    }
+
     router.push(`/partner/manage-adoptions?partnerId=${businessId}`);
   };
 
@@ -246,6 +265,15 @@ export default function ConfigureBusiness() {
   }
 
   const config = getBusinessTypeConfig(business.businessType);
+  const plan = getPartnerPlan(business.subscriptionPlanTier);
+  const canManageAdoptions = business.businessType === 'shelter';
+  const adoptionPlanAllowed = canAccessPartnerModule(
+    business.subscriptionPlanTier,
+    'adoptions',
+    business.businessType,
+    business.subscriptionPlanStatus,
+    business.subscriptionPlanExpiresAt,
+  );
 
   return (
     <SafeAreaView style={styles.container}> 
@@ -264,6 +292,11 @@ export default function ConfigureBusiness() {
             <View style={styles.businessInfo}> 
               <Text style={styles.businessName}>{business.businessName}</Text> 
               <Text style={styles.businessType}>{config.name}</Text> 
+              <View style={[styles.planBadge, { backgroundColor: plan.surface, borderColor: plan.border }]}>
+                <Text style={[styles.planBadgeText, { color: plan.accent }]}>
+                  Plan {plan.name}
+                </Text>
+              </View>
             </View>
           </View>
         </Card>
@@ -370,7 +403,7 @@ export default function ConfigureBusiness() {
         )}
 
         {/* Configuración de Adopciones */}
-        {business.features.adoptions && (
+        {canManageAdoptions && (
           <Card style={styles.featureCard}>
             <View style={styles.featureHeader}>
               <Heart size={24} color="#EF4444" />
@@ -379,6 +412,15 @@ export default function ConfigureBusiness() {
             <Text style={styles.featureDescription}>
               Administra las mascotas disponibles para adopción
             </Text>
+
+            {!adoptionPlanAllowed && (
+              <View style={styles.lockedNotice}>
+                <Text style={styles.lockedNoticeTitle}>Disponible en plan Pro</Text>
+                <Text style={styles.lockedNoticeText}>
+                  {getPartnerLockedActionLabel('adoptions')}
+                </Text>
+              </View>
+            )}
             
             <View style={styles.servicesList}>
               <Text style={styles.servicesTitle}>Tipos de adopción:</Text>
@@ -392,10 +434,11 @@ export default function ConfigureBusiness() {
             <View style={styles.featureActions}>
               <View style={{ flex: 1 }}>
                 <Button
-                  title="Ver Adopciones"
+                  title={adoptionPlanAllowed ? 'Ver Adopciones' : 'Plan Pro requerido'}
                   onPress={handleConfigureAdoptions}
                   variant="outline"
                   size="medium"
+                  disabled={!adoptionPlanAllowed}
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -403,6 +446,7 @@ export default function ConfigureBusiness() {
                   title="Agregar Mascota"
                   onPress={handleAddService}
                   size="medium"
+                  disabled={!adoptionPlanAllowed}
                 />
               </View>
             </View>
@@ -494,6 +538,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#3B82F6',
   },
+  planBadge: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginTop: 8,
+  },
+  planBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
   featureCard: {
     marginBottom: 16,
   },
@@ -514,6 +570,26 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginBottom: 16,
     lineHeight: 20,
+  },
+  lockedNotice: {
+    backgroundColor: '#F5F3FF',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  lockedNoticeTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6D28D9',
+    marginBottom: 4,
+  },
+  lockedNoticeText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 18,
   },
   servicesList: {
     marginBottom: 16,

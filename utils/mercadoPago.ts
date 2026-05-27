@@ -13,6 +13,12 @@ import { logResourceAction, logError } from '../services/auditService';
 const MP_BASE_URL = envConfig.getOrDefault('EXPO_PUBLIC_MERCADOPAGO_BASE_URL', 'https://api.mercadopago.com');
 const MP_REDIRECT_URI = 'https://dogcatify.com/auth/mercadopago/callback';
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return String(error);
+};
+
 // Type Definitions
 export interface MercadoPagoConfig {
   publicKey: string;
@@ -59,31 +65,68 @@ export interface PartnerMercadoPagoConfig {
 }
 
 /**
- * Get admin Mercado Pago configuration from database
+ * Get the public OAuth client_id used to start Mercado Pago authorization.
+ * This can come from runtime env config or a public admin setting.
  */
-const getAdminMercadoPagoConfig = async () => {
+const getMercadoPagoOAuthClientId = async (): Promise<string> => {
   try {
     const { data, error } = await supabaseClient
       .from('admin_settings')
       .select('value')
       .eq('key', 'mercadopago_config')
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
 
-    if (!data?.value?.access_token) {
+    const clientId = data?.value?.client_id || data?.value?.clientId || data?.value?.oauth_client_id || data?.value?.app_id;
+
+    if (!clientId) {
+      const envClientId = envConfig.getOrDefault('EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID', '').trim();
+
+      if (envClientId) {
+        return envClientId;
+      }
+
+      throw new Error('Mercado Pago Client ID not configured');
+    }
+
+    return String(clientId).trim();
+  } catch (error) {
+    logger.error('Error getting Mercado Pago OAuth client ID', error as Error);
+    throw error;
+  }
+};
+
+/**
+ * Get the legacy admin Mercado Pago configuration.
+ * Kept only as a fallback for businesses that still haven't migrated to OAuth.
+ */
+const getLegacyMercadoPagoConfig = async () => {
+  try {
+    const { data, error } = await supabaseClient
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'mercadopago_config')
+      .maybeSingle();
+
+    if (error) throw error;
+
+    const value = data?.value || {};
+
+    if (!value?.access_token) {
       throw new Error('Admin Mercado Pago configuration not found');
     }
 
     return {
-      client_id: data.value.client_id,
-      client_secret: data.value.client_secret,
-      access_token: data.value.access_token,
-      public_key: data.value.public_key,
-      is_test_mode: data.value.is_test_mode || false
+      access_token: value.access_token,
+      public_key: value.public_key || '',
+      is_test_mode: value.is_test_mode || false,
+      client_id: value.client_id || value.clientId || value.oauth_client_id || value.app_id || '',
+      account_id: value.account_id || '',
+      connected_at: value.connected_at || new Date().toISOString()
     };
   } catch (error) {
-    logger.error('Error getting admin MP config', error as Error);
+    logger.error('Error getting legacy admin MP config', error as Error);
     throw error;
   }
 };
@@ -91,27 +134,25 @@ const getAdminMercadoPagoConfig = async () => {
 /**
  * Generate OAuth2 authorization URL for partner
  */
-export const generateOAuth2AuthorizationUrl = (partnerId: string): string => {
-  // Note: This will need the client_id from admin config
-  // For now, we'll use a placeholder that gets replaced when called
-  return `https://auth.mercadopago.com/authorization?client_id=PLACEHOLDER&response_type=code&platform_id=mp&redirect_uri=${MP_REDIRECT_URI}&state=${partnerId}`;
+export const generateOAuth2AuthorizationUrl = async (partnerId: string): Promise<string> => {
+  const clientId = await getMercadoPagoOAuthClientId();
+  const redirectUri = encodeURIComponent(MP_REDIRECT_URI);
+
+  return `https://auth.mercadopago.com/authorization?client_id=${encodeURIComponent(clientId)}&response_type=code&platform_id=mp&scope=offline_access&redirect_uri=${redirectUri}&state=${encodeURIComponent(partnerId)}`;
 };
 
 /**
- * Generate OAuth2 authorization URL with admin config
+ * Generate OAuth2 authorization URL with the public client_id
  */
 export const generateOAuth2AuthorizationUrlWithConfig = async (partnerId: string): Promise<string> => {
   try {
-    const adminConfig = await getAdminMercadoPagoConfig();
-    
-    if (!adminConfig.client_id) {
-      throw new Error('Mercado Pago Client ID not configured in admin settings');
-    }
+    const clientId = await getMercadoPagoOAuthClientId();
 
     const params = new URLSearchParams({
-      client_id: adminConfig.client_id,
+      client_id: clientId,
       response_type: 'code',
       platform_id: 'mp',
+      scope: 'offline_access',
       redirect_uri: MP_REDIRECT_URI,
       state: partnerId
     });
@@ -136,31 +177,23 @@ export const exchangeCodeForTokens = async (
   public_key: string;
 }> => {
   try {
-    const adminConfig = await getAdminMercadoPagoConfig();
-    
-    const response = await fetch(`${MP_BASE_URL}/oauth/token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        client_id: adminConfig.client_id,
-        client_secret: adminConfig.client_secret,
-        grant_type: 'authorization_code',
-        code: code,
-        redirect_uri: MP_REDIRECT_URI,
-      }),
+    const { data, error } = await supabaseClient.functions.invoke('mercadopago-oauth', {
+      body: {
+        action: 'exchange',
+        code,
+        partnerId
+      }
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`OAuth2 token exchange failed: ${errorData.message || response.statusText}`);
+    if (error) {
+      throw new Error(getErrorMessage(error));
     }
 
-    const tokenData = await response.json();
+    const tokenData = data?.tokenData || data;
 
-    // Store tokens in database for the partner
-    await storePartnerTokens(partnerId, tokenData);
+    if (!tokenData?.access_token) {
+      throw new Error('Mercado Pago no devolvió credenciales válidas');
+    }
 
     return tokenData;
   } catch (error) {
@@ -237,69 +270,107 @@ const getMarketplaceAccessToken = async (): Promise<string> => {
 
 /**
  * Get partner's Mercado Pago configuration
- * UPDATED: Now uses the centralized admin Mercado Pago configuration
+ * Prefer the partner's OAuth credentials and only fall back to the legacy
+ * admin marketplace account when the partner has not migrated yet.
  */
 export const getPartnerMercadoPagoConfig = async (partnerId: string) => {
   try {
-    logger.debug('Getting MP config for partner (using admin config)', { partnerId });
+    logger.debug('Getting MP config for partner', { partnerId });
 
-    // 1. Get partner data for commission and business info
     const { data: partnerData, error: partnerError } = await supabaseClient
       .from('partners')
-      .select('business_name, commission_percentage, iva_rate, iva_included_in_price')
+      .select('business_name, commission_percentage, iva_rate, iva_included_in_price, mercadopago_config, mercadopago_connected, user_id')
       .eq('id', partnerId)
       .single();
 
     if (partnerError) throw partnerError;
 
-    logger.debug('Partner data found', {
-      business_name: partnerData?.business_name,
-      commission_percentage: partnerData?.commission_percentage
-    });
+    const partnerConfig = (partnerData?.mercadopago_config || {}) as any;
+    const hasPartnerOAuth = partnerConfig?.is_oauth === true || !!partnerConfig?.refresh_token;
 
-    // 2. Get admin Mercado Pago configuration (centralized)
-    const { data: adminConfig, error: adminError } = await supabaseClient
-      .from('admin_settings')
-      .select('value')
-      .eq('key', 'mercadopago_config')
-      .single();
+    if (hasPartnerOAuth) {
+      let resolvedPartnerConfig = { ...partnerConfig };
+      const tokenIsValid = resolvedPartnerConfig.access_token
+        ? await validatePartnerToken(resolvedPartnerConfig.access_token)
+        : false;
 
-    if (adminError || !adminConfig?.value) {
-      logger.error('Admin MP config not found', adminError as Error);
-      throw new Error('Configuración de pago inválida: La cuenta de Mercado Pago del administrador no está configurada');
-    }
+      if (!tokenIsValid) {
+        if (!resolvedPartnerConfig.refresh_token) {
+          throw new Error('La conexión OAuth de Mercado Pago expiró o necesita ser reautorizada');
+        }
 
-    // 3. Validate admin has MP configured
-    if (!adminConfig.value.is_connected || !adminConfig.value.access_token) {
-      logger.error('Admin MP not connected', {
-        is_connected: adminConfig.value.is_connected,
-        has_access_token: !!adminConfig.value.access_token
+        logger.info('Refreshing expired partner OAuth token', { partnerId });
+
+        try {
+          await refreshPartnerToken(partnerId);
+
+          const { data: refreshedPartnerData, error: refreshReadError } = await supabaseClient
+            .from('partners')
+            .select('mercadopago_config')
+            .eq('id', partnerId)
+            .single();
+
+          if (refreshReadError) throw refreshReadError;
+
+          resolvedPartnerConfig = (refreshedPartnerData?.mercadopago_config || {}) as any;
+        } catch (refreshError) {
+          logger.error('Error refreshing partner OAuth token before payment', refreshError as Error, { partnerId });
+          throw new Error('La conexión OAuth de Mercado Pago expiró o necesita ser reautorizada');
+        }
+      }
+
+      const returnConfig = {
+        access_token: resolvedPartnerConfig.access_token,
+        public_key: resolvedPartnerConfig.public_key || '',
+        refresh_token: resolvedPartnerConfig.refresh_token,
+        user_id: resolvedPartnerConfig.user_id || resolvedPartnerConfig.account_id || partnerData.user_id,
+        account_id: resolvedPartnerConfig.account_id || resolvedPartnerConfig.user_id || partnerData.user_id,
+        connected_at: resolvedPartnerConfig.connected_at || resolvedPartnerConfig.updated_at || new Date().toISOString(),
+        is_oauth: resolvedPartnerConfig.is_oauth !== false,
+        is_test_mode: resolvedPartnerConfig.is_test_mode || false,
+        commission_percentage: partnerData.commission_percentage || 5.0,
+        business_name: partnerData.business_name,
+        iva_rate: partnerData.iva_rate != null ? parseFloat(partnerData.iva_rate.toString()) : 22.0,
+        iva_included_in_price: partnerData.iva_included_in_price !== false,
+        source: 'partner_oauth'
+      };
+
+      logger.info('MP config returned from partner OAuth', {
+        business_name: returnConfig.business_name,
+        access_token_prefix: returnConfig.access_token?.substring(0, 12) + '...',
+        public_key_prefix: returnConfig.public_key?.substring(0, 12) + '...',
+        is_test_mode: returnConfig.is_test_mode,
+        commission_percentage: returnConfig.commission_percentage,
+        source: returnConfig.source
       });
-      throw new Error('Configuración de pago inválida: La cuenta de Mercado Pago del administrador no está conectada');
+
+      return returnConfig;
     }
 
-    // 4. Return combined configuration (admin MP credentials + partner business info)
+    const legacyConfig = await getLegacyMercadoPagoConfig();
+
     const returnConfig = {
-      access_token: adminConfig.value.access_token,
-      public_key: adminConfig.value.public_key,
-      is_test_mode: adminConfig.value.is_test_mode || false,
-      is_oauth: false, // Admin config is always manual
-      connected_at: adminConfig.value.connected_at,
+      access_token: legacyConfig.access_token,
+      public_key: legacyConfig.public_key,
+      is_test_mode: legacyConfig.is_test_mode,
+      is_oauth: false,
+      connected_at: legacyConfig.connected_at,
       commission_percentage: partnerData.commission_percentage || 5.0,
       business_name: partnerData.business_name,
       iva_rate: partnerData.iva_rate != null ? parseFloat(partnerData.iva_rate.toString()) : 22.0,
       iva_included_in_price: partnerData.iva_included_in_price !== false,
-      user_id: adminConfig.value.account_id || 'admin',
-      account_id: adminConfig.value.account_id
+      user_id: legacyConfig.account_id || 'admin',
+      account_id: legacyConfig.account_id,
+      source: 'legacy_admin'
     };
 
-    logger.info('MP config returned (using admin credentials)', {
+    logger.info('MP config returned from legacy admin fallback', {
       business_name: returnConfig.business_name,
       access_token_prefix: returnConfig.access_token?.substring(0, 12) + '...',
       public_key_prefix: returnConfig.public_key?.substring(0, 12) + '...',
       is_test_mode: returnConfig.is_test_mode,
       commission_percentage: returnConfig.commission_percentage,
-      source: 'admin_centralized'
+      source: returnConfig.source
     });
 
     return returnConfig;
@@ -366,7 +437,7 @@ export const createPaymentPreference = async (
   shippingCost: number = 500
 ) => {
   try {
-    const marketplaceAccessToken = await getMarketplaceAccessToken();
+    const marketplaceAccessToken = partnerConfig.access_token || await getMarketplaceAccessToken();
 
     // Calculate totals including shipping
     const itemsSubtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -381,7 +452,7 @@ export const createPaymentPreference = async (
       is_oauth: partnerConfig.is_oauth
     });
 
-    const preferenceData = {
+    const preferenceData: any = {
       items: items.map(item => ({
         id: item.id,
         title: item.name,
@@ -419,7 +490,7 @@ export const createPaymentPreference = async (
     if (partnerConfig.is_oauth && partnerConfig.user_id && !isNaN(parseInt(partnerConfig.user_id))) {
       preferenceData.marketplace_fee = commissionAmount;
       preferenceData.collector_id = parseInt(partnerConfig.user_id);
-      logger.info('Using OAuth marketplace split', { collectorId: partnerConfig.user_id });
+      logger.info('Using OAuth marketplace fee', { collectorId: partnerConfig.user_id });
     } else {
       logger.info('Using manual configuration - no marketplace split');
     }
@@ -528,7 +599,7 @@ export const createMultiPartnerOrder = async (
   totalShippingCost: number
 ): Promise<{ orders: any[], paymentPreferences: any[], isTestMode: boolean }> => {
   try {
-    logger.info('Creating multi-partner order with marketplace split');
+    logger.info('Creating multi-partner order with partner OAuth fees');
     console.log('Cart items received:', cartItems.map(item => ({
       id: item.id,
       name: item.name,
@@ -723,8 +794,12 @@ export const createMultiPartnerOrder = async (
 
     const isTestMode = primaryPartnerConfig.access_token?.startsWith('TEST-');
     const paymentUrl = isTestMode
-      ? (preference.sandbox_init_point || preference.init_point)
+      ? preference.sandbox_init_point
       : preference.init_point;
+
+    if (isTestMode && !preference.sandbox_init_point) {
+      throw new Error('Mercado Pago no devolvió sandbox_init_point en modo prueba');
+    }
 
     const { error: updateOrderError } = await supabaseClient
       .from('orders')
@@ -841,7 +916,7 @@ export const createUnifiedPaymentPreference = async (
       streetName: streetName || 'N/A'
     });
 
-    const preferenceData = {
+    const preferenceData: any = {
       items: allItems.map(item => ({
         id: item.id,
         title: item.name,
@@ -870,23 +945,23 @@ export const createUnifiedPaymentPreference = async (
     // Detect if we're using test credentials (only by token prefix)
     const isTestMode = partnerConfig.access_token?.startsWith('TEST-');
 
-    // Add application fee ONLY in production mode
+    // Add marketplace fee ONLY in production mode
     // In test mode, we skip it to avoid "mixed credentials" error
     if (!isTestMode) {
-      preferenceData.application_fee = commissionAmount;
+      preferenceData.marketplace_fee = commissionAmount;
     }
 
     console.log('Final unified preference data:', {
       items_count: preferenceData.items.length,
       total_amount: totalAmount,
-      application_fee: isTestMode ? 'SKIPPED (test mode)' : commissionAmount,
+      marketplace_fee: isTestMode ? 'SKIPPED (test mode)' : commissionAmount,
       commission_percentage: partnerConfig.commission_percentage || 5.0,
       partner_receives: totalAmount - commissionAmount,
       external_reference: preferenceData.external_reference,
       isTestMode
     });
 
-    // Use partner's token to create preference (partner receives payment minus application_fee)
+    // Use partner's token to create preference (partner receives payment minus marketplace fee)
     const response = await fetch(`${MP_BASE_URL}/checkout/preferences`, {
       method: 'POST',
       headers: {
@@ -906,7 +981,7 @@ export const createUnifiedPaymentPreference = async (
 
     console.log('Split payment preference created successfully:', {
       id: preference.id,
-      application_fee: commissionAmount,
+      marketplace_fee: commissionAmount,
       partner_receives: totalAmount - commissionAmount,
       commission_percentage: partnerConfig.commission_percentage || 5.0,
       isTestMode,
@@ -952,7 +1027,7 @@ export const createServiceBookingOrder = async (bookingData: {
       console.log('✅ Partner MP config loaded for:', partnerConfig.business_name);
     } catch (mpError) {
       console.error('❌ MP Configuration Error:', mpError);
-      throw new Error(`Configuración de pago inválida: ${mpError.message}`);
+      throw new Error(`Configuración de pago inválida: ${getErrorMessage(mpError)}`);
     }
 
     // PASO 2: VALIDAR ACCESS TOKEN
@@ -1271,7 +1346,7 @@ export const createServiceBookingOrder = async (bookingData: {
         console.error('❌ Rollback failed:', rollbackError);
       }
 
-      throw new Error(`Error al crear preferencia de pago: ${mpError.message || 'Error desconocido'}`);
+      throw new Error(`Error al crear preferencia de pago: ${getErrorMessage(mpError)}`);
     }
     
     // Update order with payment preference ID
@@ -1318,7 +1393,7 @@ export const createServiceBookingOrder = async (bookingData: {
     
     return {
       success: false,
-      error: error.message || 'Error desconocido'
+      error: getErrorMessage(error)
     };
   }
 };
@@ -1347,7 +1422,7 @@ export const createServicePaymentPreference = async (
 
     // CRITICAL: In TEST mode, Mercado Pago does NOT support marketplace features
     if (isTestMode) {
-      console.warn('⚠️ TEST MODE DETECTED - Marketplace features (application_fee, splits) will be DISABLED');
+      console.warn('⚠️ TEST MODE DETECTED - Marketplace features (fees, splits) will be DISABLED');
     }
 
     // Format phone number (remove non-digits and ensure it's 8 digits)
@@ -1382,7 +1457,7 @@ export const createServicePaymentPreference = async (
       phoneNumber: payerData.phone.number
     });
 
-    const preferenceData = {
+    const preferenceData: any = {
       items: [{
         id: bookingData.serviceId,
         title: bookingData.serviceName,
@@ -1412,13 +1487,13 @@ export const createServicePaymentPreference = async (
     
     // Add marketplace fee ONLY if:
     // 1. Partner has OAuth configuration
-    // 2. NOT in test mode (application_fee doesn't work in test mode with mixed credentials)
+    // 2. NOT in test mode (marketplace_fee doesn't work in test mode with mixed credentials)
     if (!isTestMode && partnerConfig.is_oauth && partnerConfig.user_id && !isNaN(parseInt(partnerConfig.user_id))) {
-      preferenceData.application_fee = commissionAmount;
-      console.log('Using OAuth marketplace split for service booking (PRODUCTION)');
+      preferenceData.marketplace_fee = commissionAmount;
+      console.log('Using OAuth marketplace fee for service booking (PRODUCTION)');
     } else {
       if (isTestMode) {
-        console.log('Test mode: skipping application_fee to avoid mixed credentials');
+        console.log('Test mode: skipping marketplace_fee to avoid mixed credentials');
       } else {
         console.log('Manual configuration: no marketplace split');
       }
@@ -1464,53 +1539,22 @@ export const createServicePaymentPreference = async (
  */
 export const refreshPartnerToken = async (partnerId: string): Promise<string> => {
   try {
-    const adminConfig = await getAdminMercadoPagoConfig();
-    
-    const { data: partnerData, error } = await supabaseClient
-      .from('partners')
-      .select('mercadopago_config')
-      .eq('id', partnerId)
-      .single();
-
-    if (error) throw error;
-
-    const config = partnerData.mercadopago_config;
-    if (!config?.refresh_token) {
-      throw new Error('No refresh token available for partner');
-    }
-
-    const response = await fetch(`${MP_BASE_URL}/oauth/token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        client_id: adminConfig.client_id,
-        client_secret: adminConfig.client_secret,
-        grant_type: 'refresh_token',
-        refresh_token: config.refresh_token,
-      }),
+    const { data, error } = await supabaseClient.functions.invoke('mercadopago-oauth', {
+      body: {
+        action: 'refresh',
+        partnerId
+      }
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`Token refresh failed: ${errorData.message || response.statusText}`);
+    if (error) {
+      throw new Error(getErrorMessage(error));
     }
 
-    const tokenData = await response.json();
+    const tokenData = data?.tokenData || data;
 
-    // Update stored tokens
-    await supabaseClient
-      .from('partners')
-      .update({
-        mercadopago_config: {
-          ...config,
-          access_token: tokenData.access_token,
-          refresh_token: tokenData.refresh_token,
-          updated_at: new Date().toISOString()
-        }
-      })
-      .eq('id', partnerId);
+    if (!tokenData?.access_token) {
+      throw new Error('Mercado Pago no devolvió un access_token actualizado');
+    }
 
     return tokenData.access_token;
   } catch (error) {
@@ -1529,20 +1573,26 @@ export const createMarketplacePayment = async (
   commissionAmount: number
 ): Promise<any> => {
   try {
-    const marketplaceAccessToken = await getMarketplaceAccessToken();
+    const marketplaceAccessToken = partnerConfig.access_token || await getMarketplaceAccessToken();
 
-    const paymentRequest = {
+    const paymentRequest: any = {
       transaction_amount: paymentData.transaction_amount,
       description: paymentData.description || 'Compra en DogCatiFy',
       payment_method_id: paymentData.payment_method_id,
       payer: paymentData.payer,
       statement_descriptor: 'DOGCATIFY',
       external_reference: orderId,
-      application_fee: commissionAmount, // Commission for marketplace
-      collector_id: parseInt(partnerConfig.user_id), // Partner's MP user ID
       binary_mode: true,
       notification_url: `${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/functions/v1/mercadopago-webhook`
     };
+
+    const collectorId = Number.parseInt(String(partnerConfig.user_id || ''), 10);
+    if (partnerConfig.is_oauth && !Number.isNaN(collectorId)) {
+      paymentRequest.application_fee = commissionAmount; // Commission for marketplace
+      paymentRequest.collector_id = collectorId; // Partner's MP user ID
+    } else {
+      console.log('Manual Mercado Pago configuration detected - skipping marketplace split fields');
+    }
 
     console.log('Creating marketplace payment:', {
       amount: paymentData.transaction_amount,
@@ -1596,19 +1646,21 @@ export const getPartnerOAuthStatus = async (partnerId: string): Promise<{
   try {
     const { data, error } = await supabaseClient
       .from('partners')
-      .select('mercadopago_config')
+      .select('mercadopago_config, mercadopago_connected')
       .eq('id', partnerId)
       .single();
 
     if (error) throw error;
 
     const config = data?.mercadopago_config;
+    const authorizationUrl = await generateOAuth2AuthorizationUrlWithConfig(partnerId)
+      .catch(() => generateOAuth2AuthorizationUrl(partnerId));
     
     if (!config?.access_token || !config?.user_id) {
       return {
         isConnected: false,
         needsReauthorization: true,
-        authorizationUrl: generateOAuth2AuthorizationUrl(partnerId)
+        authorizationUrl
       };
     }
 
@@ -1627,7 +1679,7 @@ export const getPartnerOAuthStatus = async (partnerId: string): Promise<{
         return {
           isConnected: false,
           needsReauthorization: true,
-          authorizationUrl: generateOAuth2AuthorizationUrl(partnerId)
+          authorizationUrl
         };
       }
     }
@@ -1638,10 +1690,12 @@ export const getPartnerOAuthStatus = async (partnerId: string): Promise<{
     };
   } catch (error) {
     console.error('Error checking partner OAuth status:', error);
+    const authorizationUrl = await generateOAuth2AuthorizationUrlWithConfig(partnerId)
+      .catch(() => generateOAuth2AuthorizationUrl(partnerId));
     return {
       isConnected: false,
       needsReauthorization: true,
-      authorizationUrl: generateOAuth2AuthorizationUrl(partnerId)
+      authorizationUrl
     };
   }
 };
@@ -1693,7 +1747,7 @@ export const handleOAuth2Callback = async (
     return {
       success: false,
       partnerId: state || 'unknown',
-      error: error.message
+      error: getErrorMessage(error)
     };
   }
 };
@@ -1823,7 +1877,7 @@ export const isMercadoPagoAppInstalled = async (): Promise<boolean> => {
           return true;
         }
       } catch (error) {
-        console.log('   Error with scheme:', error.message);
+        console.log('   Error with scheme:', getErrorMessage(error));
         // Continuar con el siguiente esquema
         continue;
       }
@@ -1936,6 +1990,11 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
             openedInApp: true // En iOS asumimos que se manejó correctamente
           };
         }
+
+        return {
+          success: true,
+          openedInApp: true
+        };
       } else {
         // ANDROID: El sistema de App Links maneja automáticamente
         console.log('🤖 Android detected - opening URL (App Links will handle)');
@@ -2080,7 +2139,7 @@ export const getPartnerMercadoPagoSimpleConfig = async (
   partnerId: string
 ): Promise<MercadoPagoConfig> => {
   try {
-    const fullConfig = await getPartnerMercadoPagoConfig(partnerId);
+    const fullConfig = await getPartnerMercadoPagoConfig(partnerId) as any;
 
     return {
       publicKey: fullConfig.public_key,
@@ -2237,7 +2296,7 @@ export const regeneratePaymentLink = async (orderId: string): Promise<{
     console.error('Error regenerating payment link:', error);
     return {
       success: false,
-      error: error.message || 'Error al regenerar link de pago'
+      error: getErrorMessage(error)
     };
   }
 };

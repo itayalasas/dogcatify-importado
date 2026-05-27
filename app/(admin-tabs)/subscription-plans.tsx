@@ -7,8 +7,11 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { buildPartnerLimitSummary, buildUserLimitSummary, resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
 
 type PlanTier = 'free' | 'standard' | 'premium';
+type AudienceTarget = 'users' | 'partners' | 'all';
+type PlanAudienceFilter = AudienceTarget | 'all';
 type EntitlementKey =
   | 'pet_profiles'
   | 'shop_services'
@@ -40,8 +43,12 @@ interface SubscriptionPlan {
   price_monthly: number;
   price_yearly: number;
   currency: string;
+  trial_days: number;
+  features: string[];
   entitlementKeys: EntitlementKey[];
+  limits?: Record<string, any> | null;
   audience: string;
+  audience_target?: AudienceTarget | null;
   is_active: boolean;
   is_default?: boolean;
   is_recommended?: boolean;
@@ -61,56 +68,56 @@ const ENTITLEMENTS: Entitlement[] = [
   {
     key: 'pet_profiles',
     title: 'Perfiles de mascotas',
-    description: 'Crear y gestionar fichas basicas de mascotas.',
+    description: 'Crear y gestionar fichas basicas de mascotas del cliente.',
     category: 'Mascotas',
     target: 'app/(tabs)/pets.tsx, app/pets/add.tsx',
   },
   {
     key: 'shop_services',
     title: 'Tienda y servicios',
-    description: 'Comprar productos y reservar servicios activos.',
+    description: 'Comprar productos y reservar servicios activos como cliente.',
     category: 'Compras',
     target: 'app/(tabs)/shop.tsx, app/services/booking.tsx',
   },
   {
     key: 'orders_bookings_history',
     title: 'Historial basico',
-    description: 'Ver pedidos, reservas y estado de transacciones.',
+    description: 'Ver pedidos, reservas y estado de transacciones del usuario final.',
     category: 'Compras',
     target: 'app/orders/index.tsx, app/orders/[id].tsx',
   },
   {
     key: 'basic_notifications',
     title: 'Notificaciones esenciales',
-    description: 'Avisos operativos de reservas, pedidos y cuenta.',
+    description: 'Avisos operativos de reservas, pedidos y cuenta del cliente.',
     category: 'Plataforma',
     target: 'contexts/NotificationContext.tsx',
   },
   {
     key: 'medical_reminders',
     title: 'Recordatorios medicos',
-    description: 'Alertas de vacunas, desparasitacion, alergias y tratamientos.',
+    description: 'Alertas de vacunas, desparasitacion, alergias y tratamientos de mascotas.',
     category: 'Salud',
     target: 'app/pets/health/*, medical_alerts',
   },
   {
     key: 'appointment_reminders',
     title: 'Recordatorios de citas',
-    description: 'Seguimiento de agenda y proximas reservas.',
+    description: 'Seguimiento de agenda y proximas reservas del cliente.',
     category: 'Salud',
     target: 'app/pets/appointments/[id].tsx, app/services/booking/[serviceId].tsx',
   },
   {
     key: 'promo_personalization',
     title: 'Promociones personalizadas',
-    description: 'Mayor visibilidad de promociones segun actividad y mascotas.',
+    description: 'Mayor visibilidad de promociones segun actividad y mascotas del cliente.',
     category: 'Compras',
     target: 'app/(tabs)/index.tsx, app/(admin-tabs)/promotions.tsx',
   },
   {
     key: 'priority_support',
     title: 'Soporte prioritario',
-    description: 'Prioridad en flujos de ayuda y atencion digital.',
+    description: 'Prioridad en flujos de ayuda y atencion digital del usuario.',
     category: 'Soporte',
     target: 'app/profile/help-support.tsx',
   },
@@ -124,7 +131,7 @@ const ENTITLEMENTS: Entitlement[] = [
   {
     key: 'advanced_health_reports',
     title: 'Reportes de salud',
-    description: 'Tendencias, PDFs e historial medico enriquecido.',
+    description: 'Tendencias, PDFs e historial medico enriquecido del cliente.',
     category: 'Salud',
     target: 'utils/medicalHistoryPDF.ts, app/medical-history/[id].tsx',
   },
@@ -142,6 +149,16 @@ const ENTITLEMENTS: Entitlement[] = [
     category: 'Plataforma',
     target: 'feature_flags / remote config',
   },
+];
+
+const AUDIENCE_FILTERS: Array<{
+  key: PlanAudienceFilter;
+  label: string;
+  subtitle: string;
+}> = [
+  { key: 'all', label: 'Todos', subtitle: 'Ver todo el catálogo' },
+  { key: 'users', label: 'Usuarios', subtitle: 'Planes de clientes' },
+  { key: 'partners', label: 'Aliados', subtitle: 'Planes de negocios' },
 ];
 
 const TIER_STYLES: Record<PlanTier, { color: string; bg: string; border: string; icon: React.ReactNode }> = {
@@ -199,6 +216,46 @@ const getFeatureTitles = (keys: EntitlementKey[]) =>
     .filter((entitlement) => keys.includes(entitlement.key))
     .map((entitlement) => entitlement.title);
 
+const normalizeFeatureLines = (value: string) =>
+  value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+const parseLimitField = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) return null;
+
+  return Math.max(0, Math.trunc(parsed));
+};
+
+const getAudienceMeta = (audience: AudienceTarget | null | undefined) => {
+  if (audience === 'partners') {
+    return { label: 'Aliados', subtitle: 'Planes de negocios', color: '#047857', bg: '#ECFDF5', border: '#A7F3D0' };
+  }
+
+  if (audience === 'all') {
+    return { label: 'Todos', subtitle: 'Usuarios y aliados', color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE' };
+  }
+
+  return { label: 'Usuarios', subtitle: 'Planes de clientes', color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' };
+};
+
+const getAudienceFilterLabel = (filter: PlanAudienceFilter) => {
+  if (filter === 'users') return 'Usuarios';
+  if (filter === 'partners') return 'Aliados';
+  return 'Todos';
+};
+
+const planMatchesAudience = (plan: SubscriptionPlan, filter: PlanAudienceFilter) => {
+  if (filter === 'all') return true;
+  if (filter === 'users') return plan.audience_target === 'users' || plan.audience_target === 'all';
+  return plan.audience_target === 'partners' || plan.audience_target === 'all';
+};
+
 const getMpSyncStatus = (plan: SubscriptionPlan) => {
   const lastStatus = String(plan.mercadopago_metadata?.last_sync_status || '').toLowerCase();
   const requiresMp = plan.price_monthly > 0 || plan.price_yearly > 0;
@@ -232,9 +289,13 @@ const inferTier = (row: any): PlanTier => {
   if (rawTier === 'free' || rawTier === 'standard' || rawTier === 'premium') {
     return rawTier;
   }
+  if (rawTier === 'starter') return 'free';
+  if (rawTier === 'growth') return 'standard';
+  if (rawTier === 'pro') return 'premium';
 
   const name = String(row?.name || '').toLowerCase();
-  if (name.includes('free')) return 'free';
+  if (name.includes('free') || name.includes('starter')) return 'free';
+  if (name.includes('growth') || name.includes('standard') || name.includes('plus')) return 'standard';
   if (name.includes('premium') || name.includes('pro')) return 'premium';
   return 'standard';
 };
@@ -254,10 +315,14 @@ const normalizePlan = (row: any): SubscriptionPlan => {
     price_monthly: Number(row.price_monthly || 0),
     price_yearly: Number(row.price_yearly || 0),
     currency: row.currency || 'UYU',
+    trial_days: Math.max(0, Number(row.trial_days || 0)),
+    features: Array.isArray(row.features) ? row.features.map(String) : [],
     entitlementKeys,
+    limits: row.limits || null,
     audience: row.audience || '',
+    audience_target: String(row.audience_target || 'users').toLowerCase() as AudienceTarget,
     is_active: row.is_active !== false,
-    is_default: row.is_default === true || tier === 'free',
+    is_default: row.is_default === true || tier === 'free' || String(row?.name || '').toLowerCase().includes('starter'),
     is_recommended: row.is_recommended === true,
     mercadopago_monthly_plan_id: row.mercadopago_monthly_plan_id || null,
     mercadopago_yearly_plan_id: row.mercadopago_yearly_plan_id || null,
@@ -280,6 +345,7 @@ export default function SubscriptionPlans() {
   const [syncingPlanId, setSyncingPlanId] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
+  const [audienceFilter, setAudienceFilter] = useState<PlanAudienceFilter>('all');
   const [formData, setFormData] = useState({
     name: '',
     label: '',
@@ -287,11 +353,23 @@ export default function SubscriptionPlans() {
     price_monthly: '',
     price_yearly: '',
     currency: 'UYU',
+    trial_days: '0',
     entitlementKeys: [] as EntitlementKey[],
+    featureText: '',
     audience: '',
+    audience_target: 'users' as AudienceTarget,
     is_active: true,
     mercadopago_monthly_plan_id: '',
     mercadopago_yearly_plan_id: '',
+    user_max_pets: '',
+    user_max_posts_per_day: '',
+    user_max_pet_albums: '',
+    user_max_match_swipes_per_day: '',
+    user_dotty_enabled: true,
+    partner_max_businesses: '',
+    partner_max_services: '',
+    partner_max_products: '',
+    partner_max_promotions: '',
   });
 
   const isAdmin = currentUser?.isAdmin || currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
@@ -337,6 +415,7 @@ export default function SubscriptionPlans() {
   };
 
   const handleEditPlan = (plan: SubscriptionPlan) => {
+    const planLimits = resolveSubscriptionPlanLimits(plan);
     setEditingPlan(plan);
     setFormData({
       name: plan.name,
@@ -345,11 +424,23 @@ export default function SubscriptionPlans() {
       price_monthly: plan.price_monthly.toString(),
       price_yearly: plan.price_yearly.toString(),
       currency: plan.currency,
+      trial_days: plan.trial_days.toString(),
       entitlementKeys: plan.entitlementKeys,
+      featureText: plan.features.join('\n'),
       audience: plan.audience,
+      audience_target: (plan.audience_target || 'users') as AudienceTarget,
       is_active: plan.is_active,
       mercadopago_monthly_plan_id: plan.mercadopago_monthly_plan_id || '',
       mercadopago_yearly_plan_id: plan.mercadopago_yearly_plan_id || '',
+      user_max_pets: planLimits.users.maxPets === null ? '' : String(planLimits.users.maxPets),
+      user_max_posts_per_day: planLimits.users.maxPostsPerDay === null ? '' : String(planLimits.users.maxPostsPerDay),
+      user_max_pet_albums: planLimits.users.maxPetAlbums === null ? '' : String(planLimits.users.maxPetAlbums),
+      user_max_match_swipes_per_day: planLimits.users.maxMatchSwipesPerDay === null ? '' : String(planLimits.users.maxMatchSwipesPerDay),
+      user_dotty_enabled: planLimits.users.dottyEnabled,
+      partner_max_businesses: planLimits.partners.maxBusinesses === null ? '' : String(planLimits.partners.maxBusinesses),
+      partner_max_services: planLimits.partners.maxServices === null ? '' : String(planLimits.partners.maxServices),
+      partner_max_products: planLimits.partners.maxProducts === null ? '' : String(planLimits.partners.maxProducts),
+      partner_max_promotions: planLimits.partners.maxPromotions === null ? '' : String(planLimits.partners.maxPromotions),
     });
     setShowEditModal(true);
   };
@@ -370,8 +461,37 @@ export default function SubscriptionPlans() {
         editingPlan.price_monthly !== (Number(formData.price_monthly) || 0) ||
         editingPlan.price_yearly !== (Number(formData.price_yearly) || 0) ||
         editingPlan.currency !== (formData.currency.trim().toUpperCase() || 'UYU') ||
+        editingPlan.trial_days !== (Math.max(0, Number(formData.trial_days) || 0)) ||
         (editingPlan.mercadopago_monthly_plan_id || '') !== formData.mercadopago_monthly_plan_id.trim() ||
         (editingPlan.mercadopago_yearly_plan_id || '') !== formData.mercadopago_yearly_plan_id.trim();
+      const featureLines = normalizeFeatureLines(formData.featureText);
+      const entitlementTitles = getFeatureTitles(formData.entitlementKeys);
+      const planLimits = resolveSubscriptionPlanLimits(editingPlan);
+      const userLimits =
+        formData.audience_target === 'partners'
+          ? planLimits.users
+          : {
+              max_pets: parseLimitField(formData.user_max_pets),
+              max_posts_per_day: parseLimitField(formData.user_max_posts_per_day),
+              max_pet_albums: parseLimitField(formData.user_max_pet_albums),
+              max_match_swipes_per_day: parseLimitField(formData.user_max_match_swipes_per_day),
+              dotty_enabled: formData.user_dotty_enabled,
+            };
+      const partnerLimits =
+        formData.audience_target === 'users'
+          ? planLimits.partners
+          : {
+              max_businesses: parseLimitField(formData.partner_max_businesses),
+              max_services: parseLimitField(formData.partner_max_services),
+              max_products: parseLimitField(formData.partner_max_products),
+              max_promotions: parseLimitField(formData.partner_max_promotions),
+            };
+      const nextFeatures =
+        formData.audience_target === 'partners'
+          ? featureLines
+          : formData.audience_target === 'all'
+            ? Array.from(new Set([...featureLines, ...entitlementTitles]))
+            : entitlementTitles;
 
       const updatePayload = {
         name: formData.name.trim(),
@@ -380,9 +500,15 @@ export default function SubscriptionPlans() {
         price_monthly: Number(formData.price_monthly) || 0,
         price_yearly: Number(formData.price_yearly) || 0,
         currency: formData.currency.trim().toUpperCase() || 'UYU',
+        trial_days: Math.max(0, Number(formData.trial_days) || 0),
         audience: formData.audience.trim(),
+        audience_target: String(formData.audience_target || 'users').toLowerCase() as AudienceTarget,
         entitlement_keys: formData.entitlementKeys,
-        features: getFeatureTitles(formData.entitlementKeys),
+        features: nextFeatures,
+        limits: {
+          users: userLimits,
+          partners: partnerLimits,
+        },
         is_active: editingPlan.is_default ? true : formData.is_active,
         mercadopago_monthly_plan_id: formData.mercadopago_monthly_plan_id.trim() || null,
         mercadopago_yearly_plan_id: formData.mercadopago_yearly_plan_id.trim() || null,
@@ -537,6 +663,16 @@ export default function SubscriptionPlans() {
     });
   };
 
+  const visiblePlans = plans.filter((plan) => planMatchesAudience(plan, audienceFilter));
+  const planAudienceCounts = {
+    all: plans.length,
+    users: plans.filter((plan) => planMatchesAudience(plan, 'users')).length,
+    partners: plans.filter((plan) => planMatchesAudience(plan, 'partners')).length,
+  };
+  const editingAudienceMeta = getAudienceMeta(formData.audience_target);
+  const showEntitlementEditor = formData.audience_target !== 'partners';
+  const showPartnerBenefitsEditor = formData.audience_target !== 'users';
+
   if (!isAdmin) {
     return (
       <SafeAreaView style={styles.container}>
@@ -568,9 +704,38 @@ export default function SubscriptionPlans() {
           <View style={styles.summaryCopy}>
             <Text style={styles.summaryTitle}>Planes conectados a Mercado Pago</Text>
             <Text style={styles.summaryText}>
-              DogCatiFy guarda permisos y visibilidad; Mercado Pago mantiene el plan recurrente, precio, link de checkout y estado de cobro.
+              Filtra por publico para editar planes de clientes o aliados sin mezclar funcionalidades.
             </Text>
           </View>
+        </View>
+
+        <View style={styles.filterBar}>
+          {AUDIENCE_FILTERS.map((option) => {
+            const selected = audienceFilter === option.key;
+            const count = planAudienceCounts[option.key];
+
+            return (
+              <TouchableOpacity
+                key={option.key}
+                style={[styles.filterChip, selected && styles.filterChipSelected]}
+                onPress={() => setAudienceFilter(option.key)}
+              >
+                <Text style={[styles.filterChipLabel, selected && styles.filterChipLabelSelected]}>
+                  {option.label}
+                </Text>
+                <Text style={[styles.filterChipCount, selected && styles.filterChipCountSelected]}>
+                  {count}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <View style={styles.filterHintBox}>
+          <Text style={styles.filterHintTitle}>Vista actual: {getAudienceFilterLabel(audienceFilter)}</Text>
+          <Text style={styles.filterHintText}>
+            Los planes marcados como "Todos" tambien se muestran al filtrar usuarios o aliados.
+          </Text>
         </View>
 
         {loading ? (
@@ -583,12 +748,20 @@ export default function SubscriptionPlans() {
             <Text style={styles.emptyTitle}>No hay planes configurados</Text>
             <Text style={styles.emptyText}>Aplica la migracion de planes o crea los planes base en Supabase.</Text>
           </Card>
-        ) : (
-          plans.map((plan) => {
+        ) : visiblePlans.length === 0 ? (
+          <Card style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No hay planes para esta audiencia</Text>
+            <Text style={styles.emptyText}>Cambia el filtro o crea planes para este publico.</Text>
+          </Card>
+        ) : visiblePlans.map((plan) => {
             const tier = TIER_STYLES[plan.tier];
             const entitlements = getEntitlementsForPlan(plan);
             const syncing = syncingPlanId === plan.id;
             const mpSyncStatus = getMpSyncStatus(plan);
+            const audienceMeta = getAudienceMeta(plan.audience_target);
+            const planLimits = resolveSubscriptionPlanLimits(plan);
+            const showEntitlements = plan.audience_target !== 'partners';
+            const showBenefits = plan.audience_target !== 'users';
 
             return (
               <Card key={plan.id} style={[styles.planCard, { borderColor: tier.border }, !plan.is_active && styles.inactivePlanCard] as any}>
@@ -614,6 +787,11 @@ export default function SubscriptionPlans() {
                   <View style={[styles.planLabelBadge, { backgroundColor: tier.bg }]}>
                     <Text style={[styles.planLabelText, { color: tier.color }]}>{plan.label}</Text>
                   </View>
+                  <View style={[styles.audienceBadge, { backgroundColor: audienceMeta.bg, borderColor: audienceMeta.border }]}>
+                    <Text style={[styles.audienceBadgeText, { color: audienceMeta.color }]}>
+                      {audienceMeta.label}
+                    </Text>
+                  </View>
                   <View style={plan.is_active ? styles.activeBadge : styles.inactiveBadge}>
                     <Text style={plan.is_active ? styles.activeBadgeText : styles.inactiveBadgeText}>
                       {plan.is_active ? 'Activo' : 'Inactivo'}
@@ -624,7 +802,50 @@ export default function SubscriptionPlans() {
                 <View style={styles.audienceBox}>
                   <Text style={styles.audienceLabel}>Enfocado en</Text>
                   <Text style={styles.audienceText}>{plan.audience || 'Sin audiencia definida'}</Text>
+                  <Text style={styles.audienceMetaText}>
+                    Publico: {audienceMeta.label} · {audienceMeta.subtitle} · Prueba: {plan.trial_days > 0 ? `${plan.trial_days} dias` : 'Sin prueba'}
+                  </Text>
                 </View>
+
+                <View style={styles.planLimitsBox}>
+                  <Text style={styles.planLimitsTitle}>Límites del plan</Text>
+                  {showEntitlements && (
+                    <View style={styles.planLimitSection}>
+                      <Text style={styles.planLimitSectionTitle}>Clientes dueños de mascota</Text>
+                      {buildUserLimitSummary(planLimits.users).map((limit) => (
+                        <View key={`${plan.id}-user-limit-${limit.label}`} style={styles.planLimitRow}>
+                          <Text style={styles.planLimitLabel}>{limit.label}</Text>
+                          <Text style={styles.planLimitValue}>{limit.value}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                  {showBenefits && (
+                    <View style={styles.planLimitSection}>
+                      <Text style={styles.planLimitSectionTitle}>Aliados / negocios</Text>
+                      {buildPartnerLimitSummary(planLimits.partners).map((limit) => (
+                        <View key={`${plan.id}-partner-limit-${limit.label}`} style={styles.planLimitRow}>
+                          <Text style={styles.planLimitLabel}>{limit.label}</Text>
+                          <Text style={styles.planLimitValue}>{limit.value}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+
+                {showBenefits && plan.features.length > 0 && (
+                  <View style={styles.planBenefitsBox}>
+                    <Text style={styles.planBenefitsTitle}>
+                      {plan.audience_target === 'partners' ? 'Beneficios del aliado' : 'Beneficios del plan'}
+                    </Text>
+                    {plan.features.slice(0, 6).map((feature, index) => (
+                      <View key={`${plan.id}-benefit-${index}`} style={styles.planBenefitRow}>
+                        <Check size={14} color="#2D6A6F" />
+                        <Text style={styles.planBenefitText}>{feature}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
 
                 <View style={styles.priceSection}>
                   <View style={styles.priceItem}>
@@ -682,22 +903,45 @@ export default function SubscriptionPlans() {
                 </View>
 
                 <View style={styles.featuresSection}>
-                  <Text style={styles.featuresTitle}>Funcionalidades habilitadas</Text>
-                  {entitlements.map((entitlement) => (
-                    <View key={entitlement.key} style={styles.entitlementRow}>
-                      <View style={[styles.entitlementIcon, { backgroundColor: tier.bg }]}>
-                        <Check size={15} color={tier.color} />
-                      </View>
-                      <View style={styles.entitlementCopy}>
-                        <View style={styles.entitlementTitleRow}>
-                          <Text style={styles.entitlementTitle}>{entitlement.title}</Text>
-                          <Text style={[styles.entitlementCategory, { color: tier.color }]}>{entitlement.category}</Text>
+                  <Text style={styles.featuresTitle}>
+                    {showEntitlements ? 'Funciones para clientes' : 'Beneficios comerciales'}
+                  </Text>
+                  {showEntitlements ? (
+                    entitlements.length > 0 ? (
+                      entitlements.map((entitlement) => (
+                        <View key={entitlement.key} style={styles.entitlementRow}>
+                          <View style={[styles.entitlementIcon, { backgroundColor: tier.bg }]}>
+                            <Check size={15} color={tier.color} />
+                          </View>
+                          <View style={styles.entitlementCopy}>
+                            <View style={styles.entitlementTitleRow}>
+                              <Text style={styles.entitlementTitle}>{entitlement.title}</Text>
+                              <Text style={[styles.entitlementCategory, { color: tier.color }]}>{entitlement.category}</Text>
+                            </View>
+                            <Text style={styles.entitlementDescription}>{entitlement.description}</Text>
+                            <Text style={styles.entitlementTarget}>{entitlement.target}</Text>
+                          </View>
                         </View>
-                        <Text style={styles.entitlementDescription}>{entitlement.description}</Text>
-                        <Text style={styles.entitlementTarget}>{entitlement.target}</Text>
+                      ))
+                    ) : (
+                      <View style={styles.emptyFeatureBox}>
+                        <Text style={styles.emptyFeatureText}>No hay funciones de cliente asignadas a este plan.</Text>
                       </View>
+                    )
+                  ) : plan.features.length > 0 ? (
+                    plan.features.map((feature, index) => (
+                      <View key={`${plan.id}-partner-feature-${index}`} style={styles.partnerFeatureRow}>
+                        <View style={[styles.partnerFeatureBullet, { backgroundColor: tier.bg }]}>
+                          <Check size={12} color={tier.color} />
+                        </View>
+                        <Text style={styles.partnerFeatureText}>{feature}</Text>
+                      </View>
+                    ))
+                  ) : (
+                    <View style={styles.emptyFeatureBox}>
+                      <Text style={styles.emptyFeatureText}>No hay beneficios comerciales cargados para este plan.</Text>
                     </View>
-                  ))}
+                  )}
                 </View>
 
                 <View style={styles.lockHint}>
@@ -740,7 +984,7 @@ export default function SubscriptionPlans() {
               </Card>
             );
           })
-        )}
+        }
       </ScrollView>
 
       <Modal
@@ -753,6 +997,25 @@ export default function SubscriptionPlans() {
           <View style={styles.modalContent}>
             <ScrollView showsVerticalScrollIndicator={false}>
               <Text style={styles.modalTitle}>Editar permisos: {editingPlan?.name}</Text>
+
+              <View style={[styles.modalHeroBox, { backgroundColor: editingAudienceMeta.bg, borderColor: editingAudienceMeta.border }]}>
+                <View style={styles.modalHeroTopRow}>
+                  <Text style={[styles.modalHeroPill, { color: editingAudienceMeta.color }]}>
+                    {editingAudienceMeta.label}
+                  </Text>
+                  <Text style={styles.modalHeroScope}>Público del plan</Text>
+                </View>
+                <Text style={styles.modalHeroSubtitle}>{editingAudienceMeta.subtitle}</Text>
+                <Text style={styles.modalHeroText}>
+                  {formData.audience_target === 'partners'
+                    ? 'Este formulario configura beneficios comerciales del aliado y sus planes en Mercado Pago.'
+                    : formData.audience_target === 'all'
+                      ? 'Este formulario mezcla funciones de cliente con beneficios transversales.'
+                      : 'Este formulario configura funciones para clientes dueños de mascotas.'}
+                </Text>
+              </View>
+
+              <Text style={styles.formSectionTitle}>Identidad del plan</Text>
 
               <Input
                 label="Nombre del plan"
@@ -784,6 +1047,32 @@ export default function SubscriptionPlans() {
                 placeholder="Ej: Usuarios frecuentes"
               />
 
+              <Text style={styles.formSectionTitle}>Público y precios</Text>
+
+              <View style={styles.audienceTargetSection}>
+                <Text style={styles.inputLabel}>Público del plan</Text>
+                <View style={styles.audienceTargetRow}>
+                  {([
+                    { key: 'users', label: 'Usuarios' },
+                    { key: 'partners', label: 'Aliados' },
+                    { key: 'all', label: 'Todos' },
+                  ] as const).map((option) => {
+                    const selected = formData.audience_target === option.key;
+                    return (
+                      <TouchableOpacity
+                        key={option.key}
+                        style={[styles.audienceTargetChip, selected && styles.audienceTargetChipSelected]}
+                        onPress={() => setFormData({ ...formData, audience_target: option.key })}
+                      >
+                        <Text style={[styles.audienceTargetChipText, selected && styles.audienceTargetChipTextSelected]}>
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
               <View style={styles.priceInputsRow}>
                 <Input
                   label="Mensual"
@@ -801,15 +1090,128 @@ export default function SubscriptionPlans() {
                   keyboardType="numeric"
                   style={styles.priceInput}
                 />
+              <Input
+                label="Moneda"
+                value={formData.currency}
+                onChangeText={(value) => setFormData({ ...formData, currency: value })}
+                placeholder="UYU"
+                autoCapitalize="characters"
+                style={styles.currencyInput}
+              />
+            </View>
+
+            <Input
+              label="Dias de prueba"
+              value={formData.trial_days}
+              onChangeText={(value) => setFormData({ ...formData, trial_days: value })}
+              placeholder="0"
+              keyboardType="numeric"
+            />
+
+            <Text style={styles.formSectionTitle}>Limites de uso</Text>
+
+            {formData.audience_target !== 'partners' && (
+              <View style={styles.limitGroupCard}>
+                <View style={styles.limitGroupHeader}>
+                  <Text style={styles.limitGroupTitle}>Clientes dueños de mascota</Text>
+                  <Text style={styles.limitGroupBadge}>Visible en la app del usuario</Text>
+                </View>
+                <Text style={styles.limitGroupHint}>
+                  Deja el campo vacio para marcarlo como sin limite.
+                </Text>
                 <Input
-                  label="Moneda"
-                  value={formData.currency}
-                  onChangeText={(value) => setFormData({ ...formData, currency: value })}
-                  placeholder="UYU"
-                  autoCapitalize="characters"
-                  style={styles.currencyInput}
+                  label="Mascotas maximas"
+                  value={formData.user_max_pets}
+                  onChangeText={(value) => setFormData({ ...formData, user_max_pets: value })}
+                  placeholder="2"
+                  keyboardType="numeric"
+                />
+                <View style={styles.limitPairRow}>
+                  <Input
+                    label="Publicaciones por dia"
+                    value={formData.user_max_posts_per_day}
+                    onChangeText={(value) => setFormData({ ...formData, user_max_posts_per_day: value })}
+                    placeholder="3"
+                    keyboardType="numeric"
+                    style={styles.limitPairInput}
+                  />
+                  <Input
+                    label="Albumes por mascota"
+                    value={formData.user_max_pet_albums}
+                    onChangeText={(value) => setFormData({ ...formData, user_max_pet_albums: value })}
+                    placeholder="2"
+                    keyboardType="numeric"
+                    style={styles.limitPairInput}
+                  />
+                </View>
+                <View style={styles.limitPairRow}>
+                  <Input
+                    label="Matches por dia"
+                    value={formData.user_max_match_swipes_per_day}
+                    onChangeText={(value) => setFormData({ ...formData, user_max_match_swipes_per_day: value })}
+                    placeholder="1"
+                    keyboardType="numeric"
+                    style={styles.limitPairInput}
+                  />
+                  <View style={styles.dottySwitchCard}>
+                    <Text style={styles.dottySwitchLabel}>Dotty activo</Text>
+                    <Text style={styles.dottySwitchHint}>Permite usar el asistente en este plan.</Text>
+                    <Switch
+                      value={formData.user_dotty_enabled}
+                      onValueChange={(value) => setFormData({ ...formData, user_dotty_enabled: value })}
+                      trackColor={{ false: '#E5E7EB', true: '#DDD6FE' }}
+                      thumbColor={formData.user_dotty_enabled ? '#7C3AED' : '#FFFFFF'}
+                    />
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {formData.audience_target !== 'users' && (
+              <View style={styles.limitGroupCard}>
+                <View style={styles.limitGroupHeader}>
+                  <Text style={styles.limitGroupTitle}>Aliados / negocios</Text>
+                  <Text style={styles.limitGroupBadge}>Visible en el dashboard del aliado</Text>
+                </View>
+                <Text style={styles.limitGroupHint}>
+                  Deja el campo vacio para marcarlo como sin limite.
+                </Text>
+                <Input
+                  label="Negocios maximos"
+                  value={formData.partner_max_businesses}
+                  onChangeText={(value) => setFormData({ ...formData, partner_max_businesses: value })}
+                  placeholder="1"
+                  keyboardType="numeric"
+                />
+                <View style={styles.limitPairRow}>
+                  <Input
+                    label="Servicios maximos"
+                    value={formData.partner_max_services}
+                    onChangeText={(value) => setFormData({ ...formData, partner_max_services: value })}
+                    placeholder="5"
+                    keyboardType="numeric"
+                    style={styles.limitPairInput}
+                  />
+                  <Input
+                    label="Productos maximos"
+                    value={formData.partner_max_products}
+                    onChangeText={(value) => setFormData({ ...formData, partner_max_products: value })}
+                    placeholder="10"
+                    keyboardType="numeric"
+                    style={styles.limitPairInput}
+                  />
+                </View>
+                <Input
+                  label="Promociones maximas"
+                  value={formData.partner_max_promotions}
+                  onChangeText={(value) => setFormData({ ...formData, partner_max_promotions: value })}
+                  placeholder="1"
+                  keyboardType="numeric"
                 />
               </View>
+            )}
+
+            <Text style={styles.formSectionTitle}>Mercado Pago</Text>
 
               <View style={styles.mpModalBox}>
                 <Text style={styles.inputLabel}>Planes registrados en Mercado Pago</Text>
@@ -832,28 +1234,51 @@ export default function SubscriptionPlans() {
                 />
               </View>
 
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Permisos de funcionalidad</Text>
-                {ENTITLEMENTS.map((entitlement) => {
-                  const enabled = formData.entitlementKeys.includes(entitlement.key);
-                  return (
-                    <TouchableOpacity
-                      key={entitlement.key}
-                      style={[styles.permissionOption, enabled && styles.permissionOptionSelected]}
-                      onPress={() => handleToggleEntitlement(entitlement.key)}
-                    >
-                      <View style={enabled ? styles.permissionCheckOn : styles.permissionCheckOff}>
-                        {enabled && <Check size={13} color="#FFFFFF" />}
-                      </View>
-                      <View style={styles.permissionCopy}>
-                        <Text style={styles.permissionTitle}>{entitlement.title}</Text>
-                        <Text style={styles.permissionDescription}>{entitlement.description}</Text>
-                        <Text style={styles.permissionTarget}>{entitlement.target}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              {showPartnerBenefitsEditor && (
+                <View style={styles.partnerBenefitsSection}>
+                  <Text style={styles.inputLabel}>Beneficios del aliado</Text>
+                  <Text style={styles.partnerBenefitsHint}>
+                    Escribe un beneficio por linea. Ejemplo: Dashboard operativo, Agenda y reservas, Cobros con Mercado Pago.
+                  </Text>
+                  <Input
+                    label="Listado de beneficios"
+                    value={formData.featureText}
+                    onChangeText={(value) => setFormData({ ...formData, featureText: value })}
+                    placeholder="Un beneficio por linea"
+                    multiline
+                    numberOfLines={5}
+                    style={styles.partnerBenefitsInput}
+                  />
+                </View>
+              )}
+
+              {showEntitlementEditor && (
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Funciones para clientes</Text>
+                  <Text style={styles.permissionHelperText}>
+                    Marca solo las funciones que aplican a usuarios dueños de mascotas.
+                  </Text>
+                  {ENTITLEMENTS.map((entitlement) => {
+                    const enabled = formData.entitlementKeys.includes(entitlement.key);
+                    return (
+                      <TouchableOpacity
+                        key={entitlement.key}
+                        style={[styles.permissionOption, enabled && styles.permissionOptionSelected]}
+                        onPress={() => handleToggleEntitlement(entitlement.key)}
+                      >
+                        <View style={enabled ? styles.permissionCheckOn : styles.permissionCheckOff}>
+                          {enabled && <Check size={13} color="#FFFFFF" />}
+                        </View>
+                        <View style={styles.permissionCopy}>
+                          <Text style={styles.permissionTitle}>{entitlement.title}</Text>
+                          <Text style={styles.permissionDescription}>{entitlement.description}</Text>
+                          <Text style={styles.permissionTarget}>{entitlement.target}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
 
               {!editingPlan?.is_default && (
                 <View style={styles.modalSwitchRow}>
@@ -957,6 +1382,62 @@ const styles = StyleSheet.create({
     color: '#4B5563',
     lineHeight: 19,
   },
+  filterBar: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  filterChip: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  filterChipSelected: {
+    backgroundColor: '#ECFEFF',
+    borderColor: '#2D6A6F',
+  },
+  filterChipLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  filterChipLabelSelected: {
+    color: '#2D6A6F',
+  },
+  filterChipCount: {
+    marginTop: 2,
+    fontSize: 11,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+  },
+  filterChipCountSelected: {
+    color: '#2D6A6F',
+  },
+  filterHintBox: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  filterHintTitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  filterHintText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 17,
+  },
   loadingBox: {
     minHeight: 220,
     alignItems: 'center',
@@ -1051,6 +1532,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
   },
+  audienceBadge: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  audienceBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
   activeBadge: {
     backgroundColor: '#D1FAE5',
     borderRadius: 999,
@@ -1090,6 +1581,149 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     color: '#111827',
+  },
+  audienceMetaText: {
+    marginTop: 6,
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+  },
+  planLimitsBox: {
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: '#F8FAFF',
+    marginBottom: 12,
+  },
+  planLimitsTitle: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4338CA',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+  },
+  planLimitSection: {
+    marginBottom: 10,
+  },
+  planLimitSectionTitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  planLimitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 6,
+  },
+  planLimitLabel: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#4B5563',
+    marginRight: 10,
+  },
+  planLimitValue: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  planBenefitsBox: {
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: '#F0FDF4',
+    marginBottom: 12,
+  },
+  planBenefitsTitle: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#065F46',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  planBenefitRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 8,
+  },
+  planBenefitText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#14532D',
+    lineHeight: 18,
+  },
+  emptyFeatureBox: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    padding: 12,
+  },
+  emptyFeatureText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 17,
+  },
+  partnerFeatureRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  partnerFeatureBullet: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+    marginTop: 1,
+  },
+  partnerFeatureText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#14532D',
+    lineHeight: 18,
+  },
+  audienceTargetSection: {
+    marginTop: 12,
+  },
+  audienceTargetRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  audienceTargetChip: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  audienceTargetChipSelected: {
+    borderColor: '#2D6A6F',
+    backgroundColor: '#ECFEFF',
+  },
+  audienceTargetChipText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#374151',
+  },
+  audienceTargetChipTextSelected: {
+    color: '#2D6A6F',
   },
   priceSection: {
     flexDirection: 'row',
@@ -1339,6 +1973,52 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginBottom: 20,
   },
+  modalHeroBox: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+  modalHeroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 6,
+  },
+  modalHeroPill: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    overflow: 'hidden',
+  },
+  modalHeroScope: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+  },
+  modalHeroSubtitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  modalHeroText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#4B5563',
+    lineHeight: 17,
+  },
+  formSectionTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginTop: 10,
+    marginBottom: 8,
+  },
   priceInputsRow: {
     flexDirection: 'row',
     gap: 12,
@@ -1364,6 +2044,84 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 12,
   },
+  partnerBenefitsSection: {
+    marginBottom: 12,
+  },
+  partnerBenefitsHint: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 17,
+    marginBottom: 10,
+  },
+  partnerBenefitsInput: {
+    minHeight: 120,
+    textAlignVertical: 'top',
+  },
+  limitGroupCard: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+  limitGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 4,
+  },
+  limitGroupTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    flex: 1,
+  },
+  limitGroupBadge: {
+    fontSize: 11,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    textAlign: 'right',
+  },
+  limitGroupHint: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 17,
+    marginBottom: 10,
+  },
+  limitPairRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  limitPairInput: {
+    flex: 1,
+  },
+  dottySwitchCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  dottySwitchLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 3,
+  },
+  dottySwitchHint: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 15,
+    marginBottom: 10,
+  },
   inputContainer: {
     marginBottom: 16,
   },
@@ -1385,6 +2143,13 @@ const styles = StyleSheet.create({
   permissionOptionSelected: {
     borderColor: '#2D6A6F',
     backgroundColor: '#F0FDFA',
+  },
+  permissionHelperText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 17,
+    marginBottom: 10,
   },
   permissionCheckOn: {
     width: 20,

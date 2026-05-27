@@ -14,6 +14,8 @@ import { supabaseClient } from '../../lib/supabase';
 import { NotificationService } from '@/utils/notifications';
 import { PartnerServiceAgreement } from '../../components/PartnerServiceAgreement';
 import { envConfig } from '../../utils/envConfig';
+import { resolvePartnerPlanTier } from '../../utils/partnerPlans';
+import { resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
 
 const SYSTEM_CONFIG_KEY = 'system_config';
 
@@ -335,7 +337,7 @@ export default function PartnerRegister() {
   const pickDocument = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
         quality: 1,
@@ -352,7 +354,7 @@ export default function PartnerRegister() {
   const handleTakePhoto = async () => {
     try {
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
         allowsEditing: true,
         aspect: [4, 3],
@@ -528,6 +530,80 @@ export default function PartnerRegister() {
       return;
     }
 
+    try {
+      const { data: partnerRows, error: partnerCountError } = await supabaseClient
+        .from('partners')
+        .select('subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at, subscription_plan_started_at')
+        .eq('user_id', currentUser.id);
+
+      if (partnerCountError) {
+        throw partnerCountError;
+      }
+
+      const order: Array<'starter' | 'growth' | 'pro'> = ['starter', 'growth', 'pro'];
+      const representativePartner = (partnerRows || []).reduce((best: any, row: any) => {
+        const resolvedTier = resolvePartnerPlanTier(
+          row.subscription_plan_tier,
+          row.subscription_plan_status,
+          row.subscription_plan_expires_at
+        ) as 'starter' | 'growth' | 'pro';
+
+        if (!best) {
+          return row;
+        }
+
+        const bestTier = resolvePartnerPlanTier(
+          best.subscription_plan_tier,
+          best.subscription_plan_status,
+          best.subscription_plan_expires_at
+        ) as 'starter' | 'growth' | 'pro';
+
+        return order.indexOf(resolvedTier) > order.indexOf(bestTier) ? row : best;
+      }, null);
+
+      const effectiveTier = representativePartner
+        ? (resolvePartnerPlanTier(
+            representativePartner.subscription_plan_tier,
+            representativePartner.subscription_plan_status,
+            representativePartner.subscription_plan_expires_at
+          ) as 'starter' | 'growth' | 'pro')
+        : 'starter';
+      const effectiveStatus = representativePartner?.subscription_plan_status || (autoApprovePartners ? 'active' : 'pending');
+      const effectiveStartedAt = representativePartner?.subscription_plan_started_at || (autoApprovePartners ? new Date().toISOString() : null);
+      const effectiveExpiresAt = representativePartner?.subscription_plan_expires_at || null;
+
+      const partnerLimits = resolveSubscriptionPlanLimits({
+        tier: effectiveTier,
+        audience_target: 'partners',
+      });
+
+      const maxBusinessesAllowed = partnerLimits.partners.maxBusinesses;
+      const { count: currentBusinessesCount, error: currentBusinessesError } = await supabaseClient
+        .from('partners')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', currentUser.id);
+
+      if (currentBusinessesError) {
+        throw currentBusinessesError;
+      }
+
+      if (maxBusinessesAllowed !== null && (currentBusinessesCount || 0) >= maxBusinessesAllowed) {
+        Alert.alert(
+          'Límite alcanzado',
+          `Tu plan actual permite registrar hasta ${maxBusinessesAllowed} negocio${maxBusinessesAllowed === 1 ? '' : 's'}. Actualiza tu suscripción para agregar otro negocio.`,
+          [
+            { text: 'Ver planes', onPress: () => router.push('/partner/subscription') },
+            { text: 'OK', style: 'cancel' },
+          ]
+        );
+        return;
+      }
+    } catch (limitError) {
+      console.error('Error validating partner business limit:', limitError);
+      Alert.alert('Error', 'No se pudo validar el límite de negocios de tu plan. Intenta nuevamente.');
+      return;
+    }
+
     setLoading(true);
     try {
       let logoUrl = null;
@@ -630,6 +706,10 @@ export default function PartnerRegister() {
         user_id: currentUserId,
         business_name: businessName.trim(),
         business_type: selectedType,
+        subscription_plan_tier: effectiveTier,
+        subscription_plan_status: effectiveStatus,
+        subscription_plan_started_at: effectiveStartedAt,
+        subscription_plan_expires_at: effectiveTier === 'starter' ? null : effectiveExpiresAt,
         description: description.trim(),
         address: `${calle.trim()} ${numero.trim()}${barrio ? ', ' + barrio : ''}, ${selectedDepartment?.name || ''}, ${selectedCountry?.name || ''}`,
         phone: phone.trim(),
@@ -937,13 +1017,13 @@ export default function PartnerRegister() {
             </View>
           )}
 
-          {/* Sección de IVA */}
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>💰 Configuración de IVA</Text>
+        {/* Sección de IVA */}
+        <View style={styles.sectionHeader}>
+            <Text style={styles.sectionHeaderTitle}>💰 Configuración de IVA</Text>
             <Text style={styles.sectionSubtitle}>
               Configura el IVA que se aplicará a tus servicios y productos
             </Text>
-          </View>
+        </View>
 
           <View style={styles.row}>
             <View style={styles.halfWidth}>
@@ -1381,7 +1461,7 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 16,
   },
-  sectionTitle: {
+  sectionHeaderTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
     color: '#111827',

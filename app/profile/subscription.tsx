@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator, Alert, Linking, Platform } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Check, Clock, Crown, ExternalLink, RefreshCw } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { buildUserLimitSummary, resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
 
 type BillingCycle = 'monthly' | 'yearly';
 
@@ -17,8 +18,10 @@ interface SubscriptionPlan {
   price_yearly: number;
   currency: string;
   features?: string[];
+  limits?: Record<string, any> | null;
   is_recommended?: boolean;
   is_default?: boolean;
+  audience_target?: string | null;
   mercadopago_monthly_plan_id?: string | null;
   mercadopago_yearly_plan_id?: string | null;
   mercadopago_monthly_init_point?: string | null;
@@ -33,8 +36,10 @@ const normalizePlan = (row: any): SubscriptionPlan => ({
   price_yearly: Number(row.price_yearly || 0),
   currency: row.currency || 'UYU',
   features: Array.isArray(row.features) ? row.features.map(String) : [],
+  limits: row.limits || null,
   is_recommended: row.is_recommended === true,
   is_default: row.is_default === true,
+  audience_target: row.audience_target || null,
   mercadopago_monthly_plan_id: row.mercadopago_monthly_plan_id || null,
   mercadopago_yearly_plan_id: row.mercadopago_yearly_plan_id || null,
   mercadopago_monthly_init_point: row.mercadopago_monthly_init_point || null,
@@ -60,6 +65,8 @@ const isMobileWebBrowser = () => {
   return /Android|iPhone|iPad|iPod/i.test(userAgent);
 };
 
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export default function Subscription() {
   const { currentUser } = useAuth();
   const { subscription_id } = useLocalSearchParams<{ subscription_id?: string }>();
@@ -73,6 +80,12 @@ export default function Subscription() {
   useEffect(() => {
     loadSubscriptionData();
   }, [currentUser?.id, subscription_id]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadSubscriptionData();
+    }, [currentUser?.id, subscription_id]),
+  );
 
   useEffect(() => {
     if (Platform.OS !== 'web' || !isMobileWebBrowser()) return;
@@ -110,7 +123,11 @@ export default function Subscription() {
 
       if (error) throw error;
 
-      setPlans((data || []).map(normalizePlan));
+      setPlans(
+        (data || [])
+          .filter((row) => String(row?.audience_target || 'users').toLowerCase() !== 'partners')
+          .map(normalizePlan),
+      );
     } catch (error) {
       console.error('Error loading plans:', error);
       Alert.alert('Error', 'No se pudieron cargar los planes de suscripcion');
@@ -122,31 +139,68 @@ export default function Subscription() {
 
     try {
       const selectedSubscriptionId = getSingleParam(subscription_id);
-      let query = supabaseClient
+      const buildQuery = () => supabaseClient
         .from('user_subscriptions')
         .select(`
           *,
           subscription_plans (
             name,
             description,
-            features
+            features,
+            limits
           )
         `)
         .eq('user_id', currentUser.id)
         .in('status', ['active', 'pending', 'paused']);
 
-      if (selectedSubscriptionId) {
-        query = query.eq('id', selectedSubscriptionId);
-      } else {
-        query = query.order('created_at', { ascending: false }).limit(1);
-      }
+      let data: any = null;
+      let error: any = null;
 
-      const { data, error } = await query.maybeSingle();
+      if (selectedSubscriptionId) {
+        const selectedResult = await buildQuery()
+          .eq('id', selectedSubscriptionId)
+          .maybeSingle();
+
+        data = selectedResult.data || null;
+        error = selectedResult.error || null;
+
+        if (!data && !error) {
+          const fallbackResult = await buildQuery()
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          data = fallbackResult.data || null;
+          error = fallbackResult.error || null;
+        }
+      } else {
+        const latestResult = await buildQuery()
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        data = latestResult.data || null;
+        error = latestResult.error || null;
+      }
 
       if (error) throw error;
 
       if (data && shouldSyncSubscriptionStatus(data)) {
-        const syncedSubscription = await syncSubscriptionStatus(data.id);
+        let syncedSubscription = await syncSubscriptionStatus(data.id);
+
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const currentStatus = String(syncedSubscription?.status || data.status || '').toLowerCase();
+          if (currentStatus !== 'pending') {
+            break;
+          }
+
+          await delay(2000);
+          const retriedSubscription = await syncSubscriptionStatus(data.id);
+          if (retriedSubscription) {
+            syncedSubscription = retriedSubscription;
+          }
+        }
+
         setUserSubscription(syncedSubscription || data);
         return;
       }
@@ -293,6 +347,13 @@ export default function Subscription() {
     return status || 'Sin estado';
   };
 
+  const currentPlanLimits = resolveSubscriptionPlanLimits(userSubscription?.subscription_plans || null);
+  const currentSubscriptionStatus = String(userSubscription?.status || '').toLowerCase();
+  const currentSubscriptionName = userSubscription?.subscription_plans?.name || 'Plan Personal';
+  const currentSubscriptionDescription = userSubscription?.subscription_plans?.description || '';
+  const currentLimitSummary = buildUserLimitSummary(currentPlanLimits.users);
+  const isWaitingForMpConfirmation = Boolean(syncingSubscriptionId || (subscription_id && !userSubscription && !loading));
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -310,33 +371,61 @@ export default function Subscription() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.title}>Suscripcion Premium</Text>
+        <Text style={styles.title}>Suscripcion de Mascota</Text>
         <TouchableOpacity onPress={loadSubscriptionData} style={styles.backButton}>
           <RefreshCw size={21} color="#111827" />
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {isWaitingForMpConfirmation && !userSubscription && (
+          <Card style={styles.syncingCard}>
+            <View style={styles.syncingHeader}>
+              <ActivityIndicator size="small" color="#F59E0B" />
+              <Text style={styles.syncingTitle}>Estamos verificando tu suscripción</Text>
+            </View>
+            <Text style={styles.syncingText}>
+              Si acabas de pagar en Mercado Pago, refresca esta pantalla en unos segundos para traer el estado real del plan.
+            </Text>
+          </Card>
+        )}
+
         {userSubscription && (
           <Card style={[
             styles.currentSubscriptionCard,
-            userSubscription.status === 'pending' && styles.pendingSubscriptionCard,
+            currentSubscriptionStatus === 'pending' && styles.pendingSubscriptionCard,
+            currentSubscriptionStatus === 'active' && styles.activeSubscriptionCard,
           ] as any}>
             <View style={styles.currentSubscriptionHeader}>
-              {userSubscription.status === 'pending' ? (
+              {currentSubscriptionStatus === 'pending' ? (
                 <Clock size={32} color="#D97706" />
               ) : (
                 <Crown size={32} color="#F59E0B" />
               )}
               <View style={styles.currentSubscriptionInfo}>
-                <Text style={styles.currentSubscriptionTitle}>
-                  {userSubscription.status === 'pending' ? 'Suscripcion Pendiente' : 'Suscripcion Activa'}
-                </Text>
+                <Text style={styles.currentSubscriptionTitle}>Tu plan contratado</Text>
                 <Text style={styles.currentSubscriptionPlan}>
-                  {userSubscription.subscription_plans?.name || 'Premium'}
+                  {currentSubscriptionName}
                 </Text>
               </View>
             </View>
+            <Text style={styles.subscriptionStatusNote}>
+              {currentSubscriptionStatus === 'pending' && syncingSubscriptionId === userSubscription.id
+                ? 'Estamos confirmando tu pago con Mercado Pago. Si acabas de pagar, espera unos segundos o toca actualizar.'
+                : currentSubscriptionStatus === 'pending'
+                ? 'Mercado Pago todavía no confirmó el cobro. Si ya pagaste, toca actualizar para traer el estado real.'
+                : currentSubscriptionStatus === 'active'
+                  ? 'Este es el plan activo de tu cuenta personal.'
+                  : 'Aquí verás el estado real de tu suscripción cuando Mercado Pago la confirme.'}
+            </Text>
+            {currentSubscriptionStatus === 'pending' && syncingSubscriptionId === userSubscription.id && (
+              <View style={styles.syncInlineBanner}>
+                <ActivityIndicator size="small" color="#B45309" />
+                <Text style={styles.syncInlineBannerText}>
+                  Confirmando pago con Mercado Pago...
+                </Text>
+              </View>
+            )}
             <View style={styles.currentSubscriptionDetails}>
               <Text style={styles.subscriptionDetailText}>
                 Estado: <Text style={styles.subscriptionDetailValue}>{getSubscriptionStatus()}</Text>
@@ -361,6 +450,22 @@ export default function Subscription() {
                 </Text>
               )}
             </View>
+            {currentLimitSummary.length > 0 && (
+              <View style={styles.planSummaryContainer}>
+                <Text style={styles.planSummaryTitle}>Resumen de límites</Text>
+                {currentLimitSummary.slice(0, 4).map((limit) => (
+                  <View key={limit.label} style={styles.limitRowCompact}>
+                    <Text style={styles.limitLabel}>{limit.label}</Text>
+                    <Text style={styles.limitValue}>{limit.value}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            {currentSubscriptionDescription ? (
+              <Text style={styles.currentSubscriptionDescription}>
+                {currentSubscriptionDescription}
+              </Text>
+            ) : null}
             <Button
               title={
                 syncingSubscriptionId === userSubscription.id
@@ -380,6 +485,33 @@ export default function Subscription() {
               disabled={syncingSubscriptionId === userSubscription.id}
               loading={syncingSubscriptionId === userSubscription.id}
             />
+          </Card>
+        )}
+
+        {userSubscription?.subscription_plans && (
+          <Card style={styles.limitsCard}>
+            <Text style={styles.limitsTitle}>Límites de tu plan</Text>
+            <Text style={styles.limitsSubtitle}>
+              Estos son los topes activos para tu perfil personal y tus mascotas.
+            </Text>
+            {buildUserLimitSummary(currentPlanLimits.users).map((limit) => (
+              <View key={limit.label} style={styles.limitRow}>
+                <Text style={styles.limitLabel}>{limit.label}</Text>
+                <Text style={styles.limitValue}>{limit.value}</Text>
+              </View>
+            ))}
+            <Text style={styles.limitsNote}>
+              Si también eres aliado, tu plan de negocio se administra aparte desde la sección de aliado.
+            </Text>
+          </Card>
+        )}
+
+        {!userSubscription && (
+          <Card style={styles.emptySubscriptionCard}>
+            <Text style={styles.emptySubscriptionTitle}>Tu plan contratado aún no aparece aquí</Text>
+            <Text style={styles.emptySubscriptionText}>
+              Cuando Mercado Pago confirme tu pago, esta pantalla mostrará el plan activo, su estado y los límites que tienes habilitados.
+            </Text>
           </Card>
         )}
 
@@ -518,8 +650,8 @@ export default function Subscription() {
           <Text style={styles.infoTitle}>Informacion importante</Text>
           <Text style={styles.infoText}>
             Los planes pagos se autorizan y cobran desde Mercado Pago.{'\n'}
-            DogCatiFy activa tus permisos cuando Mercado Pago confirma la suscripcion.{'\n'}
-            Puedes pausar o cancelar la suscripcion desde tu cuenta de Mercado Pago.
+            Esta suscripcion pertenece a tu perfil personal y activa funciones de mascota.{'\n'}
+            Si tambien eres aliado, tu plan de negocio se gestiona por separado.
           </Text>
         </Card>
       </ScrollView>
@@ -576,6 +708,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#F59E0B',
   },
+  activeSubscriptionCard: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#10B981',
+  },
   pendingSubscriptionCard: {
     backgroundColor: '#FFF7ED',
     borderColor: '#FDBA74',
@@ -600,6 +736,39 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     color: '#92400E',
   },
+  currentSubscriptionDescription: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#7C2D12',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  subscriptionStatusNote: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#9A3412',
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  syncInlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+  },
+  syncInlineBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#9A3412',
+    lineHeight: 18,
+  },
   currentSubscriptionDetails: {
     marginBottom: 16,
     paddingTop: 16,
@@ -615,8 +784,73 @@ const styles = StyleSheet.create({
   subscriptionDetailValue: {
     fontFamily: 'Inter-SemiBold',
   },
+  planSummaryContainer: {
+    marginBottom: 14,
+    padding: 12,
+    backgroundColor: '#FFF7ED',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  planSummaryTitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#92400E',
+    marginBottom: 8,
+  },
+  limitRowCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FDE68A',
+  },
   manageButton: {
     marginTop: 8,
+  },
+  syncingCard: {
+    marginBottom: 16,
+    padding: 16,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  syncingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  syncingTitle: {
+    marginLeft: 10,
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1D4ED8',
+  },
+  syncingText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#1E40AF',
+    lineHeight: 20,
+  },
+  emptySubscriptionCard: {
+    marginBottom: 16,
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  emptySubscriptionTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  emptySubscriptionText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 20,
   },
   billingCycleContainer: {
     flexDirection: 'row',
@@ -740,6 +974,52 @@ const styles = StyleSheet.create({
   },
   mpPlanWarning: {
     color: '#B45309',
+  },
+  limitsCard: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    padding: 16,
+    marginBottom: 16,
+  },
+  limitsTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#92400E',
+    marginBottom: 6,
+  },
+  limitsSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#B45309',
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  limitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FDE68A',
+  },
+  limitLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#78350F',
+  },
+  limitValue: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#92400E',
+  },
+  limitsNote: {
+    marginTop: 10,
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#A16207',
+    lineHeight: 18,
   },
   featuresContainer: {
     marginBottom: 20,
