@@ -345,10 +345,3 @@ steps:
       artifactName: 'ios-ipa'
       publishLocation: 'Container'
 
-  - task: PublishBuildArtifacts@1
-    displayName: 'Publicar logs xcodebuild'
-    condition: succeededOrFailed()
-    inputs:
-      pathToPublish: '$(Build.ArtifactStagingDirectory)'
-      artifactName: 'ios-build-logs'
-      publishLocation: 'Container'
