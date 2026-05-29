@@ -242,10 +242,10 @@ export default function PartnerServices() {
         // Parse basic info
         const lines = description.split('\n');
         const basicInfo = lines[0] || '';
-        const healthInfo = lines.find(line => line.includes('🩺')) || '';
-        const temperamentInfo = lines.find(line => line.includes('🧠')) || '';
-        const adoptionInfo = lines.find(line => line.includes('🏡')) || '';
-        const contactInfo = lines.find(line => line.includes('📞')) || '';
+        const healthInfo = lines.find((line: string) => line.includes('🩺')) || '';
+        const temperamentInfo = lines.find((line: string) => line.includes('🧠')) || '';
+        const adoptionInfo = lines.find((line: string) => line.includes('🏡')) || '';
+        const contactInfo = lines.find((line: string) => line.includes('📞')) || '';
         
         return {
           id: service.id,
@@ -682,7 +682,8 @@ export default function PartnerServices() {
       router.push(`/chat/${conversationId}?petName=${petName}`);
     } catch (error) {
       console.error('Error starting adoption chat:', error);
-      Alert.alert('Error', `No se pudo iniciar la conversación: ${error?.message || error || 'Error desconocido'}`);
+      const message = error instanceof Error ? error.message : String(error);
+      Alert.alert('Error', `No se pudo iniciar la conversación: ${message || 'Error desconocido'}`);
     }
   };
 

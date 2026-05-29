@@ -111,7 +111,7 @@ const requireAdmin = async (supabase: any, req: Request) => {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("email, is_admin")
+    .select("is_admin")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -119,8 +119,7 @@ const requireAdmin = async (supabase: any, req: Request) => {
     throw new HttpError(500, `PROFILE_READ_FAILED: ${error.message}`);
   }
 
-  const email = String(profile?.email || user.email || "").toLowerCase();
-  const isAdmin = profile?.is_admin === true || email === "admin@dogcatify.com";
+  const isAdmin = profile?.is_admin === true;
 
   if (!isAdmin) {
     throw new HttpError(403, "ADMIN_REQUIRED");

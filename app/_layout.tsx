@@ -321,7 +321,7 @@ function RootLayout() {
     const [loadingSystemConfig, setLoadingSystemConfig] = useState(true);
     const [adminAccessRequested, setAdminAccessRequested] = useState(false);
 
-    const isAdminUser = currentUser?.isAdmin || currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
+    const isAdminUser = currentUser?.isAdmin === true;
 
     const loadRuntimeSystemConfig = async () => {
       try {
@@ -459,6 +459,8 @@ function RootLayout() {
         <Stack.Screen name="web-info" />
         <Stack.Screen name="auth/login" />
         <Stack.Screen name="auth/register" />
+        <Stack.Screen name="auth/become-partner" />
+        <Stack.Screen name="auth/select-role" />
         <Stack.Screen name="auth/forgot-password" />
         <Stack.Screen name="auth/confirm" />
         <Stack.Screen name="auth/biometric-setup" />
@@ -803,6 +805,7 @@ function RootLayout() {
                   <Stack.Screen name="web-info" />
                   <Stack.Screen name="auth/login" />
                   <Stack.Screen name="auth/register" />
+                  <Stack.Screen name="auth/become-partner" />
                   <Stack.Screen name="auth/forgot-password" />
                   <Stack.Screen name="auth/confirm" />
                   <Stack.Screen name="auth/biometric-setup" />

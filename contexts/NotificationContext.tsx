@@ -238,14 +238,16 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           });
           console.log('✅ Token obtained with explicit project ID');
         } catch (explicitError) {
-          console.log('❌ Failed with explicit project ID:', explicitError.message);
+          const explicitMessage = explicitError instanceof Error ? explicitError.message : String(explicitError);
+          console.log('❌ Failed with explicit project ID:', explicitMessage);
           console.log('Attempting without project ID...');
           
           try {
             tokenData = await Notifications.getExpoPushTokenAsync();
             console.log('✅ Token obtained without project ID');
           } catch (fallbackError) {
-            console.log('❌ Failed without project ID:', fallbackError.message);
+            const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+            console.log('❌ Failed without project ID:', fallbackMessage);
             throw fallbackError;
           }
         }
@@ -599,7 +601,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
 
         currentExpoToken = tokenData.data;
-        console.log('✅ Expo token actual:', currentExpoToken.substring(0, 30) + '...');
+        console.log('✅ Expo token actual:', currentExpoToken ? currentExpoToken.substring(0, 30) + '...' : 'null');
 
         if (currentExpoToken !== storedPushToken) {
           console.log('🔄 Expo token cambió, necesita actualización');

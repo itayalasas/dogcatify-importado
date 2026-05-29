@@ -202,7 +202,7 @@ export default function SelectDewormer() {
   const handleSelectDewormer = (dewormer: any) => {
     console.log('Navigating back with dewormer:', dewormer.name);
     router.replace({
-      pathname: returnPath,
+      pathname: returnPath as any,
       params: {
         selectedDewormer: JSON.stringify(dewormer),
         // Preserve other form values

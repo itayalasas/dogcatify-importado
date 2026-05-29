@@ -401,6 +401,14 @@ export default function Login() {
                 Registrate
               </Link>
             </Text>
+            <TouchableOpacity
+              style={styles.partnerButton}
+              onPress={() => router.push('/auth/become-partner')}
+            >
+              <Text style={styles.partnerText}>
+                ¿Sos aliado? <Text style={styles.partnerLink}>{t('becomePartner')}</Text>
+              </Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -623,6 +631,19 @@ const styles = StyleSheet.create({
   },
   link: {
     color: '#3B82F6',
+    fontFamily: 'Inter-SemiBold',
+  },
+  partnerButton: {
+    marginTop: 14,
+  },
+  partnerText: {
+    fontSize: 15,
+    color: '#6B7280',
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+  },
+  partnerLink: {
+    color: '#2D6A6F',
     fontFamily: 'Inter-SemiBold',
   },
   

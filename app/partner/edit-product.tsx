@@ -98,7 +98,7 @@ export default function EditProduct() {
   const handleSelectImages = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
         quality: 0.8,
         selectionLimit: 5 - existingImages.length,
@@ -119,7 +119,7 @@ export default function EditProduct() {
   const handleTakePhoto = async () => {
     try {
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
         allowsEditing: true,
         aspect: [4, 3],

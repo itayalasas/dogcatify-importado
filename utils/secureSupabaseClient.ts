@@ -25,9 +25,9 @@ const isJWTError = (error: any): boolean => {
 };
 
 export const withTokenValidation = async <T>(
-  operation: () => Promise<T>,
+  operation: () => T | Promise<T>,
   context = 'operation'
-): Promise<T> => {
+): Promise<Awaited<T>> => {
   try {
     const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
 
@@ -93,17 +93,14 @@ export const withTokenValidation = async <T>(
 
 export const secureSupabaseQuery = {
   from: (table: string) => {
-    const query = supabaseClient.from(table);
+    const query: any = supabaseClient.from(table);
 
     return {
       select: (columns?: string) => {
-        const selectQuery = query.select(columns);
-
         return {
-          ...selectQuery,
           execute: async () => {
             return withTokenValidation(
-              () => selectQuery,
+              async () => await query.select(columns),
               `select from ${table}`
             );
           },
@@ -111,13 +108,10 @@ export const secureSupabaseQuery = {
       },
 
       insert: (values: any) => {
-        const insertQuery = query.insert(values);
-
         return {
-          ...insertQuery,
           execute: async () => {
             return withTokenValidation(
-              () => insertQuery,
+              async () => await query.insert(values),
               `insert into ${table}`
             );
           },
@@ -125,13 +119,10 @@ export const secureSupabaseQuery = {
       },
 
       update: (values: any) => {
-        const updateQuery = query.update(values);
-
         return {
-          ...updateQuery,
           execute: async () => {
             return withTokenValidation(
-              () => updateQuery,
+              async () => await query.update(values),
               `update ${table}`
             );
           },
@@ -139,13 +130,10 @@ export const secureSupabaseQuery = {
       },
 
       delete: () => {
-        const deleteQuery = query.delete();
-
         return {
-          ...deleteQuery,
           execute: async () => {
             return withTokenValidation(
-              () => deleteQuery,
+              async () => await query.delete(),
               `delete from ${table}`
             );
           },

@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabaseClient } from '@/lib/supabase';
 import Constants from 'expo-constants';
 import { envConfig } from './envConfig';
 
@@ -34,7 +34,7 @@ export async function getAppConfig(forceRefresh = false): Promise<Record<string,
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('app_config')
       .select('key, value');
 

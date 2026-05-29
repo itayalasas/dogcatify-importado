@@ -444,7 +444,7 @@ export default function PartnerAgenda() {
       </View>
 
       <View style={styles.selectedDateInfo}>
-        <Text style={styles.selectedDateText}>
+        <Text style={styles.selectedDateInfoText}>
           {formatDate(selectedDate)}
         </Text>
         <Text style={styles.bookingsCount}>
@@ -586,7 +586,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  selectedDateText: {
+  selectedDateHeaderText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    textTransform: 'capitalize',
+  },
+  selectedDateInfoText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',

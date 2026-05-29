@@ -78,7 +78,7 @@ export default function AdminRequests() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (currentUser?.email?.toLowerCase() === 'admin@dogcatify.com') {
+    if (currentUser?.isAdmin === true) {
       logDebug('User is admin, fetching requests data...');
       fetchRequests();
     } else {
@@ -462,7 +462,7 @@ export default function AdminRequests() {
     </Card>
   );
 
-  const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
+  const isAdmin = currentUser?.isAdmin === true;
   if (!isAdmin) {
     return (
       <SafeAreaView style={styles.container}>

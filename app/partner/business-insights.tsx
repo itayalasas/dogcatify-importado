@@ -5,7 +5,12 @@ import { ArrowLeft, TrendingUp, Users, MapPin, Calendar, Target, Award, DollarSi
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
-import { canAccessPartnerModule, getPartnerLockedActionLabel, getPartnerPlan, resolvePartnerPlanTier } from '../../utils/partnerPlans';
+import {
+  canAccessPartnerModule,
+  getPartnerLockedActionLabel,
+  resolvePartnerAccountSubscription,
+  resolvePartnerPlanTier,
+} from '../../utils/partnerPlans';
 
 const { width } = Dimensions.get('window');
 
@@ -36,8 +41,26 @@ export default function BusinessInsights() {
   const [locationInsights, setLocationInsights] = useState<any>(null);
   const [accessDenied, setAccessDenied] = useState(false);
 
+  const loadAccountSubscription = async (userId?: string | null) => {
+    if (!userId) {
+      return null;
+    }
+
+    const { data, error } = await supabaseClient
+      .from('partners')
+      .select('subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
+      .eq('user_id', userId)
+      .eq('is_verified', true);
+
+    if (error) {
+      throw error;
+    }
+
+    return resolvePartnerAccountSubscription(data || []);
+  };
+
   useEffect(() => {
-    if (normalizedPartnerId) {
+    if (normalizedPartnerId && currentUser?.id) {
       setLoading(true);
       setAccessDenied(false);
       setInsights(null);
@@ -47,29 +70,44 @@ export default function BusinessInsights() {
       fetchBusinessInsights();
       fetchLocationBasedInsights();
     }
-  }, [normalizedPartnerId, selectedTimeRange]);
+  }, [normalizedPartnerId, selectedTimeRange, currentUser?.id]);
 
   const fetchPartnerProfile = async () => {
     try {
-      const { data, error } = await supabaseClient
-        .from('partners')
-        .select('*, subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
-        .eq('id', normalizedPartnerId)
-        .single();
+      const [{ data, error }, accountSubscription] = await Promise.all([
+        supabaseClient
+          .from('partners')
+          .select('*, subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
+          .eq('id', normalizedPartnerId)
+          .single(),
+        loadAccountSubscription(currentUser?.id),
+      ]);
       
       if (error) throw error;
+
+      const effectiveSubscriptionTier =
+        accountSubscription?.subscriptionPlanTier ||
+        resolvePartnerPlanTier(
+          data.subscription_plan_tier,
+          data.subscription_plan_status,
+          data.subscription_plan_expires_at,
+        );
+      const effectiveSubscriptionStatus =
+        accountSubscription?.subscriptionPlanStatus ||
+        data.subscription_plan_status ||
+        null;
+      const effectiveSubscriptionExpiresAt =
+        accountSubscription?.subscriptionPlanExpiresAt ||
+        data.subscription_plan_expires_at ||
+        null;
       
       setPartnerProfile({
         id: data.id,
         businessName: data.business_name,
         businessType: data.business_type,
-        subscriptionPlanTier: resolvePartnerPlanTier(
-          data.subscription_plan_tier,
-          data.subscription_plan_status,
-          data.subscription_plan_expires_at,
-        ),
-        subscriptionPlanStatus: data.subscription_plan_status || null,
-        subscriptionPlanExpiresAt: data.subscription_plan_expires_at || null,
+        subscriptionPlanTier: effectiveSubscriptionTier,
+        subscriptionPlanStatus: effectiveSubscriptionStatus,
+        subscriptionPlanExpiresAt: effectiveSubscriptionExpiresAt,
         address: data.address,
         logo: data.logo,
         rating: data.rating || 0,
@@ -98,24 +136,33 @@ export default function BusinessInsights() {
       console.log('Fetching location-based insights for partner:', partnerId);
       
       // 1. Obtener ubicación del negocio
-      const { data: partnerData, error: partnerError } = await supabaseClient
-        .from('partners')
-        .select('latitud, longitud, address, barrio, department_id, country_id, business_type, subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
-        .eq('id', normalizedPartnerId)
-        .single();
+      const [{ data: partnerData, error: partnerError }, accountSubscription] = await Promise.all([
+        supabaseClient
+          .from('partners')
+          .select('latitud, longitud, address, barrio, department_id, country_id, business_type, subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
+          .eq('id', normalizedPartnerId)
+          .single(),
+        loadAccountSubscription(currentUser?.id),
+      ]);
       
       if (partnerError) {
         console.error('Error fetching partner location:', partnerError);
         return;
       }
 
-      const planTier = partnerData?.subscription_plan_tier || 'starter';
+      const planTier =
+        accountSubscription?.subscriptionPlanTier ||
+        resolvePartnerPlanTier(
+          partnerData?.subscription_plan_tier,
+          partnerData?.subscription_plan_status,
+          partnerData?.subscription_plan_expires_at,
+        );
       if (!canAccessPartnerModule(
         planTier,
         'insights',
         partnerData?.business_type,
-        partnerData?.subscription_plan_status,
-        partnerData?.subscription_plan_expires_at,
+        accountSubscription?.subscriptionPlanStatus || partnerData?.subscription_plan_status,
+        accountSubscription?.subscriptionPlanExpiresAt || partnerData?.subscription_plan_expires_at,
       )) {
         setLocationInsights({
           nearbyPets: 0,
@@ -349,15 +396,26 @@ export default function BusinessInsights() {
     try {
       setLoading(true);
 
-      const { data: partnerTypeData } = await supabaseClient
-        .from('partners')
-        .select('business_type, subscription_plan_tier')
-        .eq('id', normalizedPartnerId)
-        .single();
+      const [{ data: partnerTypeData }, accountSubscription] = await Promise.all([
+        supabaseClient
+          .from('partners')
+          .select('business_type, subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
+          .eq('id', normalizedPartnerId)
+          .single(),
+        loadAccountSubscription(currentUser?.id),
+      ]);
 
       const businessType = partnerTypeData?.business_type || partnerProfile?.businessType;
-      const planTier = partnerTypeData?.subscription_plan_tier || partnerProfile?.subscriptionPlanTier || 'starter';
-      if (!canAccessPartnerModule(planTier, 'insights', businessType)) {
+      const planTier =
+        accountSubscription?.subscriptionPlanTier ||
+        resolvePartnerPlanTier(
+          partnerTypeData?.subscription_plan_tier,
+          partnerTypeData?.subscription_plan_status,
+          partnerTypeData?.subscription_plan_expires_at,
+        );
+      const subscriptionStatus = accountSubscription?.subscriptionPlanStatus || partnerTypeData?.subscription_plan_status || null;
+      const subscriptionExpiresAt = accountSubscription?.subscriptionPlanExpiresAt || partnerTypeData?.subscription_plan_expires_at || null;
+      if (!canAccessPartnerModule(planTier, 'insights', businessType, subscriptionStatus, subscriptionExpiresAt)) {
         setAccessDenied(true);
         setLoading(false);
         return;

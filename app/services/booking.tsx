@@ -387,7 +387,7 @@ export default function ServiceBooking() {
             customer_id: currentUser.id,
             customer_name: currentUser.displayName || currentUser.email,
             customer_email: currentUser.email,
-            customer_phone: currentUser.phoneNumber || null,
+            customer_phone: currentUser.phone || null,
             pet_id: petId,
             pet_name: pet.name,
             date: bookingDate.toISOString(),
@@ -404,16 +404,38 @@ export default function ServiceBooking() {
 
         // Send notification to partner
         try {
-          await NotificationService.sendNotification(
-            partnerId,
-            '🎉 Nueva Reserva',
-            `${currentUser.displayName || 'Un cliente'} ha reservado ${service.name} para el ${bookingDate.toLocaleDateString()}`,
-            {
-              type: 'booking',
-              bookingId: bookingData.id,
-              serviceId: serviceId
+          const { data: partnerUser, error: partnerUserError } = await supabaseClient
+            .from('partners')
+            .select('user_id')
+            .eq('id', partnerId)
+            .single();
+
+          if (partnerUserError || !partnerUser?.user_id) {
+            console.warn('No se pudo resolver el usuario del partner para notificar:', partnerUserError);
+          } else {
+            const { data: profileData, error: profileError } = await supabaseClient
+              .from('profiles')
+              .select('push_token, fcm_token')
+              .eq('id', partnerUser.user_id)
+              .single();
+
+            const pushToken = profileData?.fcm_token || profileData?.push_token;
+
+            if (profileError || !pushToken) {
+              console.warn('Partner sin token de notificación para reservas:', profileError);
+            } else {
+              await NotificationService.sendPushNotification(
+                pushToken,
+                '🎉 Nueva Reserva',
+                `${currentUser.displayName || 'Un cliente'} ha reservado ${service.name} para el ${bookingDate.toLocaleDateString()}`,
+                {
+                  type: 'booking',
+                  bookingId: bookingData.id,
+                  serviceId: serviceId
+                }
+              );
             }
-          );
+          }
         } catch (notifError) {
           console.error('Error sending notification:', notifError);
         }
@@ -425,7 +447,7 @@ export default function ServiceBooking() {
             {
               text: 'OK',
               onPress: () => {
-                router.replace('/(tabs)/');
+                router.replace('/(tabs)');
               }
             }
           ]

@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 type BillingCycle = "monthly" | "yearly";
+type UserSubscriptionStatus = "pending" | "trialing" | "active" | "paused" | "cancelled" | "expired" | "past_due";
 type MercadoPagoCredentialMode = "test" | "production";
 
 const MOBILE_APP_SCHEME = "dogcatify";
@@ -168,6 +169,18 @@ const toNumber = (value: unknown): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const isValidDate = (value?: string | null) => {
+  if (!value) return false;
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime());
+};
+
+const addDays = (date: string | Date, days: number) => {
+  const base = typeof date === "string" ? new Date(date) : new Date(date);
+  base.setDate(base.getDate() + days);
+  return base.toISOString();
+};
+
 const getCycleFields = (cycle: BillingCycle) => ({
   planId: cycle === "monthly" ? "mercadopago_monthly_plan_id" : "mercadopago_yearly_plan_id",
   initPoint: cycle === "monthly" ? "mercadopago_monthly_init_point" : "mercadopago_yearly_init_point",
@@ -189,6 +202,20 @@ const mapPreapprovalStatus = (status: string | null | undefined) => {
     default:
       return "pending";
   }
+};
+
+const resolveUserSubscriptionStatus = (subscription: any, mappedStatus: string | null | undefined): UserSubscriptionStatus => {
+  const normalizedStatus = mapPreapprovalStatus(mappedStatus) as UserSubscriptionStatus;
+  const trialEndsAt = isValidDate(subscription?.trial_ends_at) ? String(subscription.trial_ends_at) : null;
+  const stillInTrial = Boolean(
+    subscription?.trial_used &&
+    trialEndsAt &&
+    new Date(trialEndsAt).getTime() > Date.now(),
+  );
+
+  return stillInTrial && normalizedStatus === "active"
+    ? "trialing"
+    : normalizedStatus;
 };
 
 const normalizeHttpsBaseUrl = (value: unknown) => {
@@ -231,6 +258,9 @@ const getSubscriptionReturnUrl = (supabaseUrl?: string) => {
 
 const buildBackUrl = (subscriptionId: string, supabaseUrl?: string) => {
   const url = getSubscriptionReturnUrl(supabaseUrl);
+  if (normalizeHttpsBaseUrl(supabaseUrl)) {
+    url.pathname = `${url.pathname.replace(/\/+$/, "")}/user/${encodeURIComponent(subscriptionId)}`;
+  }
   url.searchParams.set("subscription_id", subscriptionId);
   url.searchParams.set("scope", "user");
   url.searchParams.set("target", buildMobileSubscriptionDeepLink(subscriptionId));
@@ -252,6 +282,21 @@ const getPreapprovalPayerEmail = (preapproval: any) => {
 
 const getSearchResults = (body: any) =>
   Array.isArray(body?.results) ? body.results : [];
+
+const hasUsedUserTrial = async (supabase: any, userId: string) => {
+  const { data, error } = await supabase
+    .from("user_subscriptions")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("trial_used", true)
+    .limit(1);
+
+  if (error) {
+    throw new HttpError(500, `USER_TRIAL_LOOKUP_FAILED: ${error.message}`);
+  }
+
+  return Array.isArray(data) && data.length > 0;
+};
 
 const findMercadoPagoPreapprovalForSubscription = async (
   accessToken: string,
@@ -324,8 +369,10 @@ const updateLocalSubscriptionFromPreapproval = async (
 ) => {
   const now = new Date().toISOString();
   const mappedStatus = mapPreapprovalStatus(preapproval?.status);
+  const resolvedStatus = resolveUserSubscriptionStatus(subscription, preapproval?.status);
+  const trialEndsAt = isValidDate(subscription?.trial_ends_at) ? String(subscription.trial_ends_at) : null;
   const updatePayload: Record<string, unknown> = {
-    status: mappedStatus,
+    status: resolvedStatus,
     crm_subscription_id: preapproval?.id || subscription.crm_subscription_id || null,
     mercadopago_preapproval_id: preapproval?.id || subscription.mercadopago_preapproval_id || null,
     mercadopago_preapproval_plan_id: preapproval?.preapproval_plan_id || subscription.mercadopago_preapproval_plan_id || null,
@@ -343,12 +390,16 @@ const updateLocalSubscriptionFromPreapproval = async (
     updated_at: now,
   };
 
-  if (mappedStatus === "active" && !subscription.started_at) {
+  if (resolvedStatus === "trialing" && !subscription.started_at) {
+    updatePayload.started_at = subscription.trial_started_at || preapproval?.date_created || now;
+  } else if (mappedStatus === "active" && !subscription.started_at) {
     updatePayload.started_at = preapproval?.date_created || now;
   }
 
   if (preapproval?.next_payment_date) {
     updatePayload.expires_at = preapproval.next_payment_date;
+  } else if (resolvedStatus === "trialing" && trialEndsAt) {
+    updatePayload.expires_at = trialEndsAt;
   }
 
   const { error } = await supabase
@@ -464,6 +515,9 @@ Deno.serve(async (req: Request) => {
     const price = toNumber(plan[fields.price]);
     const mpPlanId = String(plan[fields.planId] || "").trim();
     const planCheckoutUrl = String(plan[fields.initPoint] || "").trim();
+    const trialDays = Math.max(0, Math.trunc(Number(plan.trial_days || 0)));
+    const trialAlreadyUsed = await hasUsedUserTrial(supabase, user.id);
+    const canGrantTrial = trialDays > 0 && !trialAlreadyUsed;
     const now = new Date().toISOString();
 
     await supabase
@@ -523,8 +577,12 @@ Deno.serve(async (req: Request) => {
       .insert({
         user_id: user.id,
         plan_id: plan.id,
-        status: "pending",
+        status: canGrantTrial ? "trialing" : "pending",
         billing_cycle: billingCycle,
+        trial_days: trialDays,
+        trial_started_at: canGrantTrial ? now : null,
+        trial_ends_at: canGrantTrial ? addDays(now, trialDays) : null,
+        trial_used: canGrantTrial,
         mercadopago_preapproval_plan_id: mpPlanId,
         mercadopago_status: "pending",
         metadata: {
@@ -534,6 +592,8 @@ Deno.serve(async (req: Request) => {
           price,
           currency: plan.currency || "UYU",
           payer_email: payerEmail,
+          trial_days: trialDays,
+          trial_granted: canGrantTrial,
         },
       })
       .select("*")
@@ -542,6 +602,17 @@ Deno.serve(async (req: Request) => {
     if (subscriptionError || !localSubscription) {
       throw new HttpError(500, `SUBSCRIPTION_CREATE_FAILED: ${subscriptionError?.message || "unknown"}`);
     }
+
+    console.log("[CreateUserSubscription] Local subscription created", {
+      local_subscription_id: localSubscription.id,
+      user_id: user.id,
+      plan_id: plan.id,
+      plan_name: plan.name,
+      billing_cycle: billingCycle,
+      trial_granted: canGrantTrial,
+      payer_email: payerEmail,
+      mp_plan_id: mpPlanId,
+    });
 
     const mpConfig = await getAdminMercadoPagoConfig(supabase);
     console.log("create-user-subscription Mercado Pago config loaded:", {
@@ -571,20 +642,43 @@ Deno.serve(async (req: Request) => {
       },
     };
 
+    console.log("[CreateUserSubscription] Creating Mercado Pago preapproval", {
+      local_subscription_id: localSubscription.id,
+      external_reference: preapprovalPayload.external_reference,
+      notification_url: preapprovalPayload.notification_url,
+      back_url: preapprovalPayload.back_url,
+      payer_email: payerEmail,
+      billing_cycle: billingCycle,
+      transaction_amount: price,
+      currency_id: preapprovalPayload.auto_recurring.currency_id,
+    });
+
     try {
       const preapproval = await fetchMercadoPago(mpConfig.access_token, "/preapproval", {
         method: "POST",
         body: JSON.stringify(preapprovalPayload),
       });
 
+      console.log("[CreateUserSubscription] Mercado Pago preapproval response received", {
+        local_subscription_id: localSubscription.id,
+        mp_preapproval_id: preapproval?.id || null,
+        mp_status: preapproval?.status || null,
+        init_point: preapproval?.init_point || null,
+      });
+
       const mappedStatus = mapPreapprovalStatus(preapproval?.status);
+      const finalStatus = (canGrantTrial ? "trialing" : mappedStatus) as UserSubscriptionStatus;
       const updatePayload = {
-        status: mappedStatus,
+        status: finalStatus,
         crm_subscription_id: preapproval?.id || null,
         mercadopago_preapproval_id: preapproval?.id || null,
         mercadopago_status: preapproval?.status || "pending",
         payment_url: preapproval?.init_point || planCheckoutUrl || null,
-        started_at: mappedStatus === "active" ? now : null,
+        started_at: finalStatus === "trialing" ? localSubscription.trial_started_at || now : mappedStatus === "active" ? now : null,
+        trial_days: trialDays,
+        trial_started_at: localSubscription.trial_started_at || null,
+        trial_ends_at: localSubscription.trial_ends_at || null,
+        trial_used: canGrantTrial || Boolean(localSubscription.trial_used),
         last_synced_at: now,
         metadata: {
           ...(localSubscription.metadata || {}),
@@ -593,6 +687,8 @@ Deno.serve(async (req: Request) => {
             ...preapprovalPayload,
             payer_email: payerEmail,
           },
+          trial_days: trialDays,
+          trial_granted: canGrantTrial,
         },
         updated_at: now,
       };
@@ -608,10 +704,18 @@ Deno.serve(async (req: Request) => {
         throw new HttpError(500, `SUBSCRIPTION_UPDATE_FAILED: ${updateError.message}`);
       }
 
+      console.log("[CreateUserSubscription] Local subscription synced after preapproval create", {
+        local_subscription_id: updatedSubscription.id,
+        status: finalStatus,
+        mp_preapproval_id: preapproval?.id || null,
+        mp_status: preapproval?.status || null,
+        trial_granted: canGrantTrial,
+      });
+
       return jsonResponse({
         success: true,
         subscription: updatedSubscription,
-        status: mappedStatus,
+        status: finalStatus,
         paymentUrl: preapproval?.init_point || planCheckoutUrl || null,
       });
     } catch (mpError) {
@@ -619,10 +723,22 @@ Deno.serve(async (req: Request) => {
         throw mpError;
       }
 
+      console.warn("[CreateUserSubscription] Mercado Pago preapproval failed, using checkout fallback", {
+        local_subscription_id: localSubscription.id,
+        error: mpError instanceof Error ? mpError.message : String(mpError),
+        fallback_url: planCheckoutUrl,
+      });
+
       const { data: fallbackSubscription, error: fallbackError } = await supabase
         .from("user_subscriptions")
         .update({
+          status: canGrantTrial ? "trialing" : "pending",
           payment_url: planCheckoutUrl,
+          started_at: canGrantTrial ? localSubscription.trial_started_at || now : null,
+          trial_days: trialDays,
+          trial_started_at: localSubscription.trial_started_at || null,
+          trial_ends_at: localSubscription.trial_ends_at || null,
+          trial_used: canGrantTrial,
           metadata: {
             ...(localSubscription.metadata || {}),
             mp_plan_checkout_fallback: true,
@@ -631,6 +747,8 @@ Deno.serve(async (req: Request) => {
               ...preapprovalPayload,
               payer_email: payerEmail,
             },
+            trial_days: trialDays,
+            trial_granted: canGrantTrial,
           },
           updated_at: now,
         })
@@ -642,10 +760,16 @@ Deno.serve(async (req: Request) => {
         throw new HttpError(500, `SUBSCRIPTION_FALLBACK_UPDATE_FAILED: ${fallbackError.message}`);
       }
 
+      console.log("[CreateUserSubscription] Local subscription updated with checkout fallback", {
+        local_subscription_id: fallbackSubscription?.id || localSubscription.id,
+        fallback_url: planCheckoutUrl,
+        trial_granted: canGrantTrial,
+      });
+
       return jsonResponse({
         success: true,
         subscription: fallbackSubscription,
-        status: "pending",
+        status: canGrantTrial ? "trialing" : "pending",
         paymentUrl: planCheckoutUrl,
         fallback: true,
       });

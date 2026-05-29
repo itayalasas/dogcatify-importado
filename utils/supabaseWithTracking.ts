@@ -25,9 +25,8 @@ class TrackedSupabaseClient {
   /**
    * Proxy para operaciones con tracking
    */
-  from(table: string) {
-    const builder = this.client.from(table);
-    const startTime = Date.now();
+  from(table: string): any {
+    const builder: any = this.client.from(table);
 
     // Wrapper para cada método
     const wrapMethod = (method: string, originalFn: Function) => {
@@ -123,7 +122,7 @@ class TrackedSupabaseClient {
    * Auth con tracking
    */
   get auth() {
-    const originalAuth = this.client.auth;
+    const originalAuth: any = this.client.auth;
 
     return {
       ...originalAuth,
@@ -211,7 +210,7 @@ class TrackedSupabaseClient {
       },
 
       onAuthStateChange: (callback: any) => {
-        return originalAuth.onAuthStateChange((event, session) => {
+        return originalAuth.onAuthStateChange((event: any, session: any) => {
           logger.info('Auth: State Change', {
             event,
             hasSession: !!session,
@@ -226,7 +225,7 @@ class TrackedSupabaseClient {
    * Storage con tracking
    */
   get storage() {
-    const originalStorage = this.client.storage;
+    const originalStorage: any = this.client.storage;
 
     return {
       from: (bucket: string) => {
@@ -317,7 +316,7 @@ class TrackedSupabaseClient {
    * Acceso directo a funciones edge
    */
   get functions() {
-    const originalFunctions = this.client.functions;
+    const originalFunctions: any = this.client.functions;
 
     return {
       invoke: async (functionName: string, options?: any) => {

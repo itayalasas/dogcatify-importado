@@ -183,7 +183,6 @@ const styles = StyleSheet.create({
   },
   debugText: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
     color: '#6B7280',
     fontFamily: 'monospace',
   },

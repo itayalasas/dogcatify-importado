@@ -22,6 +22,85 @@ export interface EmailConfirmationToken {
   created_at: string;
 }
 
+type ProfileRoleFlags = {
+  isOwner: boolean;
+  isPartner: boolean;
+  isAdmin: boolean;
+};
+
+const parseMetadataBoolean = (value: any): boolean | undefined => {
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  return undefined;
+};
+
+const resolveProfileRoleFlagsFromMetadata = (
+  metadata: Record<string, any> | null | undefined,
+  existing?: Partial<ProfileRoleFlags> | null,
+): ProfileRoleFlags => {
+  const accountRole = String(metadata?.account_role || '').toLowerCase();
+  const explicitOwner = parseMetadataBoolean(metadata?.is_owner);
+  const explicitPartner = parseMetadataBoolean(metadata?.is_partner);
+  const explicitAdmin = parseMetadataBoolean(metadata?.is_admin);
+  const currentOwner = existing?.isOwner ?? true;
+  const currentPartner = existing?.isPartner ?? false;
+  const currentAdmin = existing?.isAdmin ?? false;
+
+  if (accountRole === 'partner') {
+    return {
+      isOwner: existing ? currentOwner : false,
+      isPartner: true,
+      isAdmin: explicitAdmin ?? currentAdmin,
+    };
+  }
+
+  if (accountRole === 'admin') {
+    return {
+      isOwner: explicitOwner ?? currentOwner,
+      isPartner: explicitPartner ?? currentPartner,
+      isAdmin: true,
+    };
+  }
+
+  if (accountRole === 'owner') {
+    return {
+      isOwner: true,
+      isPartner: existing ? currentPartner : false,
+      isAdmin: explicitAdmin ?? currentAdmin,
+    };
+  }
+
+  return {
+    isOwner: explicitOwner ?? currentOwner,
+    isPartner: explicitPartner ?? currentPartner,
+    isAdmin: explicitAdmin ?? currentAdmin,
+  };
+};
+
+const getRoleFlagsFromAuthUser = async (
+  serviceClient: any,
+  userId: string,
+  existing?: Partial<ProfileRoleFlags> | null,
+): Promise<ProfileRoleFlags> => {
+  try {
+    if (serviceClient?.auth?.admin?.getUserById) {
+      const { data, error } = await serviceClient.auth.admin.getUserById(userId);
+
+      if (!error && data?.user) {
+        return resolveProfileRoleFlagsFromMetadata(data.user.user_metadata, existing);
+      }
+    }
+  } catch (error) {
+    console.warn('Error resolving role flags from auth user, falling back to defaults:', error);
+  }
+
+  return {
+    isOwner: true,
+    isPartner: false,
+    isAdmin: false,
+  };
+};
+
 /**
  * Get service role client for admin operations
  */
@@ -161,11 +240,14 @@ export const confirmEmailCustom = async (
 
     // CRITICAL: Update user in auth.users to mark email as confirmed
     console.log('Updating user in auth.users to mark email as confirmed...');
+    const { data: authUserData } = await serviceClient.auth.admin.getUserById(anyTokenData.user_id);
+    const existingAuthMetadata = authUserData?.user?.user_metadata || {};
     const { error: authUpdateError } = await serviceClient.auth.admin.updateUserById(
       anyTokenData.user_id,
       { 
         email_confirm: true,
         user_metadata: {
+          ...existingAuthMetadata,
           email_confirmed: true,
           email_confirmed_at: new Date().toISOString()
         }
@@ -180,9 +262,30 @@ export const confirmEmailCustom = async (
       console.log('✅ User email confirmed in auth.users successfully');
     }
     // Update user profile to mark email as confirmed
+    const { data: existingProfile } = await serviceClient
+      .from('profiles')
+      .select('is_owner, is_partner, is_admin')
+      .eq('id', anyTokenData.user_id)
+      .maybeSingle();
+
+    const roleFlags = await getRoleFlagsFromAuthUser(
+      serviceClient,
+      anyTokenData.user_id,
+      existingProfile
+        ? {
+            isOwner: existingProfile.is_owner ?? true,
+            isPartner: existingProfile.is_partner ?? false,
+            isAdmin: existingProfile.is_admin ?? false,
+          }
+        : null,
+    );
+
     const { error: profileError } = await serviceClient
       .from('profiles')
       .update({
+        is_owner: roleFlags.isOwner,
+        is_partner: roleFlags.isPartner,
+        is_admin: roleFlags.isAdmin,
         email_confirmed: true,
         email_confirmed_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -244,6 +347,7 @@ export const completeUserRegistration = async (
     
     // Use service client to create profile
     const serviceClient = getServiceClient();
+    const roleFlags = await getRoleFlagsFromAuthUser(serviceClient, userId);
     
     // Create user profile
     const { error: profileError } = await serviceClient
@@ -252,8 +356,9 @@ export const completeUserRegistration = async (
         id: userId,
         email: email,
         display_name: displayName,
-        is_owner: true,
-        is_partner: false,
+        is_owner: roleFlags.isOwner,
+        is_partner: roleFlags.isPartner,
+        is_admin: roleFlags.isAdmin,
         email_confirmed: true,
         email_confirmed_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
@@ -393,11 +498,12 @@ export const sendWelcomeEmailAPI = async (
 export const resendConfirmationEmail = async (email: string): Promise<{ success: boolean; error?: string }> => {
   try {
     console.log('Resending confirmation email for:', email);
+    const serviceClient = getServiceClient();
 
     // First try to find user in profiles table
     const { data: profileData, error: profileError } = await supabaseClient
       .from('profiles')
-      .select('id, display_name')
+      .select('id, display_name, is_owner, is_partner, is_admin')
       .eq('email', email)
       .maybeSingle();
 
@@ -430,6 +536,7 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
       userId = foundUser.id;
       displayName = (foundUser.user_metadata?.full_name as string) || 'Usuario';
       console.log('Found user in auth.users:', userId);
+      const roleFlags = resolveProfileRoleFlagsFromMetadata(foundUser.user_metadata, null);
 
       // Create the missing profile
       console.log('Creating missing profile for user...');
@@ -439,8 +546,9 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
           id: userId,
           email: email,
           display_name: displayName,
-          is_owner: true,
-          is_partner: false,
+          is_owner: roleFlags.isOwner,
+          is_partner: roleFlags.isPartner,
+          is_admin: roleFlags.isAdmin,
           email_confirmed: false,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -456,10 +564,42 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
       }
     }
 
+    if (!userId) {
+      return { success: false, error: 'No se pudo determinar el usuario para reenviar la confirmación' };
+    }
+
+    try {
+      const roleFlags = await getRoleFlagsFromAuthUser(
+        serviceClient,
+        userId,
+        profileData
+          ? {
+              isOwner: profileData.is_owner ?? true,
+              isPartner: profileData.is_partner ?? false,
+              isAdmin: profileData.is_admin ?? false,
+            }
+          : null,
+      );
+      const { error: roleSyncError } = await serviceClient
+        .from('profiles')
+        .update({
+          is_owner: roleFlags.isOwner,
+          is_partner: roleFlags.isPartner,
+          is_admin: roleFlags.isAdmin,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
+
+      if (roleSyncError) {
+        console.warn('Could not sync profile role flags during resend:', roleSyncError);
+      }
+    } catch (syncError) {
+      console.warn('Could not sync profile role flags during resend:', syncError);
+    }
+
     console.log('Resending confirmation email for user:', userId);
 
     // Invalidate any existing signup tokens for this user
-    const serviceClient = getServiceClient();
     const { error: invalidateError } = await serviceClient
       .from('email_confirmations')
       .update({

@@ -7,10 +7,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { Button } from '../../components/ui/Button';
 import {
-  canAccessPartnerModule,
   getPartnerLockedActionLabel,
   getPartnerPlan,
+  PARTNER_PLAN_ORDER,
   resolvePartnerPlanTier,
+  resolvePartnerAccountSubscription,
 } from '../../utils/partnerPlans';
 
 type DateFilter = 'today' | 'week' | 'month' | 'all';
@@ -44,6 +45,7 @@ export default function PartnerDashboard() {
     averageRating: 0,
   });
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
+  const [partnerRows, setPartnerRows] = useState<any[]>([]);
   const [recentBookings, setRecentBookings] = useState<any[]>([]);
   const [processingOrdersPreview, setProcessingOrdersPreview] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +55,7 @@ export default function PartnerDashboard() {
   useEffect(() => {
     if (!currentUser?.id || !businessId) {
       setLoading(false);
+      setPartnerRows([]);
       console.log('Dashboard - Missing currentUser or businessId:', businessId);
       return;
     }
@@ -82,6 +85,14 @@ export default function PartnerDashboard() {
           };
           
           setPartnerProfile(partnerData);
+          const { data: accountPartnerRows, error: accountPartnersError } = await supabaseClient
+            .from('partners')
+            .select('subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
+            .eq('user_id', currentUser.id)
+            .eq('is_verified', true);
+
+          if (accountPartnersError) throw accountPartnersError;
+          setPartnerRows((accountPartnerRows || []) as any[]);
           fetchDashboardData(partnerData.id);
         }
       } catch (error) {
@@ -478,33 +489,19 @@ export default function PartnerDashboard() {
   const shouldShowAgenda = (): boolean => {
     return isFeatureEnabled('agenda') || ['veterinary', 'grooming', 'boarding'].includes(partnerProfile?.businessType);
   };
-  const effectivePartnerTier = resolvePartnerPlanTier(
+  const accountSubscription = resolvePartnerAccountSubscription(partnerRows);
+  const effectivePartnerTier = accountSubscription?.subscriptionPlanTier || resolvePartnerPlanTier(
     partnerProfile?.subscription_plan_tier,
     partnerProfile?.subscription_plan_status,
     partnerProfile?.subscription_plan_expires_at,
   );
+  const accountPlanIndex = PARTNER_PLAN_ORDER.indexOf(effectivePartnerTier);
+  const growthPlanIndex = PARTNER_PLAN_ORDER.indexOf('growth');
+  const proPlanIndex = PARTNER_PLAN_ORDER.indexOf('pro');
   const partnerPlan = getPartnerPlan(effectivePartnerTier);
-  const canViewClients = canAccessPartnerModule(
-    partnerProfile?.subscription_plan_tier,
-    'clients',
-    partnerProfile?.businessType,
-    partnerProfile?.subscription_plan_status,
-    partnerProfile?.subscription_plan_expires_at,
-  );
-  const canViewInsights = canAccessPartnerModule(
-    partnerProfile?.subscription_plan_tier,
-    'insights',
-    partnerProfile?.businessType,
-    partnerProfile?.subscription_plan_status,
-    partnerProfile?.subscription_plan_expires_at,
-  );
-  const canViewAdoptions = canAccessPartnerModule(
-    partnerProfile?.subscription_plan_tier,
-    'adoptions',
-    partnerProfile?.businessType,
-    partnerProfile?.subscription_plan_status,
-    partnerProfile?.subscription_plan_expires_at,
-  );
+  const canViewClients = accountPlanIndex >= growthPlanIndex;
+  const canViewInsights = accountPlanIndex >= growthPlanIndex;
+  const canViewAdoptions = accountPlanIndex >= proPlanIndex && partnerProfile?.businessType === 'shelter';
 
   const showPlanUpgradeAlert = (module: 'clients' | 'insights' | 'adoptions') => {
     Alert.alert(

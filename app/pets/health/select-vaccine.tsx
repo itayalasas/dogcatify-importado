@@ -193,7 +193,7 @@ export default function SelectVaccine() {
     }
 
     router.push({
-      pathname: returnPath,
+      pathname: returnPath as any,
       params: {
         selectedVaccine: JSON.stringify(vaccine),
         // Preserve other form values

@@ -45,7 +45,7 @@ const ZoomableImage = ({ uri, style, onDoubleTap }: { uri: string; style?: any; 
     .enableTrackpadTwoFingerGesture(true)
     .onTouchesDown((e) => {
       if (savedScale.value > 1) {
-        panGesture.activate();
+        (panGesture as any).activate();
       }
     })
     .onUpdate((e) => {
@@ -561,7 +561,7 @@ const PostCard: React.FC<PostCardProps> = ({
         }
         // Also check replies
         if (comment.replies && comment.replies.length > 0) {
-          const updatedReplies = comment.replies.map(reply => 
+          const updatedReplies = comment.replies.map((reply: any) => 
             reply.id === commentId 
               ? { ...reply, likes: newLikes }
               : reply
@@ -986,7 +986,7 @@ const PostCard: React.FC<PostCardProps> = ({
             
             {post.albumImages.length > 1 && (
               <View style={styles.albumPagination}>
-                {post.albumImages.map((_, index) => (
+                {post.albumImages.map((_: string, index: number) => (
                   <View 
                     key={index} 
                     style={[
@@ -1226,7 +1226,6 @@ const styles = StyleSheet.create({
   albumImageWrapper: {
     width: '100%',
     height: width,
-    width: width,
   },
   albumMainImage: {
     width: width,

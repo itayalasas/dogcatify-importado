@@ -34,8 +34,8 @@ export default function AddIllness() {
 
   const handleBackNavigation = () => {
     router.replace({
-      pathname: `/pets/${id}`,
-      params: { activeTab: 'health' }
+      pathname: '/pets/[id]',
+      params: { id, activeTab: 'health' }
     });
   };
   // Handle return parameters from selection screens

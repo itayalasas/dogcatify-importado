@@ -16,7 +16,7 @@ export default function HelpSupport() {
     const version = Constants.expoConfig?.version || '15.0.0';
     setAppVersion(version);
 
-    if (currentUser?.role === 'partner' || currentUser?.role === 'admin') {
+    if (currentUser?.isPartner || currentUser?.isAdmin) {
       setIsPartner(true);
     }
   }, [currentUser]);

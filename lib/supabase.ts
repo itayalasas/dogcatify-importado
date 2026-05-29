@@ -198,6 +198,58 @@ export const handleSupabaseError = (error: any) => {
 };
 
 // User profile functions
+type ProfileRoleFlags = {
+  isOwner: boolean;
+  isPartner: boolean;
+  isAdmin: boolean;
+};
+
+const parseMetadataBoolean = (value: any): boolean | undefined => {
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  return undefined;
+};
+
+const resolveProfileRoleFlags = (metadata: any, existing?: Partial<ProfileRoleFlags> | null): ProfileRoleFlags => {
+  const accountRole = String(metadata?.account_role || '').toLowerCase();
+  const explicitOwner = parseMetadataBoolean(metadata?.is_owner);
+  const explicitPartner = parseMetadataBoolean(metadata?.is_partner);
+  const explicitAdmin = parseMetadataBoolean(metadata?.is_admin);
+  const currentOwner = existing?.isOwner ?? true;
+  const currentPartner = existing?.isPartner ?? false;
+  const currentAdmin = existing?.isAdmin ?? false;
+
+  if (accountRole === 'partner') {
+    return {
+      isOwner: existing ? currentOwner : false,
+      isPartner: true,
+      isAdmin: explicitAdmin ?? currentAdmin,
+    };
+  }
+
+  if (accountRole === 'admin') {
+    return {
+      isOwner: explicitOwner ?? currentOwner,
+      isPartner: explicitPartner ?? currentPartner,
+      isAdmin: true,
+    };
+  }
+
+  if (accountRole === 'owner') {
+    return {
+      isOwner: true,
+      isPartner: existing ? currentPartner : false,
+      isAdmin: explicitAdmin ?? currentAdmin,
+    };
+  }
+
+  return {
+    isOwner: explicitOwner ?? currentOwner,
+    isPartner: explicitPartner ?? currentPartner,
+    isAdmin: explicitAdmin ?? currentAdmin,
+  };
+};
+
 export const getUserProfile = async (userId: string) => {
   try {
     const { data, error } = await supabaseClient
@@ -221,12 +273,14 @@ export const getUserProfile = async (userId: string) => {
       }
 
       // Create the missing profile
+      const roleFlags = resolveProfileRoleFlags(user?.user_metadata, null);
       const newProfile = {
         id: userId,
         email: user.email!,
         display_name: (user.user_metadata?.full_name as string) || user.email?.split('@')[0] || 'Usuario',
-        is_owner: true,
-        is_partner: false,
+        is_owner: roleFlags.isOwner,
+        is_partner: roleFlags.isPartner,
+        is_admin: roleFlags.isAdmin,
         email_confirmed: user.email_confirmed_at !== null,
         email_confirmed_at: user.email_confirmed_at,
         onboarding_completed: false,
@@ -251,6 +305,57 @@ export const getUserProfile = async (userId: string) => {
 
       console.log('Profile created successfully');
       return createdProfile;
+    }
+
+    // If the profile already exists, make sure its role matches the auth metadata
+    try {
+      const { data: authData } = await supabaseClient.auth.getUser();
+      const authUser = authData?.user;
+
+      if (authUser) {
+        const currentRoleFlags = {
+          isOwner: data.is_owner ?? true,
+          isPartner: data.is_partner ?? false,
+          isAdmin: data.is_admin ?? false,
+        };
+        const roleFlags = resolveProfileRoleFlags(authUser.user_metadata, currentRoleFlags);
+
+        if (
+          currentRoleFlags.isOwner !== roleFlags.isOwner ||
+          currentRoleFlags.isPartner !== roleFlags.isPartner ||
+          currentRoleFlags.isAdmin !== roleFlags.isAdmin
+        ) {
+          console.log('Syncing profile role flags with auth metadata for user:', userId);
+          const { data: updatedProfile, error: roleUpdateError } = await supabaseClient
+            .from('profiles')
+            .update({
+              is_owner: roleFlags.isOwner,
+              is_partner: roleFlags.isPartner,
+              is_admin: roleFlags.isAdmin,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', userId)
+            .select('*')
+            .single();
+
+          if (!roleUpdateError && updatedProfile) {
+            return updatedProfile;
+          }
+
+          if (roleUpdateError) {
+            console.warn('Could not sync profile role flags:', roleUpdateError);
+          }
+
+          return {
+            ...data,
+            is_owner: roleFlags.isOwner,
+            is_partner: roleFlags.isPartner,
+            is_admin: roleFlags.isAdmin,
+          };
+        }
+      }
+    } catch (syncError) {
+      console.warn('Error syncing profile role flags on fetch:', syncError);
     }
 
     return data;

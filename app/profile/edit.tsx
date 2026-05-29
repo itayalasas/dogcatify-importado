@@ -286,7 +286,7 @@ export default function EditProfile() {
     let barrioFound = '';
     
     // Buscar el índice del elemento que contiene la calle
-    const streetIndex = parts.findIndex(part => 
+    const streetIndex = parts.findIndex((part: string) => 
       part.toLowerCase().includes(calle.toLowerCase())
     );
     
@@ -490,8 +490,9 @@ export default function EditProfile() {
 
       await saveProfileData(photoURL);
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       console.error('Error in handleSaveProfile:', error);
-      Alert.alert('Error', `No se pudo actualizar el perfil: ${error.message || error}`);
+      Alert.alert('Error', `No se pudo actualizar el perfil: ${message}`);
     } finally {
       // ALWAYS clear loading state
       setLoading(false);
@@ -502,8 +503,9 @@ export default function EditProfile() {
     try {
       await saveProfileData(profileImage);
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       console.error('Error saving profile without image:', error);
-      Alert.alert('Error', `No se pudo actualizar el perfil: ${error.message || error}`);
+      Alert.alert('Error', `No se pudo actualizar el perfil: ${message}`);
     } finally {
       setLoading(false);
     }

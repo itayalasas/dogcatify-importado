@@ -12,7 +12,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { detectPetInVideo, validateVideoDuration } from '../../../utils/petDetection';
 import { envConfig } from '../../../utils/envConfig';
 import { resolveSubscriptionPlanLimits } from '../../../utils/subscriptionPlanLimits';
-import { Video } from 'expo-av';
+import { Video, ResizeMode } from 'expo-av';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
 
@@ -871,8 +871,8 @@ export default function AlbumDetail() {
           text: 'OK', 
           onPress: () => {
             router.push({
-              pathname: `/pets/${album.pet_id}`,
-              params: { refresh: 'true', activeTab: 'albums' }
+              pathname: '/pets/[id]',
+              params: { id: album.pet_id, refresh: 'true', activeTab: 'albums' }
             });
           } 
         }
@@ -1166,7 +1166,7 @@ export default function AlbumDetail() {
                     ref={videoRef}
                     source={{ uri: actualUrl }}
                     style={styles.fullscreenMedia}
-                    resizeMode="contain"
+                    resizeMode={ResizeMode.CONTAIN}
                     shouldPlay
                     isLooping
                     useNativeControls

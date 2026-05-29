@@ -372,7 +372,7 @@ export default function SubscriptionPlans() {
     partner_max_promotions: '',
   });
 
-  const isAdmin = currentUser?.isAdmin || currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
+  const isAdmin = currentUser?.isAdmin === true;
 
   useEffect(() => {
     if (isAdmin) {

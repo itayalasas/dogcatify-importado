@@ -21,6 +21,9 @@ interface Pet {
   name: string;
   breed: string;
   breed_info?: any;
+  species?: 'dog' | 'cat';
+  age?: number;
+  weight?: number;
 }
 
 interface BehaviorTrait {
@@ -441,8 +444,8 @@ export default function PetBehaviorAssessment() {
 
       Alert.alert('Éxito', 'Evaluación de comportamiento guardada correctamente');
       router.push({
-        pathname: `/pets/${pet.id}`,
-        params: { refresh: 'true', activeTab: 'behavior' }
+        pathname: '/pets/[id]',
+        params: { id: pet.id, refresh: 'true', activeTab: 'behavior' }
       });
     } catch (error) {
       console.error('Error saving assessment:', error);

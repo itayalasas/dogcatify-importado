@@ -131,7 +131,7 @@ export default function SelectCondition() {
   const handleSelectCondition = (condition: any) => {
     console.log('Navigating back with condition:', condition.name);
     router.replace({
-      pathname: returnPath,
+      pathname: returnPath as any,
       params: {
         selectedCondition: JSON.stringify(condition),
         ...(currentTreatment && { currentTreatment }),

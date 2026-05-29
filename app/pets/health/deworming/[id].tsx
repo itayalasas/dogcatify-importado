@@ -428,8 +428,8 @@ export default function AddDeworming() {
 
       Alert.alert('Éxito', 'Desparasitación guardada correctamente', [
         { text: 'OK', onPress: () => router.replace({
-          pathname: `/pets/${id}`,
-          params: { activeTab: 'health' }
+          pathname: '/pets/[id]',
+          params: { id, activeTab: 'health' }
         }) }
       ]);
     } catch (error) {
@@ -442,8 +442,8 @@ export default function AddDeworming() {
 
   const handleBackNavigation = () => {
     router.replace({
-      pathname: `/pets/${id}`,
-      params: { activeTab: 'health' }
+      pathname: '/pets/[id]',
+      params: { id, activeTab: 'health' }
     });
   };
 
@@ -683,8 +683,8 @@ export default function AddDeworming() {
           {
             text: 'OK',
             onPress: () => router.replace({
-              pathname: `/pets/${id}`,
-              params: { activeTab: 'health' }
+              pathname: '/pets/[id]',
+              params: { id, activeTab: 'health' }
             })
           }
         ]
@@ -1030,6 +1030,15 @@ const styles = StyleSheet.create({
   placeholderText: {
     color: '#9CA3AF',
   },
+  addTempVetButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+  },
+  addTempVetText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#3B82F6',
+  },
   dateInputContainer: {
     marginBottom: 14,
   },
@@ -1055,46 +1064,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#111827',
     marginLeft: 10,
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  inputLabel: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 6,
-  },
-  selectableInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    minHeight: 50,
-    marginBottom: 8,
-  },
-  selectableInputText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    flex: 1,
-  },
-  placeholderText: {
-    color: '#9CA3AF',
-  },
-  addTempVetButton: {
-    alignSelf: 'flex-start',
-    paddingVertical: 8,
-  },
-  addTempVetText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
   },
   modalOverlay: {
     flex: 1,

@@ -34,14 +34,14 @@ export const ProtectedScreen: React.FC<ProtectedScreenProps> = ({
         if (requireAuth && !currentUser) {
           console.log('ProtectedScreen: No user, redirecting to login');
           setIsValid(false);
-          router.replace(redirectTo);
+          router.replace(redirectTo as any);
           return;
         }
 
         if (requirePartner && currentUser && !currentUser.isPartner) {
           console.log('ProtectedScreen: User is not a partner, redirecting');
           setIsValid(false);
-          router.replace('/(tabs)');
+          router.replace('/(tabs)' as any);
           return;
         }
 
@@ -52,7 +52,7 @@ export const ProtectedScreen: React.FC<ProtectedScreenProps> = ({
           if (!tokenValid) {
             console.log('ProtectedScreen: Token invalid, redirecting to login');
             setIsValid(false);
-            router.replace(redirectTo);
+            router.replace(redirectTo as any);
             return;
           }
 

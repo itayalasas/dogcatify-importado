@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
-import { ArrowLeft, Building, Settings, Calendar, Package, Users, Heart, Check } from 'lucide-react-native';
+import { Building, Settings, Calendar, Package, Users, Heart, Check } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingScreen } from '../../components/ui/LoadingScreen';
@@ -16,6 +16,7 @@ import {
   normalizePartnerPlanTier,
   resolvePartnerPlanTier,
 } from '../../utils/partnerPlans';
+import { setStoredActivePartnerBusinessId } from '../../utils/onboarding';
 
 interface Business {
   id: string;
@@ -33,13 +34,79 @@ interface Business {
   };
 }
 
+type AccountSubscriptionSummary = {
+  subscriptionPlanTier: string;
+  subscriptionPlanStatus: string | null;
+  subscriptionPlanExpiresAt: string | null;
+};
+
+const PARTNER_PLAN_ORDER: Array<'starter' | 'growth' | 'pro'> = ['starter', 'growth', 'pro'];
+
+const isCurrentPartnerSubscription = (status?: string | null, expiresAt?: string | null) => {
+  const normalizedStatus = String(status || '').toLowerCase();
+  const expiresTimestamp = expiresAt ? new Date(expiresAt).getTime() : null;
+  const hasFutureAccess = expiresTimestamp !== null && !Number.isNaN(expiresTimestamp) && expiresTimestamp > Date.now();
+
+  return (
+    normalizedStatus === 'pending' ||
+    normalizedStatus === 'trialing' ||
+    normalizedStatus === 'active' ||
+    normalizedStatus === 'paused' ||
+    (normalizedStatus === 'cancelled' && hasFutureAccess)
+  );
+};
+
+const resolveAccountSubscriptionFromBusinesses = (partners: Business[]): AccountSubscriptionSummary | null => {
+  if (!partners.length) {
+    return null;
+  }
+
+  const ranked = partners.map((row) => {
+    const resolvedTier = resolvePartnerPlanTier(
+      row.subscriptionPlanTier,
+      row.subscriptionPlanStatus,
+      row.subscriptionPlanExpiresAt,
+    ) as 'starter' | 'growth' | 'pro';
+
+    return {
+      row,
+      resolvedTier,
+      resolvedIndex: PARTNER_PLAN_ORDER.indexOf(resolvedTier),
+      isCurrent: isCurrentPartnerSubscription(row.subscriptionPlanStatus, row.subscriptionPlanExpiresAt),
+    };
+  });
+
+  const currentRows = ranked.some((item) => item.isCurrent)
+    ? ranked.filter((item) => item.isCurrent)
+    : ranked;
+
+  const best = currentRows.reduce((winner, item) => {
+    if (!winner) return item;
+    if (item.resolvedIndex > winner.resolvedIndex) return item;
+    return winner;
+  }, null as typeof ranked[number] | null);
+
+  if (!best) {
+    return null;
+  }
+
+  return {
+    subscriptionPlanTier: best.resolvedTier,
+    subscriptionPlanStatus: best.row.subscriptionPlanStatus || null,
+    subscriptionPlanExpiresAt: best.row.subscriptionPlanExpiresAt || null,
+  };
+};
+
 export default function BusinessSelector() {
   const { currentUser } = useAuth();
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      setLoading(false);
+      return;
+    }
 
     const fetchBusinesses = async () => {
       try {
@@ -94,6 +161,8 @@ export default function BusinessSelector() {
       subscription.unsubscribe();
     };
   }, [currentUser]);
+
+  const accountSubscription = resolveAccountSubscriptionFromBusinesses(businesses);
 
   const getBusinessTypeConfig = (type: string) => {
     switch (type) {
@@ -168,9 +237,13 @@ export default function BusinessSelector() {
     }
   };
 
-  const handleSelectBusiness = (business: Business) => {
+  const handleSelectBusiness = async (business: Business) => {
     // Navegar al dashboard específico del negocio
-    router.push({
+    if (currentUser?.id) {
+      await setStoredActivePartnerBusinessId(currentUser.id, business.id);
+    }
+
+    router.replace({
       pathname: '/(partner-tabs)/dashboard', 
       params: {  
         businessId: business.id, 
@@ -266,13 +339,15 @@ export default function BusinessSelector() {
       }
 
       if (!currentValue && featureKey === 'adoptions') {
-        const planTier = normalizePartnerPlanTier(currentBusiness.subscriptionPlanTier);
+        const planTier = normalizePartnerPlanTier(
+          accountSubscription?.subscriptionPlanTier || currentBusiness.subscriptionPlanTier,
+        );
         if (!canAccessPartnerModule(
           planTier,
           'adoptions',
           currentBusiness.businessType,
-          currentBusiness.subscriptionPlanStatus,
-          currentBusiness.subscriptionPlanExpiresAt,
+          accountSubscription?.subscriptionPlanStatus || currentBusiness.subscriptionPlanStatus,
+          accountSubscription?.subscriptionPlanExpiresAt || currentBusiness.subscriptionPlanExpiresAt,
         )) {
           Alert.alert(
             'Plan requerido',
@@ -313,13 +388,15 @@ export default function BusinessSelector() {
       }
 
       if (!currentValue && featureKey === 'adoptions') {
-        const planTier = normalizePartnerPlanTier(currentBusiness.subscriptionPlanTier);
+        const planTier = normalizePartnerPlanTier(
+          accountSubscription?.subscriptionPlanTier || currentBusiness.subscriptionPlanTier,
+        );
         if (!canAccessPartnerModule(
           planTier,
           'adoptions',
           currentBusiness.businessType,
-          currentBusiness.subscriptionPlanStatus,
-          currentBusiness.subscriptionPlanExpiresAt,
+          accountSubscription?.subscriptionPlanStatus || currentBusiness.subscriptionPlanStatus,
+          accountSubscription?.subscriptionPlanExpiresAt || currentBusiness.subscriptionPlanExpiresAt,
         )) {
           throw new Error('PLAN_REQUIRED:adoptions');
         }
@@ -388,9 +465,7 @@ export default function BusinessSelector() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
+          <View style={styles.placeholder} />
           <Text style={styles.title}>Mis Negocios</Text>
           <View style={styles.placeholder} />
         </View>
@@ -414,9 +489,7 @@ export default function BusinessSelector() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
+        <View style={styles.placeholder} />
         <Text style={styles.title}>Seleccionar Negocio</Text>
         <View style={styles.placeholder} />
       </View>
@@ -428,15 +501,25 @@ export default function BusinessSelector() {
 
         {businesses.map((business) => {
           const config = getBusinessTypeConfig(business.businessType);
+          const subscriptionPlanTier = accountSubscription?.subscriptionPlanTier || business.subscriptionPlanTier;
+          const subscriptionPlanStatus = accountSubscription?.subscriptionPlanStatus || business.subscriptionPlanStatus;
+          const subscriptionPlanExpiresAt = accountSubscription?.subscriptionPlanExpiresAt || business.subscriptionPlanExpiresAt;
           const effectiveTier = resolvePartnerPlanTier(
-            business.subscriptionPlanTier,
-            business.subscriptionPlanStatus,
-            business.subscriptionPlanExpiresAt,
+            subscriptionPlanTier,
+            subscriptionPlanStatus,
+            subscriptionPlanExpiresAt,
           );
           const plan = getPartnerPlan(effectiveTier);
           const statusLabel = getPartnerSubscriptionStatusLabel(
-            business.subscriptionPlanStatus,
-            business.subscriptionPlanExpiresAt,
+            subscriptionPlanStatus,
+            subscriptionPlanExpiresAt,
+          );
+          const canAccessAdoptions = canAccessPartnerModule(
+            subscriptionPlanTier,
+            'adoptions',
+            business.businessType,
+            subscriptionPlanStatus,
+            subscriptionPlanExpiresAt,
           );
           
           return (
@@ -477,13 +560,7 @@ export default function BusinessSelector() {
                           {feature.name}
                         </Text>
                         <Text style={styles.featureDescription}>{feature.description}</Text>
-                        {feature.key === 'adoptions' && !canAccessPartnerModule(
-                          business.subscriptionPlanTier,
-                          'adoptions',
-                          business.businessType,
-                          business.subscriptionPlanStatus,
-                          business.subscriptionPlanExpiresAt,
-                        ) && (
+                        {feature.key === 'adoptions' && !canAccessAdoptions && (
                           <Text style={styles.featureLockedText}>
                             {getPartnerLockedActionLabel('adoptions')}
                           </Text>
@@ -495,13 +572,7 @@ export default function BusinessSelector() {
                       style={[
                         styles.featureToggle,
                         business.features[feature.key as keyof typeof business.features] && styles.featureToggleActive,
-                        feature.key === 'adoptions' && !canAccessPartnerModule(
-                          business.subscriptionPlanTier,
-                          'adoptions',
-                          business.businessType,
-                          business.subscriptionPlanStatus,
-                          business.subscriptionPlanExpiresAt,
-                        )
+                        feature.key === 'adoptions' && !canAccessAdoptions
                           ? styles.featureToggleLocked
                           : null
                       ]}
@@ -533,7 +604,7 @@ export default function BusinessSelector() {
             </Text>
             <Button
               title="Registrar Otro Negocio"
-              onPress={() => router.push('/(tabs)/partner-register')}
+              onPress={() => router.push('/partner-register')}
               variant="outline"
               size="medium"
             />
@@ -559,9 +630,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
-  },
-  backButton: {
-    padding: 6,
   },
   title: {
     fontSize: 18,

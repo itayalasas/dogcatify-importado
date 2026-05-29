@@ -42,19 +42,13 @@ const getAuthUser = async (supabase: any, req: Request) => {
 };
 
 const isAdminUser = async (supabase: any, userId: string, email?: string | null) => {
-  const normalizedEmail = String(email || "").toLowerCase();
-
-  if (normalizedEmail === "admin@dogcatify.com") {
-    return true;
-  }
-
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_admin, email")
+    .select("is_admin")
     .eq("id", userId)
     .maybeSingle();
 
-  return profile?.is_admin === true || String(profile?.email || normalizedEmail).toLowerCase() === "admin@dogcatify.com";
+  return profile?.is_admin === true;
 };
 
 const requirePartnerAccess = async (supabase: any, user: any, partnerId: string) => {

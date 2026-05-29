@@ -1,45 +1,95 @@
 import { Tabs } from 'expo-router';
-import { ChartBar as BarChart3, ArrowLeft, Building, ShoppingBag, Calendar } from 'lucide-react-native';
+import { ChartBar as BarChart3, Building, ShoppingBag, Calendar, User, CreditCard } from 'lucide-react-native';
 import { MessageCircle } from 'lucide-react-native';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { TouchableOpacity, View, Text, ActivityIndicator, Platform } from 'react-native';
+import { TouchableOpacity, View, Text, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, usePathname } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { supabaseClient } from '../../lib/supabase';
 import { LoadingScreen } from '../../components/ui/LoadingScreen';
-import { canAccessPartnerModule, resolvePartnerPlanTier } from '../../utils/partnerPlans';
+import { canAccessPartnerModule, resolvePartnerAccountSubscription, resolvePartnerPlanTier } from '../../utils/partnerPlans';
+import { getAvailableRoles, getStoredActivePartnerBusinessId, setStoredActivePartnerBusinessId } from '../../utils/onboarding';
 
 export default function PartnerTabLayout() {
   const { t } = useLanguage();
-  const { currentUser, authInitialized } = useAuth();
-  const { businessId } = useLocalSearchParams<{ businessId: string }>();
+  const { currentUser, authInitialized, activeRole, isPostLoginFlowPending } = useAuth();
+  const { businessId } = useLocalSearchParams<{ businessId?: string }>();
+  const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const [partnerProfile, setPartnerProfile] = useState<any | null>(null);
+  const [partnerRows, setPartnerRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasActiveSchedule, setHasActiveSchedule] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
+  const availableRoles = getAvailableRoles(currentUser);
+  const hasMultipleRoles = availableRoles.length > 1;
+  const isAdminUser = currentUser?.isAdmin === true;
+  const isOwnerOnly = !!currentUser?.isOwner && !currentUser?.isPartner && !isAdminUser;
+  const isAdminOnly = isAdminUser && !currentUser?.isOwner && !currentUser?.isPartner;
+  const activeBusinessId = businessId || selectedBusinessId || null;
+  const hasSelectedBusiness = Boolean(activeBusinessId);
 
   useEffect(() => {
     if (authInitialized && !currentUser) {
       console.log('User not authenticated in partner tabs, redirecting to login');
-      router.replace('/auth/login');
+      if (pathname !== '/auth/login') {
+        router.replace('/auth/login');
+      }
     }
-  }, [currentUser, authInitialized]);
+  }, [currentUser, authInitialized, pathname]);
 
-  const handleBackToUser = () => {
-    router.replace('/(tabs)');
-  };
+  useEffect(() => {
+    if (!authInitialized || !currentUser || isPostLoginFlowPending) return;
+
+    if (activeRole === 'owner' || isOwnerOnly) {
+      router.replace('/(tabs)');
+      return;
+    }
+
+    if (activeRole === 'admin' || isAdminOnly) {
+      router.replace('/(admin-tabs)/analytics');
+      return;
+    }
+
+    if (!activeRole && hasMultipleRoles) {
+      router.replace('/auth/select-role');
+    }
+  }, [authInitialized, currentUser?.id, currentUser?.isOwner, currentUser?.isPartner, currentUser?.isAdmin, activeRole, hasMultipleRoles, isPostLoginFlowPending]);
 
   useEffect(() => {
     if (!authInitialized) return;
 
-    if (businessId && currentUser) {
+    if (!currentUser?.id) {
+      setSelectedBusinessId(null);
+      setPartnerRows([]);
+      return;
+    }
+
+    const resolveSelectedBusiness = async () => {
+      if (businessId) {
+        setSelectedBusinessId(businessId);
+        await setStoredActivePartnerBusinessId(currentUser.id, businessId);
+        return;
+      }
+
+      const storedBusinessId = await getStoredActivePartnerBusinessId(currentUser.id);
+      setSelectedBusinessId(storedBusinessId);
+    };
+
+    void resolveSelectedBusiness();
+  }, [businessId, currentUser?.id, authInitialized]);
+
+  useEffect(() => {
+    if (!authInitialized) return;
+
+    if (activeBusinessId && currentUser) {
       setLoading(true);
       setAccessDenied(false);
-      fetchPartnerProfile(businessId as string);
-      console.log('PartnerTabLayout - Fetching profile for business ID:', businessId);
+      fetchPartnerProfile(activeBusinessId);
+      console.log('PartnerTabLayout - Fetching profile for business ID:', activeBusinessId);
     } else {
       setPartnerProfile(null);
       setHasActiveSchedule(false);
@@ -47,7 +97,7 @@ export default function PartnerTabLayout() {
       setLoading(false);
       console.log('PartnerTabLayout - No business ID provided');
     }
-  }, [businessId, currentUser?.id, authInitialized]);
+  }, [activeBusinessId, currentUser?.id, authInitialized]);
 
   const fetchPartnerProfile = async (businessId: string) => {
     try {
@@ -69,7 +119,7 @@ export default function PartnerTabLayout() {
       }
       
       if (partnerDoc) {
-        const isAdmin = currentUser.isAdmin || currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
+        const isAdmin = currentUser.isAdmin === true;
         const isOwner = partnerDoc.user_id === currentUser.id;
 
         if (!isOwner && !isAdmin) {
@@ -85,6 +135,17 @@ export default function PartnerTabLayout() {
           ...partnerDoc
         };
         setPartnerProfile(profileData);
+        const { data: accountPartnerRows, error: accountPartnersError } = await supabaseClient
+          .from('partners')
+          .select('subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
+          .eq('user_id', currentUser.id)
+          .eq('is_verified', true);
+
+        if (accountPartnersError) {
+          throw accountPartnersError;
+        }
+
+        setPartnerRows((accountPartnerRows || []) as any[]);
         console.log('PartnerTabLayout - Profile loaded:', profileData.business_name);
         console.log('PartnerTabLayout - Business type:', profileData.business_type);
         
@@ -125,12 +186,30 @@ export default function PartnerTabLayout() {
     }
   };
 
-  if (loading || !authInitialized) {
+  if (isPostLoginFlowPending) {
+    return <LoadingScreen message="Preparando tu inicio..." />;
+  }
+  
+  if (!authInitialized) {
     return <LoadingScreen message="Cargando perfil de negocio..." />;
   }
   
   // Don't render if not authenticated
-  if (!currentUser) {
+  if (authInitialized && !currentUser) {
+    return <LoadingScreen message="Cerrando sesión..." />;
+  }
+
+  if (
+    authInitialized &&
+    currentUser &&
+    (
+      activeRole === 'owner' ||
+      activeRole === 'admin' ||
+      isOwnerOnly ||
+      isAdminOnly ||
+      (!activeRole && hasMultipleRoles)
+    )
+  ) {
     return null;
   }
 
@@ -177,7 +256,7 @@ export default function PartnerTabLayout() {
             fontFamily: 'Inter-SemiBold',
             fontSize: 15,
           }}>
-            Volver a mis negocios
+            Seleccionar negocio
           </Text>
         </TouchableOpacity>
       </View>
@@ -186,17 +265,18 @@ export default function PartnerTabLayout() {
 
   const businessType = partnerProfile?.business_type || '';
   const features = partnerProfile?.features || {};
-  const effectivePartnerTier = resolvePartnerPlanTier(
+  const accountSubscription = resolvePartnerAccountSubscription(partnerRows);
+  const effectivePartnerTier = accountSubscription?.subscriptionPlanTier || resolvePartnerPlanTier(
     partnerProfile?.subscription_plan_tier,
     partnerProfile?.subscription_plan_status,
     partnerProfile?.subscription_plan_expires_at,
   );
   const canAccessAdoptions = canAccessPartnerModule(
-    effectivePartnerTier,
+    accountSubscription?.subscriptionPlanTier || effectivePartnerTier,
     'adoptions',
     businessType,
-    partnerProfile?.subscription_plan_status,
-    partnerProfile?.subscription_plan_expires_at,
+    accountSubscription?.subscriptionPlanStatus || partnerProfile?.subscription_plan_status,
+    accountSubscription?.subscriptionPlanExpiresAt || partnerProfile?.subscription_plan_expires_at,
   );
   
   const hasProductsEnabled = features.products || businessType === 'shop';
@@ -249,8 +329,45 @@ export default function PartnerTabLayout() {
         name="dashboard"
         options={{
           title: 'Dashboard',
+          tabBarButton: (props: any) => {
+            const { children, style, ...rest } = props;
+
+            return (
+              <TouchableOpacity
+                {...rest}
+                onPress={() => {
+                  if (!hasSelectedBusiness) {
+                    return;
+                  }
+
+                  router.replace({
+                    pathname: '/(partner-tabs)/dashboard',
+                    params: { businessId: activeBusinessId as string },
+                  });
+                }}
+                disabled={!hasSelectedBusiness}
+                style={[
+                  style,
+                  {
+                    opacity: hasSelectedBusiness ? 1 : 0.35,
+                  },
+                ]}
+              >
+                {children}
+              </TouchableOpacity>
+            );
+          },
           tabBarIcon: ({ size, color }) => (
             <BarChart3 size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="mercado-pago"
+        options={{
+          title: 'Mercado Pago',
+          tabBarIcon: ({ size, color }) => (
+            <CreditCard size={size} color={color} />
           ),
         }}
       />
@@ -258,8 +375,8 @@ export default function PartnerTabLayout() {
         name="bookings"
         options={{
           title: 'Reservas',
-          href: hasActiveSchedule && partnerProfile
-            ? { pathname: '/bookings', params: { businessId } }
+          href: hasActiveSchedule && partnerProfile && activeBusinessId
+            ? { pathname: '/bookings', params: { businessId: activeBusinessId } }
             : null,
           tabBarIcon: ({ size, color }) => (
             <Calendar size={size} color={color} />
@@ -270,8 +387,8 @@ export default function PartnerTabLayout() {
         name="products"
         options={{
           title: 'Productos', 
-          href: (businessType === 'shop' || hasProductsEnabled) && partnerProfile
-            ? { pathname: '/products', params: { businessId } }
+          href: (businessType === 'shop' || hasProductsEnabled) && partnerProfile && activeBusinessId
+            ? { pathname: '/products', params: { businessId: activeBusinessId } }
             : null,
           tabBarIcon: ({ size, color }) => (
             <ShoppingBag size={size} color={color} />
@@ -282,8 +399,8 @@ export default function PartnerTabLayout() {
         name="chat-contacts"
         options={{
           title: 'Contactos',
-          href: partnerProfile?.business_type === 'shelter' && canAccessAdoptions && partnerProfile
-            ? { pathname: '/chat-contacts', params: { businessId } }
+          href: partnerProfile?.business_type === 'shelter' && canAccessAdoptions && partnerProfile && activeBusinessId
+            ? { pathname: '/chat-contacts', params: { businessId: activeBusinessId } }
             : null,
           tabBarIcon: ({ size, color }) => (
             <MessageCircle size={size} color={color} />
@@ -291,18 +408,12 @@ export default function PartnerTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="back-to-user"
+        name="profile"
         options={{
-          title: 'Volver',
+          title: 'Perfil',
           tabBarIcon: ({ size, color }) => (
-            <ArrowLeft size={size} color={color} />
+            <User size={size} color={color} />
           ),
-        }}
-        listeners={{
-          tabPress: (e) => {
-            e.preventDefault();
-            handleBackToUser();
-          },
         }}
       />
     </Tabs>

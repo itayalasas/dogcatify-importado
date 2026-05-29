@@ -101,10 +101,22 @@ export default function PaymentFailure() {
         for (const item of order.items) {
           if (item.type !== 'service' && item.id) {
             // Only restore stock for products, not services
+            const { data: productData, error: productFetchError } = await supabaseClient
+              .from('partner_products')
+              .select('stock')
+              .eq('id', item.id)
+              .maybeSingle();
+
+            if (productFetchError) {
+              console.error(`Error fetching stock for product ${item.id}:`, productFetchError);
+              continue;
+            }
+
+            const currentStock = Number(productData?.stock || 0);
             const { error: stockError } = await supabaseClient
               .from('partner_products')
               .update({
-                stock: supabaseClient.raw(`stock + ${item.quantity || 1}`),
+                stock: currentStock + Number(item.quantity || 1),
                 updated_at: new Date().toISOString()
               })
               .eq('id', item.id);

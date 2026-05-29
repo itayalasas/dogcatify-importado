@@ -75,7 +75,7 @@ export default function AdminPlaces() {
 
   useEffect(() => {
     if (!currentUser) return;
-    const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
+    const isAdmin = currentUser?.isAdmin === true;
     if (!isAdmin) return;
     fetchPlaces();
   }, [currentUser]);
@@ -293,7 +293,7 @@ export default function AdminPlaces() {
     ));
   };
 
-  if (!currentUser || currentUser.email?.toLowerCase() !== 'admin@dogcatify.com') {
+  if (!currentUser?.isAdmin) {
     return (
       <View style={styles.accessDenied}>
         <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>

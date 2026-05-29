@@ -28,7 +28,8 @@ export default function MedicalHistoryPreview() {
       await Share.share(shareContent);
     } catch (error) {
       console.error('Error sharing:', error);
-      if (!error.message?.includes('cancelled')) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes('cancelled')) {
         Alert.alert('Error', 'No se pudo compartir la historia clínica');
       }
     }
