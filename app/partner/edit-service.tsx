@@ -292,7 +292,6 @@ export default function EditService() {
           images: allImages,
           currency: currency,
           currency_code_dgi: currencyCodeDgi,
-          updated_at: new Date().toISOString()
         };
 
         const { error } = await supabaseClient
@@ -313,7 +312,6 @@ export default function EditService() {
           images: allImages,
           currency: currency,
           currency_code_dgi: currencyCodeDgi,
-          updated_at: new Date().toISOString()
         };
 
         const { error } = await supabaseClient

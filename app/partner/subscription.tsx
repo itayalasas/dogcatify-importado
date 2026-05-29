@@ -37,6 +37,7 @@ interface PartnerPlanRow {
 
 interface PartnerSubscriptionRow {
   id: string;
+  partner_id: string;
   plan_id: string;
   status: string;
   billing_cycle: BillingCycle;

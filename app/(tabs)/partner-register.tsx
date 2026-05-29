@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
 import { router } from 'expo-router';
 import { ArrowLeft, Building, Camera, MapPin, Phone, Mail, FileText, DollarSign, Truck } from 'lucide-react-native';
@@ -93,6 +93,13 @@ const businessTypes = [
   { id: 'shelter', name: 'Refugio', icon: '🐾', description: 'Adopción y rescate de mascotas' },
 ];
 
+type RegistrationPlanMeta = {
+  effectiveTier: 'starter' | 'growth' | 'pro';
+  effectiveStatus: string;
+  effectiveStartedAt: string | null;
+  effectiveExpiresAt: string | null;
+};
+
 export default function PartnerRegister() {
   const { currentUser } = useAuth();
   const { sendNotificationToAdmin } = useNotifications();
@@ -132,6 +139,7 @@ export default function PartnerRegister() {
   const [geocodingResults, setGeocodingResults] = useState<any[]>([]);
   const [showGeocodingResults, setShowGeocodingResults] = useState(false);
   const [selectedGeocodingResult, setSelectedGeocodingResult] = useState<any>(null);
+  const registrationPlanMetaRef = useRef<RegistrationPlanMeta | null>(null);
 
   // Estados para el contrato de servicio
   const [showAgreement, setShowAgreement] = useState(false);
@@ -571,6 +579,12 @@ export default function PartnerRegister() {
       const effectiveStatus = representativePartner?.subscription_plan_status || (autoApprovePartners ? 'active' : 'pending');
       const effectiveStartedAt = representativePartner?.subscription_plan_started_at || (autoApprovePartners ? new Date().toISOString() : null);
       const effectiveExpiresAt = representativePartner?.subscription_plan_expires_at || null;
+      registrationPlanMetaRef.current = {
+        effectiveTier,
+        effectiveStatus,
+        effectiveStartedAt,
+        effectiveExpiresAt,
+      };
 
       const partnerLimits = resolveSubscriptionPlanLimits({
         tier: effectiveTier,
@@ -698,6 +712,18 @@ export default function PartnerRegister() {
       if (!currentUserId) {
         throw new Error('Usuario no autenticado');
       }
+
+      const registrationPlanMeta = registrationPlanMetaRef.current;
+      if (!registrationPlanMeta) {
+        throw new Error('No se pudieron resolver los datos de suscripción para el registro');
+      }
+
+      const {
+        effectiveTier,
+        effectiveStatus,
+        effectiveStartedAt,
+        effectiveExpiresAt,
+      } = registrationPlanMeta;
 
       const parsedShippingCost = hasShipping ? parseFloat(shippingCost) || 0 : 0;
       const parsedFreeShippingThreshold = hasShipping ? parseFloat(freeShippingThreshold) || 0 : 0;

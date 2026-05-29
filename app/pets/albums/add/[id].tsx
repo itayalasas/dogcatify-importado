@@ -310,12 +310,14 @@ export default function AddPhoto() {
     } catch (error) {
       console.error('Error uploading image:', error);
 
-      if (error.message?.includes('Network request failed')) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (message.includes('Network request failed')) {
         throw new Error('Error de conexión. Verifica tu conexión a internet e intenta nuevamente.');
-      } else if (error.message?.includes('timeout')) {
+      } else if (message.includes('timeout')) {
         throw new Error('La subida tardó demasiado. Intenta con imágenes más pequeñas.');
       } else {
-        throw new Error(`Error al subir imagen: ${error.message || 'Error desconocido'}`);
+        throw new Error(`Error al subir imagen: ${message || 'Error desconocido'}`);
       }
     }
   };
@@ -358,12 +360,14 @@ export default function AddPhoto() {
     } catch (error) {
       console.error('Error uploading video:', error);
 
-      if (error.message?.includes('Network request failed')) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (message.includes('Network request failed')) {
         throw new Error('Error de conexión. Verifica tu conexión a internet e intenta nuevamente.');
-      } else if (error.message?.includes('timeout')) {
+      } else if (message.includes('timeout')) {
         throw new Error('La subida tardó demasiado. Intenta con un video más pequeño.');
       } else {
-        throw new Error(`Error al subir video: ${error.message || 'Error desconocido'}`);
+        throw new Error(`Error al subir video: ${message || 'Error desconocido'}`);
       }
     }
   };
@@ -446,11 +450,12 @@ export default function AddPhoto() {
           }
         } catch (uploadError) {
           console.error(`Error uploading image ${i + 1}:`, uploadError);
+          const uploadErrorMessage = uploadError instanceof Error ? uploadError.message : String(uploadError);
 
           const shouldContinue = await new Promise((resolve) => {
             Alert.alert(
               'Error al subir imagen',
-              `No se pudo subir la imagen ${i + 1} de ${selectedImages.length}.\n\nError: ${uploadError.message}\n\n¿Deseas continuar?`,
+              `No se pudo subir la imagen ${i + 1} de ${selectedImages.length}.\n\nError: ${uploadErrorMessage}\n\n¿Deseas continuar?`,
               [
                 {
                   text: 'Cancelar todo',
@@ -486,11 +491,12 @@ export default function AddPhoto() {
           }
         } catch (uploadError) {
           console.error(`Error uploading video ${i + 1}:`, uploadError);
+          const uploadErrorMessage = uploadError instanceof Error ? uploadError.message : String(uploadError);
 
           const shouldContinue = await new Promise((resolve) => {
             Alert.alert(
               'Error al subir video',
-              `No se pudo subir el video ${i + 1} de ${selectedVideos.length}.\n\nError: ${uploadError.message}\n\n¿Deseas continuar?`,
+              `No se pudo subir el video ${i + 1} de ${selectedVideos.length}.\n\nError: ${uploadErrorMessage}\n\n¿Deseas continuar?`,
               [
                 {
                   text: 'Cancelar todo',
@@ -684,19 +690,20 @@ export default function AddPhoto() {
       }
 
       router.push({
-        pathname: `/pets/${id}`,
-        params: { refresh: 'true', activeTab: 'albums' }
+        pathname: '/pets/[id]',
+        params: { id, refresh: 'true', activeTab: 'albums' }
       });
     } catch (error) {
       console.error('Error saving photos:', error);
       
       let errorMessage = 'No se pudieron guardar las fotos';
-      if (error.message?.includes('conexión')) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('conexión')) {
         errorMessage = 'Error de conexión. Verifica tu internet e intenta nuevamente.';
-      } else if (error.message?.includes('cancelada')) {
+      } else if (message.includes('cancelada')) {
         errorMessage = 'Subida cancelada por el usuario.';
-      } else if (error.message) {
-        errorMessage = error.message;
+      } else if (message) {
+        errorMessage = message;
       }
       
       Alert.alert('Error', errorMessage);
@@ -1033,3 +1040,5 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
+
+

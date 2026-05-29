@@ -51,19 +51,13 @@ const getAuthUser = async (supabase: any, req: Request) => {
 };
 
 const isAdminUser = async (supabase: any, userId: string, email?: string | null) => {
-  const normalizedEmail = String(email || "").toLowerCase();
-
-  if (normalizedEmail === "admin@dogcatify.com") {
-    return true;
-  }
-
   const { data: profile } = await supabase
     .from("profiles")
-    .select("is_admin, email")
+    .select("is_admin")
     .eq("id", userId)
     .maybeSingle();
 
-  return profile?.is_admin === true || String(profile?.email || normalizedEmail).toLowerCase() === "admin@dogcatify.com";
+  return profile?.is_admin === true;
 };
 
 const requirePartnerAccess = async (supabase: any, user: any, partnerId: string) => {
@@ -214,6 +208,9 @@ const buildReturnUrl = (subscriptionId: string, partnerId: string, supabaseUrl?:
     `${baseUrl}/`,
   );
 
+  if (normalizeHttpsBaseUrl(supabaseUrl)) {
+    url.pathname = `${url.pathname.replace(/\/+$/, "")}/partner/${encodeURIComponent(partnerId)}/${encodeURIComponent(subscriptionId)}`;
+  }
   url.searchParams.set("subscription_id", subscriptionId);
   url.searchParams.set("scope", "partner");
   url.searchParams.set("business_id", partnerId);
@@ -589,6 +586,18 @@ Deno.serve(async (req: Request) => {
       throw new HttpError(500, `PARTNER_SUBSCRIPTION_CREATE_FAILED: ${insertError?.message || "unknown"}`);
     }
 
+    console.log("[CreatePartnerSubscription] Local partner subscription created", {
+      local_subscription_id: localSubscription.id,
+      partner_id: partnerId,
+      plan_id: plan.id,
+      plan_name: plan.name,
+      plan_tier: plan.tier,
+      billing_cycle: billingCycle,
+      trial_granted: canGrantTrial,
+      payer_email: payerEmail,
+      mp_plan_id: mpPlanId,
+    });
+
     const mpConfig = await getAdminMercadoPagoConfig(supabase);
     const preapprovalPayload = {
       preapproval_plan_id: mpPlanId,
@@ -606,10 +615,31 @@ Deno.serve(async (req: Request) => {
       },
     };
 
+    console.log("[CreatePartnerSubscription] Creating Mercado Pago preapproval", {
+      local_subscription_id: localSubscription.id,
+      partner_id: partnerId,
+      external_reference: preapprovalPayload.external_reference,
+      notification_url: preapprovalPayload.notification_url,
+      back_url: preapprovalPayload.back_url,
+      payer_email: payerEmail,
+      billing_cycle: billingCycle,
+      transaction_amount: price,
+      trial_granted: canGrantTrial,
+      currency_id: preapprovalPayload.auto_recurring.currency_id,
+    });
+
     try {
       const preapproval = await fetchMercadoPago(mpConfig.access_token, "/preapproval", {
         method: "POST",
         body: JSON.stringify(preapprovalPayload),
+      });
+
+      console.log("[CreatePartnerSubscription] Mercado Pago preapproval response received", {
+        local_subscription_id: localSubscription.id,
+        partner_id: partnerId,
+        mp_preapproval_id: preapproval?.id || null,
+        mp_status: preapproval?.status || null,
+        init_point: preapproval?.init_point || null,
       });
 
       const mappedStatus = mapPreapprovalStatusToLocalStatus(preapproval?.status);
@@ -646,6 +676,14 @@ Deno.serve(async (req: Request) => {
         throw new HttpError(500, `PARTNER_SUBSCRIPTION_UPDATE_FAILED: ${updateError.message}`);
       }
 
+      console.log("[CreatePartnerSubscription] Local partner subscription synced after preapproval create", {
+        local_subscription_id: updatedSubscription?.id || localSubscription.id,
+        partner_id: partnerId,
+        status: finalStatus,
+        mp_preapproval_id: preapproval?.id || null,
+        mp_status: preapproval?.status || null,
+      });
+
       await updatePartnerProfileSubscription(supabase, partnerId, {
         subscription_plan_tier: String(plan.tier || "starter"),
         subscription_plan_status: finalStatus,
@@ -675,6 +713,13 @@ Deno.serve(async (req: Request) => {
         throw mpError;
       }
 
+      console.warn("[CreatePartnerSubscription] Mercado Pago preapproval failed, using checkout fallback", {
+        local_subscription_id: localSubscription.id,
+        partner_id: partnerId,
+        error: mpError instanceof Error ? mpError.message : String(mpError),
+        fallback_url: planCheckoutUrl,
+      });
+
       const fallbackStatus: PartnerSubscriptionStatus = canGrantTrial ? "trialing" : "pending";
       const { data: fallbackSubscription, error: fallbackError } = await supabase
         .from("partner_subscriptions")
@@ -699,6 +744,12 @@ Deno.serve(async (req: Request) => {
       if (fallbackError) {
         throw new HttpError(500, `PARTNER_SUBSCRIPTION_FALLBACK_UPDATE_FAILED: ${fallbackError.message}`);
       }
+
+      console.log("[CreatePartnerSubscription] Local partner subscription updated with checkout fallback", {
+        local_subscription_id: fallbackSubscription?.id || localSubscription.id,
+        partner_id: partnerId,
+        fallback_url: planCheckoutUrl,
+      });
 
       await updatePartnerProfileSubscription(supabase, partnerId, {
         subscription_plan_tier: String(plan.tier || "starter"),

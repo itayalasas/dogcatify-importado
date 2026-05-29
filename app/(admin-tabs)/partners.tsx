@@ -11,6 +11,7 @@ import {
   getPartnerPlan,
   getPartnerPlanDisplayPrice,
   normalizePartnerPlanTier,
+  resolvePartnerAccountSubscription,
 } from '../../utils/partnerPlans';
 
 interface Subscription {
@@ -52,7 +53,7 @@ export default function AdminPartners() {
     }
 
     console.log('Current user email:', currentUser.email);
-    const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
+    const isAdmin = currentUser?.isAdmin === true;
     if (!isAdmin) {
       console.log('User is not admin');
       return;
@@ -89,6 +90,7 @@ export default function AdminPartners() {
           commission_percentage, 
           subscription_plan_tier,
           subscription_plan_status,
+          subscription_plan_expires_at,
           is_verified, 
           is_active, 
           created_at, 
@@ -133,18 +135,32 @@ export default function AdminPartners() {
         })
       );
       
-      const partnersData = partnersWithServices.map(partner => ({
-        ...partner,
-        isVerified: partner.is_verified,
-        businessName: partner.business_name,
-        businessType: partner.business_type,
-        commissionPercentage: partner.commission_percentage || 5.0,
-        subscriptionPlanTier: normalizePartnerPlanTier(partner.subscription_plan_tier),
-        subscriptionPlanStatus: partner.subscription_plan_status || 'active',
-        servicesCount: partner.servicesCount || 0,
-        createdAt: new Date(partner.created_at),
-        updatedAt: partner.updated_at ? new Date(partner.updated_at) : null,
-      }));
+      const partnersByUser = partnersWithServices.reduce((acc, partner) => {
+        const key = String(partner.user_id || partner.id);
+        if (!acc[key]) {
+          acc[key] = [];
+        }
+        acc[key].push(partner);
+        return acc;
+      }, {} as Record<string, typeof partnersWithServices>);
+
+      const partnersData = partnersWithServices.map(partner => {
+        const accountSubscription = resolvePartnerAccountSubscription(partnersByUser[String(partner.user_id || partner.id)] || []);
+
+        return {
+          ...partner,
+          isVerified: partner.is_verified,
+          businessName: partner.business_name,
+          businessType: partner.business_type,
+          commissionPercentage: partner.commission_percentage || 5.0,
+          subscriptionPlanTier: accountSubscription?.subscriptionPlanTier || normalizePartnerPlanTier(partner.subscription_plan_tier),
+          subscriptionPlanStatus: accountSubscription?.subscriptionPlanStatus || partner.subscription_plan_status || 'active',
+          subscriptionPlanExpiresAt: accountSubscription?.subscriptionPlanExpiresAt || partner.subscription_plan_expires_at || null,
+          servicesCount: partner.servicesCount || 0,
+          createdAt: new Date(partner.created_at),
+          updatedAt: partner.updated_at ? new Date(partner.updated_at) : null,
+        };
+      });
 
       setPartners(partnersData);
       setFilteredPartners(partnersData);
@@ -180,9 +196,9 @@ export default function AdminPartners() {
       const { error } = await supabaseClient
         .from('partners')
         .update({
-        commission_percentage: parseFloat(newCommission),
-        updated_at: new Date().toISOString(),
-      })
+          commission_percentage: parseFloat(newCommission),
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', selectedPartner.id);
 
       if (error) throw error;
@@ -224,13 +240,13 @@ export default function AdminPartners() {
           subscription_plan_status: 'active',
           updated_at: new Date().toISOString(),
         })
-        .eq('id', selectedPartner.id);
+        .eq('user_id', selectedPartner.user_id);
 
       if (error) throw error;
 
       setPartners(prevPartners =>
         prevPartners.map(partner =>
-          partner.id === selectedPartner.id
+          partner.user_id === selectedPartner.user_id
             ? {
                 ...partner,
                 subscriptionPlanTier: selectedPlanTier,
@@ -275,7 +291,7 @@ export default function AdminPartners() {
     return types[type] || type;
   };
 
-  const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
+  const isAdmin = currentUser?.isAdmin === true;
   if (!isAdmin) {
     return (
       <SafeAreaView style={styles.container}>

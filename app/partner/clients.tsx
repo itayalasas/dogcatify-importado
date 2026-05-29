@@ -6,7 +6,12 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
-import { canAccessPartnerModule, getPartnerLockedActionLabel, getPartnerPlan, resolvePartnerPlanTier } from '../../utils/partnerPlans';
+import {
+  canAccessPartnerModule,
+  getPartnerLockedActionLabel,
+  resolvePartnerAccountSubscription,
+  resolvePartnerPlanTier,
+} from '../../utils/partnerPlans';
 
 export default function PartnerClients() {
   const { partnerId } = useLocalSearchParams<{ partnerId: string }>();
@@ -15,51 +20,85 @@ export default function PartnerClients() {
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  const loadAccountSubscription = async (userId?: string | null) => {
+    if (!userId) {
+      return null;
+    }
+
+    const { data, error } = await supabaseClient
+      .from('partners')
+      .select('subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
+      .eq('user_id', userId)
+      .eq('is_verified', true);
+
+    if (error) {
+      throw error;
+    }
+
+    return resolvePartnerAccountSubscription(data || []);
+  };
+
   useEffect(() => {
-    if (!partnerId) return;
+    const userId = currentUser?.id;
+    if (!partnerId || !userId) return;
     
     // Fetch partner profile using Supabase
     const fetchPartnerProfile = async () => {
       try {
-        const { data, error } = await supabaseClient
-          .from('partners')
-          .select('*')
-          .eq('id', partnerId)
-          .single();
+        const [{ data, error }, accountSubscription] = await Promise.all([
+          supabaseClient
+            .from('partners')
+            .select('*')
+            .eq('id', partnerId)
+            .single(),
+          loadAccountSubscription(userId),
+        ]);
         
         if (error) throw error;
         
         if (data) {
+          const effectiveSubscriptionTier =
+            accountSubscription?.subscriptionPlanTier ||
+            resolvePartnerPlanTier(
+              data.subscription_plan_tier,
+              data.subscription_plan_status,
+              data.subscription_plan_expires_at,
+            );
+          const effectiveSubscriptionStatus =
+            accountSubscription?.subscriptionPlanStatus ||
+            data.subscription_plan_status ||
+            null;
+          const effectiveSubscriptionExpiresAt =
+            accountSubscription?.subscriptionPlanExpiresAt ||
+            data.subscription_plan_expires_at ||
+            null;
+
           setPartnerProfile({
             id: data.id,
             businessName: data.business_name,
             businessType: data.business_type,
-            subscriptionPlanTier: resolvePartnerPlanTier(
-              data.subscription_plan_tier,
-              data.subscription_plan_status,
-              data.subscription_plan_expires_at,
-            ),
-            subscriptionPlanStatus: data.subscription_plan_status || null,
-            subscriptionPlanExpiresAt: data.subscription_plan_expires_at || null,
+            subscriptionPlanTier: effectiveSubscriptionTier,
+            subscriptionPlanStatus: effectiveSubscriptionStatus,
+            subscriptionPlanExpiresAt: effectiveSubscriptionExpiresAt,
             ...data
           });
-        }
 
-        const planTier = data?.subscription_plan_tier || 'starter';
-        if (!canAccessPartnerModule(
-          planTier,
-          'clients',
-          data?.business_type,
-          data?.subscription_plan_status,
-          data?.subscription_plan_expires_at,
-        )) {
-          setLoading(false);
-          return;
+          if (!canAccessPartnerModule(
+            effectiveSubscriptionTier,
+            'clients',
+            data?.business_type,
+            effectiveSubscriptionStatus,
+            effectiveSubscriptionExpiresAt,
+          )) {
+            setLoading(false);
+            return;
+          }
         }
 
         fetchClients();
       } catch (error) {
         console.error('Error fetching partner profile:', error);
+        setLoading(false);
       }
     };
     
@@ -67,13 +106,13 @@ export default function PartnerClients() {
     
     // Set up real-time subscription
     const subscription = supabaseClient
-      .channel('partner-profile-changes')
+      .channel(`partner-profile-changes-${userId}`)
       .on('postgres_changes', 
         { 
           event: '*', 
           schema: 'public', 
           table: 'partners',
-          filter: `id=eq.${partnerId}`
+          filter: `user_id=eq.${userId}`
         }, 
         () => {
           fetchPartnerProfile();
@@ -84,7 +123,7 @@ export default function PartnerClients() {
     return () => {
       subscription.unsubscribe();
     };
-  }, [partnerId]);
+  }, [partnerId, currentUser?.id]);
 
   const fetchClients = async () => {
     try {
@@ -183,44 +222,6 @@ export default function PartnerClients() {
       });
 
       setClients(clientsData);
-
-      // Set up real-time subscriptions for both bookings and orders
-      const bookingsSubscription = supabaseClient
-        .channel('bookings-changes-clients')
-        .on('postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'bookings',
-            filter: `partner_id=eq.${partnerId}`
-          },
-          () => {
-            console.log('Booking changed, refreshing clients');
-            fetchClients();
-          }
-        )
-        .subscribe();
-
-      const ordersSubscription = supabaseClient
-        .channel('orders-changes-clients')
-        .on('postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'orders',
-            filter: `partner_id=eq.${partnerId}`
-          },
-          () => {
-            console.log('Order changed, refreshing clients');
-            fetchClients();
-          }
-        )
-        .subscribe();
-
-      return () => {
-        bookingsSubscription.unsubscribe();
-        ordersSubscription.unsubscribe();
-      };
     } catch (error) {
       console.error('Error fetching clients:', error);
     } finally {

@@ -33,6 +33,7 @@ export type AuditAction =
   | 'ORDER_UPDATE'
   | 'ORDER_CANCEL'
   | 'ORDER_VIEW'
+  | 'ALBUM_CREATE'
   
   // Recursos - Payments
   | 'PAYMENT_INITIATED'

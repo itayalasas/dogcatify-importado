@@ -101,7 +101,9 @@ export const createMedicalHistoryToken = async (
     console.error('Error in createMedicalHistoryToken:', error);
     
     // Check if this is a session error
-    if (error?.message?.includes('JWT') || error?.message?.includes('expired') || error?.message?.includes('session')) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (message.includes('JWT') || message.includes('expired') || message.includes('session')) {
       return { success: false, error: 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.' };
     }
     
@@ -236,7 +238,9 @@ export const generateSecureMedicalHistoryUrl = async (
   } catch (error) {
     
     // Check if this is a session error
-    if (error?.message?.includes('JWT') || error?.message?.includes('expired') || error?.message?.includes('session')) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (message.includes('JWT') || message.includes('expired') || message.includes('session')) {
       return { success: false, error: 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.' };
     }
     

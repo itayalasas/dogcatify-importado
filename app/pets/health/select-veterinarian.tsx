@@ -96,7 +96,7 @@ export default function SelectVeterinarian() {
   const handleSelectVeterinarian = (veterinarian: any) => {
     console.log('Navigating back with veterinarian:', veterinarian.business_name);
     router.replace({
-      pathname: returnPath,
+      pathname: returnPath as any,
       params: {
         selectedVeterinarian: JSON.stringify({ name: veterinarian.business_name }),
         ...(currentCondition && { currentCondition }),

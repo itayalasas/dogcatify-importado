@@ -872,17 +872,6 @@ export default function Home() {
   // Memoizar el header para evitar re-renders que causen saltos
   const listHeader = React.useMemo(() => null, []);
 
-  // Manejar redirección cuando no hay usuario - FUERA del render condicional
-  useEffect(() => {
-    if (!currentUser) {
-      const timer = setTimeout(() => {
-        router.replace('/auth/login');
-      }, 100);
-
-      return () => clearTimeout(timer);
-    }
-  }, [currentUser]);
-
   // Show initial loader while feed is loading
   if (initialLoading) {
     return <FeedLoader />;

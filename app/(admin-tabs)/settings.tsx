@@ -56,7 +56,7 @@ export default function AdminSettings() {
   const [broadcastProgress, setBroadcastProgress] = useState({ sent: 0, total: 0 });
   const [batchSize, setBatchSize] = useState('20');
   const [savingSystemSetting, setSavingSystemSetting] = useState<SystemToggleKey | null>(null);
-  const isAdmin = currentUser?.isAdmin || currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
+  const isAdmin = currentUser?.isAdmin === true;
 
   useEffect(() => {
     if (isAdmin) {
@@ -581,7 +581,6 @@ export default function AdminSettings() {
     try {
       setIsLoggingOut(true);
       await logout();
-      router.replace('/auth/login');
     } catch (error: any) {
       console.error('Error logging out:', error);
       setIsLoggingOut(false);

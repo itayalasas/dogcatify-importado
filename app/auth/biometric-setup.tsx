@@ -21,17 +21,19 @@ export default function BiometricSetup() {
     biometricType,
     enableBiometric
   } = useBiometric();
-  const { currentUser } = useAuth();
+  const { currentUser, clearPostLoginFlow } = useAuth();
 
   const [loading, setLoading] = useState(false);
 
   const navigateToPostLoginRoute = async () => {
+    clearPostLoginFlow();
+
     if (!currentUser?.id) {
       router.replace((redirect || '/(tabs)') as any);
       return;
     }
 
-    const nextRoute = await resolvePostLoginRoute(currentUser.id, redirect);
+    const nextRoute = await resolvePostLoginRoute(currentUser.id, redirect, currentUser);
     router.replace(nextRoute as any);
   };
 

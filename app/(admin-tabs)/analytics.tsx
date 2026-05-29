@@ -113,7 +113,7 @@ export default function AdminAnalytics() {
   const [error, setError] = useState<string | null>(null);
   const [advancedAnalyticsEnabled, setAdvancedAnalyticsEnabled] = useState(true);
 
-  const isAdmin = currentUser?.isAdmin || currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
+  const isAdmin = currentUser?.isAdmin === true;
 
   useEffect(() => {
     if (!currentUser || !isAdmin) {

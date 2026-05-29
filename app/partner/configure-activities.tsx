@@ -246,12 +246,17 @@ export default function ConfigureActivities() {
   const handleToggleActivity = async (activityId: string, isActive: boolean) => {
     try {
       const tableName = businessType === 'shop' ? 'partner_products' : 'partner_services';
+      const updatePayload: Record<string, any> = {
+        is_active: !isActive,
+      };
+
+      if (tableName === 'partner_products') {
+        updatePayload.updated_at = new Date().toISOString();
+      }
+
       const { error } = await supabaseClient
         .from(tableName)
-        .update({
-          is_active: !isActive,
-          updated_at: new Date().toISOString()
-        })
+        .update(updatePayload)
         .eq('id', activityId);
 
       if (error) throw error;

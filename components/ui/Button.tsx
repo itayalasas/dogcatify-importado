@@ -10,6 +10,8 @@ interface ButtonProps {
   loading?: boolean;
   style?: ViewStyle;
   children?: ReactNode;
+  icon?: ReactNode;
+  iconPosition?: 'left' | 'right';
 }
 
 export const Button: React.FC<ButtonProps> = ({
@@ -21,6 +23,8 @@ export const Button: React.FC<ButtonProps> = ({
   loading = false,
   style,
   children,
+  icon,
+  iconPosition = 'left',
 }) => {
   const buttonStyle = [
     styles.button,
@@ -48,7 +52,11 @@ export const Button: React.FC<ButtonProps> = ({
       ) : children ? (
         children
       ) : (
-        <Text style={textStyle}>{title}</Text>
+        <>
+          {icon && iconPosition === 'left' ? icon : null}
+          {title ? <Text style={textStyle}>{title}</Text> : null}
+          {icon && iconPosition === 'right' ? icon : null}
+        </>
       )}
     </TouchableOpacity>
   );

@@ -133,7 +133,7 @@ export default function SelectAllergy() {
   const handleSelectAllergy = (allergy: any) => {
     console.log('Navigating back with allergy:', allergy.name);
     router.replace({
-      pathname: returnPath,
+      pathname: returnPath as any,
       params: {
         selectedAllergy: JSON.stringify(allergy),
         // Preserve all current values when returning

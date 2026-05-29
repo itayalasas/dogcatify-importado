@@ -862,6 +862,9 @@ export const createUnifiedPaymentPreference = async (
     // Calculate commission using partner's configured percentage
     const commissionAmount = totalAmount * ((partnerConfig.commission_percentage || 5.0) / 100);
 
+    // Detect if we're using test credentials (only by token prefix)
+    const isTestMode = partnerConfig.access_token?.startsWith('TEST-');
+
     // Format phone number (remove non-digits and ensure it's 8 digits)
     const rawPhone = customerInfo.phone || '99999999';
     const cleanPhone = rawPhone.replace(/\D/g, '');
@@ -869,26 +872,25 @@ export const createUnifiedPaymentPreference = async (
 
     // Parse shipping address to extract street and number
     let streetName = '';
-    let streetNumber = null;
+    let streetNumber: number | null = null;
     let zipCode = '';
 
     if (shippingAddress) {
       // Format: "Calle Nombre 123, Localidad, Departamento - CP: 12345 - Tel: 099123456"
-      const addressParts = shippingAddress.split(',')[0]; // Get "Calle Nombre 123"
+      const addressParts = shippingAddress.split(',')[0];
       const zipMatch = shippingAddress.match(/CP:\s*(\d+)/);
       zipCode = zipMatch ? zipMatch[1] : '';
 
-      // Try to extract street and number
       const streetMatch = addressParts.match(/^(.+?)\s+(\d+)$/);
       if (streetMatch) {
         streetName = streetMatch[1].trim();
-        streetNumber = parseInt(streetMatch[2]);
+        streetNumber = parseInt(streetMatch[2], 10);
       } else {
         streetName = addressParts.trim();
       }
     }
 
-    // Build complete payer object with all available data
+    // Build complete payer object with the same shape used by services
     const payerData: any = {
       name: customerInfo.displayName || 'Cliente',
       email: customerInfo.email,
@@ -898,7 +900,6 @@ export const createUnifiedPaymentPreference = async (
       }
     };
 
-    // Add address if available
     if (streetName) {
       payerData.address = {
         street_name: streetName,
@@ -916,45 +917,62 @@ export const createUnifiedPaymentPreference = async (
       streetName: streetName || 'N/A'
     });
 
+    const shippingItems = shippingCost > 0
+      ? [{
+          id: 'shipping',
+          title: 'Envío',
+          quantity: 1,
+          unit_price: shippingCost,
+          currency_id: 'UYU'
+        }]
+      : [];
+
     const preferenceData: any = {
-      items: allItems.map(item => ({
-        id: item.id,
-        title: item.name,
-        quantity: item.quantity,
-        unit_price: item.price,
-        currency_id: 'UYU'
-      })).concat([{
-        id: 'shipping',
-        title: 'EnvÃ­o',
-        quantity: 1,
-        unit_price: shippingCost,
-        currency_id: 'UYU'
-      }]),
+      items: [
+        ...allItems.map(item => ({
+          id: item.id,
+          title: item.name,
+          quantity: item.quantity,
+          unit_price: item.price,
+          currency_id: 'UYU'
+        })),
+        ...shippingItems
+      ],
       payer: payerData,
       back_urls: {
-        success: `dogcatify://payment/success?order_id=${orderId}`,
-        failure: `dogcatify://payment/failure?order_id=${orderId}`,
-        pending: `dogcatify://payment/pending?order_id=${orderId}`
+        success: `dogcatify://payment/success?order_id=${orderId}&type=order`,
+        failure: `dogcatify://payment/failure?order_id=${orderId}&type=order`,
+        pending: `dogcatify://payment/pending?order_id=${orderId}&type=order`
       },
       auto_return: 'approved',
       external_reference: orderId,
       notification_url: `${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/functions/v1/mercadopago-webhook`,
-      statement_descriptor: 'DOGCATIFY'
+      statement_descriptor: 'DOGCATIFY',
+      metadata: {
+        order_type: 'product_purchase',
+        partner_name: partnerConfig.business_name,
+        item_count: allItems.length,
+        shipping_cost: shippingCost,
+        shipping_address: shippingAddress || null,
+        total_amount: totalAmount
+      }
     };
 
-    // Detect if we're using test credentials (only by token prefix)
-    const isTestMode = partnerConfig.access_token?.startsWith('TEST-');
-
-    // Add marketplace fee ONLY in production mode
-    // In test mode, we skip it to avoid "mixed credentials" error
-    if (!isTestMode) {
+    if (!isTestMode && partnerConfig.is_oauth && partnerConfig.user_id && !isNaN(parseInt(String(partnerConfig.user_id), 10))) {
       preferenceData.marketplace_fee = commissionAmount;
+      console.log('Using OAuth marketplace fee for product checkout (PRODUCTION)');
+    } else {
+      if (isTestMode) {
+        console.log('Test mode: skipping marketplace_fee to avoid mixed credentials');
+      } else {
+        console.log('Manual configuration: no marketplace split');
+      }
     }
 
     console.log('Final unified preference data:', {
       items_count: preferenceData.items.length,
       total_amount: totalAmount,
-      marketplace_fee: isTestMode ? 'SKIPPED (test mode)' : commissionAmount,
+      marketplace_fee: preferenceData.marketplace_fee || 'SKIPPED',
       commission_percentage: partnerConfig.commission_percentage || 5.0,
       partner_receives: totalAmount - commissionAmount,
       external_reference: preferenceData.external_reference,
@@ -2300,3 +2318,4 @@ export const regeneratePaymentLink = async (orderId: string): Promise<{
     };
   }
 };
+

@@ -348,7 +348,7 @@ export default function ServiceBooking() {
   }, [boardingCategory]);
 
   const generateAvailableDates = () => {
-    const dates = [];
+    const dates: Date[] = [];
     const today = new Date();
     const now = new Date();
 
@@ -611,7 +611,7 @@ export default function ServiceBooking() {
           customer_id: currentUser.id,
           customer_name: currentUser.displayName || currentUser.email,
           customer_email: currentUser.email,
-          customer_phone: currentUser.phoneNumber || null,
+          customer_phone: currentUser.phone || null,
           pet_id: petId,
           pet_name: pet.name,
           date: bookingDate.toISOString(),

@@ -85,7 +85,7 @@ export default function AdminPromotions() {
     }
 
     console.log('✅ [AdminPromotions] Current user email:', currentUser.email);
-    const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
+    const isAdmin = currentUser?.isAdmin === true;
     console.log('🔐 [AdminPromotions] Is admin:', isAdmin);
 
     if (!isAdmin) {
@@ -1111,7 +1111,7 @@ export default function AdminPromotions() {
     }).format(price);
   };
 
-  const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
+  const isAdmin = currentUser?.isAdmin === true;
   if (!isAdmin) {
     return (
       <SafeAreaView style={styles.container}>

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { resolvePostLoginRoute } from '../../utils/onboarding';
 
 export default function AuthCallback() {
   const { currentUser } = useAuth();
@@ -13,13 +14,9 @@ export default function AuthCallback() {
         // Wait a moment for auth state to update
         setTimeout(() => {
           if (currentUser) {
-            // Redirect based on user type
-            const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
-            if (isAdmin) {
-              router.replace('/(admin-tabs)/requests');
-            } else {
-              router.replace('/(tabs)');
-            }
+            resolvePostLoginRoute(currentUser.id, undefined, currentUser)
+              .then((nextRoute) => router.replace(nextRoute as any))
+              .catch(() => router.replace('/(tabs)'));
           } else {
             // If no user, redirect to login
             router.replace('/auth/login');

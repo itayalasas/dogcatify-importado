@@ -553,7 +553,7 @@ export default function DeleteAccount() {
       Alert.alert(
         'Datos eliminados',
         'Todos tus datos han sido eliminados de DogCatiFy. Tu cuenta ha sido desactivada y puedes crear una nueva cuenta con el mismo email si lo deseas.',
-        [{ text: 'OK', onPress: () => router.replace('/auth/login') }]
+        [{ text: 'OK' }]
       );
 
     } catch (error) {

@@ -149,6 +149,9 @@ export default function Register() {
         options: {
           data: {
             full_name: trimmedName,
+            account_role: 'owner',
+            is_owner: true,
+            is_partner: false,
           },
           emailRedirectTo: undefined,
         },
@@ -365,6 +368,15 @@ export default function Register() {
               {t('alreadyHaveAccount')} <Text style={styles.loginLink}>{t('signIn')}</Text>
             </Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.partnerButton}
+            onPress={() => router.push('/auth/become-partner')}
+          >
+            <Text style={styles.partnerText}>
+              ¿Sos aliado? <Text style={styles.partnerLink}>{t('becomePartner')}</Text>
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -529,5 +541,19 @@ const styles = StyleSheet.create({
   loginLink: {
     color: '#3B82F6',
     fontFamily: 'Inter-Medium',
+  },
+  partnerButton: {
+    marginTop: 14,
+    alignItems: 'center',
+  },
+  partnerText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  partnerLink: {
+    color: '#2D6A6F',
+    fontFamily: 'Inter-SemiBold',
   },
 });

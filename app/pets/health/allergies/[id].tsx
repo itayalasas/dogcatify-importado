@@ -193,8 +193,8 @@ export default function AddAllergy() {
 
   const handleBackNavigation = () => {
     router.replace({
-      pathname: `/pets/${id}`,
-      params: { activeTab: 'health' }
+      pathname: '/pets/[id]',
+      params: { id, activeTab: 'health' }
     });
   };
 
@@ -347,8 +347,8 @@ export default function AddAllergy() {
 
       Alert.alert('Éxito', isEditing ? 'Alergia actualizada correctamente' : 'Alergia registrada correctamente', [
         { text: 'OK', onPress: () => router.push({
-          pathname: `/pets/${id}`,
-          params: { activeTab: 'health' }
+          pathname: '/pets/[id]',
+          params: { id, activeTab: 'health' }
         }) }
       ]);
     } catch (error) {

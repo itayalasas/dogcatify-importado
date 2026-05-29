@@ -5,13 +5,20 @@ import { supabaseClient, getUserProfile, updateUserProfile, signIn as supabaseSi
 import { User } from '../types';
 import { logger } from '@/utils/datadogLogger';
 import { logAction, logError } from '../services/auditService';
+import { AppRole, clearStoredActivePartnerBusinessId, getAvailableRoles, getStoredActiveRole } from '../utils/onboarding';
 
 interface AuthContextType {
   currentUser: User | null;
+  activeRole: AppRole | null;
+  isPostLoginFlowPending: boolean;
   loading: boolean; 
   login: (email: string, password: string) => Promise<User | null>;
   register: (email: string, password: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateCurrentUser: (updatedUser: User) => void;
+  setActiveRole: (role: AppRole | null) => void;
+  startPostLoginFlow: () => void;
+  clearPostLoginFlow: () => void;
   isEmailConfirmed: boolean;
   authInitialized: boolean;
   authError: string | null;
@@ -31,6 +38,8 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [activeRole, setActiveRoleState] = useState<AppRole | null>(null);
+  const [isPostLoginFlowPending, setIsPostLoginFlowPending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<any | null>(null);
   const [isEmailConfirmed, setIsEmailConfirmed] = useState(false);
@@ -43,6 +52,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateCurrentUser = (updatedUser: User) => {
     setCurrentUser(updatedUser);
+  };
+
+  const setActiveRole = (role: AppRole | null) => {
+    setActiveRoleState(role);
+  };
+
+  const startPostLoginFlow = () => {
+    setIsPostLoginFlowPending(true);
+  };
+
+  const clearPostLoginFlow = () => {
+    setIsPostLoginFlowPending(false);
   };
 
   useEffect(() => {
@@ -71,7 +92,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (event === 'SIGNED_OUT' || !session) {
           if (!mounted) return;
+          if (currentUser?.id) {
+            await clearStoredActivePartnerBusinessId(currentUser.id);
+          }
           setCurrentUser(null);
+          setActiveRoleState(null);
+          setIsPostLoginFlowPending(false);
           setSession(null);
           setLoading(false);
           setAuthInitialized(true);
@@ -221,6 +247,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (profile) {
           if (!mounted) return;
+          const availableRoles = getAvailableRoles({
+            isOwner: profile.is_owner ?? true,
+            isPartner: profile.is_partner ?? false,
+            isAdmin: profile.is_admin ?? false,
+          });
+          const storedActiveRole = await getStoredActiveRole(userId);
+          const resolvedActiveRole = storedActiveRole && availableRoles.includes(storedActiveRole)
+            ? storedActiveRole
+            : availableRoles.length === 1
+              ? availableRoles[0]
+              : null;
           const user = {
             id: userId,
             email: userEmail,
@@ -238,6 +275,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             followersCount: (profile.followers || []).length,
             followingCount: (profile.following || []).length,
           };
+          setActiveRoleState(resolvedActiveRole);
           setCurrentUser(user);
 
           logger.setUser(userId, {
@@ -252,6 +290,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else {
           // Create user profile if it doesn't exist
           if (!mounted) return;
+          setActiveRoleState(null);
           const newUser: Omit<User, 'id'> = {
             email: userEmail,
             displayName: '',
@@ -272,6 +311,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             photo_url: newUser.photoURL,
             is_owner: newUser.isOwner,
             is_partner: newUser.isPartner,
+            is_admin: newUser.isAdmin,
             location: newUser.location,
             bio: newUser.bio,
             phone: newUser.phone,
@@ -567,6 +607,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setLoading(false);
       setCurrentUser(null);
+      setActiveRoleState(null);
+      setIsPostLoginFlowPending(false);
       setSession(null);
       setIsEmailConfirmed(false);
 
@@ -756,8 +798,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             followersCount: (profile.followers || []).length,
             followingCount: (profile.following || []).length,
           };
+          const availableRoles = getAvailableRoles({
+            isOwner: profile.is_owner ?? true,
+            isPartner: profile.is_partner ?? false,
+            isAdmin: profile.is_admin ?? false,
+          });
+          const storedActiveRole = await getStoredActiveRole(user.id);
+          const resolvedActiveRole = storedActiveRole && availableRoles.includes(storedActiveRole)
+            ? storedActiveRole
+            : availableRoles.length === 1
+              ? availableRoles[0]
+              : null;
           
           console.log('AuthContext - Login successful, setting user:', user.email);
+          setActiveRoleState(resolvedActiveRole);
           setCurrentUser(user);
 
           // Registrar login exitoso
@@ -860,6 +914,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logger.clearUser();
 
       setCurrentUser(null);
+      setActiveRoleState(null);
+      setIsPostLoginFlowPending(false);
       setSession(null);
       setIsEmailConfirmed(false);
     } catch (error) {
@@ -874,12 +930,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const value = {
     currentUser,
+    activeRole,
+    isPostLoginFlowPending,
     loading,
     authInitialized,
     login,
     register,
     logout,
     updateCurrentUser,
+    setActiveRole,
+    startPostLoginFlow,
+    clearPostLoginFlow,
     isEmailConfirmed,
     authError,
     clearAuthError,

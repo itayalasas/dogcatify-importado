@@ -47,6 +47,18 @@ export interface PartnerPlanSummary {
   moduleAccess: Record<PartnerModule, boolean>;
 }
 
+export interface PartnerAccountSubscriptionSource {
+  subscription_plan_tier?: string | null;
+  subscription_plan_status?: string | null;
+  subscription_plan_expires_at?: string | null;
+}
+
+export interface PartnerAccountSubscriptionSummary {
+  subscriptionPlanTier: PartnerPlanTier;
+  subscriptionPlanStatus: string | null;
+  subscriptionPlanExpiresAt: string | null;
+}
+
 export const PARTNER_PLAN_ORDER: PartnerPlanTier[] = ['starter', 'growth', 'pro'];
 
 const PARTNER_PLAN_DEFINITIONS: Record<PartnerPlanTier, PartnerPlanDefinition> = {
@@ -194,6 +206,63 @@ const getTimestampOrNull = (value?: string | null) => {
 
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+};
+
+const isPartnerSubscriptionCurrent = (status?: string | null, expiresAt?: string | null) => {
+  const normalizedStatus = String(status || '').toLowerCase();
+  const expiresAtTimestamp = getTimestampOrNull(expiresAt);
+  const hasFutureAccess = expiresAtTimestamp ? expiresAtTimestamp > Date.now() : false;
+
+  return (
+    normalizedStatus === 'pending' ||
+    normalizedStatus === 'trialing' ||
+    normalizedStatus === 'active' ||
+    normalizedStatus === 'paused' ||
+    (normalizedStatus === 'cancelled' && hasFutureAccess)
+  );
+};
+
+export const resolvePartnerAccountSubscription = <T extends PartnerAccountSubscriptionSource>(
+  rows: T[],
+): PartnerAccountSubscriptionSummary | null => {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return null;
+  }
+
+  const ranked = rows.map((row) => {
+    const resolvedTier = resolvePartnerPlanTier(
+      row.subscription_plan_tier,
+      row.subscription_plan_status,
+      row.subscription_plan_expires_at,
+    );
+
+    return {
+      row,
+      resolvedTier,
+      resolvedIndex: PARTNER_PLAN_ORDER.indexOf(resolvedTier),
+      isCurrent: isPartnerSubscriptionCurrent(row.subscription_plan_status, row.subscription_plan_expires_at),
+    };
+  });
+
+  const currentRows = ranked.some((item) => item.isCurrent)
+    ? ranked.filter((item) => item.isCurrent)
+    : ranked;
+
+  const best = currentRows.reduce((winner, item) => {
+    if (!winner) return item;
+    if (item.resolvedIndex > winner.resolvedIndex) return item;
+    return winner;
+  }, null as typeof ranked[number] | null);
+
+  if (!best) {
+    return null;
+  }
+
+  return {
+    subscriptionPlanTier: best.resolvedTier,
+    subscriptionPlanStatus: best.row.subscription_plan_status || null,
+    subscriptionPlanExpiresAt: best.row.subscription_plan_expires_at || null,
+  };
 };
 
 export const resolvePartnerPlanTier = (

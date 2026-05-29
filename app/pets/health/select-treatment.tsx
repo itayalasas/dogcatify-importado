@@ -137,7 +137,7 @@ export default function SelectTreatment() {
   const handleSelectTreatment = (treatment: any) => {
     console.log('Navigating back with treatment:', treatment.name);
     router.replace({
-      pathname: returnPath,
+      pathname: returnPath as any,
       params: {
         selectedTreatment: JSON.stringify(treatment),
         ...(currentSelectedCondition && { currentSelectedCondition }),

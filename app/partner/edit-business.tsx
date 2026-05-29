@@ -255,7 +255,7 @@ export default function EditBusiness() {
     
     // Extraer barrio
     let barrioFound = '';
-    const streetIndex = parts.findIndex(part => 
+    const streetIndex = parts.findIndex((part: string) => 
       part.toLowerCase().includes(calle.toLowerCase())
     );
     
@@ -913,7 +913,7 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 16,
   },
-  sectionTitle: {
+  sectionHeaderTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
     color: '#111827',

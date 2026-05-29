@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Modal, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Calendar, Scale, Syringe, Heart, TriangleAlert as AlertTriangle, Pill, Camera, Plus, CreditCard as Edit, Trash2, Play, Image as ImageIcon, X, MapPin, Phone } from 'lucide-react-native';
-import { Video } from 'expo-av';
+import { Video, ResizeMode } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -767,19 +767,31 @@ export default function PetDetail() {
   };
 
   const handleAddVaccine = () => {
-    router.push(`/pets/health/vaccines/${id}`);
+    router.push({
+      pathname: '/pets/health/vaccines/[id]',
+      params: { id }
+    });
   };
 
   const handleAddIllness = () => {
-    router.push(`/pets/health/illness/${id}`);
+    router.push({
+      pathname: '/pets/health/illness/[id]',
+      params: { id }
+    });
   };
 
   const handleAddAllergy = () => {
-    router.push(`/pets/health/allergies/${id}`);
+    router.push({
+      pathname: '/pets/health/allergies/[id]',
+      params: { id }
+    });
   };
 
   const handleAddDeworming = () => {
-    router.push(`/pets/health/deworming/${id}`);
+    router.push({
+      pathname: '/pets/health/deworming/[id]',
+      params: { id }
+    });
   };
 
   const handleScanMedicalCard = (type: 'vaccine' | 'deworming') => {
@@ -803,7 +815,7 @@ export default function PetDetail() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        await processMedicalCard(result.assets[0].uri, result.assets[0].base64);
+        await processMedicalCard(result.assets[0].uri, result.assets[0].base64 ?? undefined);
       }
     } catch (error) {
       console.error('Error taking photo:', error);
@@ -828,7 +840,7 @@ export default function PetDetail() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        await processMedicalCard(result.assets[0].uri, result.assets[0].base64);
+        await processMedicalCard(result.assets[0].uri, result.assets[0].base64 ?? undefined);
       }
     } catch (error) {
       console.error('Error selecting photo:', error);
@@ -969,41 +981,44 @@ export default function PetDetail() {
   
   const handleAddWeight = () => {
     router.push({
-      pathname: `/pets/health/weight/${id}`,
-      params: { refresh: 'true' }
+      pathname: '/pets/health/weight/[id]',
+      params: { id, refresh: 'true' }
     });
   };
 
   const handleAddPhoto = () => {
-    router.push(`/pets/albums/add/${id}`);
+    router.push({
+      pathname: '/pets/albums/add/[id]',
+      params: { id }
+    });
   };
 
   // Edit handlers
   const handleEditVaccine = (vaccineId: string) => {
     router.push({
-      pathname: `/pets/health/vaccines/${id}`,
-      params: { recordId: vaccineId }
+      pathname: '/pets/health/vaccines/[id]',
+      params: { id, recordId: vaccineId }
     });
   };
 
   const handleEditIllness = (illnessId: string) => {
     router.push({
-      pathname: `/pets/health/illness/${id}`,
-      params: { recordId: illnessId }
+      pathname: '/pets/health/illness/[id]',
+      params: { id, recordId: illnessId }
     });
   };
 
   const handleEditAllergy = (allergyId: string) => {
     router.push({
-      pathname: `/pets/health/allergies/${id}`,
-      params: { recordId: allergyId }
+      pathname: '/pets/health/allergies/[id]',
+      params: { id, recordId: allergyId }
     });
   };
 
   const handleEditDeworming = (dewormingId: string) => {
     router.push({
-      pathname: `/pets/health/deworming/${id}`,
-      params: { recordId: dewormingId }
+      pathname: '/pets/health/deworming/[id]',
+      params: { id, recordId: dewormingId }
     });
   };
 
@@ -1146,13 +1161,16 @@ export default function PetDetail() {
 
   const handleBehaviorAssessment = () => {
     router.push({
-      pathname: `/pets/behavior/${id}`,
-      params: { returnTo: 'behavior' }
+      pathname: '/pets/behavior/[id]',
+      params: { id, returnTo: 'behavior' }
     });
   };
 
   const handleViewAppointments = () => {
-    router.push(`/pets/appointments/${id}`);
+    router.push({
+      pathname: '/pets/appointments/[id]',
+      params: { id }
+    });
   };
 
   const handleGenerateMedicalHistory = async () => {
@@ -1698,7 +1716,7 @@ export default function PetDetail() {
         {weightRecords.length > 3 && (
           <TouchableOpacity 
             style={styles.viewAllButton}
-            onPress={() => router.push(`/pets/health/weight/${id}`)}
+            onPress={() => router.push({ pathname: '/pets/health/weight/[id]', params: { id } })}
           >
             <Text style={styles.viewAllText}>
               Ver todos los registros ({weightRecords.length})
@@ -1746,7 +1764,7 @@ export default function PetDetail() {
               <TouchableOpacity
                 key={album.id}
                 style={styles.albumItem}
-                onPress={() => router.push(`/pets/albums/${album.id}`)}
+                onPress={() => router.push({ pathname: '/pets/albums/[id]', params: { id: album.id } })}
               >
                 {cleanUrl ? (
                   <View style={styles.albumCoverContainer}>
@@ -1755,7 +1773,7 @@ export default function PetDetail() {
                         <Video
                           source={{ uri: cleanUrl }}
                           style={styles.albumCover}
-                          resizeMode="cover"
+                          resizeMode={ResizeMode.COVER}
                           shouldPlay={false}
                           isMuted
                         />
@@ -3193,10 +3211,10 @@ const styles = StyleSheet.create({
   highPriorityBadge: {
     backgroundColor: '#EF4444',
   },
-  urgentPriorityBadge: {
+  medicalUrgentPriorityBadge: {
     backgroundColor: '#DC2626',
   },
-  priorityText: {
+  medicalPriorityText: {
     fontSize: 10,
     fontFamily: 'Inter-Bold',
     color: '#FFFFFF',
@@ -3568,3 +3586,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+
+
+
+
+

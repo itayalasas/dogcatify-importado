@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { supabaseClient } from '../lib/supabase';
 
 export interface VideoInfo {
