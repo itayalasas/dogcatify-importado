@@ -577,7 +577,7 @@ Deno.serve(async (req: Request) => {
       .insert({
         user_id: user.id,
         plan_id: plan.id,
-        status: canGrantTrial ? "trialing" : "pending",
+        status: "pending",
         billing_cycle: billingCycle,
         trial_days: trialDays,
         trial_started_at: canGrantTrial ? now : null,
@@ -732,9 +732,9 @@ Deno.serve(async (req: Request) => {
       const { data: fallbackSubscription, error: fallbackError } = await supabase
         .from("user_subscriptions")
         .update({
-          status: canGrantTrial ? "trialing" : "pending",
+          status: "pending",
           payment_url: planCheckoutUrl,
-          started_at: canGrantTrial ? localSubscription.trial_started_at || now : null,
+          started_at: null,
           trial_days: trialDays,
           trial_started_at: localSubscription.trial_started_at || null,
           trial_ends_at: localSubscription.trial_ends_at || null,
@@ -769,7 +769,7 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({
         success: true,
         subscription: fallbackSubscription,
-        status: canGrantTrial ? "trialing" : "pending",
+        status: "pending",
         paymentUrl: planCheckoutUrl,
         fallback: true,
       });

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
 import { Package, CheckCircle, Truck, Home, Clock, XCircle, AlertCircle, RefreshCw } from 'lucide-react-native';
+import { type OrderFulfillmentMode } from '../utils/orderFulfillment';
 
 interface TrackingStep {
   id: string;
@@ -14,6 +15,7 @@ interface TrackingStep {
 interface OrderTrackingProps {
   orderStatus: string;
   orderType?: 'product_purchase' | 'service_booking';
+  fulfillmentMode?: OrderFulfillmentMode;
   orderDate?: Date;
   cancelledDate?: Date;
   paymentLinkExpiresAt?: Date;
@@ -24,6 +26,7 @@ interface OrderTrackingProps {
 export const OrderTracking: React.FC<OrderTrackingProps> = ({
   orderStatus,
   orderType = 'product_purchase',
+  fulfillmentMode = 'shipping',
   orderDate,
   cancelledDate,
   paymentLinkExpiresAt,
@@ -69,6 +72,7 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
   const getTrackingSteps = (): TrackingStep[] => {
     const isCancelled = orderStatus === 'cancelled';
     const isServiceBooking = orderType === 'service_booking';
+    const isPickupOrder = fulfillmentMode === 'pickup';
 
     // Para servicios (reservas), solo mostrar estados simples
     if (isServiceBooking) {
@@ -145,7 +149,82 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
       return serviceSteps;
     }
 
-    // Para productos, mostrar seguimiento completo
+    // Para productos, mostrar seguimiento según el tipo de entrega
+    if (isPickupOrder) {
+      const pickupSteps: TrackingStep[] = [
+        {
+          id: 'pending',
+          label: 'Pedido recibido',
+          description: 'Tu pedido ha sido registrado',
+          icon: Clock,
+          status: 'completed',
+          date: orderDate?.toLocaleDateString('es-ES', {
+            day: '2-digit',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        },
+        {
+          id: 'confirmed',
+          label: 'Pedido confirmado',
+          description: 'La tienda confirmó tu pedido',
+          icon: CheckCircle,
+          status: orderStatus === 'pending' ? 'pending' :
+                  isCancelled ? 'cancelled' :
+                  'completed'
+        },
+        {
+          id: 'processing',
+          label: 'En preparación',
+          description: 'Estamos preparando tu pedido',
+          icon: Package,
+          status: ['pending', 'reserved', 'confirmed'].includes(orderStatus) ? 'pending' :
+                  ['processing', 'preparing'].includes(orderStatus) ? 'active' :
+                  isCancelled ? 'cancelled' :
+                  'completed'
+        },
+        {
+          id: 'ready_for_delivery',
+          label: 'Listo para retirar',
+          description: 'Tu pedido está listo para pasar a buscar',
+          icon: Package,
+          status: ['pending', 'reserved', 'confirmed', 'processing', 'preparing'].includes(orderStatus) ? 'pending' :
+                  ['ready_for_delivery', 'shipped'].includes(orderStatus) ? 'active' :
+                  isCancelled ? 'cancelled' :
+                  'completed'
+        },
+        {
+          id: 'delivered',
+          label: 'Entregado',
+          description: 'El pedido fue entregado en tienda',
+          icon: Home,
+          status: orderStatus === 'delivered' || orderStatus === 'completed' ? 'completed' :
+                  isCancelled ? 'cancelled' :
+                  'pending'
+        }
+      ];
+
+      if (isCancelled) {
+        pickupSteps.push({
+          id: 'cancelled',
+          label: 'Pedido cancelado',
+          description: 'El pedido fue cancelado',
+          icon: XCircle,
+          status: 'cancelled',
+          date: cancelledDate?.toLocaleDateString('es-ES', {
+            day: '2-digit',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        });
+      }
+
+      return pickupSteps;
+    }
+
+    // Para productos con envío, mostrar seguimiento completo
     const productSteps: TrackingStep[] = [
       {
         id: 'pending',

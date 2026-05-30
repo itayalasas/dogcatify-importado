@@ -9,6 +9,7 @@ import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { regeneratePaymentLink } from '../../utils/mercadoPago';
+import { getOrderFulfillmentMode, getOrderStatusLabel } from '../../utils/orderFulfillment';
 
 export default function MyOrders() {
   const { currentUser } = useAuth();
@@ -139,6 +140,7 @@ export default function MyOrders() {
         items: order.items || [],
         status: order.status || 'pending',
         orderType: order.order_type || 'product_purchase',
+        fulfillmentMode: getOrderFulfillmentMode(order.order_type || 'product_purchase', order.shipping_address),
         totalAmount: order.total_amount || 0,
         shippingAddress: order.shipping_address || '',
         createdAt: new Date(order.created_at),
@@ -214,24 +216,6 @@ export default function MyOrders() {
     }
   };
 
-  const getStatusText = (status: string, orderType?: string) => {
-    switch (status) {
-      case 'pending': return orderType === 'service_booking' ? 'Pendiente de pago' : 'Pendiente';
-      case 'reserved': return 'Reservado';
-      case 'payment_failed': return 'Pago fallido';
-      case 'confirmed': return 'Confirmado';
-      case 'processing': return 'En proceso';
-      case 'preparing': return 'Preparando';
-      case 'ready_for_delivery': return 'Listo para entrega';
-      case 'shipped': return 'En reparto';
-      case 'completed': return 'Completado';
-      case 'delivered': return 'Entregado';
-      case 'cancelled': return 'Cancelado';
-      case 'refunded': return 'Reembolsado';
-      default: return 'Desconocido';
-    }
-  };
-
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pending': return <Clock size={16} color="#92400E" />;
@@ -286,6 +270,8 @@ export default function MyOrders() {
   const handleTrackOrder = (order: any) => {
     router.push(`/orders/${order.id}?tracking=true`);
   };
+
+  const isPickupOrder = (order: any) => order.fulfillmentMode === 'pickup';
 
   const handleContactSupport = () => {
     Alert.alert(
@@ -369,7 +355,7 @@ export default function MyOrders() {
             styles.statusText,
             { color: getStatusTextColor(order.status) }
           ]}>
-                {getStatusText(order.status, order.orderType)}
+                {getOrderStatusLabel(order.status, order.orderType, order.shippingAddress)}
           </Text>
         </View>
       </View>
@@ -429,7 +415,7 @@ export default function MyOrders() {
             size="small"
           />
         )}
-        {['pending', 'reserved', 'confirmed', 'processing', 'preparing', 'shipped'].includes(order.status) && (
+        {!isPickupOrder(order) && ['pending', 'reserved', 'confirmed', 'processing', 'preparing', 'ready_for_delivery', 'shipped'].includes(order.status) && (
           <Button
             title="Rastrear"
             onPress={() => handleTrackOrder(order)}

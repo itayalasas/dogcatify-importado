@@ -92,6 +92,7 @@ const ZoomableImage = ({ uri, style, onDoubleTap }: { uri: string; style?: any; 
     <GestureDetector gesture={composedGesture}>
       <Animated.Image
         source={{ uri }}
+        resizeMode="cover"
         style={[style, animatedStyle]}
       />
     </GestureDetector>
@@ -236,6 +237,15 @@ const PostCard: React.FC<PostCardProps> = ({
   const videoRefs = useRef<{[key: number]: Video | null}>({});
 
   useEffect(() => {
+    // Reset carousel state when the card starts representing a different post.
+    setCurrentImageIndex(0);
+    setPlayingVideos({});
+    setVideoSpeeds({});
+    setVideosInitialized({});
+    videoRefs.current = {};
+  }, [post.id]);
+
+  useEffect(() => {
     if (currentUser && post.likes) {
       setLiked(post.likes.includes(currentUser.id));
     }
@@ -271,6 +281,21 @@ const PostCard: React.FC<PostCardProps> = ({
     setPlayingVideos({});
     setVideoSpeeds({});
   }, [currentImageIndex]);
+
+  useEffect(() => {
+    if (!post.albumImages || post.albumImages.length === 0) {
+      return;
+    }
+
+    post.albumImages.forEach((mediaUrl: string) => {
+      if (!mediaUrl || isVideoUrl(mediaUrl)) {
+        return;
+      }
+
+      const cleanUrl = getCleanUrl(mediaUrl);
+      Image.prefetch(cleanUrl).catch(() => {});
+    });
+  }, [post.albumImages]);
 
   // Pause videos when post is not in viewport
   useEffect(() => {
@@ -910,15 +935,23 @@ const PostCard: React.FC<PostCardProps> = ({
         {post.albumImages && post.albumImages.length > 0 && (
           <View style={styles.albumContainer}>
             <ScrollView
+              key={`album-${post.id}`}
+              style={styles.albumScrollView}
+              contentContainerStyle={styles.albumScrollContent}
               horizontal
               pagingEnabled
+              snapToInterval={width}
+              snapToAlignment="start"
+              decelerationRate="fast"
               showsHorizontalScrollIndicator={false}
               scrollEnabled={true}
               directionalLockEnabled={true}
+              nestedScrollEnabled={true}
+              removeClippedSubviews={false}
               onMomentumScrollEnd={(e) => {
                 const contentOffset = e.nativeEvent.contentOffset;
                 const viewSize = e.nativeEvent.layoutMeasurement;
-                const pageNum = Math.floor(contentOffset.x / viewSize.width);
+                const pageNum = Math.round(contentOffset.x / viewSize.width);
                 setCurrentImageIndex(pageNum);
               }}
               onScrollBeginDrag={() => {
@@ -1000,7 +1033,7 @@ const PostCard: React.FC<PostCardProps> = ({
                         
             <View style={styles.albumOverlay}>
               <Text style={styles.albumCount}>
-                {isVideoUrl(post.albumImages[currentImageIndex]) ? '🎥 ' : '📸 '}
+                {((post.albumImages[currentImageIndex] || post.albumImages[0] || '') as string).startsWith('VIDEO:') ? '🎥 ' : '📸 '}
                 {currentImageIndex + 1}/{post.albumImages.length}
               </Text>
             </View>
@@ -1223,8 +1256,15 @@ const styles = StyleSheet.create({
     width: width,
     height: width, 
   },
+  albumScrollView: {
+    width: width,
+    height: width,
+  },
+  albumScrollContent: {
+    alignItems: 'stretch',
+  },
   albumImageWrapper: {
-    width: '100%',
+    width: width,
     height: width,
   },
   albumMainImage: {
