@@ -344,4 +344,3 @@ steps:
       pathToPublish: '$(Build.ArtifactStagingDirectory)/export'
       artifactName: 'ios-ipa'
       publishLocation: 'Container'
-
