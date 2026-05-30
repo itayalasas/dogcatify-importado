@@ -339,3 +339,9 @@ steps:
     displayName: 'Export IPA'
 
 
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publicar artefacto iOS'
+    inputs:
+      pathToPublish: '$(Build.ArtifactStagingDirectory)/export'
+      artifactName: 'ios-ipa'
+      publishLocation: 'Container'
