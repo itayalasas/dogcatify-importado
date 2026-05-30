@@ -338,17 +338,4 @@ steps:
       exit $RC
     displayName: 'Export IPA'
 
-  - task: PublishBuildArtifacts@1
-    displayName: 'Publicar artefacto iOS'
-    inputs:
-      pathToPublish: '$(Build.ArtifactStagingDirectory)/export'
-      artifactName: 'ios-ipa'
-      publishLocation: 'Container'
 
-  - task: PublishBuildArtifacts@1
-    displayName: 'Publicar logs xcodebuild'
-    condition: succeededOrFailed()
-    inputs:
-      pathToPublish: '$(Build.ArtifactStagingDirectory)'
-      artifactName: 'ios-build-logs'
-      publishLocation: 'Container'
