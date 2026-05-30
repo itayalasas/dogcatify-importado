@@ -40,6 +40,22 @@ export const Button: React.FC<ButtonProps> = ({
     styles[`${size}Text`],
   ];
 
+  const renderChildren = () => {
+    const nodes = React.Children.toArray(children);
+
+    return nodes.map((child, index) => {
+      if (typeof child === 'string' || typeof child === 'number') {
+        return (
+          <Text key={`button-text-${index}`} style={textStyle}>
+            {child}
+          </Text>
+        );
+      }
+
+      return child;
+    });
+  };
+
   return (
     <TouchableOpacity
       style={buttonStyle}
@@ -49,8 +65,8 @@ export const Button: React.FC<ButtonProps> = ({
     >
       {loading ? (
         <ActivityIndicator color={variant === 'primary' ? '#FFFFFF' : '#3B82F6'} />
-      ) : children ? (
-        children
+      ) : children !== null && children !== undefined && children !== false ? (
+        renderChildren()
       ) : (
         <>
           {icon && iconPosition === 'left' ? icon : null}

@@ -553,7 +553,7 @@ Deno.serve(async (req: Request) => {
     const localSubscriptionInsert: Record<string, unknown> = {
       partner_id: partnerId,
       plan_id: plan.id,
-      status: canGrantTrial ? "trialing" : "pending",
+      status: "pending",
       billing_cycle: billingCycle,
       trial_days: trialDays,
       trial_started_at: canGrantTrial ? now : null,
@@ -720,11 +720,10 @@ Deno.serve(async (req: Request) => {
         fallback_url: planCheckoutUrl,
       });
 
-      const fallbackStatus: PartnerSubscriptionStatus = canGrantTrial ? "trialing" : "pending";
       const { data: fallbackSubscription, error: fallbackError } = await supabase
         .from("partner_subscriptions")
         .update({
-          status: fallbackStatus,
+          status: "pending",
           payment_url: planCheckoutUrl,
           metadata: {
             ...(localSubscription.metadata || {}),
@@ -753,8 +752,8 @@ Deno.serve(async (req: Request) => {
 
       await updatePartnerProfileSubscription(supabase, partnerId, {
         subscription_plan_tier: String(plan.tier || "starter"),
-        subscription_plan_status: fallbackStatus,
-        subscription_plan_started_at: canGrantTrial ? localSubscription.trial_started_at || now : now,
+        subscription_plan_status: "pending",
+        subscription_plan_started_at: null,
         subscription_plan_expires_at: localSubscription.trial_ends_at || null,
         subscription_plan_metadata: {
           partner_subscription_id: fallbackSubscription?.id || localSubscription.id,
@@ -773,7 +772,7 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({
         success: true,
         subscription: fallbackSubscription,
-        status: fallbackStatus,
+        status: "pending",
         paymentUrl: planCheckoutUrl,
         fallback: true,
       });

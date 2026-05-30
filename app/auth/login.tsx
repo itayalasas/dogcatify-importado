@@ -388,9 +388,14 @@ export default function Login() {
           />
 
           <View style={styles.forgotPasswordContainer}>
-            <Link href="/auth/forgot-password" style={styles.forgotPasswordLink}>
-              ¿Olvidaste tu contraseña?
-            </Link>
+            <TouchableOpacity
+              onPress={() => router.push('/auth/forgot-password')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.forgotPasswordLink}>
+                ¿Olvidaste tu contraseña?
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 

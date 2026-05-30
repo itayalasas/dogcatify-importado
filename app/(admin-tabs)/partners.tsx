@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert } from 'react-native';
-import { Plus, DollarSign, Percent, Calendar, Package, Search } from 'lucide-react-native';
+import { Plus, Calendar, Package, Search } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -14,15 +14,6 @@ import {
   resolvePartnerAccountSubscription,
 } from '../../utils/partnerPlans';
 
-interface Subscription {
-  id: string;
-  name: string;
-  price: number;
-  duration: number; // days
-  features: string[];
-  commission: number; // percentage
-  isActive: boolean;
-}
 
 export default function AdminPartners() {
   const { currentUser } = useAuth();
@@ -30,7 +21,6 @@ export default function AdminPartners() {
   const [filteredPartners, setFilteredPartners] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
-  const [showCommissionModal, setShowCommissionModal] = useState(false);
   const [selectedPartner, setSelectedPartner] = useState<any>(null);
   const [selectedPlanTier, setSelectedPlanTier] = useState<'starter' | 'growth' | 'pro'>('starter');
   
@@ -39,11 +29,6 @@ export default function AdminPartners() {
   const [subPrice, setSubPrice] = useState('');
   const [subDuration, setSubDuration] = useState('');
   const [subFeatures, setSubFeatures] = useState('');
-  const [subCommission, setSubCommission] = useState('');
-  
-  // Commission form
-  const [newCommission, setNewCommission] = useState('');
-  
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -87,7 +72,6 @@ export default function AdminPartners() {
           user_id, 
           business_name, 
           business_type, 
-          commission_percentage, 
           subscription_plan_tier,
           subscription_plan_status,
           subscription_plan_expires_at,
@@ -152,7 +136,6 @@ export default function AdminPartners() {
           isVerified: partner.is_verified,
           businessName: partner.business_name,
           businessType: partner.business_type,
-          commissionPercentage: partner.commission_percentage || 5.0,
           subscriptionPlanTier: accountSubscription?.subscriptionPlanTier || normalizePartnerPlanTier(partner.subscription_plan_tier),
           subscriptionPlanStatus: accountSubscription?.subscriptionPlanStatus || partner.subscription_plan_status || 'active',
           subscriptionPlanExpiresAt: accountSubscription?.subscriptionPlanExpiresAt || partner.subscription_plan_expires_at || null,
@@ -182,46 +165,6 @@ export default function AdminPartners() {
       };
     } catch (error) {
       console.error('Error fetching partners:', error);
-    }
-  };
-
-  const handleUpdateCommission = async () => {
-    if (!selectedPartner || !newCommission) {
-      Alert.alert('Error', 'Por favor especifica la comisión');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const { error } = await supabaseClient
-        .from('partners')
-        .update({
-          commission_percentage: parseFloat(newCommission),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', selectedPartner.id);
-
-      if (error) throw error;
-
-      // Update local state immediately
-      setPartners(prevPartners => 
-        prevPartners.map(partner => 
-          partner.id === selectedPartner.id 
-            ? { ...partner, commissionPercentage: parseFloat(newCommission) }
-            : partner
-        )
-      );
-
-      setNewCommission('');
-      setSelectedPartner(null);
-      setShowCommissionModal(false);
-      
-      Alert.alert('Éxito', 'Comisión actualizada correctamente');
-    } catch (error) {
-      console.error('Error updating commission:', error);
-      Alert.alert('Error', 'No se pudo actualizar la comisión');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -368,19 +311,6 @@ export default function AdminPartners() {
                     </Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.commissionButton}
-                    onPress={() => {
-                      setSelectedPartner(partner);
-                      setNewCommission(partner.commissionPercentage?.toString() || '5.0');
-                      setShowCommissionModal(true);
-                    }}
-                  >
-                    <Percent size={16} color="#3B82F6" />
-                    <Text style={styles.commissionButtonText}>
-                      {partner.commissionPercentage || 5.0}%
-                    </Text>
-                  </TouchableOpacity>
                 </View>
               </View>
               
@@ -409,55 +339,6 @@ export default function AdminPartners() {
         </View>
       </ScrollView>
 
-      {/* Commission Modal */}
-      <Modal
-        visible={showCommissionModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowCommissionModal(false)}
-      >
-        <View style={styles.commissionModalOverlay}>
-          <View style={styles.commissionModalContent}>
-            <Text style={styles.modalTitle}>
-              Actualizar Comisión - {selectedPartner?.businessName}
-            </Text>
-            
-            <View style={styles.commissionInfo}>
-              <Text style={styles.commissionInfoText}>
-                Comisión actual: {selectedPartner?.commissionPercentage || 5.0}%
-              </Text>
-            </View>
-            
-            <Input
-              label="Nueva comisión (%)"
-              placeholder="5.0"
-              value={newCommission}
-              onChangeText={setNewCommission}
-              keyboardType="numeric"
-              leftIcon={<Percent size={20} color="#6B7280" />}
-            />
-            
-            <View style={styles.commissionModalActions}>
-              <Button
-                title="Cancelar"
-                onPress={() => {
-                  setShowCommissionModal(false);
-                  setNewCommission('');
-                  setSelectedPartner(null);
-                }}
-                variant="outline"
-                size="large"
-              />
-              <Button
-                title="Actualizar"
-                onPress={handleUpdateCommission}
-                loading={loading}
-                size="large"
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       <Modal
         visible={showSubscriptionModal}

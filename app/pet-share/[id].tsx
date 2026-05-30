@@ -268,9 +268,8 @@ export default function PetShareInvitationScreen() {
           <Button
             onPress={() => router.replace('/(tabs)/pets')}
             style={styles.errorButton}
-          >
-            Ir a Mis Mascotas
-          </Button>
+            title="Ir a Mis Mascotas"
+          />
         </View>
       </SafeAreaView>
     );

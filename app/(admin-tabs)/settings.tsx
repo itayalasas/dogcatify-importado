@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Switch, Alert, Modal, ActivityIndicator } from 'react-native';
-import { Bell, Shield, DollarSign, Globe, Database, LogOut, CreditCard, Crown } from 'lucide-react-native';
+import { Bell, Shield, Globe, Database, LogOut, CreditCard, Crown } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
@@ -28,9 +28,6 @@ export default function AdminSettings() {
     emailNotificationServer: 'smtpout.secureserver.net',
     emailNotificationPort: '465',
     emailNotificationUser: 'info@dogcatify.com',
-    globalCommission: '5.0',
-    commissionType: 'percentage', // 'percentage', 'fixed', 'subscription'
-    fixedCommission: '100',
   });
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [testEmail, setTestEmail] = useState('');
@@ -62,7 +59,6 @@ export default function AdminSettings() {
     if (isAdmin) {
       loadSystemSettings();
       loadAdminMpConfig();
-      loadCommissionConfig();
       loadSubscriptionSettings();
     }
   }, [isAdmin]);
@@ -183,28 +179,6 @@ export default function AdminSettings() {
 
   const handleManageSubscriptionPlans = () => {
     router.push('/(admin-tabs)/subscription-plans');
-  };
-
-  const loadCommissionConfig = async () => {
-    try {
-      const { data, error } = await supabaseClient
-        .from('admin_settings')
-        .select('value')
-        .eq('key', 'commission_config')
-        .single();
-      
-      if (data && !error) {
-        const config = data.value || {};
-        setSettings(prev => ({
-          ...prev,
-          globalCommission: config.global_commission?.toString() || '5.0',
-          commissionType: config.commission_type || 'percentage',
-          fixedCommission: config.fixed_commission?.toString() || '100'
-        }));
-      }
-    } catch (error) {
-      console.error('Error loading commission config:', error);
-    }
   };
 
   const loadAdminMpConfig = async () => {
@@ -637,54 +611,6 @@ export default function AdminSettings() {
     }
   };
 
-  const handleCommissionChange = (value: string) => {
-    // Validate that it's a valid number
-    const numValue = parseFloat(value);
-    if (!isNaN(numValue) && numValue >= 0 && numValue <= 100) {
-      setSettings(prev => ({ ...prev, globalCommission: value }));
-    }
-  };
-
-  const handleCommissionTypeChange = (type: string) => {
-    setSettings(prev => ({ ...prev, commissionType: type }));
-  };
-
-  const handleFixedCommissionChange = (value: string) => {
-    // Validate that it's a valid number
-    const numValue = parseFloat(value);
-    if (!isNaN(numValue) && numValue >= 0) {
-      setSettings(prev => ({ ...prev, fixedCommission: value }));
-    }
-  };
-
-  const handleSaveCommissionConfig = async () => {
-    try {
-      const configData = {
-        global_commission: parseFloat(settings.globalCommission),
-        commission_type: settings.commissionType,
-        fixed_commission: parseFloat(settings.fixedCommission),
-        updated_at: new Date().toISOString()
-      };
-
-      const { error } = await supabaseClient
-        .from('admin_settings')
-        .upsert({
-          key: 'commission_config',
-          value: configData,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'key'
-        });
-
-      if (error) throw error;
-
-      Alert.alert('Éxito', 'Configuración de comisiones guardada correctamente');
-    } catch (error) {
-      console.error('Error saving commission config:', error);
-      Alert.alert('Error', 'No se pudo guardar la configuración de comisiones');
-    }
-  };
-
   const handleSystemMaintenance = () => {
     Alert.alert(
       'Modo Mantenimiento',
@@ -1011,101 +937,6 @@ export default function AdminSettings() {
                 </Text>
               </View>
             )}
-          </Card>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>💰 Configuración de Comisiones</Text>
-
-          <Card style={styles.commissionCard}>
-            <View style={styles.commissionHeader}>
-              <View style={styles.commissionTitleContainer}>
-                <View style={styles.commissionIconBadge}>
-                  <DollarSign size={22} color="#047857" />
-                </View>
-                <View style={styles.commissionTitleCopy}>
-                  <Text style={styles.commissionTitle}>Comisión de la plataforma</Text>
-                  <Text style={styles.commissionDescription}>
-                    Define cómo se calcula la comisión base para ventas y transacciones de aliados.
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.commissionSummaryBadge}>
-                <Text style={styles.commissionSummaryLabel}>Actual</Text>
-                <Text style={styles.commissionSummaryValue}>
-                  {settings.commissionType === 'percentage'
-                    ? `${settings.globalCommission}%`
-                    : `$${settings.fixedCommission}`}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.commissionTypesTitle}>Tipo de comisión</Text>
-
-            <View style={styles.commissionOptionsGrid}>
-              <TouchableOpacity
-                style={[
-                  styles.commissionOption,
-                  settings.commissionType === 'percentage' && styles.commissionOptionSelected
-                ]}
-                onPress={() => handleCommissionTypeChange('percentage')}
-              >
-                <View style={styles.commissionOptionHeader}>
-                  <View style={[
-                    styles.commissionRadio,
-                    settings.commissionType === 'percentage' && styles.commissionRadioSelected
-                  ]} />
-                  <Text style={styles.commissionOptionTitle}>Porcentaje</Text>
-                </View>
-                <Text style={styles.commissionOptionText}>Se descuenta un porcentaje del valor de cada transacción.</Text>
-                <View style={styles.commissionFieldRow}>
-                  <Input
-                    placeholder="5.0"
-                    value={settings.globalCommission}
-                    onChangeText={handleCommissionChange}
-                    keyboardType="numeric"
-                    editable={settings.commissionType === 'percentage'}
-                    style={styles.commissionInput}
-                  />
-                  <Text style={styles.commissionFieldSuffix}>%</Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.commissionOption,
-                  settings.commissionType === 'fixed' && styles.commissionOptionSelected
-                ]}
-                onPress={() => handleCommissionTypeChange('fixed')}
-              >
-                <View style={styles.commissionOptionHeader}>
-                  <View style={[
-                    styles.commissionRadio,
-                    settings.commissionType === 'fixed' && styles.commissionRadioSelected
-                  ]} />
-                  <Text style={styles.commissionOptionTitle}>Monto fijo</Text>
-                </View>
-                <Text style={styles.commissionOptionText}>Se cobra el mismo importe por cada transacción procesada.</Text>
-                <View style={styles.commissionFieldRow}>
-                  <Text style={styles.commissionFieldPrefix}>$</Text>
-                  <Input
-                    value={settings.fixedCommission}
-                    onChangeText={handleFixedCommissionChange}
-                    keyboardType="numeric"
-                    editable={settings.commissionType === 'fixed'}
-                    style={styles.commissionInput}
-                  />
-                </View>
-              </TouchableOpacity>
-            </View>
-
-            <Button
-              title="Guardar Configuración"
-              onPress={handleSaveCommissionConfig}
-              variant="primary"
-              size="large"
-              style={styles.saveButton}
-            />
           </Card>
         </View>
 
@@ -2415,3 +2246,5 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
 });
+
+

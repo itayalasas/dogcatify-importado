@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { OrderTracking } from '../../components/OrderTracking';
+import { getOrderFulfillmentMode, getOrderStatusLabel } from '../../utils/orderFulfillment';
 
 export default function OrderDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -78,6 +79,7 @@ export default function OrderDetail() {
           items: data.items || [],
           status: data.status || 'pending',
           orderType: data.order_type || 'product_purchase',
+          fulfillmentMode: getOrderFulfillmentMode(data.order_type || 'product_purchase', data.shipping_address),
           totalAmount: data.total_amount || 0,
           subtotalAmount: data.subtotal,
           shippingCost: Number(data.shipping_cost || 0),
@@ -161,24 +163,6 @@ export default function OrderDetail() {
     }
   };
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'pending': return 'Pendiente';
-      case 'reserved': return 'Reservado';
-      case 'payment_failed': return 'Pago fallido';
-      case 'confirmed': return 'Confirmado';
-      case 'processing': return 'En proceso';
-      case 'preparing': return 'Preparando';
-      case 'ready_for_delivery': return 'Listo para entrega';
-      case 'shipped': return 'En reparto';
-      case 'delivered': return 'Entregado';
-      case 'completed': return 'Completado';
-      case 'cancelled': return 'Cancelado';
-      case 'refunded': return 'Reembolsado';
-      default: return 'Desconocido';
-    }
-  };
-
   const isServiceOrder = order?.orderType === 'service_booking';
   const shippingAddressText = (order?.shippingAddress || '').trim();
   const isStorePickup = !isServiceOrder && (
@@ -252,7 +236,7 @@ export default function OrderDetail() {
                 styles.statusText,
                 { color: getStatusTextColor(order.status) }
               ]}>
-                {getStatusText(order.status)}
+                {getOrderStatusLabel(order.status, order.orderType, order.shippingAddress)}
               </Text>
             </View>
           </View>
@@ -274,6 +258,7 @@ export default function OrderDetail() {
           <OrderTracking
             orderStatus={order.status}
             orderType={order.orderType}
+            fulfillmentMode={order.fulfillmentMode}
             orderDate={order.createdAt}
             cancelledDate={order.status === 'cancelled' ? order.updatedAt : undefined}
           />
