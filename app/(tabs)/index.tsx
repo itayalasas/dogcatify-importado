@@ -221,10 +221,10 @@ export default function Home() {
 
       if (error) throw error;
 
+      // No abrir Dotty automáticamente en cuentas nuevas.
+      // El onboarding se maneja de forma explícita desde la pantalla dedicada.
       if (data && !data.onboarding_completed) {
-        setTimeout(() => {
-          setShowOnboarding(true);
-        }, 1500);
+        setShowOnboarding(false);
       }
 
       setOnboardingChecked(true);

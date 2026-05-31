@@ -17,6 +17,14 @@ const getActivePartnerBusinessCacheKey = (userId: string) => `${ACTIVE_PARTNER_B
 const isAppRole = (value: string | null | undefined): value is AppRole =>
   value === 'owner' || value === 'partner' || value === 'admin';
 
+const buildSelectRoleRoute = (redirect?: string): string => {
+  if (!redirect) {
+    return '/auth/select-role';
+  }
+
+  return `/auth/select-role?redirect=${encodeURIComponent(redirect)}`;
+};
+
 export const getAvailableRoles = (userContext?: PostLoginRoleContext | null): AppRole[] => {
   const roles: AppRole[] = [];
 
@@ -141,6 +149,11 @@ export const resolveRoleRoute = async (
   userId: string,
   role: AppRole,
 ): Promise<string> => {
+  const showOnboarding = await shouldShowOnboarding(userId);
+  if (showOnboarding) {
+    return '/onboarding';
+  }
+
   if (role === 'partner') {
     return '/(partner-tabs)/business-selector';
   }
@@ -149,8 +162,7 @@ export const resolveRoleRoute = async (
     return '/(admin-tabs)/analytics';
   }
 
-  const showOnboarding = await shouldShowOnboarding(userId);
-  return showOnboarding ? '/onboarding' : '/(tabs)';
+  return '/(tabs)';
 };
 
 export const resolvePostLoginRoute = async (
@@ -158,6 +170,11 @@ export const resolvePostLoginRoute = async (
   redirect?: string,
   userContext?: PostLoginRoleContext | null,
 ): Promise<string> => {
+  const showOnboarding = await shouldShowOnboarding(userId);
+  if (showOnboarding) {
+    return '/onboarding';
+  }
+
   if (redirect) {
     return redirect;
   }
@@ -191,13 +208,12 @@ export const resolvePostLoginRoute = async (
   const availableRoles = getAvailableRoles(resolvedContext);
 
   if (availableRoles.length > 1) {
-    return '/auth/select-role';
+    return buildSelectRoleRoute(redirect);
   }
 
   if (availableRoles.length === 1) {
-    return resolveRoleRoute(userId, availableRoles[0]);
+    return redirect || resolveRoleRoute(userId, availableRoles[0]);
   }
 
-  const showOnboarding = await shouldShowOnboarding(userId);
-  return showOnboarding ? '/onboarding' : '/(tabs)';
+  return redirect || '/(tabs)';
 };

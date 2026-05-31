@@ -5,8 +5,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useEffect } from 'react';
-import { getAvailableRoles } from '../../utils/onboarding';
+import { useEffect, useState } from 'react';
+import { getAvailableRoles, shouldShowOnboarding } from '../../utils/onboarding';
 import { LoadingScreen } from '../../components/ui/LoadingScreen';
 
 export default function TabLayout() {
@@ -19,9 +19,49 @@ export default function TabLayout() {
   const isAdminUser = currentUser?.isAdmin === true;
   const isPartnerOnly = !!currentUser?.isPartner && !currentUser?.isOwner && !isAdminUser;
   const isAdminOnly = isAdminUser && !currentUser?.isOwner && !currentUser?.isPartner;
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [onboardingRequired, setOnboardingRequired] = useState(false);
 
   useEffect(() => {
-    if (!authInitialized || isPostLoginFlowPending) return;
+    let mounted = true;
+
+    const checkOnboarding = async () => {
+      if (!authInitialized || !currentUser || isPostLoginFlowPending) {
+        if (mounted) {
+          setOnboardingChecked(true);
+          setOnboardingRequired(false);
+        }
+        return;
+      }
+
+      try {
+        const shouldShow = await shouldShowOnboarding(currentUser.id);
+        if (!mounted) return;
+
+        setOnboardingChecked(true);
+        setOnboardingRequired(shouldShow);
+
+        if (shouldShow && pathname !== '/onboarding') {
+          router.replace('/onboarding');
+        }
+      } catch (error) {
+        console.warn('Error checking onboarding before tabs route:', error);
+        if (mounted) {
+          setOnboardingChecked(true);
+          setOnboardingRequired(false);
+        }
+      }
+    };
+
+    void checkOnboarding();
+
+    return () => {
+      mounted = false;
+    };
+  }, [authInitialized, currentUser?.id, isPostLoginFlowPending, pathname]);
+
+  useEffect(() => {
+    if (!authInitialized || isPostLoginFlowPending || !onboardingChecked || onboardingRequired) return;
 
     if (!currentUser) {
       if (pathname !== '/auth/login') {
@@ -43,7 +83,7 @@ export default function TabLayout() {
     if (!activeRole && hasMultipleRoles) {
       router.replace('/auth/select-role');
     }
-  }, [authInitialized, currentUser?.id, currentUser?.isOwner, currentUser?.isPartner, currentUser?.isAdmin, activeRole, hasMultipleRoles, isPostLoginFlowPending, pathname]);
+  }, [authInitialized, currentUser?.id, currentUser?.isOwner, currentUser?.isPartner, currentUser?.isAdmin, activeRole, hasMultipleRoles, isPostLoginFlowPending, pathname, onboardingChecked, onboardingRequired]);
 
   if (isPostLoginFlowPending) {
     return <LoadingScreen message="Preparando tu inicio..." />;
@@ -51,6 +91,10 @@ export default function TabLayout() {
 
   if (authInitialized && !currentUser) {
     return <LoadingScreen message="Cerrando sesión..." />;
+  }
+
+  if (authInitialized && currentUser && (!onboardingChecked || onboardingRequired)) {
+    return <LoadingScreen message="Preparando onboarding..." />;
   }
 
   if (

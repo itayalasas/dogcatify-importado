@@ -5,6 +5,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Input } from '../../components/ui/Input';
 import { supabaseClient } from '../../lib/supabase';
 import { envConfig } from '../../utils/envConfig';
@@ -19,6 +20,7 @@ type SystemToggleKey =
 
 export default function AdminSettings() {
   const { currentUser, logout } = useAuth();
+  const insets = useSafeAreaInsets();
   const [settings, setSettings] = useState({
     pushNotifications: true,
     maintenanceMode: false,
@@ -770,7 +772,12 @@ export default function AdminSettings() {
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 140 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Notifications Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>🔔 Notificaciones</Text>
@@ -1536,6 +1543,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  scrollContent: {
+    paddingBottom: 16,
+  },
   section: {
     marginBottom: 24,
     paddingHorizontal: 16,
@@ -2246,5 +2256,4 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
 });
-
 
