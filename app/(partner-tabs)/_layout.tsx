@@ -10,7 +10,7 @@ import { useState, useEffect } from 'react';
 import { supabaseClient } from '../../lib/supabase';
 import { LoadingScreen } from '../../components/ui/LoadingScreen';
 import { canAccessPartnerModule, resolvePartnerAccountSubscription, resolvePartnerPlanTier } from '../../utils/partnerPlans';
-import { getAvailableRoles, getStoredActivePartnerBusinessId, setStoredActivePartnerBusinessId } from '../../utils/onboarding';
+import { getAvailableRoles, getStoredActivePartnerBusinessId, setStoredActivePartnerBusinessId, shouldShowOnboarding } from '../../utils/onboarding';
 
 export default function PartnerTabLayout() {
   const { t } = useLanguage();
@@ -31,6 +31,8 @@ export default function PartnerTabLayout() {
   const isAdminOnly = isAdminUser && !currentUser?.isOwner && !currentUser?.isPartner;
   const activeBusinessId = businessId || selectedBusinessId || null;
   const hasSelectedBusiness = Boolean(activeBusinessId);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [onboardingRequired, setOnboardingRequired] = useState(false);
 
   useEffect(() => {
     if (authInitialized && !currentUser) {
@@ -42,7 +44,45 @@ export default function PartnerTabLayout() {
   }, [currentUser, authInitialized, pathname]);
 
   useEffect(() => {
-    if (!authInitialized || !currentUser || isPostLoginFlowPending) return;
+    let mounted = true;
+
+    const checkOnboarding = async () => {
+      if (!authInitialized || !currentUser || isPostLoginFlowPending) {
+        if (mounted) {
+          setOnboardingChecked(true);
+          setOnboardingRequired(false);
+        }
+        return;
+      }
+
+      try {
+        const shouldShow = await shouldShowOnboarding(currentUser.id);
+        if (!mounted) return;
+
+        setOnboardingChecked(true);
+        setOnboardingRequired(shouldShow);
+
+        if (shouldShow && pathname !== '/onboarding') {
+          router.replace('/onboarding');
+        }
+      } catch (error) {
+        console.warn('Error checking onboarding before partner tabs route:', error);
+        if (mounted) {
+          setOnboardingChecked(true);
+          setOnboardingRequired(false);
+        }
+      }
+    };
+
+    void checkOnboarding();
+
+    return () => {
+      mounted = false;
+    };
+  }, [authInitialized, currentUser?.id, isPostLoginFlowPending, pathname]);
+
+  useEffect(() => {
+    if (!authInitialized || !currentUser || isPostLoginFlowPending || !onboardingChecked || onboardingRequired) return;
 
     if (activeRole === 'owner' || isOwnerOnly) {
       router.replace('/(tabs)');
@@ -57,7 +97,7 @@ export default function PartnerTabLayout() {
     if (!activeRole && hasMultipleRoles) {
       router.replace('/auth/select-role');
     }
-  }, [authInitialized, currentUser?.id, currentUser?.isOwner, currentUser?.isPartner, currentUser?.isAdmin, activeRole, hasMultipleRoles, isPostLoginFlowPending]);
+  }, [authInitialized, currentUser?.id, currentUser?.isOwner, currentUser?.isPartner, currentUser?.isAdmin, activeRole, hasMultipleRoles, isPostLoginFlowPending, onboardingChecked, onboardingRequired]);
 
   useEffect(() => {
     if (!authInitialized) return;
@@ -188,6 +228,10 @@ export default function PartnerTabLayout() {
 
   if (isPostLoginFlowPending) {
     return <LoadingScreen message="Preparando tu inicio..." />;
+  }
+
+  if (authInitialized && currentUser && (!onboardingChecked || onboardingRequired)) {
+    return <LoadingScreen message="Preparando onboarding..." />;
   }
   
   if (!authInitialized) {

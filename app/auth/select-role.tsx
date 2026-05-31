@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert } from 'react-native';
-import { router, Stack } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Briefcase, CircleCheck as CheckCircle, Chrome as Home, ShieldCheck } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { AppRole, getAvailableRoles, resolveRoleRoute, setStoredActiveRole } from '../../utils/onboarding';
+import { AppRole, getAvailableRoles, getStoredActiveRole, resolveRoleRoute, setStoredActiveRole } from '../../utils/onboarding';
 
 type RoleOption = {
   role: AppRole;
@@ -18,11 +18,43 @@ type RoleOption = {
 };
 
 export default function SelectRoleScreen() {
+  const { redirect } = useLocalSearchParams<{ redirect?: string }>();
   const { currentUser, activeRole, setActiveRole } = useAuth();
   const { t } = useLanguage();
-  const [selectedRole, setSelectedRole] = useState<AppRole | null>(null);
+  const [selectedRole, setSelectedRole] = useState<AppRole | null>(activeRole);
 
   const availableRoles = useMemo(() => getAvailableRoles(currentUser), [currentUser]);
+
+  useEffect(() => {
+    if (activeRole) {
+      setSelectedRole(activeRole);
+    }
+  }, [activeRole]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadStoredRole = async () => {
+      if (!currentUser?.id) return;
+
+      try {
+        const storedRole = await getStoredActiveRole(currentUser.id);
+        if (!mounted || !storedRole) return;
+
+        if (availableRoles.includes(storedRole)) {
+          setSelectedRole(storedRole);
+        }
+      } catch (error) {
+        console.warn('Error loading stored active role:', error);
+      }
+    };
+
+    void loadStoredRole();
+
+    return () => {
+      mounted = false;
+    };
+  }, [currentUser?.id, availableRoles]);
 
   useEffect(() => {
     const autoRedirect = async () => {
@@ -33,7 +65,9 @@ export default function SelectRoleScreen() {
 
       if (availableRoles.length <= 1) {
         const fallbackRole = availableRoles[0] || 'owner';
-        const nextRoute = await resolveRoleRoute(currentUser.id, fallbackRole);
+        const nextRoute = redirect
+          ? String(redirect)
+          : await resolveRoleRoute(currentUser.id, fallbackRole);
         router.replace(nextRoute as any);
       }
     };
@@ -95,7 +129,9 @@ export default function SelectRoleScreen() {
       await setStoredActiveRole(currentUser.id, role);
       setActiveRole(role);
 
-      const nextRoute = await resolveRoleRoute(currentUser.id, role);
+      const nextRoute = redirect
+        ? String(redirect)
+        : await resolveRoleRoute(currentUser.id, role);
       router.replace(nextRoute as any);
     } catch (error) {
       console.error('Error selecting role:', error);

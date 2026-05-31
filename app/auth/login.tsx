@@ -229,7 +229,7 @@ export default function Login() {
             }
           });
         } else {
-          const nextRoute = await resolvePostLoginRoute(result.id, redirect);
+          const nextRoute = await resolvePostLoginRoute(result.id, redirect, result);
           router.replace(nextRoute as any);
         }
       }

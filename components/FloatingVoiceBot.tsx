@@ -19,6 +19,7 @@ import { X, Send, PawPrint, CircleHelp as HelpCircle, ChevronRight, Sparkles, Ar
 import { supabaseClient } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { envConfig } from '@/utils/envConfig';
+import { type AppRole, getStoredActivePartnerBusinessId } from '@/utils/onboarding';
 import { router, usePathname, useSegments } from 'expo-router';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -50,31 +51,207 @@ interface FloatingVoiceBotProps {
   showWelcome?: boolean;
 }
 
-const quickActions = [
-  {
-    id: 'add-pet',
-    label: '🐕 Registrar mi primera mascota',
-    description: 'Guía paso a paso para agregar tu mascota',
-  },
-  {
-    id: 'medical-history',
-    label: '📋 Historial médico',
-    description: 'Aprende a gestionar la salud de tu mascota',
-  },
-  {
-    id: 'find-vet',
-    label: '🏥 Encontrar veterinario',
-    description: 'Servicios veterinarios cerca de ti',
-  },
-  {
-    id: 'explore-app',
-    label: '🎯 Explorar funcionalidades',
-    description: 'Tour completo de DogCatiFy',
-  },
+type DottyQuickAction = {
+  id: string;
+  label: string;
+  description: string;
+};
+
+type PetSummaryState = {
+  loading: boolean;
+  hasPets: boolean;
+  petNames: string[];
+  petCount: number;
+};
+
+const OWNER_PROMPTS_WITH_PETS = (petNames: string[]) => {
+  const firstPet = petNames[0] || 'mi mascota';
+
+  return [
+    `¿Qué le recomendarías hoy a ${firstPet}?`,
+    `¿Qué vacunas o controles faltan para ${firstPet}?`,
+    `¿Está bien el peso de ${firstPet}?`,
+    `¿Qué hago si ${firstPet} tiene vómitos o decaimiento?`,
+    '¿Cómo comparto el historial con un veterinario?',
+  ];
+};
+
+const OWNER_PROMPTS_WITHOUT_PETS = [
+  '¿Cómo registro mi primera mascota?',
+  '¿Qué puedo hacer en Mascotas?',
+  '¿Cómo empiezo con el historial médico?',
+  '¿Qué servicios me recomienda la app?',
+  '¿Cómo funciona el cuidado inteligente?',
 ];
 
+const PARTNER_PROMPTS = [
+  '¿Qué clientes debo reactivar hoy?',
+  '¿Qué clientes están en riesgo de irse?',
+  '¿Cómo veo mis reservas de hoy?',
+  '¿Cómo reviso mis pedidos?',
+  '¿Qué puedo hacer desde mi dashboard?',
+  '¿Qué puedo hacer o no con mi plan actual?',
+  '¿Cómo publico una mascota en adopción?',
+  '¿Qué módulos tengo habilitados?',
+  '¿Qué oportunidades de retención tengo esta semana?',
+];
+
+const ADMIN_PROMPTS = [
+  '¿Cómo reviso los analytics de la plataforma?',
+  '¿Qué solicitudes pendientes tengo?',
+  '¿Cómo veo el estado de los partners?',
+  '¿Qué alertas importantes debo revisar?',
+  '¿Qué puedo gestionar desde admin?',
+  '¿Qué partners necesito revisar primero?',
+  '¿Cómo veo la actividad reciente de la plataforma?',
+];
+
+const getQuickActions = (role: AppRole | null, hasPets: boolean, loading = false): DottyQuickAction[] => {
+  if (loading) {
+    return role === 'partner' || role === 'admin'
+      ? [
+          {
+            id: 'partner-dashboard',
+            label: '📊 Ir al dashboard',
+            description: 'Ver métricas, accesos y estado del negocio',
+          },
+          {
+            id: 'partner-clients',
+            label: '🤝 Clientes y retención',
+            description: 'CRM, seguimiento y reactivación de clientes',
+          },
+          {
+            id: 'partner-bookings',
+            label: '📅 Reservas',
+            description: 'Ver reservas, agenda y próximos turnos',
+          },
+          {
+            id: 'partner-adoptions',
+            label: '🏡 Adopciones',
+            description: 'Gestionar publicaciones y disponibilidad',
+          },
+        ]
+      : [
+          {
+            id: 'care-hub',
+            label: '🧠 Cuidado inteligente',
+            description: 'IA, recomendaciones, alertas y modo emergencia',
+          },
+          {
+            id: 'find-vet',
+            label: '🏥 Encontrar veterinario',
+            description: 'Servicios veterinarios cerca de ti',
+          },
+          {
+            id: 'explore-app',
+            label: '🎯 Explorar funcionalidades',
+            description: 'Tour completo de DogCatiFy',
+          },
+        ];
+  }
+
+  if (role === 'partner' || role === 'admin') {
+    return [
+      {
+        id: 'partner-dashboard',
+        label: '📊 Ir al dashboard',
+        description: 'Ver métricas, accesos y estado del negocio',
+      },
+      {
+        id: 'partner-clients',
+        label: '🤝 Clientes y retención',
+        description: 'CRM, seguimiento y reactivación de clientes',
+      },
+      {
+        id: 'partner-bookings',
+        label: '📅 Reservas',
+        description: 'Ver reservas, agenda y próximos turnos',
+      },
+      {
+        id: 'partner-adoptions',
+        label: '🏡 Adopciones',
+        description: 'Gestionar publicaciones y disponibilidad',
+      },
+    ];
+  }
+
+  return hasPets
+    ? [
+        {
+          id: 'medical-history',
+          label: '📋 Historial médico',
+          description: 'Gestiona salud, vacunas y seguimiento',
+        },
+        {
+          id: 'care-hub',
+          label: '🧠 Cuidado inteligente',
+          description: 'IA, recomendaciones, alertas y modo emergencia',
+        },
+        {
+          id: 'find-vet',
+          label: '🏥 Encontrar veterinario',
+          description: 'Servicios veterinarios cerca de ti',
+        },
+        {
+          id: 'explore-app',
+          label: '🎯 Explorar funcionalidades',
+          description: 'Tour completo de DogCatiFy',
+        },
+      ]
+    : [
+        {
+          id: 'add-pet',
+          label: '🐕 Registrar mi primera mascota',
+          description: 'Guía paso a paso para agregar tu mascota',
+        },
+        {
+          id: 'care-hub',
+          label: '🧠 Cuidado inteligente',
+          description: 'IA, recomendaciones, alertas y modo emergencia',
+        },
+        {
+          id: 'find-vet',
+          label: '🏥 Encontrar veterinario',
+          description: 'Servicios veterinarios cerca de ti',
+        },
+        {
+          id: 'explore-app',
+          label: '🎯 Explorar funcionalidades',
+          description: 'Tour completo de DogCatiFy',
+        },
+      ];
+};
+
+const getStarterPrompts = (role: AppRole | null, hasPets: boolean, petNames: string[], loading = false) => {
+  if (loading) {
+    return role === 'partner' || role === 'admin'
+      ? [
+          '¿Qué debo revisar en mi dashboard?',
+          '¿Qué clientes debo priorizar hoy?',
+          '¿Cómo veo mis reservas y pedidos?',
+          '¿Qué puedo hacer con mi plan actual?',
+        ]
+      : [
+          '¿Qué puede hacer Dotty por mí?',
+          '¿Cómo veo mis mascotas?',
+          '¿Cómo reviso alertas y recordatorios?',
+          '¿Cómo comparto el historial con un veterinario?',
+        ];
+  }
+
+  if (role === 'partner') {
+    return PARTNER_PROMPTS;
+  }
+
+  if (role === 'admin') {
+    return ADMIN_PROMPTS;
+  }
+
+  return hasPets ? OWNER_PROMPTS_WITH_PETS(petNames) : OWNER_PROMPTS_WITHOUT_PETS;
+};
+
 export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, showWelcome = false }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, activeRole } = useAuth();
   const pathname = usePathname();
   const segments = useSegments();
 
@@ -85,7 +262,14 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const [inputText, setInputText] = useState('');
   const [showQuickActions, setShowQuickActions] = useState(true);
   const [isDottyEnabled, setIsDottyEnabled] = useState<boolean | null>(null);
+  const [activePartnerBusinessId, setActivePartnerBusinessId] = useState<string | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [petSummary, setPetSummary] = useState<PetSummaryState>({
+    loading: true,
+    hasPets: false,
+    petNames: [],
+    petCount: 0,
+  });
 
   const position = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 90, y: SCREEN_HEIGHT - 300 })).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -97,6 +281,15 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const isDragging = useRef(false);
   const startPosition = useRef({ x: 0, y: 0 });
   const gestureStartTime = useRef(0);
+  const resolvedRole: AppRole = activeRole ?? (currentUser?.isAdmin ? 'admin' : currentUser?.isPartner ? 'partner' : 'owner');
+  const visibleQuickActions = useMemo(
+    () => getQuickActions(resolvedRole, petSummary.hasPets, petSummary.loading),
+    [resolvedRole, petSummary.hasPets, petSummary.loading]
+  );
+  const visibleStarterPrompts = useMemo(
+    () => getStarterPrompts(resolvedRole, petSummary.hasPets, petSummary.petNames, petSummary.loading),
+    [resolvedRole, petSummary.hasPets, petSummary.petNames, petSummary.loading]
+  );
 
   // Funciones para guardar/cargar posición
   const savePosition = async (x: number, y: number) => {
@@ -399,6 +592,126 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     }
   }, [currentUser?.id]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadActivePartnerBusiness = async () => {
+      if (!currentUser?.id) {
+        setActivePartnerBusinessId(null);
+        return;
+      }
+
+      try {
+        const storedBusinessId = await getStoredActivePartnerBusinessId(currentUser.id);
+        if (isMounted) {
+          setActivePartnerBusinessId(storedBusinessId);
+        }
+      } catch (error) {
+        console.error('[Dotty] Error loading active partner business:', error);
+        if (isMounted) {
+          setActivePartnerBusinessId(null);
+        }
+      }
+    };
+
+    void loadActivePartnerBusiness();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPetSummary = async () => {
+      if (!currentUser?.id) {
+        setPetSummary({
+          loading: false,
+          hasPets: false,
+          petNames: [],
+          petCount: 0,
+        });
+        return;
+      }
+
+      setPetSummary((prev) => ({
+        ...prev,
+        loading: true,
+      }));
+
+      try {
+        const [ownedResponse, sharedResponse] = await Promise.all([
+          supabaseClient
+            .from('pets')
+            .select('id, name, species, breed, owner_id, created_at')
+            .eq('owner_id', currentUser.id)
+            .order('created_at', { ascending: false }),
+          supabaseClient
+            .from('pet_shares')
+            .select(`
+              pet_id,
+              pets!inner (
+                id,
+                name,
+                species,
+                breed,
+                owner_id,
+                created_at
+              )
+            `)
+            .eq('shared_with_user_id', currentUser.id)
+            .eq('status', 'accepted'),
+        ]);
+
+        const petMap = new Map<string, any>();
+
+        (ownedResponse.data || []).forEach((pet: any) => {
+          if (pet?.id && !petMap.has(pet.id)) {
+            petMap.set(pet.id, pet);
+          }
+        });
+
+        (sharedResponse.data || []).forEach((share: any) => {
+          const sharedPet = Array.isArray(share?.pets) ? share.pets[0] : share?.pets;
+          if (sharedPet?.id && !petMap.has(sharedPet.id)) {
+            petMap.set(sharedPet.id, sharedPet);
+          }
+        });
+
+        const petNames = Array.from(petMap.values())
+          .map((pet: any) => pet?.name)
+          .filter(Boolean)
+          .slice(0, 5);
+
+        if (isMounted) {
+          setPetSummary({
+            loading: false,
+            hasPets: petNames.length > 0,
+            petNames,
+            petCount: petMap.size,
+          });
+        }
+      } catch (error) {
+        console.error('[Dotty] Error loading pet summary:', error);
+        if (isMounted) {
+          setPetSummary({
+            loading: false,
+            hasPets: false,
+            petNames: [],
+            petCount: 0,
+          });
+        }
+      }
+    };
+
+    void loadPetSummary();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser?.id]);
+
   // Log cuando cambia isDottyEnabled
   useEffect(() => {
     console.log('[Dotty] isDottyEnabled changed to:', isDottyEnabled);
@@ -425,10 +738,27 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   }, [messages]);
 
   const sendWelcomeMessage = async () => {
+    const userName = currentUser?.displayName || 'Usuario';
+    const welcomeContent = (() => {
+      if (resolvedRole === 'partner' || resolvedRole === 'admin') {
+        return `¡Hola, ${userName}! Soy Dotty, tu asistente para negocio.\n\nPuedo ayudarte con clientes, retención, reservas, pedidos, adopciones, métricas y con lo que tu plan permite hacer o no.\n\n¿Qué quieres revisar primero?`;
+      }
+
+      if (petSummary.loading) {
+        return `¡Hola, ${userName}! Soy Dotty, tu asistente personal.\n\nEstoy cargando tu contexto para darte recomendaciones personalizadas, alertas y próximos pasos. Dame un segundo y empezamos.`;
+      }
+
+      if (petSummary.hasPets) {
+        return `¡Hola, ${userName}! Veo ${petSummary.petCount} mascota(s) registrada(s): ${petSummary.petNames.join(', ')} 🐾\n\nPuedo ayudarte con recomendaciones de hoy, vacunas, peso, alertas, historial médico y cuidado inteligente.\n\n¿Qué necesitas revisar primero?`;
+      }
+
+      return `¡Hola, ${userName}! Soy Dotty, tu asistente personal.\n\nAún no veo mascotas registradas en tu cuenta. Si quieres, te guío para crear tu primera mascota o puedo mostrarte las funciones principales de la app.`;
+    })();
+
     const welcomeMessage: Message = {
       id: Date.now().toString(),
       role: 'assistant',
-      content: '¡Hola! Soy Dotty, tu asistente personal.\n\nEstoy aquí para guiarte en cada paso. ¿En qué puedo ayudarte?',
+      content: welcomeContent,
       audioUsed: false,
       timestamp: new Date(),
     };
@@ -581,7 +911,57 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   };
 
   const handleQuickAction = (actionId: string) => {
-    setShowQuickActions(false);
+      setShowQuickActions(false);
+
+    const openPartnerDashboard = () => {
+      if (activePartnerBusinessId) {
+        router.push({
+          pathname: '/(partner-tabs)/dashboard',
+          params: { businessId: activePartnerBusinessId },
+        });
+        return;
+      }
+
+      router.push('/(partner-tabs)/business-selector');
+    };
+
+    const openPartnerClients = () => {
+      if (activePartnerBusinessId) {
+        router.push({
+          pathname: '/partner/clients',
+          params: { partnerId: activePartnerBusinessId },
+        });
+        return;
+      }
+
+      router.push('/(partner-tabs)/business-selector');
+    };
+
+    const openPartnerBookings = () => {
+      if (activePartnerBusinessId) {
+        router.push({
+          pathname: '/(partner-tabs)/bookings',
+          params: { businessId: activePartnerBusinessId },
+        });
+        return;
+      }
+
+      router.push('/(partner-tabs)/business-selector');
+    };
+
+    const openPartnerAdoptions = () => {
+      if (activePartnerBusinessId) {
+        router.push({
+          pathname: '/partner/manage-adoptions',
+          params: { partnerId: activePartnerBusinessId },
+        });
+        return;
+      }
+
+      router.push('/(partner-tabs)/business-selector');
+    };
+
+    const isBusinessRole = resolvedRole === 'partner' || resolvedRole === 'admin';
 
     const actionMessages: { [key: string]: Message } = {
       'add-pet': {
@@ -649,6 +1029,41 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           }
         ],
       },
+      'care-hub': {
+        id: Date.now().toString(),
+        role: 'action',
+        content: 'Abramos el centro de cuidado inteligente de tu mascota',
+        audioUsed: false,
+        timestamp: new Date(),
+        sections: [
+          {
+            title: 'Qué encontrarás',
+            items: [
+              'Recomendaciones personalizadas según edad, raza y peso',
+              'Modo emergencia con acceso rápido al historial',
+              'Alertas médicas y atajos para salud',
+            ],
+            icon: '🧠',
+          },
+        ],
+        actionButtons: [
+          {
+            label: 'Abrir centro de cuidado →',
+            action: () => {
+              router.push('/pets/care');
+              const msg: Message = {
+                id: Date.now().toString(),
+                role: 'assistant',
+                content:
+                  'Perfecto, abre una mascota para ver sus recomendaciones personalizadas y el modo emergencia.',
+                audioUsed: false,
+                timestamp: new Date(),
+              };
+              setMessages(prev => [...prev, msg]);
+            },
+          },
+        ],
+      },
       'find-vet': {
         id: Date.now().toString(),
         role: 'action',
@@ -687,20 +1102,93 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       'explore-app': {
         id: Date.now().toString(),
         role: 'assistant',
-        content: 'DogCatiFy es tu compañero integral para el cuidado de mascotas',
+        content: isBusinessRole
+          ? 'Tus funciones de negocio están organizadas para que revises lo importante sin perder tiempo'
+          : 'DogCatiFy es tu compañero integral para el cuidado de mascotas',
+        audioUsed: false,
+        timestamp: new Date(),
+        sections: [
+          isBusinessRole
+            ? {
+                title: 'Secciones del negocio',
+                items: [
+                  '📊 Dashboard con métricas y accesos',
+                  '🤝 CRM de clientes y retención',
+                  '📅 Reservas y agenda',
+                  '🏡 Adopciones y publicaciones',
+                  '⚙️ Configuración de negocio y plan',
+                ],
+              }
+            : {
+                title: 'Secciones principales',
+                items: [
+                  '🏠 Inicio - Red social de mascotas',
+                  '🐾 Mascotas - Perfiles e historial médico',
+                  '🛒 Tienda - Productos de calidad',
+                  '🏥 Servicios - Profesionales certificados',
+                  '📍 Lugares - Espacios pet-friendly'
+                ],
+              }
+        ],
+        actionButtons: isBusinessRole
+          ? [
+              {
+                label: 'Ir al Dashboard →',
+                action: openPartnerDashboard,
+              },
+              {
+                label: 'Ver Clientes →',
+                action: openPartnerClients,
+              },
+            ]
+          : undefined,
+      },
+      'partner-bookings': {
+        id: Date.now().toString(),
+        role: 'action',
+        content: 'Abramos tus reservas para revisar agenda, turnos y próximos movimientos',
         audioUsed: false,
         timestamp: new Date(),
         sections: [
           {
-            title: 'Secciones principales',
+            title: 'Qué puedes revisar',
             items: [
-              '🏠 Inicio - Red social de mascotas',
-              '🐾 Mascotas - Perfiles e historial médico',
-              '🛒 Tienda - Productos de calidad',
-              '🏥 Servicios - Profesionales certificados',
-              '📍 Lugares - Espacios pet-friendly'
+              'Reservas pendientes, confirmadas y completadas',
+              'Agenda del negocio con detalles de cada turno',
+              'Cambios de estado y seguimiento rápido',
             ],
-          }
+            icon: '📅',
+          },
+        ],
+        actionButtons: [
+          {
+            label: 'Ir a Reservas →',
+            action: openPartnerBookings,
+          },
+        ],
+      },
+      'partner-adoptions': {
+        id: Date.now().toString(),
+        role: 'action',
+        content: 'Abramos adopciones para publicar o revisar mascotas disponibles',
+        audioUsed: false,
+        timestamp: new Date(),
+        sections: [
+          {
+            title: 'Qué puedes hacer',
+            items: [
+              'Publicar nuevas mascotas en adopción',
+              'Revisar disponibilidad y requisitos',
+              'Gestionar el catálogo de adopciones del negocio',
+            ],
+            icon: '🏡',
+          },
+        ],
+        actionButtons: [
+          {
+            label: 'Ir a Adopciones →',
+            action: openPartnerAdoptions,
+          },
         ],
       },
       'profile': {
@@ -743,7 +1231,22 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           {
             label: 'Ir al Dashboard de Aliado →',
             action: () => {
-              router.push('/(partner-tabs)/dashboard');
+              openPartnerDashboard();
+            },
+          },
+        ],
+      },
+      'partner-clients': {
+        id: Date.now().toString(),
+        role: 'action',
+        content: 'Abramos tu CRM para revisar clientes, seguimiento y reactivación',
+        audioUsed: false,
+        timestamp: new Date(),
+        actionButtons: [
+          {
+            label: 'Ver Clientes →',
+            action: () => {
+              openPartnerClients();
             },
           },
         ],
@@ -936,6 +1439,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
             conversationHistory,
             userId: currentUser?.id,
             userName, // Pasar el nombre del usuario
+            activeRole: resolvedRole,
           }),
         }
       );
@@ -1061,7 +1565,11 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                 </View>
                 <View>
                   <Text style={styles.chatTitle}>Dotty Assistant</Text>
-                  <Text style={styles.chatSubtitle}>Tu guía personal</Text>
+                  <Text style={styles.chatSubtitle}>
+                    {resolvedRole === 'partner' || resolvedRole === 'admin'
+                      ? 'Tu guía de negocio'
+                      : 'Tu guía personal'}
+                  </Text>
                 </View>
               </View>
               <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
@@ -1143,8 +1651,12 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
               )}
               {showQuickActions && (
                 <View style={styles.quickActionsContainer}>
-                  <Text style={styles.quickActionsTitle}>¿Qué te gustaría hacer?</Text>
-                  {quickActions.map((action) => (
+                  <Text style={styles.quickActionsTitle}>
+                    {resolvedRole === 'partner' || resolvedRole === 'admin'
+                      ? '¿Qué quieres revisar sobre tu negocio?'
+                      : '¿Qué te gustaría preguntarme o hacer?'}
+                  </Text>
+                  {visibleQuickActions.map((action) => (
                     <TouchableOpacity
                       key={action.id}
                       onPress={() => handleQuickAction(action.id)}
@@ -1159,13 +1671,36 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                   ))}
                 </View>
               )}
+              {showQuickActions && (
+                <View style={styles.promptContainer}>
+                  <Text style={styles.promptTitle}>
+                    {resolvedRole === 'partner' || resolvedRole === 'admin'
+                      ? 'Preguntas para aliados'
+                      : 'Prueba con una pregunta'}
+                  </Text>
+                  <View style={styles.promptWrap}>
+                    {visibleStarterPrompts.map((prompt) => (
+                      <TouchableOpacity
+                        key={prompt}
+                        style={styles.promptChip}
+                        onPress={() => handleUserMessage(prompt, false)}
+                        activeOpacity={0.86}
+                      >
+                        <Text style={styles.promptChipText}>{prompt}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
             </ScrollView>
 
             <View style={styles.inputContainer}>
-              <View style={styles.inputWrapper}>
+      <View style={styles.inputWrapper}>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="Escribe tu pregunta..."
+                  placeholder={resolvedRole === 'partner' || resolvedRole === 'admin'
+                    ? 'Pregúntame sobre clientes, reservas o módulos...'
+                    : 'Pregúntame algo sobre tu mascota...'}
                   placeholderTextColor="#9CA3AF"
                   value={inputText}
                   onChangeText={setInputText}
@@ -1439,6 +1974,37 @@ const styles = StyleSheet.create({
   },
   quickActionsContainer: {
     marginTop: 8,
+  },
+  promptContainer: {
+    marginBottom: 16,
+  },
+  promptTitle: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  promptWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  promptChip: {
+    borderRadius: 999,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    maxWidth: '100%',
+  },
+  promptChipText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#065F46',
+    lineHeight: 18,
   },
   quickActionsTitle: {
     fontSize: 14,

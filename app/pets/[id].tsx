@@ -1259,7 +1259,7 @@ export default function PetDetail() {
   const handleBookAppointment = () => {
     router.push('/(tabs)/services');
   };
-  
+
   const handleUpdatePhoto = async () => {
     try {
       // Request permission

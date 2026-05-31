@@ -1,7 +1,8 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, ActivityIndicator } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, CircleHelp as HelpCircle, Building, Fingerprint, ChevronRight, ArrowRight, Trash2, Crown } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, CircleHelp as HelpCircle, Building, Fingerprint, ChevronRight, ArrowRight, Trash2, Crown, Sparkles } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
@@ -61,6 +62,7 @@ const resolvePartnerAccountPlan = (partnerRows: any[]) => {
 export default function Profile() {
   const { currentUser, logout, activeRole } = useAuth();
   const { t } = useLanguage();
+  const insets = useSafeAreaInsets();
   const { expoPushToken, notificationsEnabled, registerForPushNotifications, disableNotifications } = useNotifications();
   const { 
     isBiometricSupported, 
@@ -760,7 +762,12 @@ export default function Profile() {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Profile Header */}
         <Card style={styles.profileCard}>
           <View style={styles.profileHeader}>
@@ -802,6 +809,33 @@ export default function Profile() {
             </View>
           )}
         </Card>
+
+        {!isPartnerView && (
+          <Card style={styles.smartCareCard}>
+            <View style={styles.smartCareHeader}>
+              <View style={styles.smartCareIcon}>
+                <Sparkles size={24} color="#2D6A6F" />
+              </View>
+              <View style={styles.smartCareCopy}>
+                <Text style={styles.smartCareTitle}>Cuidado inteligente</Text>
+                <Text style={styles.smartCareSubtitle}>
+                  Recomendaciones personalizadas y modo emergencia
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.smartCareBody}>
+              Abre el centro para ver vacunas, peso, conducta, alergias y compartir la historia
+              clínica de tus mascotas cuando lo necesites.
+            </Text>
+
+            <Button
+              title="Abrir centro"
+              onPress={() => router.push('/pets/care')}
+              size="medium"
+            />
+          </Card>
+        )}
 
         {/* Premium Subscription Card */}
         {subscriptionsEnabled && !isPartnerView && (
@@ -1068,6 +1102,9 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
+  scrollContent: {
+    paddingBottom: 16,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1112,6 +1149,44 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#374151',
     lineHeight: 20,
+  },
+  smartCareCard: {
+    marginBottom: 16,
+  },
+  smartCareHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  smartCareIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#E6F4F1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  smartCareCopy: {
+    flex: 1,
+  },
+  smartCareTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  smartCareSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  smartCareBody: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    lineHeight: 20,
+    marginBottom: 14,
   },
   statsContainer: {
     flexDirection: 'row',

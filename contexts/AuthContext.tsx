@@ -5,7 +5,7 @@ import { supabaseClient, getUserProfile, updateUserProfile, signIn as supabaseSi
 import { User } from '../types';
 import { logger } from '@/utils/datadogLogger';
 import { logAction, logError } from '../services/auditService';
-import { AppRole, clearStoredActivePartnerBusinessId, getAvailableRoles, getStoredActiveRole } from '../utils/onboarding';
+import { AppRole, clearStoredActivePartnerBusinessId, getAvailableRoles } from '../utils/onboarding';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -252,12 +252,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             isPartner: profile.is_partner ?? false,
             isAdmin: profile.is_admin ?? false,
           });
-          const storedActiveRole = await getStoredActiveRole(userId);
-          const resolvedActiveRole = storedActiveRole && availableRoles.includes(storedActiveRole)
-            ? storedActiveRole
-            : availableRoles.length === 1
-              ? availableRoles[0]
-              : null;
+          const resolvedActiveRole = availableRoles.length === 1
+            ? availableRoles[0]
+            : null;
           const user = {
             id: userId,
             email: userEmail,
@@ -803,12 +800,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             isPartner: profile.is_partner ?? false,
             isAdmin: profile.is_admin ?? false,
           });
-          const storedActiveRole = await getStoredActiveRole(user.id);
-          const resolvedActiveRole = storedActiveRole && availableRoles.includes(storedActiveRole)
-            ? storedActiveRole
-            : availableRoles.length === 1
-              ? availableRoles[0]
-              : null;
+          const resolvedActiveRole = availableRoles.length === 1
+            ? availableRoles[0]
+            : null;
           
           console.log('AuthContext - Login successful, setting user:', user.email);
           setActiveRoleState(resolvedActiveRole);

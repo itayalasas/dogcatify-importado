@@ -29,7 +29,10 @@ export default function BiometricSetup() {
     clearPostLoginFlow();
 
     if (!currentUser?.id) {
-      router.replace((redirect || '/(tabs)') as any);
+      router.replace({
+        pathname: '/auth/login',
+        params: redirect ? { redirect } : undefined,
+      });
       return;
     }
 

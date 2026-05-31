@@ -644,6 +644,45 @@ export default function PartnerDashboard() {
           </View>
         </View>
 
+        <Card style={styles.crmCard}>
+          <View style={styles.crmHeader}>
+            <View style={styles.crmHeaderLeft}>
+              <Users size={20} color="#F59E0B" />
+              <View>
+                <Text style={styles.crmTitle}>CRM y retención</Text>
+                <Text style={styles.crmSubtitle}>
+                  Segmenta clientes, reactivá a los que se enfriaron y seguí cada contacto.
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.crmStats}>
+            <View style={styles.crmStat}>
+              <Text style={styles.crmStatValue}>{stats.totalCustomers}</Text>
+              <Text style={styles.crmStatLabel}>Clientes</Text>
+            </View>
+            <View style={styles.crmStat}>
+              <Text style={styles.crmStatValue}>{stats.pendingBookings + stats.pendingOrders}</Text>
+              <Text style={styles.crmStatLabel}>Pendientes</Text>
+            </View>
+            <View style={styles.crmStat}>
+              <Text style={styles.crmStatValue}>{stats.completedBookings + stats.completedOrders}</Text>
+              <Text style={styles.crmStatLabel}>Completados</Text>
+            </View>
+          </View>
+
+          <Text style={styles.crmNote}>
+            Abrí la lista para ver último contacto, datos de contacto y oportunidades de reactivación.
+          </Text>
+
+          {canViewClients ? (
+            <Button title="Abrir CRM" onPress={handleViewClients} size="medium" />
+          ) : (
+            <Text style={styles.crmLockedText}>{getPartnerLockedActionLabel('clients')}</Text>
+          )}
+        </Card>
+
         {/* Quick Actions */ }
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
@@ -674,10 +713,15 @@ export default function PartnerDashboard() {
               onPress={canViewClients ? handleViewClients : () => showPlanUpgradeAlert('clients')}
             >
               <Users size={24} color={canViewClients ? '#F59E0B' : '#A855F7'} />
-              <Text style={styles.quickActionText}>Ver Clientes</Text>
+              <Text style={styles.quickActionText}>CRM y clientes</Text>
               {!canViewClients && (
                 <Text style={styles.quickActionSubtext}>
                   {getPartnerLockedActionLabel('clients')}
+                </Text>
+              )}
+              {canViewClients && (
+                <Text style={styles.quickActionSubtext}>
+                  Seguimiento y reactivación
                 </Text>
               )}
             </TouchableOpacity>
@@ -1067,6 +1111,67 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  crmCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 16,
+  },
+  crmHeader: {
+    marginBottom: 12,
+  },
+  crmHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  crmTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  crmSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  crmStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 12,
+  },
+  crmStat: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+  },
+  crmStatValue: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+  },
+  crmStatLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  crmNote: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#4B5563',
+    lineHeight: 19,
+    marginBottom: 12,
+  },
+  crmLockedText: {
+    fontSize: 13,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
   },
