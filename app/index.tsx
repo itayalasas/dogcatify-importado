@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, SafeAreaView, Alert, RefreshControl, ActivityIndicator, Platform } from 'react-native';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { Linking } from 'react-native';
 import PostCard from '../components/PostCard';
 import PromotionCard from '../components/PromotionCard';
@@ -49,9 +49,10 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const { t } = useLanguage();
   const { currentUser } = useAuth();
+  const pathname = usePathname();
 
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser || pathname !== '/') {
       return;
     }
 
@@ -60,7 +61,7 @@ export default function Home() {
     }, 100);
 
     return () => clearTimeout(timer);
-  }, [currentUser]);
+  }, [currentUser, pathname]);
 
   useEffect(() => {
     if (currentUser) {

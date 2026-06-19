@@ -6,6 +6,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { getOrderFulfillmentMode, getOrderStatusLabel } from '../../utils/orderFulfillment';
 
 export default function PartnerOrders() {
   const params = useLocalSearchParams<{
@@ -121,9 +122,11 @@ export default function PartnerOrders() {
           ...order,
           partnerId: order.partner_id,
           customerId: order.customer_id,
+          orderType: order.order_type,
           totalAmount: order.total_amount,
           shippingAddress: order.shipping_address,
           shippingCost: order.shipping_cost || 0,
+          fulfillmentMode: getOrderFulfillmentMode(order.order_type || 'product_purchase', order.shipping_address),
           createdAt: new Date(order.created_at),
           updatedAt: order.updated_at ? new Date(order.updated_at) : null
         }));
@@ -159,14 +162,24 @@ export default function PartnerOrders() {
     };
   };
 
-  const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
+  const getFulfillmentMode = (order: any) => {
+    return order.fulfillmentMode || getOrderFulfillmentMode(order.orderType, order.shippingAddress);
+  };
+
+  const getReadyStatusMessage = (order: any) => {
+    return getFulfillmentMode(order) === 'pickup'
+      ? 'Pedido listo para retirar en tienda'
+      : 'Pedido listo para entrega';
+  };
+
+  const handleUpdateOrderStatus = async (order: any, newStatus: string) => {
     try {
       // Optimistic update: actualizar el estado localmente primero
       setOrders(prevOrders =>
-        prevOrders.map(order =>
-          order.id === orderId
-            ? { ...order, status: newStatus, updatedAt: new Date() }
-            : order
+        prevOrders.map(prevOrder =>
+          prevOrder.id === order.id
+            ? { ...prevOrder, status: newStatus, updatedAt: new Date() }
+            : prevOrder
         )
       );
 
@@ -176,13 +189,13 @@ export default function PartnerOrders() {
           status: newStatus,
           updated_at: new Date().toISOString()
         })
-        .eq('id', orderId);
+        .eq('id', order.id);
 
       if (error) throw error;
 
       const statusMessages = {
         processing: 'Pedido en procesamiento',
-        ready_for_delivery: 'Pedido listo para entrega',
+        ready_for_delivery: getReadyStatusMessage(order),
         shipped: 'Pedido enviado',
         delivered: 'Pedido entregado',
         cancelled: 'Pedido cancelado'
@@ -235,22 +248,8 @@ export default function PartnerOrders() {
     }
   };
 
-  const getStatusText = (status: string, orderType?: string) => {
-    switch (status) {
-      case 'pending': return orderType === 'service_booking' ? 'Pendiente de pago' : 'Pendiente';
-      case 'reserved': return 'Reservado';
-      case 'payment_failed': return 'Pago fallido';
-      case 'confirmed': return 'Confirmado';
-      case 'processing': return 'En proceso';
-      case 'preparing': return 'Preparando';
-      case 'ready_for_delivery': return 'Listo para entrega';
-      case 'shipped': return 'En reparto';
-      case 'delivered': return 'Entregado';
-      case 'completed': return 'Completado';
-      case 'cancelled': return 'Cancelado';
-      case 'refunded': return 'Reembolsado';
-      default: return 'Desconocido';
-    }
+  const getStatusText = (status: string, orderType?: string, shippingAddress?: string | null) => {
+    return getOrderStatusLabel(status, orderType, shippingAddress);
   };
 
   const isServiceOrder = (order: any) => order.orderType === 'service_booking';
@@ -333,6 +332,12 @@ export default function PartnerOrders() {
 
   const renderOrder = (order: any) => (
     <Card key={order.id} style={styles.orderCard}>
+      {(() => {
+        const fulfillmentMode = getFulfillmentMode(order);
+        const isPickupOrder = fulfillmentMode === 'pickup';
+
+        return (
+          <>
       <View style={styles.orderHeader}>
         <View style={styles.orderInfo}>
           <Text style={styles.orderNumber}>Pedido {order.orderNumber || `#${order.id.slice(-6)}`}</Text>
@@ -343,10 +348,10 @@ export default function PartnerOrders() {
           { backgroundColor: getStatusColor(order.status) }
         ]}>
           <Text style={[
-            styles.statusText,
-            { color: getStatusTextColor(order.status) }
-          ]}>
-            {getStatusText(order.status, order.orderType)}
+          styles.statusText,
+          { color: getStatusTextColor(order.status) }
+        ]}>
+          {getStatusText(order.status, order.orderType, order.shippingAddress)}
           </Text>
         </View>
       </View>
@@ -470,13 +475,13 @@ export default function PartnerOrders() {
           <>
             <Button
               title="Cancelar"
-              onPress={() => handleUpdateOrderStatus(order.id, 'cancelled')}
+              onPress={() => handleUpdateOrderStatus(order, 'cancelled')}
               variant="outline"
               size="small"
             />
             <Button
               title="Procesar"
-              onPress={() => handleUpdateOrderStatus(order.id, 'processing')}
+              onPress={() => handleUpdateOrderStatus(order, 'processing')}
               size="small"
             />
           </>
@@ -486,13 +491,13 @@ export default function PartnerOrders() {
           <>
             <Button
               title="Cancelar"
-              onPress={() => handleUpdateOrderStatus(order.id, 'cancelled')}
+              onPress={() => handleUpdateOrderStatus(order, 'cancelled')}
               variant="outline"
               size="small"
             />
             <Button
               title="Marcar Completado"
-              onPress={() => handleUpdateOrderStatus(order.id, 'completed')}
+              onPress={() => handleUpdateOrderStatus(order, 'completed')}
               size="small"
             />
           </>
@@ -500,26 +505,31 @@ export default function PartnerOrders() {
         
         {order.orderType !== 'service_booking' && ['confirmed', 'processing', 'preparing'].includes(order.status) && (
           <Button
-            title="Marcar Listo para Entrega"
-            onPress={() => handleUpdateOrderStatus(order.id, 'ready_for_delivery')}
+            title={isPickupOrder ? 'Marcar listo para retirar' : 'Marcar listo para entrega'}
+            onPress={() => handleUpdateOrderStatus(order, 'ready_for_delivery')}
             size="small"
           />
         )}
 
         {order.orderType !== 'service_booking' && order.status === 'ready_for_delivery' && (
           <View style={styles.readyForDeliveryInfo}>
-            <Text style={styles.readyForDeliveryText}>Esperando que un repartidor tome el pedido</Text>
+            <Text style={styles.readyForDeliveryText}>
+              {isPickupOrder ? 'Ya pueden retirar el pedido en tienda' : 'Esperando que un repartidor tome el pedido'}
+            </Text>
           </View>
         )}
         
         {order.orderType !== 'service_booking' && order.status === 'shipped' && (
           <Button
             title="Marcar como Entregado"
-            onPress={() => handleUpdateOrderStatus(order.id, 'delivered')}
+            onPress={() => handleUpdateOrderStatus(order, 'delivered')}
             size="small"
           />
         )}
       </View>
+          </>
+        );
+      })()}
     </Card>
   );
 

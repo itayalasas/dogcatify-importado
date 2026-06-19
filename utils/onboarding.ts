@@ -43,6 +43,26 @@ export const getAvailableRoles = (userContext?: PostLoginRoleContext | null): Ap
   return roles;
 };
 
+export const resolvePreferredActiveRole = async (
+  userId: string,
+  availableRoles: AppRole[],
+): Promise<AppRole | null> => {
+  try {
+    const storedRole = await getStoredActiveRole(userId);
+    if (storedRole && availableRoles.includes(storedRole)) {
+      return storedRole;
+    }
+  } catch (error) {
+    console.warn('Error resolving preferred active role:', error);
+  }
+
+  if (availableRoles.length === 1) {
+    return availableRoles[0];
+  }
+
+  return null;
+};
+
 export const getStoredActiveRole = async (userId: string): Promise<AppRole | null> => {
   try {
     const storedRole = await AsyncStorage.getItem(getActiveRoleCacheKey(userId));
@@ -206,13 +226,14 @@ export const resolvePostLoginRoute = async (
   })());
 
   const availableRoles = getAvailableRoles(resolvedContext);
+  const preferredRole = await resolvePreferredActiveRole(userId, availableRoles);
+
+  if (preferredRole) {
+    return resolveRoleRoute(userId, preferredRole);
+  }
 
   if (availableRoles.length > 1) {
     return buildSelectRoleRoute(redirect);
-  }
-
-  if (availableRoles.length === 1) {
-    return redirect || resolveRoleRoute(userId, availableRoles[0]);
   }
 
   return redirect || '/(tabs)';
