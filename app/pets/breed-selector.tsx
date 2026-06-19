@@ -36,8 +36,8 @@ export default function BreedSelector() {
       
       // Use the optimized endpoint that returns all breeds at once
       const endpoint = species === 'dog'
-        ? 'https://ffihaeatoundrjzgtpzk.supabase.co/functions/v1/alldogs'
-        : 'https://ffihaeatoundrjzgtpzk.supabase.co/functions/v1/allcats';
+        ? 'https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/alldogs'
+        : 'https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/allcats';
       
       console.log(`Using endpoint: ${endpoint}`);
       

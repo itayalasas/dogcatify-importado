@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { OrderTracking } from '../../components/OrderTracking';
+import { StoreRouteMap } from '../../components/StoreRouteMap';
 import { getOrderFulfillmentMode, getOrderStatusLabel } from '../../utils/orderFulfillment';
 
 export default function OrderDetail() {
@@ -14,6 +15,8 @@ export default function OrderDetail() {
   const { currentUser } = useAuth();
   const [order, setOrder] = useState<any>(null);
   const [partnerAddress, setPartnerAddress] = useState<string>('');  
+  const [partnerName, setPartnerName] = useState<string>('');
+  const [partnerLocation, setPartnerLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -71,6 +74,10 @@ export default function OrderDetail() {
       if (error) throw error;
       
       if (data) {
+        setPartnerAddress('');
+        setPartnerName('');
+        setPartnerLocation(null);
+
         setOrder({
           id: data.id,
           orderNumber: data.order_number,
@@ -97,23 +104,34 @@ export default function OrderDetail() {
           }
         }
 
-        // 2. Fall back to direct partners table query (works for product purchases)
-        if (!resolvedAddress && data.partner_id) {
+        // 2. Query direct partners table to enrich the order with store data
+        if (data.partner_id) {
           const { data: partnerData } = await supabaseClient
             .from('partners')
-            .select('address, calle, numero, barrio, codigo_postal')
+            .select('business_name, address, calle, numero, barrio, codigo_postal, latitud, longitud')
             .eq('id', data.partner_id)
             .single();
           if (partnerData) {
+            setPartnerName(partnerData.business_name || '');
             const parts = [
               partnerData.calle,
               partnerData.numero,
               partnerData.barrio,
               partnerData.codigo_postal,
             ].filter(Boolean);
-            resolvedAddress = parts.length > 0
-              ? parts.join(', ')
-              : partnerData.address || '';
+            if (!resolvedAddress) {
+              resolvedAddress = parts.length > 0
+                ? parts.join(', ')
+                : partnerData.address || '';
+            }
+
+            const latitude = Number(partnerData.latitud);
+            const longitude = Number(partnerData.longitud);
+            if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+              setPartnerLocation({ latitude, longitude });
+            } else {
+              setPartnerLocation(null);
+            }
           }
         }
 
@@ -297,6 +315,13 @@ export default function OrderDetail() {
                 {isStorePickup && partnerAddress ? partnerAddress : order.shippingAddress}
               </Text>
             </View>
+            {isStorePickup && (partnerAddress || partnerLocation) && (
+              <StoreRouteMap
+                storeName={partnerName || order.items?.[0]?.partnerName || 'Tienda'}
+                storeAddress={partnerAddress || order.shippingAddress}
+                destinationCoordinates={partnerLocation}
+              />
+            )}
           </Card>
         )}
 

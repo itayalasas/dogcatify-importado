@@ -210,8 +210,8 @@ export default function AddPet() {
     setLoadingBreedInfo(true);
     try {
       const endpoint = speciesType === 'dog' 
-        ? `https://ffihaeatoundrjzgtpzk.supabase.co/functions/v1/dogs?name=${encodeURIComponent(breedName)}`
-        : `https://ffihaeatoundrjzgtpzk.supabase.co/functions/v1/cats?name=${encodeURIComponent(breedName)}`;
+        ? `https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/dogs?name=${encodeURIComponent(breedName)}`
+        : `https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/cats?name=${encodeURIComponent(breedName)}`;
       
       console.log(`API endpoint: ${endpoint}`);
       

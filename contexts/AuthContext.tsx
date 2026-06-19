@@ -5,7 +5,7 @@ import { supabaseClient, getUserProfile, updateUserProfile, signIn as supabaseSi
 import { User } from '../types';
 import { logger } from '@/utils/datadogLogger';
 import { logAction, logError } from '../services/auditService';
-import { AppRole, clearStoredActivePartnerBusinessId, getAvailableRoles } from '../utils/onboarding';
+import { AppRole, clearStoredActivePartnerBusinessId, getAvailableRoles, resolvePreferredActiveRole } from '../utils/onboarding';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -252,9 +252,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             isPartner: profile.is_partner ?? false,
             isAdmin: profile.is_admin ?? false,
           });
-          const resolvedActiveRole = availableRoles.length === 1
-            ? availableRoles[0]
-            : null;
+          const resolvedActiveRole = await resolvePreferredActiveRole(userId, availableRoles);
           const user = {
             id: userId,
             email: userEmail,
@@ -287,7 +285,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else {
           // Create user profile if it doesn't exist
           if (!mounted) return;
-          setActiveRoleState(null);
           const newUser: Omit<User, 'id'> = {
             email: userEmail,
             displayName: '',
@@ -318,6 +315,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             id: userId,
             ...newUser,
           };
+          const resolvedActiveRole = await resolvePreferredActiveRole(userId, ['owner']);
+          setActiveRoleState(resolvedActiveRole);
           setCurrentUser(user);
 
           logger.setUser(userId, {
@@ -800,9 +799,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             isPartner: profile.is_partner ?? false,
             isAdmin: profile.is_admin ?? false,
           });
-          const resolvedActiveRole = availableRoles.length === 1
-            ? availableRoles[0]
-            : null;
+          const resolvedActiveRole = await resolvePreferredActiveRole(data.user.id, availableRoles);
           
           console.log('AuthContext - Login successful, setting user:', user.email);
           setActiveRoleState(resolvedActiveRole);

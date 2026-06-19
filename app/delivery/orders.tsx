@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { LoadingScreen } from '../../components/ui/LoadingScreen';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { getOrderFulfillmentMode } from '../../utils/orderFulfillment';
 
 const AVAILABLE_STATUS = 'ready_for_delivery';
 const IN_DELIVERY_STATUS = 'shipped';
@@ -124,7 +125,12 @@ export default function DeliveryOrdersScreen() {
       const { data, error } = await query;
 
       if (error) throw error;
-      setOrders(data || []);
+
+      const deliveryOrders = (data || []).filter((order: any) =>
+        getOrderFulfillmentMode(order.order_type || 'product_purchase', order.shipping_address) === 'shipping'
+      );
+
+      setOrders(deliveryOrders);
     } catch (error) {
       console.error('Error loading delivery orders:', error);
       Alert.alert('Error', 'No se pudieron cargar los pedidos de reparto.');
