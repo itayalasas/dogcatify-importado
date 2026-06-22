@@ -18,7 +18,7 @@ type RoleOption = {
 };
 
 export default function SelectRoleScreen() {
-  const { redirect } = useLocalSearchParams<{ redirect?: string }>();
+  const { redirect, source } = useLocalSearchParams<{ redirect?: string; source?: string }>();
   const { currentUser, activeRole, setActiveRole } = useAuth();
   const { t } = useLanguage();
   const [selectedRole, setSelectedRole] = useState<AppRole | null>(activeRole);
@@ -55,6 +55,23 @@ export default function SelectRoleScreen() {
       mounted = false;
     };
   }, [currentUser?.id, availableRoles]);
+
+  const getCurrentRoleRoute = async (): Promise<string> => {
+    if (!currentUser?.id) {
+      return '/auth/login';
+    }
+
+    const fallbackRole =
+      activeRole ??
+      selectedRole ??
+      (availableRoles.length === 1 ? availableRoles[0] : null);
+
+    if (fallbackRole) {
+      return resolveRoleRoute(currentUser.id, fallbackRole);
+    }
+
+    return '/(tabs)';
+  };
 
   useEffect(() => {
     const autoRedirect = async () => {
@@ -140,7 +157,13 @@ export default function SelectRoleScreen() {
     }
   };
 
-  const handleBackToLogin = () => {
+  const handleCancel = async () => {
+    if (source === 'profile' && currentUser?.id) {
+      const nextRoute = await getCurrentRoleRoute();
+      router.replace(nextRoute as any);
+      return;
+    }
+
     router.replace('/auth/login');
   };
 
@@ -158,7 +181,7 @@ export default function SelectRoleScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleBackToLogin} style={styles.backButton}>
+          <TouchableOpacity onPress={() => void handleCancel()} style={styles.backButton}>
             <ArrowLeft size={24} color="#111827" />
           </TouchableOpacity>
 
@@ -222,8 +245,10 @@ export default function SelectRoleScreen() {
           })}
         </View>
 
-        <TouchableOpacity onPress={handleBackToLogin} style={styles.cancelLink}>
-          <Text style={styles.cancelText}>Volver al inicio de sesión</Text>
+        <TouchableOpacity onPress={() => void handleCancel()} style={styles.cancelLink}>
+          <Text style={styles.cancelText}>
+            {source === 'profile' ? 'Volver a mi perfil' : 'Volver al inicio de sesión'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

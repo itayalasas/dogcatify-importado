@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { ActivityIndicator, Linking, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 
 const getSingleParam = (value?: string | string[]) =>
   Array.isArray(value) ? value[0] : value;
@@ -38,6 +38,13 @@ const buildDeepLink = (params: Record<string, string | string[] | undefined>) =>
 export default function SubscriptionReturn() {
   const params = useLocalSearchParams<Record<string, string | string[]>>();
   const deepLink = useMemo(() => buildDeepLink(params), [params]);
+  const handleGoToProfile = () => {
+    router.replace('/(tabs)/profile');
+  };
+
+  const handleGoToHome = () => {
+    router.replace('/(tabs)');
+  };
 
   const openApp = async () => {
     try {
@@ -67,6 +74,12 @@ export default function SubscriptionReturn() {
         </Text>
         <TouchableOpacity style={styles.button} onPress={openApp}>
           <Text style={styles.buttonText}>Abrir la app</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={handleGoToProfile}>
+          <Text style={styles.secondaryButtonText}>Ir al perfil</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={handleGoToHome}>
+          <Text style={styles.secondaryButtonText}>Ir al inicio</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -113,5 +126,21 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
+  },
+  secondaryButton: {
+    minWidth: 180,
+    marginTop: 12,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#0F766E',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F766E',
   },
 });

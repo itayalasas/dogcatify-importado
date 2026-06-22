@@ -294,13 +294,13 @@ export default function Subscription() {
         let syncedSubscription = await syncSubscriptionStatus(data.id);
 
         if (shouldForceSync) {
-          for (let attempt = 0; attempt < 2; attempt += 1) {
+          for (let attempt = 0; attempt < 4; attempt += 1) {
             const currentStatus = String(syncedSubscription?.status || data.status || '').toLowerCase();
             if (currentStatus !== 'pending') {
               break;
             }
 
-            await delay(1500);
+            await delay(1200);
             const retriedSubscription = await syncSubscriptionStatus(data.id);
             if (retriedSubscription) {
               syncedSubscription = retriedSubscription;
@@ -348,6 +348,15 @@ export default function Subscription() {
     } finally {
       setSyncingSubscriptionId(null);
     }
+  };
+
+  const handleGoBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace('/(tabs)/profile');
   };
 
   const handleSelectPlan = (plan: SubscriptionPlan) => {
@@ -488,7 +497,7 @@ export default function Subscription() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>Suscripción de Mascota</Text>

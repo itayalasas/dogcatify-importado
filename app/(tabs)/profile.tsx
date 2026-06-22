@@ -2,7 +2,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, ActivityIndicator } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, CircleHelp as HelpCircle, Building, Fingerprint, ChevronRight, ArrowRight, Trash2, Crown, Sparkles } from 'lucide-react-native';
+import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, CircleHelp as HelpCircle, Building, Fingerprint, ChevronRight, ArrowRight, Trash2, Crown, Sparkles, RefreshCw } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
@@ -512,6 +512,13 @@ export default function Profile() {
     router.push('/profile/edit');
   };
 
+  const handleChangeRole = () => {
+    router.push({
+      pathname: '/auth/select-role',
+      params: { source: 'profile' },
+    });
+  };
+
   const handlePartnerMode = () => {
     if (partnerProfile) {
       router.push('/(partner-tabs)/business-selector');
@@ -923,6 +930,16 @@ export default function Profile() {
             </View>
             <ChevronRight size={16} color="#6B7280" />
           </TouchableOpacity>
+
+          {availableRoles.length > 1 && (
+            <TouchableOpacity style={styles.menuOption} onPress={handleChangeRole}>
+              <View style={styles.menuOptionLeft}>
+                <RefreshCw size={20} color="#6B7280" />
+                <Text style={styles.menuOptionText}>Cambiar rol</Text>
+              </View>
+              <ChevronRight size={16} color="#6B7280" />
+            </TouchableOpacity>
+          )}
 
           {!isPartnerView && (
             <>
