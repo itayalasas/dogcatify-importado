@@ -195,10 +195,6 @@ export const resolvePostLoginRoute = async (
     return '/onboarding';
   }
 
-  if (redirect) {
-    return redirect;
-  }
-
   const resolvedContext = userContext ?? (await (async () => {
     try {
       const { data: profile, error } = await supabaseClient
@@ -226,14 +222,19 @@ export const resolvePostLoginRoute = async (
   })());
 
   const availableRoles = getAvailableRoles(resolvedContext);
+
+  if (availableRoles.length > 1) {
+    return buildSelectRoleRoute(redirect);
+  }
+
+  if (redirect) {
+    return redirect;
+  }
+
   const preferredRole = await resolvePreferredActiveRole(userId, availableRoles);
 
   if (preferredRole) {
     return resolveRoleRoute(userId, preferredRole);
-  }
-
-  if (availableRoles.length > 1) {
-    return buildSelectRoleRoute(redirect);
   }
 
   return redirect || '/(tabs)';

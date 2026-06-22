@@ -336,6 +336,43 @@ const findMercadoPagoPreapprovalForSubscription = async (
   return null;
 };
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const findMercadoPagoPreapprovalWithRetry = async (
+  accessToken: string,
+  subscription: any,
+  scope: "user" = "user",
+  attempts = 5,
+  delayMs = 1200,
+) => {
+  void scope;
+
+  let lastPreapproval: any = null;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const preapproval = await findMercadoPagoPreapprovalForSubscription(accessToken, subscription);
+    lastPreapproval = preapproval;
+
+    if (!preapproval) {
+      if (attempt < attempts - 1) {
+        await sleep(delayMs);
+      }
+      continue;
+    }
+
+    const status = String(preapproval?.status || "").toLowerCase();
+    if (status !== "pending") {
+      return preapproval;
+    }
+
+    if (attempt < attempts - 1) {
+      await sleep(delayMs);
+    }
+  }
+
+  return lastPreapproval;
+};
+
 const loadLocalSubscription = async (supabase: any, userId: string, subscriptionId: string) => {
   const { data, error } = await supabase
     .from("user_subscriptions")
@@ -422,7 +459,7 @@ const syncExistingSubscriptionStatus = async (supabase: any, user: any, body: an
 
   const subscription = await loadLocalSubscription(supabase, user.id, subscriptionId);
   const mpConfig = await getAdminMercadoPagoConfig(supabase);
-  const preapproval = await findMercadoPagoPreapprovalForSubscription(mpConfig.access_token, subscription);
+  const preapproval = await findMercadoPagoPreapprovalWithRetry(mpConfig.access_token, subscription);
 
   if (!preapproval) {
     return {

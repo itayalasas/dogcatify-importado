@@ -15,6 +15,12 @@ type SubscriptionScope = typeof SUBSCRIPTION_SCOPES[number];
 const isUuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
+const isValidDate = (value?: string | null) => {
+  if (!value) return false;
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime());
+};
+
 const normalizeScope = (value?: string | null): SubscriptionScope => {
   const normalized = String(value || "").toLowerCase();
   return normalized === "partner" ? "partner" : "user";
@@ -279,6 +285,41 @@ const findMercadoPagoPreapprovalForSubscription = async (
   return null;
 };
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const findMercadoPagoPreapprovalWithRetry = async (
+  accessToken: string,
+  subscription: any,
+  scope: SubscriptionScope = "user",
+  attempts = 5,
+  delayMs = 1200,
+) => {
+  let lastPreapproval: any = null;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const preapproval = await findMercadoPagoPreapprovalForSubscription(accessToken, subscription, scope);
+    lastPreapproval = preapproval;
+
+    if (!preapproval) {
+      if (attempt < attempts - 1) {
+        await sleep(delayMs);
+      }
+      continue;
+    }
+
+    const status = String(preapproval?.status || "").toLowerCase();
+    if (status !== "pending") {
+      return preapproval;
+    }
+
+    if (attempt < attempts - 1) {
+      await sleep(delayMs);
+    }
+  }
+
+  return lastPreapproval;
+};
+
 const findLocalSubscriptionFromPreapproval = async (
   supabase: any,
   preapproval: any,
@@ -471,7 +512,7 @@ const syncUserSubscription = async (supabase: any, subscriptionId: string) => {
 
   const mpConfig = await getAdminMercadoPagoConfig(supabase);
   if (!preapproval) {
-    preapproval = await findMercadoPagoPreapprovalForSubscription(mpConfig.access_token, subscription, "user");
+    preapproval = await findMercadoPagoPreapprovalWithRetry(mpConfig.access_token, subscription, "user");
   }
 
   if (!preapproval) {
@@ -596,7 +637,7 @@ const syncPartnerSubscription = async (supabase: any, subscriptionId: string) =>
 
   const mpConfig = await getAdminMercadoPagoConfig(supabase);
   if (!preapproval) {
-    preapproval = await findMercadoPagoPreapprovalForSubscription(mpConfig.access_token, subscription, "partner");
+    preapproval = await findMercadoPagoPreapprovalWithRetry(mpConfig.access_token, subscription, "partner");
   }
 
   if (!preapproval) {
