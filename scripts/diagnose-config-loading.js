@@ -7,8 +7,8 @@
  * en la pantalla de "Cargando configuración..."
  */
 
-const API_GATEWAY_URL = 'https://api.flowbridge.site/functions/v1/api-gateway/a3db1463-6c83-4eb0-bc6e-9ad7db89ea8e';
-const API_KEY = 'pub_4382560178cd0284e641e30eef20da87e3abde25937764c2d52e98b77a4d3f57';
+const API_GATEWAY_URL = 'https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/get-env';
+const API_KEY = '3f74c928844b161da0fbb3d6a4bd19abc3b4e61024f2813a26ca66003dcd4fad';
 
 console.log('========================================');
 console.log('📋 Diagnóstico de Carga de Configuración');
@@ -25,13 +25,13 @@ async function testApiGateway() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-    const response = await fetch(API_GATEWAY_URL, {
-      method: 'GET',
-      headers: {
-        'X-Integration-Key': API_KEY,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
+      const response = await fetch(API_GATEWAY_URL, {
+        method: 'GET',
+        headers: {
+          'X-Access-Key': API_KEY,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
       signal: controller.signal,
     });
 
@@ -95,7 +95,7 @@ async function testMultipleTimes() {
       const response = await fetch(API_GATEWAY_URL, {
         method: 'GET',
         headers: {
-          'X-Integration-Key': API_KEY,
+          'X-Access-Key': API_KEY,
           'Content-Type': 'application/json',
         },
         signal: controller.signal,

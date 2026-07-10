@@ -154,8 +154,18 @@ class EnvConfigService {
         } catch (apiError: any) {
           console.error('[EnvConfig] ❌ Failed to load from API Gateway:', apiError.message);
 
-          // Si el API Gateway falla, lanzar error inmediatamente
-          // No usar process.env como fallback porque esto es producción
+          // Fallback a variables embebidas si existen en el build.
+          // Esto evita dejar la app trabada si el gateway falla en producción.
+          const fallbackEnv = this._loadFromProcessEnv();
+          if (fallbackEnv) {
+            console.warn('[EnvConfig] ⚠️ Falling back to process.env after API Gateway failure');
+            this.config = fallbackEnv;
+            this.initialized = true;
+            await this._saveToCache(fallbackEnv);
+            console.log('[EnvConfig] ✅ Configuration loaded from process.env fallback');
+            return;
+          }
+
           throw new Error(
             'No se pudo cargar la configuración desde el servidor.\n' +
             'Verifica tu conexión a internet e intenta nuevamente.'
@@ -203,15 +213,20 @@ class EnvConfigService {
 
         // Timeout de 60 segundos para redes lentas
         const controller = new AbortController();
+        let timeoutReject: ((error: Error) => void) | null = null;
+        const timeoutPromise = new Promise<Response>((_, reject) => {
+          timeoutReject = reject;
+        });
         const timeoutId = setTimeout(() => {
           console.error(`[EnvConfig] ⏱️ API Gateway request timeout after ${TIMEOUT_MS}ms (attempt ${attempt})`);
           controller.abort();
+          timeoutReject?.(new Error(`API Gateway request timeout after ${TIMEOUT_MS}ms`));
         }, TIMEOUT_MS);
 
         const fetchPromise = fetch(url, {
           method: 'GET',
           headers: {
-            'X-Integration-Key': apiKey,
+            'X-Access-Key': apiKey,
             'Content-Type': 'application/json',
             'Accept': 'application/json',
           },
@@ -219,8 +234,12 @@ class EnvConfigService {
         });
 
         console.log('[EnvConfig] ⏳ Waiting for API Gateway response...');
-        const response = await fetchPromise;
-        clearTimeout(timeoutId);
+        let response!: Response;
+        try {
+          response = await Promise.race([fetchPromise, timeoutPromise]);
+        } finally {
+          clearTimeout(timeoutId);
+        }
 
         console.log('[EnvConfig] 📨 Response received:', {
           status: response.status,
@@ -229,16 +248,11 @@ class EnvConfigService {
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
-          console.error('[EnvConfig] ❌ API Gateway error response:', errorText);
+          console.error('[EnvConfig] ❌ API Gateway error status:', response.status, response.statusText);
 
-          // Si es un error 4xx, no reintentar (error del cliente)
-          if (response.status >= 400 && response.status < 500) {
-            throw new Error(`API Gateway returned ${response.status}: ${response.statusText}`);
-          }
-
-          // Si es 5xx, reintentar
-          throw new Error(`Server error ${response.status}, retrying...`);
+          const gatewayError = new Error(`API Gateway returned ${response.status}: ${response.statusText}`);
+          (gatewayError as any).retryable = response.status >= 500;
+          throw gatewayError;
         }
 
         const data: ApiGatewayResponse = await response.json();
@@ -260,7 +274,7 @@ class EnvConfigService {
       } catch (error: any) {
         const isLastAttempt = attempt === MAX_RETRIES;
 
-        if (error.name === 'AbortError') {
+        if (error.name === 'AbortError' || error.message?.includes('request timeout')) {
           console.error(`[EnvConfig] ❌ Request timeout (attempt ${attempt}/${MAX_RETRIES})`);
 
           if (!isLastAttempt) {
@@ -275,6 +289,10 @@ class EnvConfigService {
         console.error(`[EnvConfig] ❌ Error fetching from API Gateway (attempt ${attempt}/${MAX_RETRIES}):`);
         console.error('[EnvConfig]    Type:', error.constructor.name);
         console.error('[EnvConfig]    Message:', error.message);
+
+        if ((error as any).retryable === false) {
+          throw error;
+        }
 
         if (error.message?.includes('Network request failed')) {
           if (!isLastAttempt) {

@@ -30,7 +30,7 @@ async function testApiGateway() {
     const response = await fetch(apiGateway.url, {
       method: 'GET',
       headers: {
-        'X-Integration-Key': apiGateway.apiKey,
+        'X-Access-Key': apiGateway.apiKey,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },

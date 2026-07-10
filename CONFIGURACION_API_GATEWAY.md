@@ -94,7 +94,7 @@ const environments = {
 
 serve(async (req) => {
   // Verificar API Key
-  const apiKey = req.headers.get('X-Integration-Key');
+  const apiKey = req.headers.get('X-Access-Key');
   if (apiKey !== Deno.env.get('EXPECTED_API_KEY')) {
     return new Response('Unauthorized', { status: 401 });
   }
@@ -225,7 +225,7 @@ Luego modifica `app.json` para usar estos secrets:
 2. Busca configuración en caché
 3. Si no hay caché:
    a. Hace request GET al API Gateway
-   b. Incluye header: X-Integration-Key: [apiKey]
+   b. Incluye header: X-Access-Key: [apiKey]
    c. Opcionalmente: X-Environment: [environment]
    d. Reintenta hasta 3 veces si falla
    e. Timeout de 60 segundos por intento
@@ -265,7 +265,7 @@ Luego modifica `envConfig.ts` para enviar el header:
 ```typescript
 const response = await fetch(url, {
   headers: {
-    'X-Integration-Key': apiKey,
+    'X-Access-Key': apiKey,
     'X-Environment': Constants.expoConfig?.extra?.apiGateway?.environment || 'production'
   }
 });
@@ -371,10 +371,10 @@ eas build --platform android --profile preview
 
 ```bash
 # Test directo
-curl -H "X-Integration-Key: tu_api_key" https://tu-api-gateway.com/config
+curl -H "X-Access-Key: tu_api_key" https://tu-api-gateway.com/config
 
 # Test con ambiente específico
-curl -H "X-Integration-Key: tu_api_key" \
+curl -H "X-Access-Key: tu_api_key" \
      -H "X-Environment: staging" \
      https://tu-api-gateway.com/config
 ```
