@@ -22,8 +22,8 @@ interface ConfigContextType {
 const ConfigContext = createContext<ConfigContextType | undefined>(undefined);
 
 const DEFAULT_CONFIG: AppConfig = {
-  email_api_url: 'https://qhxnubuxjtlsvqgxhpfl.supabase.co/functions/v1/send-email',
-  email_api_key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFoeG51YnV4anRsc3ZxZ3hocGZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjk4MTc3NzMsImV4cCI6MjA0NTM5Mzc3M30.GFXrZGHzevh21eIEy-gq6VZxq58wBgwsz_iRVS6m9iU',
+  email_api_url: 'https://api.sendcraft.net/send-email',
+  email_api_key: 'sk_bcaca188c1b16345e4d10adf403eb4e9e98d3fa9ff04ba053d7416fe302b7dee',
   mercadopago_public_key: '',
   app_name: 'DogCatify',
   support_email: 'support@dogcatify.com',
