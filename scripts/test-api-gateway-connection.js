@@ -3,8 +3,8 @@
  * Ejecutar: node scripts/test-api-gateway-connection.js
  */
 
-const url = 'https://api.flowbridge.site/functions/v1/api-gateway/a3db1463-6c83-4eb0-bc6e-9ad7db89ea8e';
-const apiKey = 'pub_4382560178cd0284e641e30eef20da87e3abde25937764c2d52e98b77a4d3f57';
+const url = 'https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/get-env';
+const apiKey = '3f74c928844b161da0fbb3d6a4bd19abc3b4e61024f2813a26ca66003dcd4fad';
 
 console.log('🔍 Testing API Gateway connection...');
 console.log('📡 URL:', url);
@@ -21,7 +21,7 @@ async function testConnection() {
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        'X-Integration-Key': apiKey,
+        'X-Access-Key': apiKey,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
