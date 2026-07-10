@@ -48,8 +48,8 @@
         "projectId": "0618d9ae-6714-46bb-adce-f4ee57fff324"
       },
       "apiGateway": {
-        "url": "https://api.flowbridge.site/functions/v1/api-gateway/a3db1463-6c83-4eb0-bc6e-9ad7db89ea8e",
-        "apiKey": "pub_4382560178cd0284e641e30eef20da87e3abde25937764c2d52e98b77a4d3f57"
+        "url": "https://apis-pets-app.proudmoss-ff0cfe85.northcentralus.azurecontainerapps.io/api/get-env",
+        "apiKey": "cc3cdc09379e1dc8f8482007290a5d9e2d2755c5613f5a3fd81fb02c81040b37"
       }
     },
     "ios": {
