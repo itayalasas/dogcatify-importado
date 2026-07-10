@@ -49,7 +49,7 @@
       },
       "apiGateway": {
         "url": "https://apis-pets-app.proudmoss-ff0cfe85.northcentralus.azurecontainerapps.io/api/get-env",
-        "apiKey": "cc3cdc09379e1dc8f8482007290a5d9e2d2755c5613f5a3fd81fb02c81040b37"
+        "apiKey": "3f74c928844b161da0fbb3d6a4bd19abc3b4e61024f2813a26ca66003dcd4fad"
       }
     },
     "ios": {
