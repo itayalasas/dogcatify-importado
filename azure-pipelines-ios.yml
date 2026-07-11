@@ -42,7 +42,7 @@ steps:
     fetchDepth: 0
 
   # ============================================================
-  # LIMPIAR WORKSPACE DEL AGENTE SELF-HOSTED
+  # LIMPIAR RESIDUOS DEL AGENTE SELF-HOSTED
   # ============================================================
   - script: |
       set -euo pipefail
@@ -53,6 +53,8 @@ steps:
       rm -rf "$(Build.ArtifactStagingDirectory)"/*.xcarchive
       rm -rf "$(Build.ArtifactStagingDirectory)/export"
       rm -rf "$(Build.ArtifactStagingDirectory)/ArchiveResult.xcresult"
+      rm -f "$(Build.ArtifactStagingDirectory)/xcodebuild-archive.log"
+      rm -f "$(Build.ArtifactStagingDirectory)/xcodebuild-export.log"
 
       mkdir -p "$(Build.ArtifactStagingDirectory)"
 
@@ -75,15 +77,26 @@ steps:
 
   - script: |
       set -e
+
+      echo "Node:"
       node -v
+
+      echo "NPM:"
       npm -v
-    displayName: 'Ver versiones Node/NPM'
+
+      echo "Xcode:"
+      xcodebuild -version
+
+      echo "macOS:"
+      sw_vers
+    displayName: 'Ver versiones del entorno'
 
   # ============================================================
-  # DEPENDENCIAS
+  # DEPENDENCIAS NPM
   # ============================================================
   - script: |
-      set -e
+      set -euo pipefail
+
       npm ci
     displayName: 'Instalar dependencias (npm ci)'
 
@@ -91,7 +104,7 @@ steps:
   # EXPO PREBUILD
   # ============================================================
   - script: |
-      set -e
+      set -euo pipefail
 
       if [ ! -d "ios" ]; then
         echo "No existe ios/. Ejecutando Expo prebuild..."
@@ -105,8 +118,13 @@ steps:
   # COCOAPODS
   # ============================================================
   - script: |
-      set -e
+      set -euo pipefail
+
       cd ios
+
+      echo "Versión de CocoaPods:"
+      pod --version
+
       pod install
     displayName: 'Instalar CocoaPods'
 
@@ -134,10 +152,14 @@ steps:
       echo "Eliminando archivos AppleDouble..."
       find "$(Build.SourcesDirectory)" -name "._*" -type f -delete || true
 
-      echo "Buscando React.framework en dependencias..."
+      echo "Revisando atributos extendidos residuales en frameworks React..."
+
       find "$(Build.SourcesDirectory)" \
         -path "*React.framework*" \
-        -print 2>/dev/null || true
+        -exec sh -c '
+          echo "Framework: $1"
+          xattr -lr "$1" 2>/dev/null || true
+        ' sh {} \; || true
 
       echo "Limpieza de metadatos finalizada."
     displayName: 'Limpiar xattrs, resource forks y FinderInfo'
@@ -146,7 +168,7 @@ steps:
   # VERSIONADO IOS
   # ============================================================
   - script: |
-      set -e
+      set -euo pipefail
 
       echo "Seteando versioning iOS..."
       echo "Marketing Version: $(IOS_MARKETING_VERSION)"
@@ -158,7 +180,7 @@ steps:
       xcrun agvtool new-version -all "$(IOS_BUILD_NUMBER)" || true
 
       echo "Versionado completado."
-    displayName: 'Set iOS Version + Build (auto incremental)'
+    displayName: 'Set iOS Version + Build'
 
   # ============================================================
   # SECURE FILES
@@ -179,39 +201,41 @@ steps:
   # KEYCHAIN + CERTIFICADO + PROVISIONING PROFILE
   # ============================================================
   - script: |
-      set -e
+      set -euo pipefail
 
       CERT_PATH="$(iosCert.secureFilePath)"
       PROFILE_PATH="$(iosProfile.secureFilePath)"
+      KEYCHAIN_PATH="$(KEYCHAIN_NAME)"
 
       echo "CERT_PATH=$CERT_PATH"
       echo "PROFILE_PATH=$PROFILE_PATH"
+      echo "KEYCHAIN=$KEYCHAIN_PATH"
 
-      security delete-keychain "$(KEYCHAIN_NAME)" || true
+      security delete-keychain "$KEYCHAIN_PATH" || true
 
       security create-keychain \
         -p "$(MAC_KEYCHAIN_PASSWORD)" \
-        "$(KEYCHAIN_NAME)"
+        "$KEYCHAIN_PATH"
 
       security set-keychain-settings \
         -lut 21600 \
-        "$(KEYCHAIN_NAME)"
+        "$KEYCHAIN_PATH"
 
       security unlock-keychain \
         -p "$(MAC_KEYCHAIN_PASSWORD)" \
-        "$(KEYCHAIN_NAME)"
+        "$KEYCHAIN_PATH"
 
       security list-keychains \
         -d user \
-        -s "$(KEYCHAIN_NAME)" login.keychain-db
+        -s "$KEYCHAIN_PATH" login.keychain-db
 
       security default-keychain \
-        -s "$(KEYCHAIN_NAME)"
+        -s "$KEYCHAIN_PATH"
 
       echo "Importando certificado P12..."
 
       security import "$CERT_PATH" \
-        -k "$(KEYCHAIN_NAME)" \
+        -k "$KEYCHAIN_PATH" \
         -P "$(IOS_P12_PASSWORD)" \
         -A \
         -T /usr/bin/codesign \
@@ -221,13 +245,14 @@ steps:
         -S apple-tool:,apple:,codesign: \
         -s \
         -k "$(MAC_KEYCHAIN_PASSWORD)" \
-        "$(KEYCHAIN_NAME)"
+        "$KEYCHAIN_PATH"
 
       echo "Identidades disponibles para codesign:"
+
       security find-identity \
         -v \
         -p codesigning \
-        "$(KEYCHAIN_NAME)" || true
+        "$KEYCHAIN_PATH"
 
       UUID=$(
         /usr/bin/security cms -D -i "$PROFILE_PATH" |
@@ -244,16 +269,55 @@ steps:
         /usr/bin/plutil -extract TeamIdentifier.0 raw -o - -
       )
 
-      echo "Profile Name: $NAME"
-      echo "Profile UUID: $UUID"
-      echo "Profile Team: $TEAM"
+      APP_IDENTIFIER=$(
+        /usr/bin/security cms -D -i "$PROFILE_PATH" |
+        /usr/bin/plutil \
+          -extract Entitlements.application-identifier \
+          raw \
+          -o - -
+      )
+
+      EXPIRATION=$(
+        /usr/bin/security cms -D -i "$PROFILE_PATH" |
+        /usr/bin/plutil \
+          -extract ExpirationDate \
+          raw \
+          -o - -
+      )
+
+      echo "Profile Name:             $NAME"
+      echo "Profile UUID:             $UUID"
+      echo "Profile Team:             $TEAM"
+      echo "Profile App Identifier:   $APP_IDENTIFIER"
+      echo "Profile Expiration:       $EXPIRATION"
+
+      if [ "$NAME" != "$(IOS_PROFILE_NAME)" ]; then
+        echo "ERROR: el nombre del profile no coincide."
+        echo "Esperado: $(IOS_PROFILE_NAME)"
+        echo "Actual:   $NAME"
+        exit 1
+      fi
+
+      if [ "$TEAM" != "$(IOS_TEAM_ID)" ]; then
+        echo "ERROR: el Team ID del profile no coincide."
+        echo "Esperado: $(IOS_TEAM_ID)"
+        echo "Actual:   $TEAM"
+        exit 1
+      fi
+
+      EXPECTED_IDENTIFIER="$(IOS_TEAM_ID).$(IOS_BUNDLE_ID)"
+
+      if [ "$APP_IDENTIFIER" != "$EXPECTED_IDENTIFIER" ]; then
+        echo "ERROR: el Bundle ID del profile no coincide."
+        echo "Esperado: $EXPECTED_IDENTIFIER"
+        echo "Actual:   $APP_IDENTIFIER"
+        exit 1
+      fi
 
       mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
 
       cp "$PROFILE_PATH" \
         "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
-
-      echo "Guardando profile plist para análisis..."
 
       /usr/bin/security cms \
         -D \
@@ -265,8 +329,8 @@ steps:
       /usr/bin/plutil \
         -p "$(Build.ArtifactStagingDirectory)/profile.plist" |
         sed -n '/"Entitlements" => {/,/}/p' |
-        head -n 220 || true
-    displayName: 'Keychain + importar .p12 + instalar .mobileprovision'
+        head -n 250 || true
+    displayName: 'Keychain + importar certificado + instalar profile'
     env:
       IOS_P12_PASSWORD: $(IOS_P12_PASSWORD)
       MAC_KEYCHAIN_PASSWORD: $(MAC_KEYCHAIN_PASSWORD)
@@ -275,14 +339,9 @@ steps:
   # VALIDAR ASSOCIATED DOMAINS
   # ============================================================
   - script: |
-      set -e
+      set -euo pipefail
 
-      echo "Validando Associated Domains en el provisioning profile..."
-
-      /usr/bin/plutil \
-        -p "$(Build.ArtifactStagingDirectory)/profile.plist" |
-        sed -n '/"Entitlements" => {/,/}/p' |
-        head -n 220 || true
+      echo "Validando Associated Domains..."
 
       if /usr/bin/plutil \
         -p "$(Build.ArtifactStagingDirectory)/profile.plist" |
@@ -299,7 +358,7 @@ steps:
   # DETECTAR WORKSPACE
   # ============================================================
   - script: |
-      set -e
+      set -euo pipefail
 
       WS=$(find ios -maxdepth 3 -name "*.xcworkspace" -print | head -n 1)
 
@@ -319,7 +378,9 @@ steps:
   # DIAGNÓSTICO DE FIRMA
   # ============================================================
   - script: |
-      set -e
+      set -euo pipefail
+
+      SETTINGS_FILE="$(Build.ArtifactStagingDirectory)/build-settings-signing.txt"
 
       echo "Build settings relacionados con signing..."
 
@@ -330,7 +391,7 @@ steps:
         -configuration "$(IOS_CONFIGURATION)" \
         | egrep -i \
         "PRODUCT_BUNDLE_IDENTIFIER|DEVELOPMENT_TEAM|CODE_SIGN|PROVISIONING_PROFILE|ENTITLEMENTS|SIGNING|MARKETING_VERSION|CURRENT_PROJECT_VERSION" \
-        | tee "$(Build.ArtifactStagingDirectory)/build-settings-signing.txt" || true
+        | tee "$SETTINGS_FILE" || true
 
       ENT_PATH=$(
         xcodebuild \
@@ -339,27 +400,36 @@ steps:
           -scheme "$(IOS_SCHEME)" \
           -configuration "$(IOS_CONFIGURATION)" \
         | awk -F"= " '/CODE_SIGN_ENTITLEMENTS/ {print $2; exit}' \
-        | tr -d ' '
+        | xargs
       )
 
       echo "CODE_SIGN_ENTITLEMENTS=$ENT_PATH" |
-        tee -a "$(Build.ArtifactStagingDirectory)/build-settings-signing.txt"
+        tee -a "$SETTINGS_FILE"
 
-      if [ -n "$ENT_PATH" ] && [ -f "$ENT_PATH" ]; then
-        echo "Contenido de entitlements del target:"
+      if [ -n "$ENT_PATH" ]; then
+        if [ -f "$ENT_PATH" ]; then
+          echo "Contenido de entitlements del target:"
 
-        cat "$ENT_PATH" |
-          tee "$(Build.ArtifactStagingDirectory)/target-entitlements.entitlements"
+          cat "$ENT_PATH" |
+            tee "$(Build.ArtifactStagingDirectory)/target-entitlements.entitlements"
+        elif [ -f "$(Build.SourcesDirectory)/$ENT_PATH" ]; then
+          echo "Contenido de entitlements del target:"
+
+          cat "$(Build.SourcesDirectory)/$ENT_PATH" |
+            tee "$(Build.ArtifactStagingDirectory)/target-entitlements.entitlements"
+        else
+          echo "El archivo de entitlements declarado no fue encontrado: $ENT_PATH"
+        fi
       else
         echo "No existe un archivo de entitlements declarado."
       fi
-    displayName: 'Diagnóstico: build settings + entitlements del target'
+    displayName: 'Diagnóstico: build settings + entitlements'
 
   # ============================================================
   # EXPORT OPTIONS
   # ============================================================
   - script: |
-      set -e
+      set -euo pipefail
 
       EXPORT_PLIST="$(Build.SourcesDirectory)/ios/exportOptions.plist"
 
@@ -382,13 +452,20 @@ steps:
           <key>$(IOS_BUNDLE_ID)</key>
           <string>$(IOS_PROFILE_NAME)</string>
         </dict>
+
+        <key>stripSwiftSymbols</key>
+        <true/>
+
+        <key>uploadSymbols</key>
+        <true/>
       </dict>
       </plist>
       EOF
 
       echo "Export plist: $EXPORT_PLIST"
 
-      plutil -p "$EXPORT_PLIST" || cat "$EXPORT_PLIST"
+      plutil -lint "$EXPORT_PLIST"
+      plutil -p "$EXPORT_PLIST"
 
       echo "##vso[task.setvariable variable=EXPORT_OPTIONS_PLIST]$EXPORT_PLIST"
     displayName: 'Crear exportOptions.plist'
@@ -417,6 +494,7 @@ steps:
       rm -rf "$DERIVED"
       rm -rf "$ARCHIVE_PATH"
       rm -rf "$RESULT_BUNDLE"
+      rm -f "$LOG_ARCHIVE"
 
       mkdir -p "$DERIVED"
 
@@ -430,12 +508,20 @@ steps:
         -type f \
         -delete || true
 
-      echo "Validando atributos extendidos residuales..."
+      echo "Desbloqueando keychain..."
 
-      find "$(Build.SourcesDirectory)" \
-        -path "*React.framework*" \
-        -exec xattr -lr {} \; \
-        2>/dev/null || true
+      security unlock-keychain \
+        -p "$(MAC_KEYCHAIN_PASSWORD)" \
+        "$(KEYCHAIN_NAME)"
+
+      security set-keychain-settings \
+        -lut 21600 \
+        "$(KEYCHAIN_NAME)"
+
+      security find-identity \
+        -v \
+        -p codesigning \
+        "$(KEYCHAIN_NAME)"
 
       set +e
 
@@ -464,45 +550,119 @@ steps:
       set -e
 
       echo "=================================================="
-      echo "Últimas 200 líneas del log"
+      echo "Resultado xcodebuild: $RC"
       echo "=================================================="
 
-      tail -n 200 "$LOG_ARCHIVE" || true
+      echo "=================================================="
+      echo "Últimas 300 líneas del log"
+      echo "=================================================="
+
+      tail -n 300 "$LOG_ARCHIVE" || true
 
       echo "=================================================="
       echo "Errores relevantes encontrados"
       echo "=================================================="
 
-      egrep -n \
-        "error:|No profiles|provisioning|CodeSign|codesign|Signing|resource fork|Finder information|detritus|PhaseScriptExecution|requires a development team|exportArchive|Command.*failed" \
+      egrep -n -i \
+        "error:|fatal error|ARCHIVE FAILED|Command CodeSign failed|Command PhaseScriptExecution failed|resource fork|Finder information|detritus|No profiles for|requires a provisioning profile|Provisioning profile.*doesn't|Provisioning profile.*does not|errSec|codesign.*failed|The following build commands failed|No signing certificate|Signing certificate.*not found|doesn't include signing certificate|doesn't match the entitlements" \
         "$LOG_ARCHIVE" \
-        | tail -n 160 || true
+        | tail -n 250 || true
 
-      exit $RC
+      echo "=================================================="
+      echo "Contexto alrededor de ARCHIVE FAILED"
+      echo "=================================================="
+
+      FAILED_LINE=$(
+        grep -n -i "ARCHIVE FAILED" "$LOG_ARCHIVE" |
+        tail -n 1 |
+        cut -d: -f1 || true
+      )
+
+      if [ -n "$FAILED_LINE" ]; then
+        START=$((FAILED_LINE - 150))
+
+        if [ "$START" -lt 1 ]; then
+          START=1
+        fi
+
+        END=$((FAILED_LINE + 40))
+
+        sed -n "${START},${END}p" "$LOG_ARCHIVE"
+      else
+        echo "No se encontró la línea ARCHIVE FAILED."
+      fi
+
+      echo "=================================================="
+      echo "Frameworks con atributos extendidos"
+      echo "=================================================="
+
+      if [ -d "$DERIVED" ]; then
+        find "$DERIVED" \
+          -name "*.framework" \
+          -type d \
+          -exec sh -c '
+            ATTRS=$(xattr "$1" 2>/dev/null || true)
+            if [ -n "$ATTRS" ]; then
+              echo "Framework con xattrs: $1"
+              xattr -lr "$1" 2>/dev/null || true
+            fi
+          ' sh {} \;
+      fi
+
+      if [ "$RC" -ne 0 ]; then
+        echo "ERROR: el archive falló con código $RC"
+        exit "$RC"
+      fi
+
+      if [ ! -d "$ARCHIVE_PATH" ]; then
+        echo "ERROR: xcodebuild finalizó sin generar el xcarchive."
+        exit 1
+      fi
+
+      echo "Archive generado correctamente:"
+      ls -la "$ARCHIVE_PATH"
     displayName: 'Archive iOS (NATIVO)'
+    env:
+      MAC_KEYCHAIN_PASSWORD: $(MAC_KEYCHAIN_PASSWORD)
 
   # ============================================================
   # EXTRAER RESULTADO XCRESULT
   # ============================================================
   - script: |
-      set -e
+      set -euo pipefail
 
       XR="$(Build.ArtifactStagingDirectory)/ArchiveResult.xcresult"
+      JSON_OUT="$(Build.ArtifactStagingDirectory)/xcresult.json"
 
       if [ -d "$XR" ]; then
         echo "xcresult encontrado: $XR"
 
         xcrun xcresulttool get \
+          --legacy \
           --path "$XR" \
           --format json \
-          > "$(Build.ArtifactStagingDirectory)/xcresult.json" || true
+          > "$JSON_OUT" || true
 
-        echo "Se generó xcresult.json"
+        if [ -f "$JSON_OUT" ]; then
+          echo "Se generó xcresult.json"
+          ls -lh "$JSON_OUT"
+        fi
       else
         echo "No existe ArchiveResult.xcresult"
       fi
     displayName: 'Extraer xcresult'
     condition: succeededOrFailed()
+
+  # ============================================================
+  # PUBLICAR LOGS DE DIAGNÓSTICO
+  # ============================================================
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publicar logs de diagnóstico'
+    condition: succeededOrFailed()
+    inputs:
+      pathToPublish: '$(Build.ArtifactStagingDirectory)'
+      artifactName: 'ios-diagnostics'
+      publishLocation: 'Container'
 
   # ============================================================
   # EXPORTAR IPA
@@ -514,16 +674,31 @@ steps:
       EXPORT_PATH="$(Build.ArtifactStagingDirectory)/export"
       LOG_EXPORT="$(Build.ArtifactStagingDirectory)/xcodebuild-export.log"
 
+      if [ ! -d "$ARCHIVE_PATH" ]; then
+        echo "ERROR: no existe el archive: $ARCHIVE_PATH"
+        exit 1
+      fi
+
       rm -rf "$EXPORT_PATH"
+      rm -f "$LOG_EXPORT"
+
       mkdir -p "$EXPORT_PATH"
 
       echo "ExportOptionsPlist: $(EXPORT_OPTIONS_PLIST)"
-      ls -la "$(EXPORT_OPTIONS_PLIST)" || true
+      ls -la "$(EXPORT_OPTIONS_PLIST)"
 
       echo "Limpiando metadatos del archive antes del export..."
 
       xattr -cr "$ARCHIVE_PATH" || true
-      find "$ARCHIVE_PATH" -name "._*" -type f -delete || true
+
+      find "$ARCHIVE_PATH" \
+        -name "._*" \
+        -type f \
+        -delete || true
+
+      security unlock-keychain \
+        -p "$(MAC_KEYCHAIN_PASSWORD)" \
+        "$(KEYCHAIN_NAME)"
 
       set +e
 
@@ -539,22 +714,41 @@ steps:
       set -e
 
       echo "=================================================="
-      echo "Últimas 200 líneas del export"
+      echo "Resultado export: $RC"
       echo "=================================================="
 
-      tail -n 200 "$LOG_EXPORT" || true
-
       echo "=================================================="
-      echo "IPA generado"
+      echo "Últimas 300 líneas del export"
       echo "=================================================="
 
-      find "$EXPORT_PATH" \
-        -maxdepth 2 \
-        -name "*.ipa" \
-        -print
+      tail -n 300 "$LOG_EXPORT" || true
 
-      exit $RC
+      echo "=================================================="
+      echo "Errores relevantes del export"
+      echo "=================================================="
+
+      egrep -n -i \
+        "error:|fatal error|EXPORT FAILED|exportArchive|No profiles for|requires a provisioning profile|Provisioning profile.*doesn't|Provisioning profile.*does not|errSec|codesign.*failed|No signing certificate|Signing certificate.*not found|The following build commands failed" \
+        "$LOG_EXPORT" \
+        | tail -n 250 || true
+
+      if [ "$RC" -ne 0 ]; then
+        echo "ERROR: el export falló con código $RC"
+        exit "$RC"
+      fi
+
+      IPA_PATH=$(find "$EXPORT_PATH" -maxdepth 2 -name "*.ipa" -print | head -n 1)
+
+      if [ -z "$IPA_PATH" ]; then
+        echo "ERROR: el export terminó sin generar un IPA."
+        exit 1
+      fi
+
+      echo "IPA generado:"
+      ls -lh "$IPA_PATH"
     displayName: 'Export IPA'
+    env:
+      MAC_KEYCHAIN_PASSWORD: $(MAC_KEYCHAIN_PASSWORD)
 
   # ============================================================
   # PUBLICAR IPA
