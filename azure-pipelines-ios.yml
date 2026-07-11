@@ -61,12 +61,14 @@ steps:
       mkdir -p "$(Build.ArtifactStagingDirectory)"
 
       echo "Eliminando archivos AppleDouble..."
+
       find "$(Build.SourcesDirectory)" \
         -name "._*" \
         -type f \
         -delete || true
 
       echo "Limpiando atributos extendidos..."
+
       xattr -cr "$(Build.SourcesDirectory)" || true
 
       echo "Workspace preparado."
@@ -101,7 +103,7 @@ steps:
       echo "Arquitectura:"
       uname -m
 
-      echo "Directorio del agente:"
+      echo "Directorio actual:"
       pwd
     displayName: 'Ver versiones del entorno'
 
@@ -114,6 +116,7 @@ steps:
       npm ci
 
       echo "Limpiando atributos de node_modules..."
+
       xattr -cr "$(Build.SourcesDirectory)/node_modules" || true
 
       find "$(Build.SourcesDirectory)/node_modules" \
@@ -163,6 +166,7 @@ steps:
       pod install
 
       echo "Limpiando atributos de Pods..."
+
       xattr -cr "$(Build.SourcesDirectory)/ios/Pods" || true
 
       find "$(Build.SourcesDirectory)/ios/Pods" \
@@ -176,12 +180,13 @@ steps:
 
   # ============================================================
   # PARCHEAR SCRIPTS DE COCOAPODS
-  # Limpia cada framework después de copiarlo y antes de firmarlo
+  # Limpia el framework después de copiarlo y antes de firmarlo
   # ============================================================
   - script: |
       set -euo pipefail
 
       SUPPORT_DIR="$(Build.SourcesDirectory)/ios/Pods/Target Support Files"
+      SCRIPT_LIST="$(Build.ArtifactStagingDirectory)/framework-scripts.txt"
 
       echo "Buscando scripts de frameworks en:"
       echo "$SUPPORT_DIR"
@@ -190,8 +195,6 @@ steps:
         echo "ERROR: no existe el directorio Target Support Files."
         exit 1
       fi
-
-      SCRIPT_LIST="$(Build.ArtifactStagingDirectory)/framework-scripts.txt"
 
       find "$SUPPORT_DIR" \
         -name "*-frameworks.sh" \
@@ -209,8 +212,7 @@ steps:
 
       while IFS= read -r SCRIPT_FILE; do
         echo "=================================================="
-        echo "Parcheando:"
-        echo "$SCRIPT_FILE"
+        echo "Parcheando: $SCRIPT_FILE"
         echo "=================================================="
 
         python3 - "$SCRIPT_FILE" <<'PY'
@@ -274,10 +276,14 @@ steps:
               break
 
       if not replaced:
-          print(f"ERROR: no se encontró la llamada code_sign_if_enabled esperada en {script_path}")
+          print(
+              f"ERROR: no se encontró la llamada "
+              f"code_sign_if_enabled esperada en {script_path}"
+          )
           sys.exit(1)
 
       script_path.write_text(content)
+
       print(f"Parche aplicado correctamente: {script_path}")
       PY
 
@@ -285,9 +291,7 @@ steps:
 
       done < "$SCRIPT_LIST"
 
-      echo "=================================================="
-      echo "Verificando parches aplicados"
-      echo "=================================================="
+      echo "Verificando parches aplicados..."
 
       grep -R -n \
         "AZURE_DEVOPS_XATTR_PATCH" \
@@ -322,7 +326,7 @@ steps:
         -type f \
         -delete || true
 
-      echo "Buscando atributos fileprovider residuales..."
+      echo "Buscando atributos residuales de File Provider..."
 
       xattr -lr "$(Build.SourcesDirectory)" 2>/dev/null \
         | grep -E \
@@ -538,11 +542,13 @@ steps:
   - script: |
       set -euo pipefail
 
-      WS=$(find ios \
-        -maxdepth 3 \
-        -name "*.xcworkspace" \
-        -print |
-        head -n 1)
+      WS=$(
+        find ios \
+          -maxdepth 3 \
+          -name "*.xcworkspace" \
+          -print |
+        head -n 1
+      )
 
       if [ -z "$WS" ]; then
         echo "ERROR: no se encontró ningún .xcworkspace."
@@ -735,6 +741,7 @@ steps:
       echo "=================================================="
 
       echo "Últimas 300 líneas del log:"
+
       tail -n 300 "$LOG_ARCHIVE" || true
 
       echo "=================================================="
@@ -784,6 +791,7 @@ steps:
 
   # ============================================================
   # EXTRAER XCRESULT
+  # No se publica; solo queda local durante la ejecución
   # ============================================================
   - script: |
       set -euo pipefail
@@ -808,17 +816,6 @@ steps:
       fi
     displayName: 'Extraer xcresult'
     condition: succeededOrFailed()
-
-  # ============================================================
-  # PUBLICAR LOGS SIEMPRE
-  # ============================================================
-  - task: PublishBuildArtifacts@1
-    displayName: 'Publicar logs de diagnóstico'
-    condition: succeededOrFailed()
-    inputs:
-      pathToPublish: '$(Build.ArtifactStagingDirectory)'
-      artifactName: 'ios-diagnostics'
-      publishLocation: 'Container'
 
   # ============================================================
   # EXPORTAR IPA
@@ -908,7 +905,7 @@ steps:
       COPY_EXTENDED_ATTRIBUTES_DISABLE: '1'
 
   # ============================================================
-  # PUBLICAR IPA
+  # PUBLICAR ÚNICAMENTE EL IPA
   # ============================================================
   - task: PublishBuildArtifacts@1
     displayName: 'Publicar artefacto iOS'
