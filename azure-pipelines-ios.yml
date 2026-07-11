@@ -42,30 +42,38 @@ steps:
     fetchDepth: 0
 
   # ============================================================
-  # LIMPIAR RESIDUOS DEL AGENTE SELF-HOSTED
+  # PREPARAR WORKSPACE
   # ============================================================
   - script: |
       set -euo pipefail
 
-      echo "Limpiando residuos de ejecuciones anteriores..."
+      echo "Preparando workspace limpio..."
 
       rm -rf "$(Build.ArtifactStagingDirectory)/DerivedData"
       rm -rf "$(Build.ArtifactStagingDirectory)"/*.xcarchive
       rm -rf "$(Build.ArtifactStagingDirectory)/export"
       rm -rf "$(Build.ArtifactStagingDirectory)/ArchiveResult.xcresult"
+
       rm -f "$(Build.ArtifactStagingDirectory)/xcodebuild-archive.log"
       rm -f "$(Build.ArtifactStagingDirectory)/xcodebuild-export.log"
+      rm -f "$(Build.ArtifactStagingDirectory)/xcresult.json"
 
       mkdir -p "$(Build.ArtifactStagingDirectory)"
 
       echo "Eliminando archivos AppleDouble..."
-      find "$(Build.SourcesDirectory)" -name "._*" -type f -delete || true
+      find "$(Build.SourcesDirectory)" \
+        -name "._*" \
+        -type f \
+        -delete || true
 
-      echo "Limpiando atributos extendidos del código fuente..."
+      echo "Limpiando atributos extendidos..."
       xattr -cr "$(Build.SourcesDirectory)" || true
 
       echo "Workspace preparado."
     displayName: 'Preparar workspace limpio'
+    env:
+      COPYFILE_DISABLE: '1'
+      COPY_EXTENDED_ATTRIBUTES_DISABLE: '1'
 
   # ============================================================
   # NODE
@@ -76,7 +84,7 @@ steps:
       versionSpec: '$(NODE_VERSION)'
 
   - script: |
-      set -e
+      set -euo pipefail
 
       echo "Node:"
       node -v
@@ -89,6 +97,12 @@ steps:
 
       echo "macOS:"
       sw_vers
+
+      echo "Arquitectura:"
+      uname -m
+
+      echo "Directorio del agente:"
+      pwd
     displayName: 'Ver versiones del entorno'
 
   # ============================================================
@@ -98,7 +112,18 @@ steps:
       set -euo pipefail
 
       npm ci
+
+      echo "Limpiando atributos de node_modules..."
+      xattr -cr "$(Build.SourcesDirectory)/node_modules" || true
+
+      find "$(Build.SourcesDirectory)/node_modules" \
+        -name "._*" \
+        -type f \
+        -delete || true
     displayName: 'Instalar dependencias (npm ci)'
+    env:
+      COPYFILE_DISABLE: '1'
+      COPY_EXTENDED_ATTRIBUTES_DISABLE: '1'
 
   # ============================================================
   # EXPO PREBUILD
@@ -112,7 +137,17 @@ steps:
       else
         echo "Existe ios/. Saltando Expo prebuild."
       fi
+
+      xattr -cr "$(Build.SourcesDirectory)/ios" || true
+
+      find "$(Build.SourcesDirectory)/ios" \
+        -name "._*" \
+        -type f \
+        -delete || true
     displayName: 'Expo prebuild iOS (si aplica)'
+    env:
+      COPYFILE_DISABLE: '1'
+      COPY_EXTENDED_ATTRIBUTES_DISABLE: '1'
 
   # ============================================================
   # COCOAPODS
@@ -120,49 +155,185 @@ steps:
   - script: |
       set -euo pipefail
 
-      cd ios
-
       echo "Versión de CocoaPods:"
       pod --version
 
+      cd ios
+
       pod install
+
+      echo "Limpiando atributos de Pods..."
+      xattr -cr "$(Build.SourcesDirectory)/ios/Pods" || true
+
+      find "$(Build.SourcesDirectory)/ios/Pods" \
+        -name "._*" \
+        -type f \
+        -delete || true
     displayName: 'Instalar CocoaPods'
+    env:
+      COPYFILE_DISABLE: '1'
+      COPY_EXTENDED_ATTRIBUTES_DISABLE: '1'
 
   # ============================================================
-  # LIMPIAR METADATOS MACOS DESPUÉS DE NPM Y POD INSTALL
+  # PARCHEAR SCRIPTS DE COCOAPODS
+  # Limpia cada framework después de copiarlo y antes de firmarlo
   # ============================================================
   - script: |
       set -euo pipefail
 
-      echo "Limpiando atributos extendidos de macOS..."
+      SUPPORT_DIR="$(Build.SourcesDirectory)/ios/Pods/Target Support Files"
+
+      echo "Buscando scripts de frameworks en:"
+      echo "$SUPPORT_DIR"
+
+      if [ ! -d "$SUPPORT_DIR" ]; then
+        echo "ERROR: no existe el directorio Target Support Files."
+        exit 1
+      fi
+
+      SCRIPT_LIST="$(Build.ArtifactStagingDirectory)/framework-scripts.txt"
+
+      find "$SUPPORT_DIR" \
+        -name "*-frameworks.sh" \
+        -type f \
+        -print \
+        > "$SCRIPT_LIST"
+
+      echo "Scripts encontrados:"
+      cat "$SCRIPT_LIST"
+
+      if [ ! -s "$SCRIPT_LIST" ]; then
+        echo "ERROR: no se encontraron scripts *-frameworks.sh."
+        exit 1
+      fi
+
+      while IFS= read -r SCRIPT_FILE; do
+        echo "=================================================="
+        echo "Parcheando:"
+        echo "$SCRIPT_FILE"
+        echo "=================================================="
+
+        python3 - "$SCRIPT_FILE" <<'PY'
+      import pathlib
+      import sys
+
+      script_path = pathlib.Path(sys.argv[1])
+      content = script_path.read_text()
+
+      patch_marker = "# AZURE_DEVOPS_XATTR_PATCH"
+
+      if patch_marker in content:
+          print(f"El script ya estaba parcheado: {script_path}")
+          sys.exit(0)
+
+      candidates = [
+          'code_sign_if_enabled "${destination}/$(basename "$1")"',
+          'code_sign_if_enabled "${destination}/$(basename "${source}")"',
+      ]
+
+      replacement_template = r'''
+        # AZURE_DEVOPS_XATTR_PATCH
+        FRAMEWORK_TO_SIGN="{framework_expression}"
+
+        echo "Limpiando xattrs antes de firmar: $FRAMEWORK_TO_SIGN"
+
+        /usr/bin/xattr -cr "$FRAMEWORK_TO_SIGN" 2>/dev/null || true
+
+        /usr/bin/find "$FRAMEWORK_TO_SIGN" \
+          -name "._*" \
+          -type f \
+          -delete 2>/dev/null || true
+
+        /usr/bin/xattr -d com.apple.FinderInfo \
+          "$FRAMEWORK_TO_SIGN" 2>/dev/null || true
+
+        /usr/bin/xattr -d com.apple.ResourceFork \
+          "$FRAMEWORK_TO_SIGN" 2>/dev/null || true
+
+        /usr/bin/xattr -d 'com.apple.fileprovider.fpfs#P' \
+          "$FRAMEWORK_TO_SIGN" 2>/dev/null || true
+
+        code_sign_if_enabled "$FRAMEWORK_TO_SIGN"
+      '''.strip()
+
+      replaced = False
+
+      for candidate in candidates:
+          if candidate in content:
+              if '"${destination}/$(basename "$1")"' in candidate:
+                  framework_expression = '${destination}/$(basename "$1")'
+              else:
+                  framework_expression = '${destination}/$(basename "${source}")'
+
+              replacement = replacement_template.format(
+                  framework_expression=framework_expression
+              )
+
+              content = content.replace(candidate, replacement)
+              replaced = True
+              break
+
+      if not replaced:
+          print(f"ERROR: no se encontró la llamada code_sign_if_enabled esperada en {script_path}")
+          sys.exit(1)
+
+      script_path.write_text(content)
+      print(f"Parche aplicado correctamente: {script_path}")
+      PY
+
+        chmod +x "$SCRIPT_FILE"
+
+      done < "$SCRIPT_LIST"
+
+      echo "=================================================="
+      echo "Verificando parches aplicados"
+      echo "=================================================="
+
+      grep -R -n \
+        "AZURE_DEVOPS_XATTR_PATCH" \
+        "$SUPPORT_DIR"
+
+      echo "Parche de CocoaPods finalizado."
+    displayName: 'Parchear CocoaPods antes de codesign'
+    env:
+      COPYFILE_DISABLE: '1'
+      COPY_EXTENDED_ATTRIBUTES_DISABLE: '1'
+
+  # ============================================================
+  # LIMPIEZA GENERAL DESPUÉS DE POD INSTALL
+  # ============================================================
+  - script: |
+      set -euo pipefail
+
+      echo "Limpieza general de atributos extendidos..."
+
+      xattr -cr "$(Build.SourcesDirectory)" || true
 
       if [ -d "$(Build.SourcesDirectory)/node_modules" ]; then
-        echo "Limpiando node_modules..."
         xattr -cr "$(Build.SourcesDirectory)/node_modules" || true
       fi
 
       if [ -d "$(Build.SourcesDirectory)/ios/Pods" ]; then
-        echo "Limpiando ios/Pods..."
         xattr -cr "$(Build.SourcesDirectory)/ios/Pods" || true
       fi
 
-      echo "Limpiando proyecto completo..."
-      xattr -cr "$(Build.SourcesDirectory)" || true
-
-      echo "Eliminando archivos AppleDouble..."
-      find "$(Build.SourcesDirectory)" -name "._*" -type f -delete || true
-
-      echo "Revisando atributos extendidos residuales en frameworks React..."
-
       find "$(Build.SourcesDirectory)" \
-        -path "*React.framework*" \
-        -exec sh -c '
-          echo "Framework: $1"
-          xattr -lr "$1" 2>/dev/null || true
-        ' sh {} \; || true
+        -name "._*" \
+        -type f \
+        -delete || true
 
-      echo "Limpieza de metadatos finalizada."
-    displayName: 'Limpiar xattrs, resource forks y FinderInfo'
+      echo "Buscando atributos fileprovider residuales..."
+
+      xattr -lr "$(Build.SourcesDirectory)" 2>/dev/null \
+        | grep -E \
+          "com.apple.FinderInfo|com.apple.ResourceFork|com.apple.fileprovider" \
+        | head -n 100 || true
+
+      echo "Limpieza general finalizada."
+    displayName: 'Limpiar xattrs, FinderInfo y FileProvider'
+    env:
+      COPYFILE_DISABLE: '1'
+      COPY_EXTENDED_ATTRIBUTES_DISABLE: '1'
 
   # ============================================================
   # VERSIONADO IOS
@@ -176,8 +347,14 @@ steps:
 
       cd ios
 
-      xcrun agvtool new-marketing-version "$(IOS_MARKETING_VERSION)" || true
-      xcrun agvtool new-version -all "$(IOS_BUILD_NUMBER)" || true
+      xcrun agvtool \
+        new-marketing-version \
+        "$(IOS_MARKETING_VERSION)" || true
+
+      xcrun agvtool \
+        new-version \
+        -all \
+        "$(IOS_BUILD_NUMBER)" || true
 
       echo "Versionado completado."
     displayName: 'Set iOS Version + Build'
@@ -285,11 +462,11 @@ steps:
           -o - -
       )
 
-      echo "Profile Name:             $NAME"
-      echo "Profile UUID:             $UUID"
-      echo "Profile Team:             $TEAM"
-      echo "Profile App Identifier:   $APP_IDENTIFIER"
-      echo "Profile Expiration:       $EXPIRATION"
+      echo "Profile Name:           $NAME"
+      echo "Profile UUID:           $UUID"
+      echo "Profile Team:           $TEAM"
+      echo "Profile App Identifier: $APP_IDENTIFIER"
+      echo "Profile Expiration:     $EXPIRATION"
 
       if [ "$NAME" != "$(IOS_PROFILE_NAME)" ]; then
         echo "ERROR: el nombre del profile no coincide."
@@ -314,7 +491,8 @@ steps:
         exit 1
       fi
 
-      mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+      mkdir -p \
+        "$HOME/Library/MobileDevice/Provisioning Profiles"
 
       cp "$PROFILE_PATH" \
         "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
@@ -330,7 +508,7 @@ steps:
         -p "$(Build.ArtifactStagingDirectory)/profile.plist" |
         sed -n '/"Entitlements" => {/,/}/p' |
         head -n 250 || true
-    displayName: 'Keychain + importar certificado + instalar profile'
+    displayName: 'Keychain + certificado + provisioning profile'
     env:
       IOS_P12_PASSWORD: $(IOS_P12_PASSWORD)
       MAC_KEYCHAIN_PASSWORD: $(MAC_KEYCHAIN_PASSWORD)
@@ -347,9 +525,9 @@ steps:
         -p "$(Build.ArtifactStagingDirectory)/profile.plist" |
         grep -q 'com.apple.developer.associated-domains'; then
 
-        echo "OK: el profile incluye com.apple.developer.associated-domains"
+        echo "OK: el profile incluye Associated Domains."
       else
-        echo "ERROR: el profile no incluye com.apple.developer.associated-domains"
+        echo "ERROR: el profile no incluye Associated Domains."
         exit 1
       fi
     displayName: 'Check: Associated Domains en profile'
@@ -360,18 +538,26 @@ steps:
   - script: |
       set -euo pipefail
 
-      WS=$(find ios -maxdepth 3 -name "*.xcworkspace" -print | head -n 1)
+      WS=$(find ios \
+        -maxdepth 3 \
+        -name "*.xcworkspace" \
+        -print |
+        head -n 1)
 
       if [ -z "$WS" ]; then
-        echo "ERROR: no se encontró ningún .xcworkspace dentro de ios/"
+        echo "ERROR: no se encontró ningún .xcworkspace."
         exit 1
       fi
 
       echo "Workspace encontrado: $WS"
+
       echo "##vso[task.setvariable variable=IOS_WORKSPACE]$WS"
 
       echo "Schemes disponibles:"
-      xcodebuild -list -workspace "$WS"
+
+      xcodebuild \
+        -list \
+        -workspace "$WS"
     displayName: 'Detectar workspace + listar schemes'
 
   # ============================================================
@@ -399,26 +585,23 @@ steps:
           -workspace "$(IOS_WORKSPACE)" \
           -scheme "$(IOS_SCHEME)" \
           -configuration "$(IOS_CONFIGURATION)" \
-        | awk -F"= " '/CODE_SIGN_ENTITLEMENTS/ {print $2; exit}' \
+        | awk -F"= " \
+          '/CODE_SIGN_ENTITLEMENTS/ {print $2; exit}' \
         | xargs
       )
 
-      echo "CODE_SIGN_ENTITLEMENTS=$ENT_PATH" |
-        tee -a "$SETTINGS_FILE"
+      echo "CODE_SIGN_ENTITLEMENTS=$ENT_PATH" \
+        | tee -a "$SETTINGS_FILE"
 
       if [ -n "$ENT_PATH" ]; then
         if [ -f "$ENT_PATH" ]; then
-          echo "Contenido de entitlements del target:"
-
-          cat "$ENT_PATH" |
-            tee "$(Build.ArtifactStagingDirectory)/target-entitlements.entitlements"
+          cat "$ENT_PATH" \
+            | tee "$(Build.ArtifactStagingDirectory)/target-entitlements.entitlements"
         elif [ -f "$(Build.SourcesDirectory)/$ENT_PATH" ]; then
-          echo "Contenido de entitlements del target:"
-
-          cat "$(Build.SourcesDirectory)/$ENT_PATH" |
-            tee "$(Build.ArtifactStagingDirectory)/target-entitlements.entitlements"
+          cat "$(Build.SourcesDirectory)/$ENT_PATH" \
+            | tee "$(Build.ArtifactStagingDirectory)/target-entitlements.entitlements"
         else
-          echo "El archivo de entitlements declarado no fue encontrado: $ENT_PATH"
+          echo "No fue encontrado el archivo: $ENT_PATH"
         fi
       else
         echo "No existe un archivo de entitlements declarado."
@@ -461,8 +644,6 @@ steps:
       </dict>
       </plist>
       EOF
-
-      echo "Export plist: $EXPORT_PLIST"
 
       plutil -lint "$EXPORT_PLIST"
       plutil -p "$EXPORT_PLIST"
@@ -553,44 +734,17 @@ steps:
       echo "Resultado xcodebuild: $RC"
       echo "=================================================="
 
-      echo "=================================================="
-      echo "Últimas 300 líneas del log"
-      echo "=================================================="
-
+      echo "Últimas 300 líneas del log:"
       tail -n 300 "$LOG_ARCHIVE" || true
 
       echo "=================================================="
-      echo "Errores relevantes encontrados"
+      echo "Errores relevantes"
       echo "=================================================="
 
       egrep -n -i \
         "error:|fatal error|ARCHIVE FAILED|Command CodeSign failed|Command PhaseScriptExecution failed|resource fork|Finder information|detritus|No profiles for|requires a provisioning profile|Provisioning profile.*doesn't|Provisioning profile.*does not|errSec|codesign.*failed|The following build commands failed|No signing certificate|Signing certificate.*not found|doesn't include signing certificate|doesn't match the entitlements" \
         "$LOG_ARCHIVE" \
         | tail -n 250 || true
-
-      echo "=================================================="
-      echo "Contexto alrededor de ARCHIVE FAILED"
-      echo "=================================================="
-
-      FAILED_LINE=$(
-        grep -n -i "ARCHIVE FAILED" "$LOG_ARCHIVE" |
-        tail -n 1 |
-        cut -d: -f1 || true
-      )
-
-      if [ -n "$FAILED_LINE" ]; then
-        START=$((FAILED_LINE - 150))
-
-        if [ "$START" -lt 1 ]; then
-          START=1
-        fi
-
-        END=$((FAILED_LINE + 40))
-
-        sed -n "${START},${END}p" "$LOG_ARCHIVE"
-      else
-        echo "No se encontró la línea ARCHIVE FAILED."
-      fi
 
       echo "=================================================="
       echo "Frameworks con atributos extendidos"
@@ -602,6 +756,7 @@ steps:
           -type d \
           -exec sh -c '
             ATTRS=$(xattr "$1" 2>/dev/null || true)
+
             if [ -n "$ATTRS" ]; then
               echo "Framework con xattrs: $1"
               xattr -lr "$1" 2>/dev/null || true
@@ -615,7 +770,7 @@ steps:
       fi
 
       if [ ! -d "$ARCHIVE_PATH" ]; then
-        echo "ERROR: xcodebuild finalizó sin generar el xcarchive."
+        echo "ERROR: no se generó el xcarchive."
         exit 1
       fi
 
@@ -624,9 +779,11 @@ steps:
     displayName: 'Archive iOS (NATIVO)'
     env:
       MAC_KEYCHAIN_PASSWORD: $(MAC_KEYCHAIN_PASSWORD)
+      COPYFILE_DISABLE: '1'
+      COPY_EXTENDED_ATTRIBUTES_DISABLE: '1'
 
   # ============================================================
-  # EXTRAER RESULTADO XCRESULT
+  # EXTRAER XCRESULT
   # ============================================================
   - script: |
       set -euo pipefail
@@ -644,7 +801,6 @@ steps:
           > "$JSON_OUT" || true
 
         if [ -f "$JSON_OUT" ]; then
-          echo "Se generó xcresult.json"
           ls -lh "$JSON_OUT"
         fi
       else
@@ -654,7 +810,7 @@ steps:
     condition: succeededOrFailed()
 
   # ============================================================
-  # PUBLICAR LOGS DE DIAGNÓSTICO
+  # PUBLICAR LOGS SIEMPRE
   # ============================================================
   - task: PublishBuildArtifacts@1
     displayName: 'Publicar logs de diagnóstico'
@@ -675,7 +831,8 @@ steps:
       LOG_EXPORT="$(Build.ArtifactStagingDirectory)/xcodebuild-export.log"
 
       if [ ! -d "$ARCHIVE_PATH" ]; then
-        echo "ERROR: no existe el archive: $ARCHIVE_PATH"
+        echo "ERROR: no existe el archive:"
+        echo "$ARCHIVE_PATH"
         exit 1
       fi
 
@@ -684,10 +841,12 @@ steps:
 
       mkdir -p "$EXPORT_PATH"
 
-      echo "ExportOptionsPlist: $(EXPORT_OPTIONS_PLIST)"
+      echo "ExportOptionsPlist:"
+      echo "$(EXPORT_OPTIONS_PLIST)"
+
       ls -la "$(EXPORT_OPTIONS_PLIST)"
 
-      echo "Limpiando metadatos del archive antes del export..."
+      echo "Limpiando atributos del archive..."
 
       xattr -cr "$ARCHIVE_PATH" || true
 
@@ -713,19 +872,9 @@ steps:
 
       set -e
 
-      echo "=================================================="
       echo "Resultado export: $RC"
-      echo "=================================================="
-
-      echo "=================================================="
-      echo "Últimas 300 líneas del export"
-      echo "=================================================="
 
       tail -n 300 "$LOG_EXPORT" || true
-
-      echo "=================================================="
-      echo "Errores relevantes del export"
-      echo "=================================================="
 
       egrep -n -i \
         "error:|fatal error|EXPORT FAILED|exportArchive|No profiles for|requires a provisioning profile|Provisioning profile.*doesn't|Provisioning profile.*does not|errSec|codesign.*failed|No signing certificate|Signing certificate.*not found|The following build commands failed" \
@@ -737,10 +886,16 @@ steps:
         exit "$RC"
       fi
 
-      IPA_PATH=$(find "$EXPORT_PATH" -maxdepth 2 -name "*.ipa" -print | head -n 1)
+      IPA_PATH=$(
+        find "$EXPORT_PATH" \
+          -maxdepth 2 \
+          -name "*.ipa" \
+          -print |
+        head -n 1
+      )
 
       if [ -z "$IPA_PATH" ]; then
-        echo "ERROR: el export terminó sin generar un IPA."
+        echo "ERROR: no se generó ningún IPA."
         exit 1
       fi
 
@@ -749,6 +904,8 @@ steps:
     displayName: 'Export IPA'
     env:
       MAC_KEYCHAIN_PASSWORD: $(MAC_KEYCHAIN_PASSWORD)
+      COPYFILE_DISABLE: '1'
+      COPY_EXTENDED_ATTRIBUTES_DISABLE: '1'
 
   # ============================================================
   # PUBLICAR IPA
