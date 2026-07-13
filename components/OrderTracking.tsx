@@ -34,6 +34,7 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
   onRetryPayment
 }) => {
   const isPaymentFailed = orderStatus === 'payment_failed';
+  const isInsufficientStock = orderStatus === 'insufficient_stock';
   const isPaymentPending = orderStatus === 'pending';
   const isPaymentLinkExpired = paymentLinkExpiresAt ? new Date(paymentLinkExpiresAt) < new Date() : true;
 
@@ -73,6 +74,24 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
     const isCancelled = orderStatus === 'cancelled';
     const isServiceBooking = orderType === 'service_booking';
     const isPickupOrder = fulfillmentMode === 'pickup';
+
+    if (isInsufficientStock) {
+      return [
+        {
+          id: 'insufficient_stock',
+          label: 'Sin stock',
+          description: 'No hay stock suficiente para completar este pedido. Te contactaremos pronto.',
+          icon: AlertCircle,
+          status: 'failed',
+          date: orderDate?.toLocaleDateString('es-ES', {
+            day: '2-digit',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        }
+      ];
+    }
 
     // Para servicios (reservas), solo mostrar estados simples
     if (isServiceBooking) {
@@ -196,8 +215,8 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
         },
         {
           id: 'delivered',
-          label: 'Entregado',
-          description: 'El pedido fue entregado en tienda',
+          label: 'Retirado',
+          description: 'Confirmaste que retiraste el pedido en tienda',
           icon: Home,
           status: orderStatus === 'delivered' || orderStatus === 'completed' ? 'completed' :
                   isCancelled ? 'cancelled' :

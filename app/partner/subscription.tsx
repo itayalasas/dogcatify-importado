@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Linking, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Check, Crown, DollarSign, RefreshCw, Shield, Sparkles } from 'lucide-react-native';
+import { SubscriptionReturnBanner } from '@/components/SubscriptionReturnBanner';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { supabaseClient } from '../../lib/supabase';
@@ -12,6 +13,7 @@ import {
   getPartnerSubscriptionStatusLabel,
   resolvePartnerPlanTier,
 } from '../../utils/partnerPlans';
+import { getSingleParam } from '../../utils/subscriptionReturn';
 import { buildPartnerLimitSummary, resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
 
 type BillingCycle = 'monthly' | 'yearly';
@@ -123,8 +125,12 @@ const resolveAccountPlanFromPartners = (partners: PartnerRow[]) => {
 
 export default function PartnerSubscriptionScreen() {
   const { currentUser } = useAuth();
-  const { businessId } = useLocalSearchParams<{ businessId?: string }>();
-  const requestedPartnerId = toSingle(businessId);
+  const params = useLocalSearchParams();
+  const requestedPartnerId = toSingle(params.businessId || params.partnerId);
+  const subscription_id = getSingleParam(params.subscription_id);
+  const subscription_status = params.subscription_status;
+  const subscription_message = params.subscription_message;
+  const subscription_scope = params.subscription_scope || params.scope;
 
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState<PartnerPlanRow[]>([]);
@@ -137,7 +143,7 @@ export default function PartnerSubscriptionScreen() {
 
   useEffect(() => {
     loadData();
-  }, [currentUser?.id, requestedPartnerId]);
+  }, [currentUser?.id, requestedPartnerId, subscription_id]);
 
   const loadData = async () => {
     if (!currentUser?.id) {
@@ -427,6 +433,14 @@ export default function PartnerSubscriptionScreen() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {(getSingleParam(subscription_status) || getSingleParam(subscription_message)) && (
+          <SubscriptionReturnBanner
+            scope={subscription_scope}
+            status={subscription_status}
+            message={subscription_message}
+          />
+        )}
+
         <Card style={styles.statusCard}>
           <View style={styles.statusRow}>
             <View style={styles.statusIcon}>

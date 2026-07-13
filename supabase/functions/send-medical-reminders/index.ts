@@ -85,8 +85,10 @@ Deno.serve(async (req: Request) => {
         if (userProfile.fcm_token) {
           const dataPayload = {
             type: 'medical_reminder',
+            screen: 'PetCare',
             alertId: String(alert.alert_id),
             petId: String(alert.pet_id),
+            petName: String(alert.pet_name || ''),
             alertType: String(alert.alert_type),
             scheduledDate: String(alert.scheduled_date),
           };
@@ -125,8 +127,10 @@ Deno.serve(async (req: Request) => {
             body: body,
             data: {
               type: 'medical_reminder',
+              screen: 'PetCare',
               alertId: alert.alert_id,
               petId: alert.pet_id,
+              petName: alert.pet_name || '',
               alertType: alert.alert_type,
               scheduledDate: alert.scheduled_date,
             },

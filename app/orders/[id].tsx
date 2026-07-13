@@ -4,11 +4,13 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Package, Clock, Truck, CircleCheck as CheckCircle, Circle as XCircle, MapPin, Phone, Star, MessageSquare } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { OrderStatusBanner } from '../../components/OrderStatusBanner';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { OrderTracking } from '../../components/OrderTracking';
 import { StoreRouteMap } from '../../components/StoreRouteMap';
 import { getOrderFulfillmentMode, getOrderStatusLabel } from '../../utils/orderFulfillment';
+import { isServiceBookingOrder } from '../../utils/orderClassification';
 
 export default function OrderDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -18,6 +20,7 @@ export default function OrderDetail() {
   const [partnerName, setPartnerName] = useState<string>('');
   const [partnerLocation, setPartnerLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pickupConfirming, setPickupConfirming] = useState(false);
 
   useEffect(() => {
     if (!currentUser) {
@@ -150,6 +153,7 @@ export default function OrderDetail() {
       case 'pending': return '#FEF3C7';
       case 'reserved': return '#FEF3C7';
       case 'payment_failed': return '#FECACA';
+      case 'insufficient_stock': return '#FEE2E2';
       case 'confirmed': return '#DBEAFE';
       case 'processing': return '#DBEAFE';
       case 'preparing': return '#DBEAFE';
@@ -168,6 +172,7 @@ export default function OrderDetail() {
       case 'pending': return '#92400E';
       case 'reserved': return '#92400E';
       case 'payment_failed': return '#991B1B';
+      case 'insufficient_stock': return '#991B1B';
       case 'confirmed': return '#1E40AF';
       case 'processing': return '#1E40AF';
       case 'preparing': return '#1E40AF';
@@ -181,7 +186,7 @@ export default function OrderDetail() {
     }
   };
 
-  const isServiceOrder = order?.orderType === 'service_booking';
+  const isServiceOrder = isServiceBookingOrder(order);
   const shippingAddressText = (order?.shippingAddress || '').trim();
   const isStorePickup = !isServiceOrder && (
     shippingAddressText.toLowerCase().startsWith('retiro en tienda') ||
@@ -205,6 +210,52 @@ export default function OrderDetail() {
       'Contactar Soporte',
       `Pedido ${order.orderNumber || `#${order.id.slice(-6)}`}\n\nPuedes contactarnos por:\n\n📧 Email: soporte@dogcatify.com\n📱 WhatsApp: +54 11 1234-5678`,
       [{ text: 'Entendido' }]
+    );
+  };
+
+  const submitPickupConfirmation = async () => {
+    if (!order || !currentUser) {
+      return;
+    }
+
+    try {
+      setPickupConfirming(true);
+
+      const now = new Date().toISOString();
+      const { error } = await supabaseClient
+        .from('orders')
+        .update({
+          status: 'delivered',
+          delivered_at: now,
+          updated_at: now,
+        })
+        .eq('id', order.id)
+        .eq('customer_id', currentUser.id);
+
+      if (error) throw error;
+
+      Alert.alert(
+        'Retiro confirmado',
+        'Tu compra quedó marcada como retirada y el aliado recibirá la notificación.',
+      );
+
+      await fetchOrderDetails();
+    } catch (error) {
+      console.error('Error confirming pickup:', error);
+      Alert.alert('Error', 'No se pudo confirmar el retiro del pedido');
+    } finally {
+      setPickupConfirming(false);
+    }
+  };
+
+  const handleConfirmPickup = () => {
+    Alert.alert(
+      'Confirmar retiro',
+      '¿Ya retiraste tu compra en tienda?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Sí, confirmar', onPress: () => { void submitPickupConfirmation(); } },
+      ]
     );
   };
 
@@ -242,6 +293,8 @@ export default function OrderDetail() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <OrderStatusBanner />
+
         {/* Order Status */}
         <Card style={styles.statusCard}>
           <View style={styles.statusHeader}>
@@ -284,7 +337,9 @@ export default function OrderDetail() {
 
         {/* Order Items */}
         <Card style={styles.itemsCard}>
-          <Text style={styles.sectionTitle}>Productos ({order.items.length})</Text>
+          <Text style={styles.sectionTitle}>
+            {isServiceOrder ? `Servicios (${order.items.length})` : `Productos (${order.items.length})`}
+          </Text>
           
           {order.items.map((item: any, index: number) => (
             <View key={index} style={styles.orderItem}>
@@ -292,7 +347,11 @@ export default function OrderDetail() {
                 <Image source={{ uri: item.image }} style={styles.itemImage} />
               )}
               <View style={styles.itemDetails}>
-                <Text style={styles.itemName}>{item.name || 'Producto'}</Text>
+                <Text style={styles.itemName}>
+                  {isServiceOrder
+                    ? item.service_name || item.name || 'Servicio'
+                    : item.name || 'Producto'}
+                </Text>
                 <Text style={styles.itemPartner}>{item.partnerName || 'Tienda'}</Text>
                 <View style={styles.itemPricing}>
                   <Text style={styles.itemQuantity}>Cantidad: {item.quantity || 1}</Text>
@@ -355,6 +414,15 @@ export default function OrderDetail() {
 
         {/* Actions */}
         <View style={styles.actionsContainer}>
+          {isStorePickup && order.status === 'ready_for_delivery' && (
+            <Button
+              title="Confirmar retiro"
+              onPress={handleConfirmPickup}
+              loading={pickupConfirming}
+              size="large"
+            />
+          )}
+
           {order.status === 'delivered' && (
             <Button
               title="Reordenar Productos"

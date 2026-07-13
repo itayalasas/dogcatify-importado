@@ -1,4 +1,4 @@
-import { supabaseClient } from '@/lib/supabase';
+﻿import { supabaseClient } from '@/lib/supabase';
 import { logger } from '@/utils/datadogLogger';
 import { Linking, Platform } from 'react-native';
 import { envConfig } from './envConfig';
@@ -192,7 +192,7 @@ export const exchangeCodeForTokens = async (
     const tokenData = data?.tokenData || data;
 
     if (!tokenData?.access_token) {
-      throw new Error('Mercado Pago no devolvió credenciales válidas');
+      throw new Error('Mercado Pago no devolviÃ³ credenciales vÃ¡lidas');
     }
 
     return tokenData;
@@ -296,7 +296,7 @@ export const getPartnerMercadoPagoConfig = async (partnerId: string) => {
 
       if (!tokenIsValid) {
         if (!resolvedPartnerConfig.refresh_token) {
-          throw new Error('La conexión OAuth de Mercado Pago expiró o necesita ser reautorizada');
+          throw new Error('La conexiÃ³n OAuth de Mercado Pago expirÃ³ o necesita ser reautorizada');
         }
 
         logger.info('Refreshing expired partner OAuth token', { partnerId });
@@ -315,7 +315,7 @@ export const getPartnerMercadoPagoConfig = async (partnerId: string) => {
           resolvedPartnerConfig = (refreshedPartnerData?.mercadopago_config || {}) as any;
         } catch (refreshError) {
           logger.error('Error refreshing partner OAuth token before payment', refreshError as Error, { partnerId });
-          throw new Error('La conexión OAuth de Mercado Pago expiró o necesita ser reautorizada');
+          throw new Error('La conexiÃ³n OAuth de Mercado Pago expirÃ³ o necesita ser reautorizada');
         }
       }
 
@@ -401,6 +401,8 @@ export const createOrder = async (
       commission_amount: commissionAmount,
       partner_amount: partnerAmount,
       shipping_address: shippingAddress,
+      is_split_master: false,
+      skip_stock_sync: false,
       payment_method: 'mercadopago',
       status: 'pending',
       created_at: new Date().toISOString()
@@ -461,7 +463,7 @@ export const createPaymentPreference = async (
         currency_id: 'UYU'
       })).concat([{
         id: 'shipping',
-        title: 'Envío',
+        title: 'EnvÃ­o',
         quantity: 1,
         unit_price: shippingCost,
         currency_id: 'UYU'
@@ -486,7 +488,7 @@ export const createPaymentPreference = async (
       statement_descriptor: 'DOGCATIFY'
     };
 
-    // Solo agregar marketplace_fee y collector_id si es configuración OAuth
+    // Solo agregar marketplace_fee y collector_id si es configuraciÃ³n OAuth
     if (partnerConfig.is_oauth && partnerConfig.user_id && !isNaN(parseInt(partnerConfig.user_id))) {
       preferenceData.marketplace_fee = commissionAmount;
       preferenceData.collector_id = parseInt(partnerConfig.user_id);
@@ -552,7 +554,7 @@ const calculateIVA = (cartItems: any[], partner: any): IVACalculation => {
   // tratamos SIEMPRE los precios de carrito como IVA incluido.
   const ivaIncluded = true;
 
-  console.log('🔍 calculateIVA - Partner IVA Config:', {
+  console.log('ðŸ” calculateIVA - Partner IVA Config:', {
     partner_id: partner.id,
     partner_business_name: partner.business_name,
     iva_rate: ivaRate,
@@ -619,7 +621,7 @@ export const createMultiPartnerOrder = async (
     // Calculate totals for the unified order (including shipping)
     const totalAmount = ivaCalculation.totalAmount + totalShippingCost;
 
-    console.log('🔍 DEBUG IVA Calculation:', {
+    console.log('ðŸ” DEBUG IVA Calculation:', {
       cartItems: cartItems.map(i => ({ name: i.name, price: i.price, quantity: i.quantity, total: i.price * i.quantity })),
       ivaIncluded: ivaCalculation.ivaIncluded,
       ivaRate: ivaCalculation.ivaRate,
@@ -672,8 +674,11 @@ export const createMultiPartnerOrder = async (
       };
     });
 
+    const uniquePartnerIds = [...new Set(itemsWithIVA.map((item) => item.partnerId).filter(Boolean))];
+    const totalPartners = uniquePartnerIds.length;
+    const isSplitMasterOrder = totalPartners > 1;
     // Prepare order data
-    console.log('🔍 DEBUG Order Data BEFORE saving:', {
+    console.log('ðŸ” DEBUG Order Data BEFORE saving:', {
       subtotal: ivaCalculation.subtotal,
       iva_amount: ivaCalculation.ivaAmount,
       shipping_cost: totalShippingCost,
@@ -698,6 +703,8 @@ export const createMultiPartnerOrder = async (
       commission_amount: commissionAmount,
       partner_amount: partnerAmount,
       shipping_address: shippingAddress,
+      is_split_master: isSplitMasterOrder,
+      skip_stock_sync: isSplitMasterOrder,
       payment_method: 'mercadopago',
       payment_status: 'pending',
       status: 'pending',
@@ -726,7 +733,7 @@ export const createMultiPartnerOrder = async (
           acc[item.partnerId].subtotal += item.subtotal;
           return acc;
         }, {}),
-        total_partners: [...new Set(itemsWithIVA.map(item => item.partnerId))].length,
+        total_partners: totalPartners,
         commission_split: commissionAmount,
         shipping_cost: totalShippingCost,
         iva_rate: ivaCalculation.ivaRate,
@@ -761,6 +768,7 @@ export const createMultiPartnerOrder = async (
       commissionAmount: orderData.commission_amount,
       partnerAmount: orderData.partner_amount,
       shippingAddress: orderData.shipping_address,
+      isSplitMaster: orderData.is_split_master,
       createdAt: new Date(orderData.created_at),
       updatedAt: null
     };
@@ -798,7 +806,7 @@ export const createMultiPartnerOrder = async (
       : preference.init_point;
 
     if (isTestMode && !preference.sandbox_init_point) {
-      throw new Error('Mercado Pago no devolvió sandbox_init_point en modo prueba');
+      throw new Error('Mercado Pago no devolviÃ³ sandbox_init_point en modo prueba');
     }
 
     const { error: updateOrderError } = await supabaseClient
@@ -920,7 +928,7 @@ export const createUnifiedPaymentPreference = async (
     const shippingItems = shippingCost > 0
       ? [{
           id: 'shipping',
-          title: 'Env�o',
+          title: 'Envío',
           quantity: 1,
           unit_price: shippingCost,
           currency_id: 'UYU'
@@ -1038,20 +1046,20 @@ export const createServiceBookingOrder = async (bookingData: {
     console.log('Booking data:', bookingData);
 
     // PASO 1: VALIDAR MERCADO PAGO ANTES DE CREAR NADA
-    console.log('⚠️ STEP 1: Validating Mercado Pago configuration...');
+    console.log('âš ï¸ STEP 1: Validating Mercado Pago configuration...');
     let partnerConfig;
     try {
       partnerConfig = await getPartnerMercadoPagoConfig(bookingData.partnerId);
-      console.log('✅ Partner MP config loaded for:', partnerConfig.business_name);
+      console.log('âœ… Partner MP config loaded for:', partnerConfig.business_name);
     } catch (mpError) {
-      console.error('❌ MP Configuration Error:', mpError);
-      throw new Error(`Configuración de pago inválida: ${getErrorMessage(mpError)}`);
+      console.error('âŒ MP Configuration Error:', mpError);
+      throw new Error(`ConfiguraciÃ³n de pago invÃ¡lida: ${getErrorMessage(mpError)}`);
     }
 
     // PASO 2: VALIDAR ACCESS TOKEN
-    console.log('⚠️ STEP 2: Validating access token...');
+    console.log('âš ï¸ STEP 2: Validating access token...');
     if (!partnerConfig.access_token || partnerConfig.access_token.length < 20) {
-      throw new Error('Token de acceso de Mercado Pago inválido o no configurado');
+      throw new Error('Token de acceso de Mercado Pago invÃ¡lido o no configurado');
     }
 
     // Test del token haciendo una llamada simple a la API
@@ -1065,17 +1073,17 @@ export const createServiceBookingOrder = async (bookingData: {
 
       if (!testResponse.ok) {
         const errorData = await testResponse.json();
-        console.error('❌ Token validation failed:', errorData);
-        throw new Error(`Token de Mercado Pago inválido o vencido (${errorData.message || testResponse.status})`);
+        console.error('âŒ Token validation failed:', errorData);
+        throw new Error(`Token de Mercado Pago invÃ¡lido o vencido (${errorData.message || testResponse.status})`);
       }
-      console.log('✅ Access token is valid');
+      console.log('âœ… Access token is valid');
     } catch (tokenError) {
-      console.error('❌ Token validation error:', tokenError);
-      throw new Error('Token de Mercado Pago inválido o vencido. Por favor, reconfigura la conexión con Mercado Pago.');
+      console.error('âŒ Token validation error:', tokenError);
+      throw new Error('Token de Mercado Pago invÃ¡lido o vencido. Por favor, reconfigura la conexiÃ³n con Mercado Pago.');
     }
 
     // PASO 3: OBTENER DATOS DEL CLIENTE
-    console.log('⚠️ STEP 3: Loading customer profile...');
+    console.log('âš ï¸ STEP 3: Loading customer profile...');
     const { data: customerProfile, error: profileError } = await supabaseClient
       .from('profiles')
       .select('display_name, email, phone, calle, numero, address_locality, barrio, codigo_postal')
@@ -1107,7 +1115,7 @@ export const createServiceBookingOrder = async (bookingData: {
     });
 
     // PASO 4: OBTENER DETALLES DEL SERVICIO (IVA, moneda)
-    console.log('⚠️ STEP 4: Loading service details...');
+    console.log('âš ï¸ STEP 4: Loading service details...');
     const { data: serviceData, error: serviceError } = await supabaseClient
       .from('partner_services')
       .select('iva_rate, currency, currency_code_dgi')
@@ -1118,12 +1126,12 @@ export const createServiceBookingOrder = async (bookingData: {
     let ivaRate = 0;
     if (serviceData?.iva_rate != null) {
       ivaRate = serviceData.iva_rate;
-      console.log(`✅ Using service iva_rate: ${ivaRate}%`);
+      console.log(`âœ… Using service iva_rate: ${ivaRate}%`);
     } else if (partnerConfig.iva_rate != null) {
       ivaRate = partnerConfig.iva_rate;
-      console.log(`✅ Using partner iva_rate: ${ivaRate}%`);
+      console.log(`âœ… Using partner iva_rate: ${ivaRate}%`);
     } else {
-      console.log(`⚠️ No IVA rate configured, using default: ${ivaRate}%`);
+      console.log(`âš ï¸ No IVA rate configured, using default: ${ivaRate}%`);
     }
 
     console.log('IVA configuration debug:', {
@@ -1170,8 +1178,8 @@ export const createServiceBookingOrder = async (bookingData: {
     });
 
     // PASO 5: CREAR BOOKING EN LA BASE DE DATOS
-    // Solo llegamos aquí si MP está configurado correctamente
-    console.log('⚠️ STEP 5: Creating booking record...');
+    // Solo llegamos aquÃ­ si MP estÃ¡ configurado correctamente
+    console.log('âš ï¸ STEP 5: Creating booking record...');
     const bookingRecord = {
       service_id: bookingData.serviceId,
       partner_id: bookingData.partnerId,
@@ -1210,8 +1218,8 @@ export const createServiceBookingOrder = async (bookingData: {
     const appointmentDate = new Date(bookingData.date);
     appointmentDate.setUTCHours(0, 0, 0, 0);
 
-    console.log('📅 Appointment date (UTC midnight):', appointmentDate.toISOString());
-    console.log('⏰ Appointment time:', bookingData.time);
+    console.log('ðŸ“… Appointment date (UTC midnight):', appointmentDate.toISOString());
+    console.log('â° Appointment time:', bookingData.time);
 
     // Create order record for payment tracking
     const orderData = {
@@ -1220,7 +1228,7 @@ export const createServiceBookingOrder = async (bookingData: {
       booking_id: insertedBooking.id,
       service_id: bookingData.serviceId,
       pet_id: bookingData.petId,
-      appointment_date: appointmentDate.toISOString(), // ✅ Fecha a medianoche UTC
+      appointment_date: appointmentDate.toISOString(), // âœ… Fecha a medianoche UTC
       appointment_time: bookingData.time,
       booking_notes: bookingData.notes,
       partner_name: bookingData.partnerName,
@@ -1318,7 +1326,7 @@ export const createServiceBookingOrder = async (bookingData: {
       console.log('Order created with ID:', insertedOrder.id);
     }
 
-    // Registrar creación del booking en auditoría
+    // Registrar creaciÃ³n del booking en auditorÃ­a
     await logResourceAction('BOOKING_CREATE', 'booking', insertedBooking.id, {
       success: true,
       user_email: completeCustomerInfo.email,
@@ -1341,7 +1349,7 @@ export const createServiceBookingOrder = async (bookingData: {
     }).catch(err => console.error('Error logging booking audit:', err));
 
     // PASO 7: CREAR PREFERENCIA DE PAGO EN MERCADO PAGO
-    console.log('⚠️ STEP 7: Creating payment preference...');
+    console.log('âš ï¸ STEP 7: Creating payment preference...');
     let preference;
     try {
       preference = await createServicePaymentPreference(
@@ -1350,18 +1358,18 @@ export const createServiceBookingOrder = async (bookingData: {
         partnerConfig,
         commissionAmount
       );
-      console.log('✅ Payment preference created:', preference.id);
+      console.log('âœ… Payment preference created:', preference.id);
     } catch (mpError) {
-      console.error('❌ Failed to create MP preference:', mpError);
+      console.error('âŒ Failed to create MP preference:', mpError);
 
-      // ROLLBACK: Eliminar la orden y booking si falló la preferencia
-      console.warn('⚠️ Rolling back order and booking...');
+      // ROLLBACK: Eliminar la orden y booking si fallÃ³ la preferencia
+      console.warn('âš ï¸ Rolling back order and booking...');
       try {
         await supabaseClient.from('orders').delete().eq('id', insertedOrder.id);
         await supabaseClient.from('bookings').delete().eq('id', insertedBooking.id);
-        console.log('✅ Rollback completed');
+        console.log('âœ… Rollback completed');
       } catch (rollbackError) {
-        console.error('❌ Rollback failed:', rollbackError);
+        console.error('âŒ Rollback failed:', rollbackError);
       }
 
       throw new Error(`Error al crear preferencia de pago: ${getErrorMessage(mpError)}`);
@@ -1396,7 +1404,7 @@ export const createServiceBookingOrder = async (bookingData: {
   } catch (error) {
     console.error('Error creating service booking order:', error);
     
-    // Registrar error en auditoría
+    // Registrar error en auditorÃ­a
     await logError(error, {
       action: 'BOOKING_CREATE',
       resource_type: 'booking',
@@ -1440,7 +1448,7 @@ export const createServicePaymentPreference = async (
 
     // CRITICAL: In TEST mode, Mercado Pago does NOT support marketplace features
     if (isTestMode) {
-      console.warn('⚠️ TEST MODE DETECTED - Marketplace features (fees, splits) will be DISABLED');
+      console.warn('âš ï¸ TEST MODE DETECTED - Marketplace features (fees, splits) will be DISABLED');
     }
 
     // Format phone number (remove non-digits and ensure it's 8 digits)
@@ -1571,7 +1579,7 @@ export const refreshPartnerToken = async (partnerId: string): Promise<string> =>
     const tokenData = data?.tokenData || data;
 
     if (!tokenData?.access_token) {
-      throw new Error('Mercado Pago no devolvió un access_token actualizado');
+      throw new Error('Mercado Pago no devolviÃ³ un access_token actualizado');
     }
 
     return tokenData.access_token;
@@ -1852,7 +1860,7 @@ export const validateCredentialsFormat = (accessToken: string, publicKey: string
   if (tokenIsTest !== keyIsTest) {
     return {
       isValid: false,
-      error: 'Las credenciales deben ser ambas de TEST o ambas de PRODUCCIÓN'
+      error: 'Las credenciales deben ser ambas de TEST o ambas de PRODUCCIÃ“N'
     };
   }
 
@@ -1861,29 +1869,29 @@ export const validateCredentialsFormat = (accessToken: string, publicKey: string
 
 /**
  * Check if Mercado Pago app is installed on the device
- * IMPORTANTE: En iOS/Android, el sistema operativo intercepta automáticamente
- * las URLs de Mercado Pago si la app está instalada, por lo que esta función
+ * IMPORTANTE: En iOS/Android, el sistema operativo intercepta automÃ¡ticamente
+ * las URLs de Mercado Pago si la app estÃ¡ instalada, por lo que esta funciÃ³n
  * intenta detectar la app pero no es 100% precisa. El comportamiento real
  * depende del sistema operativo.
  */
 export const isMercadoPagoAppInstalled = async (): Promise<boolean> => {
   try {
-    console.log('🔍 Checking for Mercado Pago app...', { platform: Platform.OS });
+    console.log('ðŸ” Checking for Mercado Pago app...', { platform: Platform.OS });
 
     // En web siempre retornamos false
     if (Platform.OS === 'web') {
-      console.log('❌ Running on web, app detection not available');
+      console.log('âŒ Running on web, app detection not available');
       return false;
     }
 
     // Deep links para abrir la app de Mercado Pago
-    // Nota: En Android, mercadopago:// es el más confiable
+    // Nota: En Android, mercadopago:// es el mÃ¡s confiable
     // En iOS, com.mercadopago.wallet:// funciona mejor
     const mpAppSchemes = Platform.OS === 'ios'
       ? ['com.mercadopago.wallet://', 'mercadopago://']
       : ['mercadopago://', 'com.mercadopago.wallet://'];
 
-    // Intentar verificar si alguno de los esquemas está disponible
+    // Intentar verificar si alguno de los esquemas estÃ¡ disponible
     for (const scheme of mpAppSchemes) {
       try {
         console.log('   Trying scheme:', scheme);
@@ -1891,7 +1899,7 @@ export const isMercadoPagoAppInstalled = async (): Promise<boolean> => {
         console.log('   Result:', canOpen);
 
         if (canOpen) {
-          console.log('✅ Mercado Pago app detected with scheme:', scheme);
+          console.log('âœ… Mercado Pago app detected with scheme:', scheme);
           return true;
         }
       } catch (error) {
@@ -1901,7 +1909,7 @@ export const isMercadoPagoAppInstalled = async (): Promise<boolean> => {
       }
     }
 
-    console.log('❌ Mercado Pago app not installed');
+    console.log('âŒ Mercado Pago app not installed');
     return false;
   } catch (error) {
     console.error('Error checking Mercado Pago app:', error);
@@ -1931,7 +1939,7 @@ const extractPreferenceId = (url: string): string | null => {
  * 3. El OS decide si abre en app o navegador basado en el dominio
  *
  * IMPORTANTE: URLs de sandbox (sandbox.mercadopago.com.uy) no siempre
- * abren la app, solo las URLs de producción (www.mercadopago.com.uy).
+ * abren la app, solo las URLs de producciÃ³n (www.mercadopago.com.uy).
  */
 export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boolean): Promise<{
   success: boolean;
@@ -1942,20 +1950,20 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
     const urlDomain = new URL(paymentUrl).hostname;
     const isSandboxUrl = urlDomain.includes('sandbox');
 
-    console.log('═══════════════════════════════════════');
-    console.log('🚀 OPENING MERCADO PAGO PAYMENT');
-    console.log('═══════════════════════════════════════');
+    console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
+    console.log('ðŸš€ OPENING MERCADO PAGO PAYMENT');
+    console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
     console.log('URL:', paymentUrl);
     console.log('Domain:', urlDomain);
     console.log('Is Test Mode:', isTestMode);
     console.log('Is Sandbox URL:', isSandboxUrl);
     console.log('Platform:', Platform.OS);
 
-    // Diagnóstico importante
+    // DiagnÃ³stico importante
     if (isSandboxUrl) {
-      console.log('⚠️  WARNING: Sandbox URLs may NOT open the app');
-      console.log('⚠️  Recommendation: Use production credentials with test cards');
-      console.log('⚠️  This will ensure the app opens correctly');
+      console.log('âš ï¸  WARNING: Sandbox URLs may NOT open the app');
+      console.log('âš ï¸  Recommendation: Use production credentials with test cards');
+      console.log('âš ï¸  This will ensure the app opens correctly');
     }
 
     console.log('');
@@ -1965,23 +1973,23 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
     // iOS: Intentar abrir la app directamente con Universal Link de MP
     //      Si falla, abrir en Safari
     //
-    // Android: Abrir URL web directamente (App Links funciona automáticamente)
+    // Android: Abrir URL web directamente (App Links funciona automÃ¡ticamente)
     //
     try {
       if (Platform.OS === 'ios') {
-        console.log('📱 iOS detected - trying to open MP app first');
+        console.log('ðŸ“± iOS detected - trying to open MP app first');
 
         // En iOS, intentamos primero con el Universal Link de Mercado Pago
-        // Esto debería abrir la app si está instalada
+        // Esto deberÃ­a abrir la app si estÃ¡ instalada
         let appOpened = false;
 
         try {
           // Intentar abrir directamente con el URL de pago
-          // iOS debería reconocer el dominio mercadopago.com y abrir la app
+          // iOS deberÃ­a reconocer el dominio mercadopago.com y abrir la app
           console.log('   Attempting to open payment URL:', paymentUrl);
 
           // En iOS, necesitamos usar una promesa con timeout para detectar
-          // si la app se abrió o no
+          // si la app se abriÃ³ o no
           await Promise.race([
             Linking.openURL(paymentUrl),
             new Promise((_, reject) =>
@@ -1990,22 +1998,22 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
           ]);
 
           appOpened = true;
-          console.log('✅ Payment URL opened on iOS');
+          console.log('âœ… Payment URL opened on iOS');
         } catch (error) {
           console.log('   Direct open attempt completed (app may or may not have opened)');
           // En iOS, openURL no falla aunque la app no se abra
-          // El sistema abre Safari si la app no está instalada
+          // El sistema abre Safari si la app no estÃ¡ instalada
           appOpened = true;
         }
 
         if (appOpened) {
-          console.log('✅ SUCCESS: Payment opened on iOS');
+          console.log('âœ… SUCCESS: Payment opened on iOS');
           console.log('   iOS will use MP app if installed, Safari otherwise');
-          console.log('═══════════════════════════════════════\n');
+          console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n');
 
           return {
             success: true,
-            openedInApp: true // En iOS asumimos que se manejó correctamente
+            openedInApp: true // En iOS asumimos que se manejÃ³ correctamente
           };
         }
 
@@ -2014,20 +2022,20 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
           openedInApp: true
         };
       } else {
-        // ANDROID: El sistema de App Links maneja automáticamente
-        console.log('🤖 Android detected - opening URL (App Links will handle)');
+        // ANDROID: El sistema de App Links maneja automÃ¡ticamente
+        console.log('ðŸ¤– Android detected - opening URL (App Links will handle)');
         console.log('   URL:', paymentUrl);
 
         const canOpen = await Linking.canOpenURL(paymentUrl);
         if (!canOpen) {
-          console.error('❌ Cannot open URL:', paymentUrl);
+          console.error('âŒ Cannot open URL:', paymentUrl);
           console.log('Attempting to open anyway...');
         }
 
         await Linking.openURL(paymentUrl);
-        console.log('✅ SUCCESS: Payment URL opened on Android');
+        console.log('âœ… SUCCESS: Payment URL opened on Android');
         console.log('   Android App Links will redirect to app if installed');
-        console.log('═══════════════════════════════════════\n');
+        console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n');
 
         return {
           success: true,
@@ -2035,7 +2043,7 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
         };
       }
     } catch (openError: any) {
-      console.error('❌ ERROR in Linking.openURL:', openError);
+      console.error('âŒ ERROR in Linking.openURL:', openError);
       console.error('   Error message:', openError.message);
       console.error('   Error name:', openError.name);
       // Re-throw para que sea capturado por el catch externo
@@ -2043,17 +2051,17 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
     }
 
   } catch (error) {
-    console.error('❌ ERROR opening Mercado Pago payment:', error);
-    console.log('═══════════════════════════════════════\n');
+    console.error('âŒ ERROR opening Mercado Pago payment:', error);
+    console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n');
 
     // Fallback: intentar abrir en navegador web
     try {
-      console.log('🔄 FALLBACK: Trying to open web URL...');
+      console.log('ðŸ”„ FALLBACK: Trying to open web URL...');
       await Linking.openURL(paymentUrl);
-      console.log('✅ Fallback successful');
+      console.log('âœ… Fallback successful');
       return { success: true, openedInApp: false };
     } catch (fallbackError) {
-      console.error('❌ Fallback failed:', fallbackError);
+      console.error('âŒ Fallback failed:', fallbackError);
       return {
         success: false,
         openedInApp: false,
@@ -2176,7 +2184,7 @@ export const getPartnerMercadoPagoSimpleConfig = async (
 
 /**
  * Regenerar link de pago para una orden existente
- * Útil cuando el link ha expirado o el pago falló
+ * Ãštil cuando el link ha expirado o el pago fallÃ³
  */
 export const regeneratePaymentLink = async (orderId: string): Promise<{
   success: boolean;
@@ -2201,7 +2209,7 @@ export const regeneratePaymentLink = async (orderId: string): Promise<{
       };
     }
 
-    // 2. Verificar que la orden esté en estado pending o payment_failed
+    // 2. Verificar que la orden estÃ© en estado pending o payment_failed
     if (!['pending', 'payment_failed'].includes(order.status)) {
       return {
         success: false,
@@ -2209,7 +2217,7 @@ export const regeneratePaymentLink = async (orderId: string): Promise<{
       };
     }
 
-    // 3. Obtener configuración de Mercado Pago del partner
+    // 3. Obtener configuraciÃ³n de Mercado Pago del partner
     const { data: partner, error: partnerError } = await supabaseClient
       .from('partners')
       .select('mercadopago_config')
@@ -2220,7 +2228,7 @@ export const regeneratePaymentLink = async (orderId: string): Promise<{
       console.error('Partner MP config not found:', partnerError);
       return {
         success: false,
-        error: 'Configuración de pago no encontrada'
+        error: 'ConfiguraciÃ³n de pago no encontrada'
       };
     }
 
@@ -2296,7 +2304,7 @@ export const regeneratePaymentLink = async (orderId: string): Promise<{
       // Para compras de productos
       return {
         success: false,
-        error: 'Regeneración de link para productos no implementada aún'
+        error: 'RegeneraciÃ³n de link para productos no implementada aÃºn'
       };
     }
 
@@ -2318,4 +2326,5 @@ export const regeneratePaymentLink = async (orderId: string): Promise<{
     };
   }
 };
+
 

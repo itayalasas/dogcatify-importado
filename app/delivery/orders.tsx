@@ -8,6 +8,7 @@ import { LoadingScreen } from '../../components/ui/LoadingScreen';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { getOrderFulfillmentMode } from '../../utils/orderFulfillment';
+import { isServiceBookingOrder } from '../../utils/orderClassification';
 
 const AVAILABLE_STATUS = 'ready_for_delivery';
 const IN_DELIVERY_STATUS = 'shipped';
@@ -108,8 +109,9 @@ export default function DeliveryOrdersScreen() {
     try {
       let query = supabaseClient
         .from('orders')
-        .select('id, order_number, partner_id, customer_name, customer_phone, shipping_address, status, total_amount, order_type, created_at, updated_at, delivery_user_id')
+        .select('id, order_number, partner_id, customer_name, customer_phone, shipping_address, status, total_amount, order_type, created_at, updated_at, delivery_user_id, is_split_master')
         .in('partner_id', storeIds)
+        .eq('is_split_master', false)
         .order('created_at', { ascending: false });
 
       if (activeTab === 'active') {
@@ -127,6 +129,7 @@ export default function DeliveryOrdersScreen() {
       if (error) throw error;
 
       const deliveryOrders = (data || []).filter((order: any) =>
+        !isServiceBookingOrder(order) &&
         getOrderFulfillmentMode(order.order_type || 'product_purchase', order.shipping_address) === 'shipping'
       );
 

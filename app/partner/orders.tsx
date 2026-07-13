@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Package, DollarSign, Truck, Clock, MapPin, User, Phone } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { OrderStatusBanner } from '../../components/OrderStatusBanner';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { getOrderFulfillmentMode, getOrderStatusLabel } from '../../utils/orderFulfillment';
@@ -88,6 +89,8 @@ export default function PartnerOrders() {
   }, [currentUser, normalizedPartnerId]);
 
   const isOrderForPartner = (order: any, partnerId: string) => {
+    if (order?.is_split_master) return false;
+
     if (order?.partner_id === partnerId) return true;
 
     if (order?.partner_breakdown?.partners && Object.prototype.hasOwnProperty.call(order.partner_breakdown.partners, partnerId)) {
@@ -101,6 +104,28 @@ export default function PartnerOrders() {
     return false;
   };
 
+  const resolveOrderType = (order: any) => {
+    const rawType = String(order?.orderType || order?.order_type || '').toLowerCase();
+
+    if (rawType === 'service_booking') {
+      return 'service_booking';
+    }
+
+    const hasServiceBookingData =
+      Boolean(order?.booking_id) ||
+      Boolean(order?.service_id) ||
+      Boolean(order?.service_name) ||
+      Boolean(order?.appointment_date) ||
+      Boolean(order?.appointment_time) ||
+      (Array.isArray(order?.items) && order.items.some((item: any) =>
+        item?.type === 'service' ||
+        Boolean(item?.service_name) ||
+        Boolean(item?.booking_id)
+      ));
+
+    return hasServiceBookingData ? 'service_booking' : (rawType || 'product_purchase');
+  };
+
   const fetchOrders = (partnerId: string) => {
     const fetchOrdersData = async () => {
       try {
@@ -110,6 +135,7 @@ export default function PartnerOrders() {
           .from('orders')
           .select('*')
           .or(`partner_id.eq.${partnerId},partner_breakdown.cs.${breakdownFilter}`)
+          .eq('is_split_master', false)
           .order('created_at', { ascending: false });
         
         if (error) throw error;
@@ -122,13 +148,19 @@ export default function PartnerOrders() {
           ...order,
           partnerId: order.partner_id,
           customerId: order.customer_id,
-          orderType: order.order_type,
+          orderType: resolveOrderType(order),
           totalAmount: order.total_amount,
           shippingAddress: order.shipping_address,
           shippingCost: order.shipping_cost || 0,
-          fulfillmentMode: getOrderFulfillmentMode(order.order_type || 'product_purchase', order.shipping_address),
+          fulfillmentMode: getOrderFulfillmentMode(resolveOrderType(order), order.shipping_address),
           createdAt: new Date(order.created_at),
-          updatedAt: order.updated_at ? new Date(order.updated_at) : null
+          updatedAt: order.updated_at ? new Date(order.updated_at) : null,
+          serviceName: order.service_name || order.serviceName || null,
+          bookingId: order.booking_id || null,
+          appointmentDate: order.appointment_date || null,
+          appointmentTime: order.appointment_time || null,
+          petName: order.pet_name || null,
+          bookingNotes: order.booking_notes || null,
         }));
         
         setOrders(ordersData);
@@ -163,7 +195,7 @@ export default function PartnerOrders() {
   };
 
   const getFulfillmentMode = (order: any) => {
-    return order.fulfillmentMode || getOrderFulfillmentMode(order.orderType, order.shippingAddress);
+    return order.fulfillmentMode || getOrderFulfillmentMode(resolveOrderType(order), order.shippingAddress);
   };
 
   const getReadyStatusMessage = (order: any) => {
@@ -217,6 +249,7 @@ export default function PartnerOrders() {
       case 'pending': return '#FEF3C7';
       case 'reserved': return '#FEF3C7';
       case 'payment_failed': return '#FECACA';
+      case 'insufficient_stock': return '#FEE2E2';
       case 'confirmed': return '#DBEAFE';
       case 'processing': return '#DBEAFE';
       case 'preparing': return '#DBEAFE';
@@ -235,6 +268,7 @@ export default function PartnerOrders() {
       case 'pending': return '#92400E';
       case 'reserved': return '#92400E';
       case 'payment_failed': return '#991B1B';
+      case 'insufficient_stock': return '#991B1B';
       case 'confirmed': return '#1E40AF';
       case 'processing': return '#1E40AF';
       case 'preparing': return '#1E40AF';
@@ -252,13 +286,13 @@ export default function PartnerOrders() {
     return getOrderStatusLabel(status, orderType, shippingAddress);
   };
 
-  const isServiceOrder = (order: any) => order.orderType === 'service_booking';
+  const isServiceOrder = (order: any) => resolveOrderType(order) === 'service_booking';
 
   const isPendingTabOrder = (order: any) => {
     if (isServiceOrder(order)) {
       return ['pending', 'reserved', 'payment_failed'].includes(order.status);
     }
-    return order.status === 'pending';
+    return ['pending', 'insufficient_stock'].includes(order.status);
   };
 
   const isProcessingTabOrder = (order: any) => {
@@ -306,11 +340,11 @@ export default function PartnerOrders() {
   };
 
   const shouldShowDetailToggle = (order: any) => {
-    if (order.orderType === 'service_booking') {
+    if (isServiceOrder(order)) {
       return order.status === 'confirmed';
     }
 
-    return ['confirmed', 'processing', 'preparing', 'shipped'].includes(order.status);
+    return ['confirmed', 'insufficient_stock', 'processing', 'preparing', 'shipped'].includes(order.status);
   };
 
   // Helper function to get customer profile data
@@ -357,11 +391,15 @@ export default function PartnerOrders() {
       </View>
 
       <View style={styles.orderItems}>
-        <Text style={styles.itemsTitle}>Productos:</Text>
+        <Text style={styles.itemsTitle}>{isServiceOrder(order) ? 'Servicios:' : 'Productos:'}</Text>
         {order.items && Array.isArray(order.items) && order.items.map((item: any, index: number) => (
           <View key={index} style={styles.orderItem}>
             <View style={styles.itemInfo}>
-              <Text style={styles.itemName}>{item.name || 'Producto'}</Text>
+              <Text style={styles.itemName}>
+                {isServiceOrder(order)
+                  ? item.service_name || item.name || 'Servicio'
+                  : item.name || 'Producto'}
+              </Text>
               <Text style={styles.itemQuantity}>x{item.quantity || 1}</Text>
             </View>
             <Text style={styles.itemPrice}>
@@ -428,7 +466,9 @@ export default function PartnerOrders() {
 
         {expandedOrderId === order.id && (
           <View style={styles.preparationDetailsCard}>
-            <Text style={styles.preparationDetailsTitle}>Detalle operativo</Text>
+            <Text style={styles.preparationDetailsTitle}>
+              {isServiceOrder(order) ? 'Detalle de la reserva' : 'Detalle operativo'}
+            </Text>
 
             <View style={styles.preparationRow}>
               <User size={16} color="#374151" />
@@ -437,11 +477,43 @@ export default function PartnerOrders() {
               </Text>
             </View>
 
-            {!!order.shippingAddress && (
-              <View style={styles.preparationRow}>
-                <MapPin size={16} color="#374151" />
-                <Text style={styles.preparationText}>Entrega: {order.shippingAddress}</Text>
-              </View>
+            {isServiceOrder(order) ? (
+              <>
+                {!!(order.serviceName || order.service_name) && (
+                  <View style={styles.preparationRow}>
+                    <Package size={16} color="#374151" />
+                    <Text style={styles.preparationText}>
+                      Servicio: {order.serviceName || order.service_name}
+                    </Text>
+                  </View>
+                )}
+
+                {!!order.petName && (
+                  <View style={styles.preparationRow}>
+                    <User size={16} color="#374151" />
+                    <Text style={styles.preparationText}>Mascota: {order.petName}</Text>
+                  </View>
+                )}
+
+                {(order.appointmentDate || order.appointmentTime) && (
+                  <View style={styles.preparationRow}>
+                    <Clock size={16} color="#374151" />
+                    <Text style={styles.preparationText}>
+                      {[
+                        order.appointmentDate,
+                        order.appointmentTime ? `a las ${order.appointmentTime}` : null,
+                      ].filter(Boolean).join(' ')}
+                    </Text>
+                  </View>
+                )}
+              </>
+            ) : (
+              !!order.shippingAddress && (
+                <View style={styles.preparationRow}>
+                  <MapPin size={16} color="#374151" />
+                  <Text style={styles.preparationText}>Entrega: {order.shippingAddress}</Text>
+                </View>
+              )
             )}
 
             {(order.notes || order.special_instructions || order.delivery_notes) && (
@@ -455,11 +527,15 @@ export default function PartnerOrders() {
 
             {Array.isArray(order.items) && order.items.length > 0 && (
               <View style={styles.preparationItemsBox}>
-                <Text style={styles.preparationItemsTitle}>Checklist de armado</Text>
+                <Text style={styles.preparationItemsTitle}>
+                  {isServiceOrder(order) ? 'Servicios incluidos' : 'Checklist de armado'}
+                </Text>
                 {order.items.map((item: any, index: number) => (
                   <View key={`${order.id}-detail-${index}`} style={styles.preparationItemRow}>
                     <Text style={styles.preparationItemName}>
-                      {item.quantity || 1} x {item.name || 'Producto'}
+                      {item.quantity || 1} x {isServiceOrder(order)
+                        ? item.service_name || item.name || 'Servicio'
+                        : item.name || 'Producto'}
                     </Text>
                     <Text style={styles.preparationItemSubtotal}>
                       {formatCurrency((item.price || 0) * (item.quantity || 1))}
@@ -471,7 +547,7 @@ export default function PartnerOrders() {
           </View>
         )}
 
-        {order.status === 'pending' && order.orderType !== 'service_booking' && (
+        {order.status === 'pending' && !isServiceOrder(order) && (
           <>
             <Button
               title="Cancelar"
@@ -487,7 +563,7 @@ export default function PartnerOrders() {
           </>
         )}
 
-        {order.orderType === 'service_booking' && order.status === 'confirmed' && (
+        {isServiceOrder(order) && order.status === 'confirmed' && (
           <>
             <Button
               title="Cancelar"
@@ -503,7 +579,7 @@ export default function PartnerOrders() {
           </>
         )}
         
-        {order.orderType !== 'service_booking' && ['confirmed', 'processing', 'preparing'].includes(order.status) && (
+        {!isServiceOrder(order) && ['confirmed', 'processing', 'preparing'].includes(order.status) && (
           <Button
             title={isPickupOrder ? 'Marcar listo para retirar' : 'Marcar listo para entrega'}
             onPress={() => handleUpdateOrderStatus(order, 'ready_for_delivery')}
@@ -511,7 +587,7 @@ export default function PartnerOrders() {
           />
         )}
 
-        {order.orderType !== 'service_booking' && order.status === 'ready_for_delivery' && (
+        {!isServiceOrder(order) && order.status === 'ready_for_delivery' && (
           <View style={styles.readyForDeliveryInfo}>
             <Text style={styles.readyForDeliveryText}>
               {isPickupOrder ? 'Ya pueden retirar el pedido en tienda' : 'Esperando que un repartidor tome el pedido'}
@@ -519,7 +595,7 @@ export default function PartnerOrders() {
           </View>
         )}
         
-        {order.orderType !== 'service_booking' && order.status === 'shipped' && (
+        {!isServiceOrder(order) && order.status === 'shipped' && (
           <Button
             title="Marcar como Entregado"
             onPress={() => handleUpdateOrderStatus(order, 'delivered')}
@@ -587,6 +663,10 @@ export default function PartnerOrders() {
           </View>
         </View>
         <View style={styles.placeholder} />
+      </View>
+
+      <View style={styles.bannerContainer}>
+        <OrderStatusBanner />
       </View>
 
       <View style={styles.tabBar}>
@@ -720,6 +800,10 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     width: 32,
+  },
+  bannerContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
   },
   tabBar: {
     flexDirection: 'row',

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+﻿import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabaseClient } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { logger } from '../utils/datadogLogger';
@@ -130,7 +130,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       price: item.price,
       partnerId: item.partnerId
     });
-
     setCart(prevCart => {
       // Check if item already exists in cart
       const existingItemIndex = prevCart.findIndex(cartItem => cartItem.id === item.id);
@@ -140,7 +139,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const updatedCart = [...prevCart];
         const newQuantity = updatedCart[existingItemIndex].quantity + item.quantity;
 
-        // Si hay un límite de stock, validarlo
+        // Si hay un lÃ­mite de stock, validarlo
         if (maxStock !== undefined && newQuantity > maxStock) {
           logger.warn('Cannot add item - exceeds stock', {
             itemId: item.id,
@@ -213,7 +212,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const getCartSubtotalWithoutTax = () => {
     // Subtotal SIN IVA (base imponible)
-    // Los precios YA incluyen IVA, así que desglosamos
+    // Los precios YA incluyen IVA, asÃ­ que desglosamos
     return cart.reduce((subtotal, item) => {
       const taxRate = (item.iva_rate || 22) / 100; // Default 22%
       const priceWithTax = item.price * item.quantity;
@@ -271,3 +270,4 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     </CartContext.Provider>
   );
 };
+

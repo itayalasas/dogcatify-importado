@@ -527,6 +527,7 @@ export default function BusinessInsights() {
           .from('orders')
           .select('id, created_at, total_amount, items, partner_id, partner_breakdown')
           .or(`partner_id.eq.${normalizedPartnerId},partner_breakdown.cs.${breakdownFilter}`)
+          .eq('is_split_master', false)
           .gte('created_at', getDateRange(selectedTimeRange));
 
         if (ordersError) {
@@ -534,6 +535,7 @@ export default function BusinessInsights() {
         }
 
         const isOrderForCurrentPartner = (order: any) => {
+          if (order?.is_split_master) return false;
           if (order?.partner_id === normalizedPartnerId) return true;
           if (order?.partner_breakdown?.partners && Object.prototype.hasOwnProperty.call(order.partner_breakdown.partners, normalizedPartnerId as string)) {
             return true;

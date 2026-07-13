@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { NativeModules, Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { router } from 'expo-router';
 import { useAuth } from './AuthContext';
 import { supabaseClient } from '../lib/supabase';
 import { envConfig } from '@/utils/envConfig';
@@ -79,6 +80,12 @@ interface NotificationContextType {
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
+type NotificationNavigationPayload = {
+  data?: any;
+  title?: string | null;
+  body?: string | null;
+};
+
 export const useNotifications = () => {
   const context = useContext(NotificationContext);
   if (!context) {
@@ -90,8 +97,449 @@ export const useNotifications = () => {
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
   const [notification, setNotification] = useState<any>(null);
-  const { currentUser } = useAuth();
+  const { currentUser, authInitialized } = useAuth();
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [pendingNotificationData, setPendingNotificationData] = useState<NotificationNavigationPayload | null>(null);
+  const authStateRef = useRef({ authInitialized: false, hasUser: false });
+
+  useEffect(() => {
+    authStateRef.current = {
+      authInitialized,
+      hasUser: Boolean(currentUser?.id),
+    };
+  }, [authInitialized, currentUser?.id]);
+
+  const extractNotificationValue = (value: any): string => {
+    if (Array.isArray(value)) {
+      return extractNotificationValue(value[0]);
+    }
+
+    if (value == null) {
+      return '';
+    }
+
+    return String(value).trim();
+  };
+
+  const normalizeNotificationKey = (value: any) =>
+    extractNotificationValue(value).toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+  const buildOrderNotificationParams = (payload: NotificationNavigationPayload, data: any) => {
+    const notificationTitle = extractNotificationValue(payload?.title || data?.notification_title || data?.title);
+    const notificationBody = extractNotificationValue(payload?.body || data?.notification_body || data?.body);
+    const notificationStatus = extractNotificationValue(data?.status);
+    const notificationFulfillmentMode = extractNotificationValue(data?.fulfillment_mode);
+    const notificationOrderNumber = extractNotificationValue(data?.order_number);
+    const notificationRecipientRole = extractNotificationValue(data?.recipient_role);
+
+    return {
+      ...(notificationTitle ? { notification_title: notificationTitle } : {}),
+      ...(notificationBody ? { notification_body: notificationBody } : {}),
+      ...(notificationStatus ? { notification_status: notificationStatus } : {}),
+      ...(notificationFulfillmentMode ? { notification_fulfillment_mode: notificationFulfillmentMode } : {}),
+      ...(notificationOrderNumber ? { notification_order_number: notificationOrderNumber } : {}),
+      ...(notificationRecipientRole ? { notification_recipient_role: notificationRecipientRole } : {}),
+    };
+  };
+
+  const openOrderDetails = (orderId: string, payload: NotificationNavigationPayload) => {
+    const data = payload?.data || {};
+
+    router.push({
+      pathname: '/orders/[id]',
+      params: {
+        id: orderId,
+        ...buildOrderNotificationParams(payload, data),
+      },
+    });
+  };
+
+  const openPartnerOrders = (
+    partnerId: string,
+    payload: NotificationNavigationPayload,
+    orderId?: string | null,
+    activeTab?: string | null,
+  ) => {
+    const data = payload?.data || {};
+
+    router.push({
+      pathname: '/partner/orders',
+      params: {
+        partnerId,
+        ...(orderId ? { openOrderId: orderId } : {}),
+        ...(activeTab ? { activeTab } : {}),
+        ...buildOrderNotificationParams(payload, data),
+      },
+    });
+  };
+
+  const openChatConversation = (conversationId: string, petName?: string | null) => {
+    router.push({
+      pathname: '/chat/[id]',
+      params: {
+        id: conversationId,
+        ...(petName ? { petName } : {}),
+      },
+    });
+  };
+
+  const openAdoptionChat = (
+    petId: string,
+    partnerId: string,
+    petName?: string | null,
+    partnerName?: string | null,
+  ) => {
+    router.push({
+      pathname: '/chat/adoption',
+      params: {
+        petId,
+        partnerId,
+        ...(petName ? { petName } : {}),
+        ...(partnerName ? { partnerName } : {}),
+      },
+    });
+  };
+
+  const openPetShareInvitation = (shareId: string) => {
+    router.push({
+      pathname: '/pet-share/[id]',
+      params: {
+        id: shareId,
+      },
+    });
+  };
+
+  const openPetCareHub = (petId: string, alertId?: string | null, alertType?: string | null) => {
+    router.push({
+      pathname: '/pets/care/[id]',
+      params: {
+        id: petId,
+        ...(alertId ? { alertId } : {}),
+        ...(alertType ? { alertType } : {}),
+      },
+    });
+  };
+
+  const openPetDetailsHealthTab = (petId: string, alertId?: string | null) => {
+    router.push({
+      pathname: '/pets/[id]',
+      params: {
+        id: petId,
+        activeTab: 'health',
+        ...(alertId ? { alertId } : {}),
+      },
+    });
+  };
+
+  const openPetMatchChat = (chatId: string, petName?: string | null) => {
+    router.push({
+      pathname: '/pets/mating/chat/[id]',
+      params: {
+        id: chatId,
+        ...(petName ? { petName } : {}),
+      },
+    });
+  };
+
+  const openPetMatchingScreen = (petId: string, petName?: string | null) => {
+    router.push({
+      pathname: '/pets/mating/[id]',
+      params: {
+        id: petId,
+        ...(petName ? { petName } : {}),
+      },
+    });
+  };
+
+  const resolvePetMatchChatId = async (matchId: string) => {
+    try {
+      const { data: existingChat, error: existingChatError } = await supabaseClient
+        .from('pet_match_chats')
+        .select('id')
+        .eq('match_id', matchId)
+        .maybeSingle();
+
+      if (existingChatError) {
+        console.warn('Error looking up pet match chat:', existingChatError);
+      }
+
+      if (existingChat?.id) {
+        return existingChat.id as string;
+      }
+
+      const { data: matchData, error: matchError } = await supabaseClient
+        .from('pet_matches')
+        .select('id, owner_a_id, owner_b_id')
+        .eq('id', matchId)
+        .maybeSingle();
+
+      if (matchError) {
+        console.warn('Error looking up pet match for notification:', matchError);
+        return null;
+      }
+
+      if (!matchData?.id) {
+        return null;
+      }
+
+      const { data: upsertedChat, error: upsertError } = await supabaseClient
+        .from('pet_match_chats')
+        .upsert(
+          {
+            match_id: matchData.id,
+            owner_a_id: matchData.owner_a_id,
+            owner_b_id: matchData.owner_b_id,
+            status: 'active',
+          },
+          { onConflict: 'match_id' }
+        )
+        .select('id')
+        .single();
+
+      if (upsertError) {
+        console.warn('Error creating pet match chat from notification:', upsertError);
+        return null;
+      }
+
+      return upsertedChat?.id || null;
+    } catch (error) {
+      console.warn('Unexpected error resolving pet match chat:', error);
+      return null;
+    }
+  };
+
+  const resolveOrderIdFromBooking = async (bookingId: string) => {
+    try {
+      const { data: orderData, error: orderError } = await supabaseClient
+        .from('orders')
+        .select('id')
+        .eq('booking_id', bookingId)
+        .maybeSingle();
+
+      if (orderError) {
+        console.warn('Error resolving booking order from notification:', orderError);
+        return null;
+      }
+
+      return orderData?.id || null;
+    } catch (error) {
+      console.warn('Unexpected error resolving booking order:', error);
+      return null;
+    }
+  };
+
+  const navigateFromNotification = (payload: NotificationNavigationPayload) => {
+    const data = payload?.data || {};
+    const notificationKey = normalizeNotificationKey(
+      data?.screen || data?.type || data?.notification_type
+    );
+    const orderId = extractNotificationValue(
+      data?.order_id || data?.orderId || data?.reference_id
+    );
+    const bookingId = extractNotificationValue(data?.booking_id || data?.bookingId);
+    const conversationId = extractNotificationValue(
+      data?.conversationId || data?.conversation_id || data?.chatId
+    );
+    const chatId = extractNotificationValue(data?.chat_id || data?.chatId);
+    const matchId = extractNotificationValue(
+      data?.match_id || data?.matchId || data?.reference_id
+    );
+    const petId = extractNotificationValue(data?.pet_id || data?.petId);
+    const petName = extractNotificationValue(data?.pet_name || data?.petName);
+    const partnerId = extractNotificationValue(
+      data?.partner_id || data?.partnerId || data?.business_id || data?.businessId
+    );
+    const partnerName = extractNotificationValue(
+      data?.partner_name || data?.partnerName || data?.business_name
+    );
+    const activeTab = extractNotificationValue(data?.active_tab || data?.activeTab);
+    const alertId = extractNotificationValue(data?.alert_id || data?.alertId || data?.medical_alert_id);
+    const alertType = extractNotificationValue(data?.alert_type || data?.alertType);
+
+    if (
+      notificationKey === 'orderdetails' ||
+      notificationKey === 'orderstatuschange' ||
+      notificationKey === 'order' ||
+      (!notificationKey && orderId)
+    ) {
+      if (orderId) {
+        openOrderDetails(orderId, payload);
+        return true;
+      }
+    }
+
+    if (
+      notificationKey === 'petdetails' ||
+      notificationKey === 'pethealth' ||
+      notificationKey === 'vaccinereminder7days' ||
+      notificationKey === 'vaccinereminder24hours'
+    ) {
+      if (petId) {
+        openPetDetailsHealthTab(petId, alertId || null);
+        return true;
+      }
+    }
+
+    if (
+      notificationKey === 'petcare' ||
+      notificationKey === 'medicalreminder'
+    ) {
+      if (petId) {
+        if (alertType === 'vaccine') {
+          openPetDetailsHealthTab(petId, alertId || null);
+        } else {
+          openPetCareHub(petId, alertId || null, alertType || null);
+        }
+        return true;
+      }
+    }
+
+    if (notificationKey === 'partnerorders' || notificationKey === 'partnerorderspage') {
+      if (partnerId) {
+        openPartnerOrders(partnerId, payload, orderId || null, activeTab || null);
+        return true;
+      }
+    }
+
+    if (
+      notificationKey === 'chatmessage' ||
+      notificationKey === 'chat' ||
+      notificationKey === 'conversation'
+    ) {
+      if (conversationId) {
+        openChatConversation(conversationId, petName || null);
+        return true;
+      }
+    }
+
+    if (notificationKey === 'adoptionchat') {
+      if (petId && partnerId) {
+        openAdoptionChat(petId, partnerId, petName || null, partnerName || null);
+        return true;
+      }
+    }
+
+    if (
+      notificationKey === 'petmatchchat' ||
+      notificationKey === 'petmatchmessage'
+    ) {
+      if (chatId) {
+        openPetMatchChat(chatId, petName || null);
+        return true;
+      }
+
+      if (matchId || petId) {
+        void (async () => {
+          const resolvedChatId = matchId ? await resolvePetMatchChatId(matchId) : null;
+
+          if (resolvedChatId) {
+            openPetMatchChat(resolvedChatId, petName || null);
+            return;
+          }
+
+          if (petId) {
+            openPetMatchingScreen(petId, petName || null);
+          }
+        })();
+
+        return true;
+      }
+    }
+
+    if (
+      notificationKey === 'petmatching' ||
+      notificationKey === 'petmatchcreated'
+    ) {
+      if (chatId) {
+        openPetMatchChat(chatId, petName || null);
+        return true;
+      }
+
+      if (matchId || petId) {
+        void (async () => {
+          const resolvedChatId = matchId ? await resolvePetMatchChatId(matchId) : null;
+
+          if (resolvedChatId) {
+            openPetMatchChat(resolvedChatId, petName || null);
+            return;
+          }
+
+          if (petId) {
+            openPetMatchingScreen(petId, petName || null);
+          }
+        })();
+
+        return true;
+      }
+    }
+
+    if (
+      notificationKey === 'petshare' ||
+      notificationKey === 'petsharerequest' ||
+      notificationKey === 'petshareinvitation' ||
+      notificationKey === 'petshareaccepted' ||
+      notificationKey === 'petsharerejected'
+    ) {
+      const shareId = extractNotificationValue(
+        data?.shareId || data?.share_id || data?.pet_share_id || data?.id || data?.reference_id
+      );
+
+      if (shareId) {
+        openPetShareInvitation(shareId);
+        return true;
+      }
+    }
+
+    if (notificationKey === 'broadcast') {
+      router.push('/(tabs)');
+      return true;
+    }
+
+    if (
+      notificationKey === 'bookingdetails' ||
+      notificationKey === 'bookingreminder' ||
+      notificationKey === 'bookingconfirmation'
+    ) {
+      if (orderId) {
+        openOrderDetails(orderId, payload);
+        return true;
+      }
+
+      if (bookingId) {
+        void (async () => {
+          const resolvedOrderId = await resolveOrderIdFromBooking(bookingId);
+
+          if (resolvedOrderId) {
+            openOrderDetails(resolvedOrderId, payload);
+            return;
+          }
+
+          router.push('/orders');
+        })();
+
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  const queueNotificationNavigation = (payload: NotificationNavigationPayload) => {
+    if (!payload) {
+      return;
+    }
+
+    const authReady = authStateRef.current.authInitialized && authStateRef.current.hasUser;
+
+    if (!authReady) {
+      setPendingNotificationData(payload);
+      return;
+    }
+
+    if (!navigateFromNotification(payload)) {
+      console.log('Notification tap ignored: unsupported data payload', payload);
+    }
+  };
 
   // Check and validate tokens when user logs in
   useEffect(() => {
@@ -142,6 +590,30 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       console.log('Error checking notification status:', error);
     }
   };
+
+  useEffect(() => {
+    if (!pendingNotificationData) {
+      return;
+    }
+
+    if (!authStateRef.current.authInitialized) {
+      return;
+    }
+
+    if (!authStateRef.current.hasUser) {
+      setPendingNotificationData(null);
+      return;
+    }
+
+    if (navigateFromNotification(pendingNotificationData)) {
+      setPendingNotificationData(null);
+      return;
+    }
+
+    console.log('Notification tap ignored: unsupported data payload', pendingNotificationData);
+    setPendingNotificationData(null);
+  }, [pendingNotificationData, authInitialized, currentUser?.id]);
+
   useEffect(() => {
     if (isExpoGo || Platform.OS === 'web' || !Notifications) {
       return;
@@ -155,8 +627,30 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     const responseListener = Notifications.addNotificationResponseReceivedListener((response: any) => {
       console.log('Notification response:', response);
-      // Handle notification tap here
+      const content = response?.notification?.request?.content || {};
+      queueNotificationNavigation({
+        data: content?.data,
+        title: content?.title,
+        body: content?.body,
+      });
     });
+
+    if (typeof Notifications.getLastNotificationResponseAsync === 'function') {
+      void Notifications.getLastNotificationResponseAsync()
+        .then((lastResponse: any) => {
+          const content = lastResponse?.notification?.request?.content || {};
+          if (content?.data || content?.title || content?.body) {
+            queueNotificationNavigation({
+              data: content?.data,
+              title: content?.title,
+              body: content?.body,
+            });
+          }
+        })
+        .catch((error: any) => {
+          console.warn('Error reading last notification response:', error);
+        });
+    }
 
     return () => {
       notificationListener.remove();

@@ -141,7 +141,8 @@ export default function PartnerClients() {
       const { data: ordersData, error: ordersError } = await supabaseClient
         .from('orders')
         .select('*')
-        .eq('partner_id', partnerId);
+        .eq('partner_id', partnerId)
+        .eq('is_split_master', false);
 
       if (ordersError) throw ordersError;
 

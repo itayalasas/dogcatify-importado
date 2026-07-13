@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { regeneratePaymentLink } from '../../utils/mercadoPago';
 import { getOrderFulfillmentMode, getOrderStatusLabel } from '../../utils/orderFulfillment';
+import { isServiceBookingOrder, resolveOrderType } from '../../utils/orderClassification';
 
 export default function MyOrders() {
   const { currentUser } = useAuth();
@@ -20,9 +21,10 @@ export default function MyOrders() {
   const [refreshing, setRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [counts, setCounts] = useState({ active: 0, completed: 0 });
+  const [pickupConfirmingOrderId, setPickupConfirmingOrderId] = useState<string | null>(null);
 
   const PAGE_SIZE = 20;
-  const ACTIVE_STATUSES = ['pending', 'reserved', 'payment_failed', 'confirmed', 'processing', 'preparing', 'ready_for_delivery', 'shipped'];
+  const ACTIVE_STATUSES = ['pending', 'reserved', 'payment_failed', 'insufficient_stock', 'confirmed', 'processing', 'preparing', 'ready_for_delivery', 'shipped'];
   const COMPLETED_STATUSES = ['completed', 'delivered', 'cancelled', 'refunded'];
 
   useEffect(() => {
@@ -82,11 +84,13 @@ export default function MyOrders() {
           .from('orders')
           .select('id', { count: 'exact', head: true })
           .eq('customer_id', currentUser.id)
+          .eq('is_split_master', false)
           .in('status', ACTIVE_STATUSES),
         supabaseClient
           .from('orders')
           .select('id', { count: 'exact', head: true })
           .eq('customer_id', currentUser.id)
+          .eq('is_split_master', false)
           .in('status', COMPLETED_STATUSES),
       ]);
 
@@ -124,8 +128,9 @@ export default function MyOrders() {
 
       const { data, error } = await supabaseClient
         .from('orders')
-        .select('id, order_number, partner_id, customer_id, items, status, order_type, total_amount, shipping_address, created_at, updated_at, payment_link_expires_at, last_payment_url, payment_retry_count')
+        .select('id, order_number, partner_id, customer_id, items, status, order_type, service_name, booking_id, appointment_date, appointment_time, pet_name, booking_notes, total_amount, shipping_address, created_at, updated_at, payment_link_expires_at, last_payment_url, payment_retry_count, is_split_master')
         .eq('customer_id', currentUser.id)
+        .eq('is_split_master', false)
         .in('status', statusFilter)
         .order('created_at', { ascending: false })
         .range(from, to);
@@ -139,15 +144,21 @@ export default function MyOrders() {
         customerId: order.customer_id,
         items: order.items || [],
         status: order.status || 'pending',
-        orderType: order.order_type || 'product_purchase',
-        fulfillmentMode: getOrderFulfillmentMode(order.order_type || 'product_purchase', order.shipping_address),
+        orderType: resolveOrderType(order),
+        fulfillmentMode: getOrderFulfillmentMode(resolveOrderType(order), order.shipping_address),
         totalAmount: order.total_amount || 0,
         shippingAddress: order.shipping_address || '',
         createdAt: new Date(order.created_at),
         updatedAt: order.updated_at ? new Date(order.updated_at) : null,
         paymentLinkExpiresAt: order.payment_link_expires_at ? new Date(order.payment_link_expires_at) : null,
         lastPaymentUrl: order.last_payment_url,
-        paymentRetryCount: order.payment_retry_count || 0
+        paymentRetryCount: order.payment_retry_count || 0,
+        serviceName: order.service_name || null,
+        bookingId: order.booking_id || null,
+        appointmentDate: order.appointment_date || null,
+        appointmentTime: order.appointment_time || null,
+        petName: order.pet_name || null,
+        bookingNotes: order.booking_notes || null,
       })) || [];
 
       setHasMore(ordersData.length === PAGE_SIZE);
@@ -185,6 +196,7 @@ export default function MyOrders() {
       case 'pending': return '#FEF3C7';
       case 'reserved': return '#FEF3C7';
       case 'payment_failed': return '#FECACA';
+      case 'insufficient_stock': return '#FEE2E2';
       case 'confirmed': return '#DBEAFE';
       case 'processing': return '#DBEAFE';
       case 'preparing': return '#DBEAFE';
@@ -203,6 +215,7 @@ export default function MyOrders() {
       case 'pending': return '#92400E';
       case 'reserved': return '#92400E';
       case 'payment_failed': return '#991B1B';
+      case 'insufficient_stock': return '#991B1B';
       case 'confirmed': return '#1E40AF';
       case 'processing': return '#1E40AF';
       case 'preparing': return '#1E40AF';
@@ -221,6 +234,7 @@ export default function MyOrders() {
       case 'pending': return <Clock size={16} color="#92400E" />;
       case 'reserved': return <Clock size={16} color="#92400E" />;
       case 'payment_failed': return <AlertCircle size={16} color="#991B1B" />;
+      case 'insufficient_stock': return <AlertCircle size={16} color="#991B1B" />;
       case 'confirmed': return <CheckCircle size={16} color="#1E40AF" />;
       case 'processing': return <Package size={16} color="#1E40AF" />;
       case 'preparing': return <Package size={16} color="#1E40AF" />;
@@ -271,7 +285,51 @@ export default function MyOrders() {
     router.push(`/orders/${order.id}?tracking=true`);
   };
 
+  const submitPickupConfirmation = async (order: any) => {
+    try {
+      setPickupConfirmingOrderId(order.id);
+
+      const now = new Date().toISOString();
+      const { error } = await supabaseClient
+        .from('orders')
+        .update({
+          status: 'delivered',
+          delivered_at: now,
+          updated_at: now,
+        })
+        .eq('id', order.id)
+        .eq('customer_id', currentUser!.id);
+
+      if (error) throw error;
+
+      Alert.alert(
+        'Retiro confirmado',
+        'Tu compra quedó marcada como retirada y el aliado recibirá la notificación.',
+      );
+
+      await Promise.all([fetchOrders(true), fetchOrderCounts()]);
+    } catch (error) {
+      console.error('Error confirming pickup:', error);
+      Alert.alert('Error', 'No se pudo confirmar el retiro del pedido');
+      await Promise.all([fetchOrders(true), fetchOrderCounts()]);
+    } finally {
+      setPickupConfirmingOrderId(null);
+    }
+  };
+
+  const handleConfirmPickup = (order: any) => {
+    Alert.alert(
+      'Confirmar retiro',
+      '¿Ya retiraste tu compra en tienda?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Sí, confirmar', onPress: () => { void submitPickupConfirmation(order); } },
+      ]
+    );
+  };
+
   const isPickupOrder = (order: any) => order.fulfillmentMode === 'pickup';
+  const isServiceOrder = (order: any) => isServiceBookingOrder(order);
 
   const handleContactSupport = () => {
     Alert.alert(
@@ -361,11 +419,17 @@ export default function MyOrders() {
       </View>
 
       <View style={styles.orderItems}>
-        <Text style={styles.itemsTitle}>Productos ({order.items.length}):</Text>
+        <Text style={styles.itemsTitle}>
+          {isServiceOrder(order) ? `Servicios (${order.items.length}):` : `Productos (${order.items.length}):`}
+        </Text>
         {order.items.slice(0, 2).map((item: any, index: number) => (
           <View key={index} style={styles.orderItem}>
             <View style={styles.itemInfo}>
-              <Text style={styles.itemName}>{item.name || 'Producto'}</Text>
+              <Text style={styles.itemName}>
+                {isServiceOrder(order)
+                  ? item.service_name || item.name || 'Servicio'
+                  : item.name || 'Producto'}
+              </Text>
               <Text style={styles.itemQuantity}>x{item.quantity || 1}</Text>
             </View>
             <Text style={styles.itemPrice}>
@@ -375,12 +439,12 @@ export default function MyOrders() {
         ))}
         {order.items.length > 2 && (
           <Text style={styles.moreItems}>
-            +{order.items.length - 2} producto{order.items.length - 2 !== 1 ? 's' : ''} más
+            +{order.items.length - 2} {isServiceOrder(order) ? 'servicio' : 'producto'}{order.items.length - 2 !== 1 ? 's' : ''} más
           </Text>
         )}
       </View>
 
-      {order.shippingAddress && (
+      {!isServiceOrder(order) && order.shippingAddress && (
         <View style={styles.shippingInfo}>
           <MapPin size={16} color="#6B7280" />
           <Text style={styles.shippingAddress}>{order.shippingAddress}</Text>
@@ -415,7 +479,16 @@ export default function MyOrders() {
             size="small"
           />
         )}
-        {!isPickupOrder(order) && ['pending', 'reserved', 'confirmed', 'processing', 'preparing', 'ready_for_delivery', 'shipped'].includes(order.status) && (
+        {isPickupOrder(order) && order.status === 'ready_for_delivery' && (
+          <Button
+            title="Confirmar retiro"
+            onPress={() => handleConfirmPickup(order)}
+            variant="outline"
+            size="small"
+            loading={pickupConfirmingOrderId === order.id}
+          />
+        )}
+        {!isServiceOrder(order) && !isPickupOrder(order) && ['pending', 'reserved', 'confirmed', 'processing', 'preparing', 'ready_for_delivery', 'shipped'].includes(order.status) && (
           <Button
             title="Rastrear"
             onPress={() => handleTrackOrder(order)}

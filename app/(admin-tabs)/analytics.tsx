@@ -318,7 +318,7 @@ export default function AdminAnalytics() {
         supabaseClient.from('partners').select('id, user_id, created_at, subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at').eq('is_verified', true).eq('is_active', true),
         supabaseClient.from('user_subscriptions').select('id, user_id, status, created_at, expires_at, trial_ends_at, subscription_plans ( id, name, tier, audience_target )'),
         supabaseClient.from('bookings').select('id, total_amount'),
-        supabaseClient.from('orders').select('id, status, total_amount, commission_amount, partner_amount, created_at'),
+        supabaseClient.from('orders').select('id, status, total_amount, commission_amount, partner_amount, created_at').eq('is_split_master', false),
         supabaseClient.from('promotions').select('id, views, is_active, start_date, end_date, approval_status'),
         supabaseClient.from('webhook_logs').select('id, success').gte('created_at', sevenDaysAgo),
         supabaseClient.from('crm_webhook_logs').select('id, success').gte('created_at', sevenDaysAgo),
