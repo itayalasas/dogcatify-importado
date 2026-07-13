@@ -1,17 +1,19 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, ActivityIndicator } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, CircleHelp as HelpCircle, Building, Fingerprint, ChevronRight, ArrowRight, Trash2, Crown, Sparkles, RefreshCw } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { SubscriptionReturnBanner } from '../../components/SubscriptionReturnBanner';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { useBiometric } from '../../contexts/BiometricContext';
 import { supabaseClient } from '../../lib/supabase';
 import { getAvailableRoles } from '../../utils/onboarding';
+import { getSingleParam } from '../../utils/subscriptionReturn';
 import {
   getPartnerPlan,
   getPartnerSubscriptionStatusLabel,
@@ -87,9 +89,28 @@ export default function Profile() {
   const [dottyPlanEnabled, setDottyPlanEnabled] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const skipInitialFocusRefreshRef = React.useRef(true);
+  const subscriptionReturnParams = useLocalSearchParams();
   const availableRoles = getAvailableRoles(currentUser);
   const effectiveRole = activeRole ?? (availableRoles.length === 1 ? availableRoles[0] : null);
   const isPartnerView = effectiveRole === 'partner';
+  const subscriptionReturnStatus = getSingleParam(subscriptionReturnParams.subscription_status);
+  const subscriptionReturnMessage = getSingleParam(subscriptionReturnParams.subscription_message);
+  const subscriptionReturnTarget = getSingleParam(subscriptionReturnParams.target);
+  const subscriptionReturnScope = subscriptionReturnTarget?.includes('://partner/subscription')
+    ? 'partner'
+    : getSingleParam(
+        subscriptionReturnParams.subscription_scope
+        ?? subscriptionReturnParams.scope
+        ?? subscriptionReturnParams.account_scope,
+      ) || (isPartnerView ? 'partner' : 'user');
+  const subscriptionReturnId = getSingleParam(subscriptionReturnParams.subscription_id);
+  const subscriptionReturnReference = getSingleParam(subscriptionReturnParams.external_reference);
+  const showSubscriptionReturnBanner = Boolean(
+    subscriptionReturnStatus ||
+    subscriptionReturnMessage ||
+    subscriptionReturnId ||
+    subscriptionReturnReference,
+  );
   const personalSubscriptionStatusLabel = (() => {
     const status = String(userSubscription?.status || '').toLowerCase();
 
@@ -775,6 +796,14 @@ export default function Profile() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {showSubscriptionReturnBanner && (
+          <SubscriptionReturnBanner
+            scope={subscriptionReturnScope}
+            status={subscriptionReturnStatus}
+            message={subscriptionReturnMessage}
+          />
+        )}
+
         {/* Profile Header */}
         <Card style={styles.profileCard}>
           <View style={styles.profileHeader}>

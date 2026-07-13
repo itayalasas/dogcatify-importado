@@ -309,6 +309,7 @@ export default function PartnerTabLayout() {
 
   const businessType = partnerProfile?.business_type || '';
   const features = partnerProfile?.features || {};
+  const agendaFeatureEnabled = features.agenda !== false;
   const accountSubscription = resolvePartnerAccountSubscription(partnerRows);
   const effectivePartnerTier = accountSubscription?.subscriptionPlanTier || resolvePartnerPlanTier(
     partnerProfile?.subscription_plan_tier,
@@ -322,6 +323,7 @@ export default function PartnerTabLayout() {
     accountSubscription?.subscriptionPlanStatus || partnerProfile?.subscription_plan_status,
     accountSubscription?.subscriptionPlanExpiresAt || partnerProfile?.subscription_plan_expires_at,
   );
+  const canShowBookingsTab = businessType !== 'shop' && agendaFeatureEnabled && hasActiveSchedule;
   
   const hasProductsEnabled = features.products || businessType === 'shop';
   
@@ -329,7 +331,7 @@ export default function PartnerTabLayout() {
     businessType,
     hasProductsEnabled,
     hasActiveSchedule,
-    shouldShowReservas: hasActiveSchedule
+    shouldShowReservas: canShowBookingsTab
   });
 
   return (
@@ -419,7 +421,7 @@ export default function PartnerTabLayout() {
         name="bookings"
         options={{
           title: 'Reservas',
-          href: hasActiveSchedule && partnerProfile && activeBusinessId
+          href: canShowBookingsTab && partnerProfile && activeBusinessId
             ? { pathname: '/bookings', params: { businessId: activeBusinessId } }
             : null,
           tabBarIcon: ({ size, color }) => (

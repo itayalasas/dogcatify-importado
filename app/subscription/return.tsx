@@ -1,45 +1,73 @@
 import React, { useEffect, useMemo } from 'react';
 import { ActivityIndicator, Linking, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { SubscriptionReturnBanner } from '@/components/SubscriptionReturnBanner';
+import {
+  buildSubscriptionDeepLink,
+  getSingleParam,
+  isUuid,
+  normalizeSubscriptionScope,
+} from '@/utils/subscriptionReturn';
 
-const getSingleParam = (value?: string | string[]) =>
-  Array.isArray(value) ? value[0] : value;
+const buildDeepLink = (
+  params: Record<string, string | string[] | undefined>,
+  scope: 'user' | 'partner',
+) => {
+  return buildSubscriptionDeepLink(
+    params,
+    scope === 'partner' ? 'dogcatify://partner/subscription' : 'dogcatify://profile/subscription',
+  );
+};
 
-const isUuid = (value: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-
-const buildDeepLink = (params: Record<string, string | string[] | undefined>) => {
+const buildInternalRoute = (params: Record<string, string | string[] | undefined>) => {
   const target = getSingleParam(params.target);
-  if (target?.startsWith('dogcatify://')) {
-    return target;
-  }
-
-  const url = new URL('dogcatify://profile/subscription');
+  const scope = target?.includes('://partner/subscription')
+    ? 'partner'
+    : normalizeSubscriptionScope(params.scope ?? params.subscription_scope ?? params.account_scope);
+  const routePath = scope === 'partner' ? '/partner/subscription' : '/profile/subscription';
+  const query = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
     if (key === 'target') return;
 
     const values = Array.isArray(value) ? value : [value];
     values.forEach((item) => {
-      if (typeof item === 'string' && item.length > 0) {
-        url.searchParams.append(key, item);
+      const cleanValue = typeof item === 'string' ? item.trim() : '';
+      if (!cleanValue) return;
+
+      if (key === 'business_id') {
+        query.set('businessId', cleanValue);
+        return;
       }
+
+      query.set(key, cleanValue);
     });
   });
 
   const externalReference = getSingleParam(params.external_reference);
-  if (!url.searchParams.get('subscription_id') && externalReference && isUuid(externalReference)) {
-    url.searchParams.set('subscription_id', externalReference);
+  if (!query.get('subscription_id') && externalReference && isUuid(externalReference)) {
+    query.set('subscription_id', externalReference);
   }
 
-  return url.toString();
+  if (!query.get('subscription_scope')) {
+    query.set('subscription_scope', scope);
+  }
+
+  const queryString = query.toString();
+  return `${routePath}${queryString ? `?${queryString}` : ''}`;
 };
 
 export default function SubscriptionReturn() {
-  const params = useLocalSearchParams<Record<string, string | string[]>>();
-  const deepLink = useMemo(() => buildDeepLink(params), [params]);
-  const handleGoToProfile = () => {
-    router.replace('/(tabs)/profile');
+  const params = useLocalSearchParams();
+  const scope = getSingleParam(params.target)?.includes('://partner/subscription')
+    ? 'partner'
+    : normalizeSubscriptionScope(params.scope ?? params.subscription_scope ?? params.account_scope);
+  const deepLink = useMemo(() => buildDeepLink(params, scope), [params, scope]);
+  const internalRoute = useMemo(() => buildInternalRoute(params), [params]);
+  const title = scope === 'partner' ? 'Retorno de aliado' : 'Retorno de suscripcion';
+
+  const handleGoToSubscription = () => {
+    router.replace(internalRoute as any);
   };
 
   const handleGoToHome = () => {
@@ -68,15 +96,23 @@ export default function SubscriptionReturn() {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <ActivityIndicator size="large" color="#0F766E" />
-        <Text style={styles.title}>Abriendo DogCatiFy</Text>
+        <Text style={styles.title}>{title}</Text>
         <Text style={styles.text}>
-          Estamos confirmando tu suscripcion y volviendo a la app.
+          Estamos confirmando {scope === 'partner' ? 'tu suscripcion de aliado' : 'tu suscripcion'} y volviendo a la app.
         </Text>
+        <SubscriptionReturnBanner
+          scope={scope}
+          status={getSingleParam(params.subscription_status)}
+          message={getSingleParam(params.subscription_message)}
+          style={styles.banner}
+        />
         <TouchableOpacity style={styles.button} onPress={openApp}>
           <Text style={styles.buttonText}>Abrir la app</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.secondaryButton} onPress={handleGoToProfile}>
-          <Text style={styles.secondaryButtonText}>Ir al perfil</Text>
+        <TouchableOpacity style={styles.secondaryButton} onPress={handleGoToSubscription}>
+          <Text style={styles.secondaryButtonText}>
+            {scope === 'partner' ? 'Ir a suscripcion de aliado' : 'Ir a mi suscripcion'}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.secondaryButton} onPress={handleGoToHome}>
           <Text style={styles.secondaryButtonText}>Ir al inicio</Text>
@@ -113,6 +149,11 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: '#6B7280',
     textAlign: 'center',
+  },
+  banner: {
+    width: '100%',
+    maxWidth: 420,
+    marginBottom: 18,
   },
   button: {
     minWidth: 180,

@@ -177,6 +177,12 @@ export default function ConfigureBusiness() {
             'Adultos',
             'Seniors'
           ],
+          services: [
+            'Visitas al refugio',
+            'Entrevistas de adopción',
+            'Seguimiento post adopción',
+            'Entrega de mascota'
+          ],
           products: [
             'Alimentos',
             'Accesorios',
@@ -217,6 +223,14 @@ export default function ConfigureBusiness() {
   };
 
   const handleAddService = () => {
+    if (business?.businessType === 'shelter') {
+      router.push({
+        pathname: '/partner/add-adoption-pet',
+        params: { partnerId: business?.id }
+      });
+      return;
+    }
+
     router.push({
       pathname: '/partner/add-service',
       params: {
@@ -274,6 +288,19 @@ export default function ConfigureBusiness() {
     business.subscriptionPlanStatus,
     business.subscriptionPlanExpiresAt,
   );
+  const showAgendaSection = business.businessType !== 'shop' && business.features?.agenda !== false;
+  const agendaTitle = business.businessType === 'shelter'
+    ? 'Agenda de Adopciones'
+    : 'Gestión de Agenda';
+  const agendaDescription = business.businessType === 'shelter'
+    ? 'Coordina visitas, entrevistas y entregas de adopción'
+    : 'Configura horarios, duración de citas y disponibilidad';
+  const agendaItemsTitle = business.businessType === 'shelter'
+    ? 'Citas disponibles:'
+    : 'Servicios disponibles:';
+  const agendaItems = business.businessType === 'shelter'
+    ? (config.services || [])
+    : (config.services || []);
 
   return (
     <SafeAreaView style={styles.container}> 
@@ -302,18 +329,19 @@ export default function ConfigureBusiness() {
         </Card>
 
         {/* Configuración de Agenda */}
-        <Card style={styles.featureCard}>
+        {showAgendaSection && (
+          <Card style={styles.featureCard}>
           <View style={styles.featureHeader}>
             <Calendar size={24} color="#3B82F6" />
-            <Text style={styles.featureTitle}>Gestión de Agenda</Text>
+            <Text style={styles.featureTitle}>{agendaTitle}</Text>
           </View>
           <Text style={styles.featureDescription}>
-            Configura horarios, duración de citas y disponibilidad
+            {agendaDescription}
           </Text>
           
           <View style={styles.servicesList}>
-            <Text style={styles.servicesTitle}>Servicios disponibles:</Text>
-            {(config.services || []).map((service, index) => (
+            <Text style={styles.servicesTitle}>{agendaItemsTitle}</Text>
+            {agendaItems.map((service, index) => (
               <View key={index} style={styles.serviceItem}>
                 <Text style={styles.serviceText}>• {service}</Text>
               </View>
@@ -330,14 +358,15 @@ export default function ConfigureBusiness() {
               />
             </View>
             <View style={styles.actionButtonContainer}>
-              <Button
-                title="Agregar Servicio"
-                onPress={handleAddService}
-                size="medium"
-              />
+                <Button
+                  title={business.businessType === 'shelter' ? 'Agregar Mascota' : 'Agregar Servicio'}
+                  onPress={handleAddService}
+                  size="medium"
+                />
             </View>
           </View>
-        </Card>
+          </Card>
+        )}
 
         {/* Configuración de Productos - Solo para tiendas */}
         {business.businessType === 'shop' && (

@@ -281,16 +281,20 @@ function RootLayout() {
             router.replace(buildRouteWithQuery('payment/pending', queryParams));
           }, 500);
         }
+        else if (routePath.startsWith('partner/subscription')) {
+          console.log('Partner subscription deep link detected');
+
+          setTimeout(() => {
+            const router = require('expo-router').router;
+            router.replace(buildRouteWithQuery('partner/subscription', queryParams));
+          }, 500);
+        }
         else if (routePath.startsWith('profile/subscription')) {
           console.log('Subscription deep link detected');
 
           setTimeout(() => {
             const router = require('expo-router').router;
-            const subscriptionId = queryParams?.subscription_id;
-            const query = typeof subscriptionId === 'string'
-              ? `?subscription_id=${encodeURIComponent(subscriptionId)}`
-              : '';
-            router.replace(`/profile/subscription${query}`);
+            router.replace(buildRouteWithQuery('profile/subscription', queryParams));
           }, 500);
         }
       } catch (error) {

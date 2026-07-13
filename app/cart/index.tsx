@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Modal, ActivityIndicator, Animated, AppState, Platform } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
@@ -42,6 +42,28 @@ export default function Cart() {
     codigo_postal: '',
     phone: ''
   });
+
+  const cartStores = cart.reduce((stores, item) => {
+    const partnerId = String(item.partnerId || '').trim();
+    if (!partnerId) return stores;
+
+    const existingStore = stores.find((store) => store.partnerId === partnerId);
+    if (existingStore) {
+      return stores;
+    }
+
+    stores.push({
+      partnerId,
+      partnerName: item.partnerName || 'Tienda',
+    });
+    return stores;
+  }, [] as Array<{ partnerId: string; partnerName: string }>);
+
+  const hasMixedStores = cartStores.length > 1;
+  const cartStoreLabel = cartStores.map((store) => store.partnerName).join(', ');
+  const mixedStoreMessage = hasMixedStores
+    ? `Tu carrito contiene productos de ${cartStoreLabel}. Tu compra se dividirá automáticamente en pedidos separados por tienda.`
+    : '';
   const [newAddress, setNewAddress] = useState({
     street: '',
     number: '',
@@ -92,7 +114,7 @@ export default function Cart() {
 
       // CRÍTICO: NO ocultar el loader si estamos procesando pago
       if (isProcessingPayment.current) {
-        console.log('⚠️  Estamos procesando pago, NO ocultar loader');
+        console.log('⚠️ Estamos procesando pago, NO ocultar loader');
         return;
       }
 
@@ -162,6 +184,11 @@ export default function Cart() {
 
   const loadPartnerShippingInfo = async () => {
     if (!cart || cart.length === 0) return;
+
+    if (hasMixedStores) {
+      setPartnerInfo(null);
+      return;
+    }
 
     try {
       // Obtener el partner_id del primer producto (asumiendo mismo partner)
@@ -334,7 +361,7 @@ export default function Cart() {
     // Guardar el tiempo de inicio para garantizar 5 segundos mínimos
     const startTime = Date.now();
     const MIN_LOADING_TIME = 5000; // 5 segundos
-    console.log(`⏱️  Tiempo mínimo de loading: ${MIN_LOADING_TIME}ms`);
+    console.log(`⏱️ Tiempo mínimo de loading: ${MIN_LOADING_TIME}ms`);
 
     try {
       console.log('=== Iniciando proceso de checkout ===');
@@ -555,13 +582,13 @@ export default function Cart() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>Mi Carrito</Text>
         <View style={styles.headerActions}>
           {cart && cart.length > 0 && (
-            <TouchableOpacity 
+              <TouchableOpacity 
               style={styles.cartButton}
               onPress={() => {
                 Alert.alert(
@@ -701,7 +728,31 @@ export default function Cart() {
                 </Text>
               </View>
               
-              {partnerInfo?.has_shipping ? (
+              {hasMixedStores ? (
+                <View style={styles.mixedStoreWarning}>
+                  <Text style={styles.mixedStoreWarningTitle}>Compra dividida por tienda</Text>
+                  <Text style={styles.mixedStoreWarningText}>
+                    {mixedStoreMessage || 'Cada tienda recibirá su pedido por separado después del pago.'}
+                  </Text>
+                  <View style={styles.mixedStoreWarningActions}>
+                    <View style={styles.mixedStoreWarningAction}>
+                      <Button
+                        title="Vaciar carrito"
+                        onPress={clearCart}
+                        variant="outline"
+                        size="medium"
+                      />
+                    </View>
+                    <View style={styles.mixedStoreWarningAction}>
+                      <Button
+                        title="Seguir comprando"
+                        onPress={() => router.push('/(tabs)/shop')}
+                        size="medium"
+                      />
+                    </View>
+                  </View>
+                </View>
+              ) : partnerInfo?.has_shipping ? (
                 <>
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Envío</Text>
@@ -731,7 +782,7 @@ export default function Cart() {
 
               <View style={styles.divider} />
 
-              {/* Dirección de Envío Colapsable */}
+              {/* Dirección de envío colapsable */}
               <TouchableOpacity
                 style={styles.addressHeader}
                 onPress={() => setIsAddressExpanded(!isAddressExpanded)}
@@ -740,7 +791,7 @@ export default function Cart() {
                   <MapPin size={20} color="#3B82F6" />
                   <View style={styles.addressHeaderText}>
                     <Text style={styles.addressHeaderTitle}>
-                      {partnerInfo?.has_shipping ? 'Dirección de Envío' : 'Dirección de la Tienda'}
+                      {partnerInfo?.has_shipping ? 'Dirección de envío' : 'Dirección de retiro'}
                     </Text>
                     {!loadingAddress && !isAddressExpanded && (
                       <>
@@ -1187,6 +1238,34 @@ const styles = StyleSheet.create({
     color: '#92400E',
     textAlign: 'center',
   },
+  mixedStoreWarning: {
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 4,
+  },
+  mixedStoreWarningTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#9A3412',
+    marginBottom: 8,
+  },
+  mixedStoreWarningText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#9A3412',
+    lineHeight: 20,
+  },
+  mixedStoreWarningActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
+  mixedStoreWarningAction: {
+    flex: 1,
+  },
   summaryCard: {
     marginHorizontal: 16,
     marginBottom: 16,
@@ -1369,3 +1448,10 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 });
+
+
+
+
+
+
+

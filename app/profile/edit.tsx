@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Platform, Modal, TextInput } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowLeft, Camera, Upload, User, Phone, MapPin, Mail, ChevronDown, Check } from 'lucide-react-native';
+import { ArrowLeft, Camera, Upload, User, Phone, MapPin, Mail, ChevronDown, Check, Search } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -12,6 +12,88 @@ import { supabaseClient } from '../../lib/supabase';
 import { uploadImage } from '../../utils/imageUpload';
 import { envConfig } from '../../utils/envConfig';
 
+type PhoneCountryOption = {
+  id: number;
+  name: string;
+  nativeName?: string;
+  iso2?: string;
+  phoneCode?: string;
+  emoji?: string;
+  flagPng?: string;
+  flagSvg?: string;
+};
+
+const phoneCountries: PhoneCountryOption[] = require('../../countries.json');
+
+const getDefaultPhoneCountry = () =>
+  phoneCountries.find((country) => country.iso2 === 'UY') || phoneCountries[0] || null;
+
+const normalizePhoneCode = (value?: string | null) => String(value || '').trim().replace(/\s+/g, '');
+
+const sanitizePhoneNumber = (value: string) => String(value || '').replace(/[^\d]/g, '');
+
+const parseStoredPhone = (value?: string | null) => {
+  const defaultCountry = getDefaultPhoneCountry();
+  const rawValue = String(value || '').trim();
+
+  if (!rawValue) {
+    return {
+      country: defaultCountry,
+      phoneNumber: '',
+    };
+  }
+
+  const normalizedValue = rawValue.replace(/[\s()-]/g, '');
+  const internationalValue = normalizedValue.startsWith('00')
+    ? `+${normalizedValue.slice(2)}`
+    : normalizedValue;
+
+  const sortedCountries = [...phoneCountries].sort((a, b) => {
+    const aLength = normalizePhoneCode(a.phoneCode).length;
+    const bLength = normalizePhoneCode(b.phoneCode).length;
+    return bLength - aLength;
+  });
+
+  for (const country of sortedCountries) {
+    const normalizedCode = normalizePhoneCode(country.phoneCode);
+    const digitsOnlyCode = normalizedCode.replace(/^\+/, '');
+
+    if (normalizedCode && internationalValue.startsWith(normalizedCode)) {
+      return {
+        country,
+        phoneNumber: sanitizePhoneNumber(internationalValue.slice(normalizedCode.length)),
+      };
+    }
+
+    if (digitsOnlyCode && internationalValue.startsWith(digitsOnlyCode)) {
+      return {
+        country,
+        phoneNumber: sanitizePhoneNumber(internationalValue.slice(digitsOnlyCode.length)),
+      };
+    }
+  }
+
+  return {
+    country: defaultCountry,
+    phoneNumber: sanitizePhoneNumber(internationalValue.replace(/^\+/, '')),
+  };
+};
+
+const buildStoredPhone = (country: PhoneCountryOption | null, phoneNumber: string) => {
+  const localNumber = sanitizePhoneNumber(phoneNumber);
+  const phoneCode = normalizePhoneCode(country?.phoneCode);
+
+  if (!localNumber) {
+    return null;
+  }
+
+  if (!phoneCode) {
+    return localNumber;
+  }
+
+  return `${phoneCode}${localNumber}`;
+};
+
 export default function EditProfile() {
   const { currentUser, updateCurrentUser } = useAuth();
   const { t } = useLanguage();
@@ -19,7 +101,10 @@ export default function EditProfile() {
   // Form state
   const [displayName, setDisplayName] = useState(currentUser?.displayName || '');
   const [email, setEmail] = useState(currentUser?.email || '');
-  const [phone, setPhone] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [selectedPhoneCountry, setSelectedPhoneCountry] = useState<PhoneCountryOption | null>(getDefaultPhoneCountry());
+  const [phoneCountryQuery, setPhoneCountryQuery] = useState('');
+  const [showPhoneCountryModal, setShowPhoneCountryModal] = useState(false);
   const [location, setLocation] = useState('');
   const [address, setAddress] = useState('');
   
@@ -61,7 +146,9 @@ export default function EditProfile() {
     if (currentUser) {
       setDisplayName(currentUser.displayName || '');
       setEmail(currentUser.email || '');
-      setPhone(currentUser.phone || '');
+      const parsedPhone = parseStoredPhone(currentUser.phone || '');
+      setSelectedPhoneCountry(parsedPhone.country);
+      setPhoneNumber(parsedPhone.phoneNumber);
       setLocation(currentUser.location || '');
       setBio(currentUser.bio || '');
       setProfileImage(currentUser.photoURL || null);
@@ -128,6 +215,9 @@ export default function EditProfile() {
       if (error) throw error;
       
       if (data) {
+        const parsedPhone = parseStoredPhone(data.phone || currentUser.phone || '');
+        setSelectedPhoneCountry(parsedPhone.country);
+        setPhoneNumber(parsedPhone.phoneNumber);
         setCalle(data.calle || '');
         setNumero(data.numero || '');
         setBarrio(data.barrio || '');
@@ -195,6 +285,23 @@ export default function EditProfile() {
   };
 
   // Función para realizar geocodificación con Nominatim
+  const filteredPhoneCountries = phoneCountries.filter((country) => {
+    const query = phoneCountryQuery.trim().toLowerCase();
+    if (!query) return true;
+
+    const name = String(country.name || '').toLowerCase();
+    const nativeName = String(country.nativeName || '').toLowerCase();
+    const iso2 = String(country.iso2 || '').toLowerCase();
+    const phoneCode = String(country.phoneCode || '').toLowerCase();
+
+    return (
+      name.includes(query) ||
+      nativeName.includes(query) ||
+      iso2.includes(query) ||
+      phoneCode.includes(query)
+    );
+  });
+
   const performGeocoding = async () => {
     if (!calle.trim() || !numero.trim() || !selectedDepartment || !selectedCountry) {
       Alert.alert('Información incompleta', 'Por favor completa calle, número, departamento y país para buscar la ubicación');
@@ -343,7 +450,7 @@ export default function EditProfile() {
     
     Alert.alert(
       'Ubicación encontrada',
-      `Se ha encontrado la ubicación exacta de tu dirección.\n\nCoordenadas: ${result.lat}, ${result.lon}${barrioFound ? `\nBarrio: ${barrioFound}` : ''}\n\nLa información se ha completado automáticamente.`,
+      `Se ha encontrado la ubicación exacta de tu dirección.${barrioFound ? `\n\nBarrio: ${barrioFound}` : ''}\n\nLa información se ha completado automáticamente.`,
       [{ text: 'Perfecto' }]
     );
   };
@@ -519,7 +626,7 @@ export default function EditProfile() {
       const updateData = {
         display_name: displayName.trim(),
         photo_url: photoURL || null,
-        phone: phone.trim() || null,
+        phone: buildStoredPhone(selectedPhoneCountry, phoneNumber),
         location: address.trim() || null, // Mantener para compatibilidad
         bio: bio.trim() || null,
         // Nuevos campos de dirección
@@ -553,7 +660,7 @@ export default function EditProfile() {
         ...currentUser!,
         displayName: displayName.trim(),
         photoURL: photoURL || currentUser!.photoURL,
-        phone: phone.trim() || currentUser!.phone,
+        phone: buildStoredPhone(selectedPhoneCountry, phoneNumber) || currentUser!.phone,
         location: address.trim() || currentUser!.location,
         bio: bio.trim() || currentUser!.bio,
       };
@@ -642,14 +749,49 @@ export default function EditProfile() {
               style={styles.disabledInput}
             />
 
-            <Input
-              label="Teléfono"
-              placeholder="Ej: +1 234 567 8900"
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              leftIcon={<Phone size={20} color="#6B7280" />}
-            />
+            <View style={styles.phoneFieldGroup}>
+              <Text style={styles.phoneFieldLabel}>Teléfono</Text>
+              <View style={styles.phoneRow}>
+                <TouchableOpacity
+                  style={styles.phoneCountryButton}
+                  onPress={() => {
+                    setPhoneCountryQuery('');
+                    setShowPhoneCountryModal(true);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.phoneCountryFlagWrap}>
+                    {selectedPhoneCountry?.flagPng ? (
+                      <Image
+                        source={{ uri: selectedPhoneCountry.flagPng }}
+                        style={styles.phoneCountryFlag}
+                      />
+                    ) : (
+                      <Text style={styles.phoneCountryEmoji}>{selectedPhoneCountry?.emoji || '🌐'}</Text>
+                    )}
+                  </View>
+                  <Text style={styles.phoneCountryCode}>
+                    {selectedPhoneCountry?.phoneCode || '+598'}
+                  </Text>
+                  <ChevronDown size={16} color="#6B7280" />
+                </TouchableOpacity>
+
+                <View style={styles.phoneNumberInputContainer}>
+                  <View style={styles.phoneInputIcon}>
+                    <Phone size={20} color="#6B7280" />
+                  </View>
+                  <TextInput
+                    style={styles.phoneNumberInput}
+                    placeholder="095148335"
+                    placeholderTextColor="#9CA3AF"
+                    value={phoneNumber}
+                    onChangeText={(text) => setPhoneNumber(sanitizePhoneNumber(text))}
+                    keyboardType="phone-pad"
+                    returnKeyType="done"
+                  />
+                </View>
+              </View>
+            </View>
 
             <TouchableOpacity onPress={() => setShowCountryModal(true)}>
               <Input
@@ -741,7 +883,7 @@ export default function EditProfile() {
                   size="medium"
                 />
                 <Text style={styles.geocodingHint}>
-                  Esto completará automáticamente el código postal, barrio y coordenadas GPS
+                  Esto completará automáticamente el código postal y barrio
                 </Text>
               </View>
             )}
@@ -762,7 +904,7 @@ export default function EditProfile() {
                       {result.display_name}
                     </Text>
                     <Text style={styles.geocodingResultType}>
-                      Tipo: {result.type} • Coordenadas: {result.lat}, {result.lon}
+                      Tipo: {result.type}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -772,24 +914,6 @@ export default function EditProfile() {
                 >
                   <Text style={styles.cancelGeocodingText}>Cancelar búsqueda</Text>
                 </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Mostrar coordenadas si están disponibles */}
-            {(latitud || longitud) && (
-              <View style={styles.coordinatesDisplay}>
-                <Text style={styles.coordinatesTitle}>📍 Coordenadas GPS:</Text>
-                <Text style={styles.coordinatesText}>
-                  Latitud: {latitud || 'No disponible'}
-                </Text>
-                <Text style={styles.coordinatesText}>
-                  Longitud: {longitud || 'No disponible'}
-                </Text>
-                {selectedGeocodingResult && (
-                  <Text style={styles.coordinatesNote}>
-                    ✅ Ubicación verificada automáticamente
-                  </Text>
-                )}
               </View>
             )}
 
@@ -853,6 +977,79 @@ export default function EditProfile() {
                   )}
                 </TouchableOpacity>
               ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de selección de código telefónico */}
+      <Modal
+        visible={showPhoneCountryModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPhoneCountryModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Código telefónico</Text>
+              <TouchableOpacity onPress={() => setShowPhoneCountryModal(false)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Input
+              label="Buscar país"
+              placeholder="Nombre, ISO o código"
+              value={phoneCountryQuery}
+              onChangeText={setPhoneCountryQuery}
+              autoCapitalize="none"
+              leftIcon={<Search size={20} color="#6B7280" />}
+            />
+
+            <ScrollView style={styles.optionsList} keyboardShouldPersistTaps="handled">
+              {filteredPhoneCountries.map((country) => {
+                const isSelected = selectedPhoneCountry?.id === country.id;
+
+                return (
+                  <TouchableOpacity
+                    key={country.id}
+                    style={[
+                      styles.phoneCountryOptionItem,
+                      isSelected && styles.selectedPhoneCountryOptionItem,
+                    ]}
+                    onPress={() => {
+                      setSelectedPhoneCountry(country);
+                      setShowPhoneCountryModal(false);
+                    }}
+                  >
+                    <View style={styles.phoneCountryOptionLeft}>
+                      <View style={styles.phoneCountryFlagWrap}>
+                        {country.flagPng ? (
+                          <Image source={{ uri: country.flagPng }} style={styles.phoneCountryFlag} />
+                        ) : (
+                          <Text style={styles.phoneCountryEmoji}>{country.emoji || '🌐'}</Text>
+                        )}
+                      </View>
+                      <View style={styles.phoneCountryOptionTextGroup}>
+                        <Text
+                          style={[
+                            styles.phoneCountryOptionName,
+                            isSelected && styles.selectedPhoneCountryOptionName,
+                          ]}
+                        >
+                          {country.name}
+                        </Text>
+                        <Text style={styles.phoneCountryOptionCode}>
+                          {country.iso2 || '--'} · {country.phoneCode || ''}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {isSelected && <Check size={16} color="#2D6A6F" />}
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </View>
         </View>
@@ -1061,6 +1258,113 @@ const styles = StyleSheet.create({
   selectedOptionText: {
     color: '#2D6A6F',
     fontFamily: 'Inter-Medium',
+  },
+  phoneFieldGroup: {
+    marginBottom: 16,
+  },
+  phoneFieldLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  phoneRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 12,
+  },
+  phoneCountryButton: {
+    minWidth: 128,
+    maxWidth: 160,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  phoneCountryFlagWrap: {
+    width: 24,
+    height: 18,
+    borderRadius: 4,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+  },
+  phoneCountryFlag: {
+    width: '100%',
+    height: '100%',
+  },
+  phoneCountryEmoji: {
+    fontSize: 15,
+  },
+  phoneCountryCode: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#111827',
+  },
+  phoneNumberInputContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  phoneInputIcon: {
+    marginRight: 12,
+  },
+  phoneNumberInput: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    paddingVertical: 0,
+  },
+  phoneCountryOptionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  selectedPhoneCountryOptionItem: {
+    backgroundColor: '#F0F9FF',
+  },
+  phoneCountryOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  phoneCountryOptionTextGroup: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  phoneCountryOptionName: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+  },
+  selectedPhoneCountryOptionName: {
+    color: '#2D6A6F',
+    fontFamily: 'Inter-Medium',
+  },
+  phoneCountryOptionCode: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 2,
   },
   geocodingSection: {
     marginBottom: 20,

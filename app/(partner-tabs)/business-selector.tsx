@@ -212,8 +212,7 @@ export default function BusinessSelector() {
           icon: '🛍️',
           description: 'Venta de productos para mascotas',
           availableFeatures: [
-            { key: 'products', name: 'Gestión de Productos', description: 'Administrar inventario y ventas' },
-            { key: 'agenda', name: 'Agenda de Citas', description: 'Gestionar citas con clientes' }
+            { key: 'products', name: 'Gestión de Productos', description: 'Administrar inventario y ventas' }
           ]
         };
       case 'shelter':

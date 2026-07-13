@@ -233,6 +233,7 @@ export default function PartnerDashboard() {
         .from('orders')
         .select('*')
         .or(`partner_id.eq.${partnerId},partner_breakdown.cs.${breakdownFilter}`)
+        .eq('is_split_master', false)
         .gte('created_at', startDate.toISOString())
         .lte('created_at', endDate.toISOString())
         .order('created_at', { ascending: false });
@@ -242,6 +243,7 @@ export default function PartnerDashboard() {
       }
 
       const orders = (ordersData || []).filter(order => {
+        if (order?.is_split_master) return false;
         if (order?.partner_id === partnerId) return true;
         if (order?.partner_breakdown?.partners && Object.prototype.hasOwnProperty.call(order.partner_breakdown.partners, partnerId)) return true;
         if (Array.isArray(order?.items)) {
@@ -258,7 +260,7 @@ export default function PartnerDashboard() {
         if (isServiceOrder(order)) {
           return ['pending', 'reserved', 'payment_failed'].includes(order.status);
         }
-        return order.status === 'pending';
+        return ['pending', 'insufficient_stock'].includes(order.status);
       });
 
       const completedOrders = orders.filter(order => {
@@ -385,6 +387,14 @@ export default function PartnerDashboard() {
 
   const handleManageServices = () => {
     if (partnerProfile && partnerProfile.id) {
+      if (partnerProfile.businessType === 'shelter') {
+        router.push({
+          pathname: '/partner/manage-adoptions',
+          params: { partnerId: partnerProfile.id }
+        });
+        return;
+      }
+
       router.push({
         pathname: '/partner/configure-activities',
         params: { 
@@ -480,6 +490,10 @@ export default function PartnerDashboard() {
     return partnerProfile?.businessType === 'shop';
   };
 
+  const isShelterBusiness = (): boolean => {
+    return partnerProfile?.businessType === 'shelter';
+  };
+
   // Función para verificar si debe mostrar la gestión de productos
   const shouldShowProducts = (): boolean => {
     return isShopBusiness() || isFeatureEnabled('products');
@@ -487,8 +501,14 @@ export default function PartnerDashboard() {
 
   // Función para verificar si debe mostrar la agenda
   const shouldShowAgenda = (): boolean => {
-    return isFeatureEnabled('agenda') || ['veterinary', 'grooming', 'boarding'].includes(partnerProfile?.businessType);
+    const agendaEnabled = partnerProfile?.features?.agenda !== false;
+    return partnerProfile?.businessType !== 'shop' && agendaEnabled;
   };
+  const manageServicesLabel = isShopBusiness()
+    ? 'Gestionar Productos'
+    : isShelterBusiness()
+      ? 'Gestionar Adopciones'
+      : 'Gestionar Servicios';
   const accountSubscription = resolvePartnerAccountSubscription(partnerRows);
   const effectivePartnerTier = accountSubscription?.subscriptionPlanTier || resolvePartnerPlanTier(
     partnerProfile?.subscription_plan_tier,
@@ -702,7 +722,7 @@ export default function PartnerDashboard() {
               onPress={handleManageServices}
             >
               <Package size={24} color="#10B981" />
-              <Text style={styles.quickActionText}>Gestionar Servicios</Text>
+              <Text style={styles.quickActionText}>{manageServicesLabel}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

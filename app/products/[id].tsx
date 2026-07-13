@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Share, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, ShoppingCart, Star, Plus, Minus, Heart, Share2, Truck, Package, Clock } from 'lucide-react-native';
+import { ArrowLeft, ShoppingCart, Star, Plus, Minus, Heart, Share2, Truck, Package, Clock, MapPin, Phone } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
@@ -11,6 +11,7 @@ import { supabaseClient } from '../../lib/supabase';
 import { useCart } from '@/contexts/CartContext';
 import { getActivePromotionForItem, incrementPromotionClicks } from '@/utils/promotions';
 import { hasSeenHint } from '../../utils/oneTimeHints';
+import { normalizePartnerDisplayData } from '../../utils/partnerDisplay';
 
 export default function ProductDetail() {
   const { id, discount } = useLocalSearchParams<{ id: string; discount?: string }>();
@@ -115,10 +116,7 @@ export default function ProductDetail() {
             .single();
 
           if (partnerData && !partnerError) {
-            setPartnerInfo({
-              id: partnerData.id,
-              ...partnerData
-            });
+            setPartnerInfo(normalizePartnerDisplayData(partnerData));
           }
 
           // Check for active promotions if no discount was passed
@@ -515,8 +513,24 @@ export default function ProductDetail() {
                   </Text>
                 </View>
               )}
-              <View>
+              <View style={styles.storeDetails}>
                 <Text style={styles.storeName}>{partnerInfo?.businessName || 'Tienda'}</Text>
+                {partnerInfo?.businessAddress ? (
+                  <View style={styles.storeMetaRow}>
+                    <MapPin size={12} color="#6B7280" />
+                    <Text style={styles.storeMetaText} numberOfLines={1}>
+                      {partnerInfo.businessAddress}
+                    </Text>
+                  </View>
+                ) : null}
+                {partnerInfo?.phone ? (
+                  <View style={styles.storeMetaRow}>
+                    <Phone size={12} color="#6B7280" />
+                    <Text style={styles.storeMetaText} numberOfLines={1}>
+                      {partnerInfo.phone}
+                    </Text>
+                  </View>
+                ) : null}
                 <Text style={styles.storeSubtitle}>Ver todos los productos</Text>
               </View>
             </View>
@@ -901,6 +915,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  storeDetails: {
+    flex: 1,
+  },
   storeLogo: {
     width: 40,
     height: 40,
@@ -926,6 +943,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
     marginBottom: 2,
+  },
+  storeMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 2,
+  },
+  storeMetaText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
   },
   storeSubtitle: {
     fontSize: 12,

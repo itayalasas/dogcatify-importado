@@ -11,6 +11,11 @@ const MOBILE_APP_SCHEME = "dogcatify";
 const SUBSCRIPTION_SCOPES = ["user", "partner"] as const;
 
 type SubscriptionScope = typeof SUBSCRIPTION_SCOPES[number];
+type SubscriptionReturnSyncResult = {
+  success: boolean;
+  localStatus: string | null;
+  mpStatus: string | null;
+};
 
 const isUuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -24,6 +29,35 @@ const isValidDate = (value?: string | null) => {
 const normalizeScope = (value?: string | null): SubscriptionScope => {
   const normalized = String(value || "").toLowerCase();
   return normalized === "partner" ? "partner" : "user";
+};
+
+const normalizeReturnStatus = (status?: string | null) => {
+  const normalized = String(status || "").toLowerCase();
+
+  switch (normalized) {
+    case "authorized":
+    case "approved":
+    case "active":
+      return "active";
+    case "trialing":
+      return "trialing";
+    case "in_process":
+    case "pending":
+    case "pending_review":
+      return "pending";
+    case "paused":
+      return "paused";
+    case "cancelled":
+    case "canceled":
+    case "rejected":
+      return "cancelled";
+    case "expired":
+      return "expired";
+    case "past_due":
+      return "past_due";
+    default:
+      return "unknown";
+  }
 };
 
 type SubscriptionReturnPathParams = {
@@ -68,7 +102,12 @@ const parseReturnPathParams = (pathname: string): SubscriptionReturnPathParams =
   };
 };
 
-const buildDeepLink = (subscriptionId: string | null, scope: SubscriptionScope = "user", target?: string | null) => {
+const buildDeepLink = (
+  subscriptionId: string | null,
+  scope: SubscriptionScope = "user",
+  target?: string | null,
+  extraParams: Record<string, string | null | undefined> = {},
+) => {
   const fallbackTarget = scope === "partner"
     ? `${MOBILE_APP_SCHEME}://partner/subscription`
     : `${MOBILE_APP_SCHEME}://profile/subscription`;
@@ -77,7 +116,54 @@ const buildDeepLink = (subscriptionId: string | null, scope: SubscriptionScope =
   if (subscriptionId) {
     url.searchParams.set("subscription_id", subscriptionId);
   }
+  url.searchParams.set("subscription_scope", scope);
+
+  Object.entries(extraParams).forEach(([key, value]) => {
+    const cleanValue = String(value || "").trim();
+    if (!cleanValue) return;
+
+    if (key === "partner_id" || key === "business_id") {
+      url.searchParams.set("businessId", cleanValue);
+      return;
+    }
+
+    url.searchParams.set(key, cleanValue);
+  });
+
   return url.toString();
+};
+
+const buildReturnMessage = (
+  scope: SubscriptionScope,
+  localStatus: string | null,
+  mpStatus: string | null,
+  synced: boolean,
+) => {
+  const normalizedStatus = normalizeReturnStatus(localStatus || mpStatus);
+  const subject = scope === "partner" ? "tu suscripcion de aliado" : "tu suscripcion";
+
+  if (!synced && normalizedStatus === "unknown") {
+    return `Estamos confirmando ${subject}. Si el estado no se refleja todavia, refresca en unos segundos.`;
+  }
+
+  switch (normalizedStatus) {
+    case "active":
+      return `Tu suscripcion${scope === "partner" ? " de aliado" : ""} quedo activa correctamente.`;
+    case "trialing":
+      return `Tu suscripcion${scope === "partner" ? " de aliado" : ""} quedo en periodo de prueba.`;
+    case "pending":
+      return `Tu suscripcion${scope === "partner" ? " de aliado" : ""} quedo pendiente de confirmacion en Mercado Pago.`;
+    case "paused":
+      return `Tu suscripcion${scope === "partner" ? " de aliado" : ""} quedo pausada.`;
+    case "cancelled":
+      return `Tu suscripcion${scope === "partner" ? " de aliado" : ""} quedo cancelada.`;
+    case "expired":
+      return `Tu suscripcion${scope === "partner" ? " de aliado" : ""} vencio. Debes renovarla para seguir usando el plan.`;
+    case "past_due":
+      return `Tu suscripcion${scope === "partner" ? " de aliado" : ""} tiene un pago pendiente.`;
+    default:
+      return `Estamos confirmando el estado de ${subject}.`;
+  }
 };
 
 const redirectResponse = (deepLink: string) => {
@@ -150,6 +236,7 @@ const fetchMercadoPagoOptional = async (accessToken: string, path: string) => {
 const mapPreapprovalStatus = (status: string | null | undefined) => {
   switch (String(status || "").toLowerCase()) {
     case "authorized":
+    case "approved":
     case "active":
       return "active";
     case "paused":
@@ -462,7 +549,7 @@ const findLocalSubscriptionFromPreapproval = async (
   return null;
 };
 
-const syncUserSubscription = async (supabase: any, subscriptionId: string) => {
+const syncUserSubscription = async (supabase: any, subscriptionId: string): Promise<SubscriptionReturnSyncResult> => {
   const { data: initialSubscription, error } = await supabase
     .from("user_subscriptions")
     .select("*")
@@ -485,7 +572,7 @@ const syncUserSubscription = async (supabase: any, subscriptionId: string) => {
       console.warn("[SubscriptionReturn][User] Could not resolve preapproval fallback", {
         subscriptionId,
       });
-      return false;
+      return { success: false, localStatus: initialSubscription?.status || null, mpStatus: null };
     }
 
     console.log("[SubscriptionReturn][User] Preapproval fallback resolved", {
@@ -498,7 +585,7 @@ const syncUserSubscription = async (supabase: any, subscriptionId: string) => {
     subscription = await findLocalSubscriptionFromPreapproval(supabase, preapproval, "user");
 
     if (!subscription) {
-      return false;
+      return { success: false, localStatus: null, mpStatus: preapproval?.status || null };
     }
   }
 
@@ -519,7 +606,7 @@ const syncUserSubscription = async (supabase: any, subscriptionId: string) => {
     console.warn("Subscription return could not find Mercado Pago preapproval:", {
       subscriptionId,
     });
-    return false;
+    return { success: false, localStatus: subscription?.status || null, mpStatus: null };
   }
 
   console.log("[SubscriptionReturn][User] Mercado Pago preapproval resolved", {
@@ -575,7 +662,7 @@ const syncUserSubscription = async (supabase: any, subscriptionId: string) => {
       subscriptionId,
       error: updateError.message,
     });
-    return false;
+    return { success: false, localStatus: effectiveStatus, mpStatus: preapproval?.status || null };
   }
 
   console.log("[SubscriptionReturn][User] Synced local subscription", {
@@ -584,10 +671,10 @@ const syncUserSubscription = async (supabase: any, subscriptionId: string) => {
     mpStatus: preapproval?.status,
     localStatus: effectiveStatus,
   });
-  return true;
+  return { success: true, localStatus: effectiveStatus, mpStatus: preapproval?.status || null };
 };
 
-const syncPartnerSubscription = async (supabase: any, subscriptionId: string) => {
+const syncPartnerSubscription = async (supabase: any, subscriptionId: string): Promise<SubscriptionReturnSyncResult> => {
   const { data: initialSubscription, error } = await supabase
     .from("partner_subscriptions")
     .select("*")
@@ -610,7 +697,7 @@ const syncPartnerSubscription = async (supabase: any, subscriptionId: string) =>
       console.warn("[SubscriptionReturn][Partner] Could not resolve preapproval fallback", {
         subscriptionId,
       });
-      return false;
+      return { success: false, localStatus: initialSubscription?.status || null, mpStatus: null };
     }
 
     console.log("[SubscriptionReturn][Partner] Preapproval fallback resolved", {
@@ -623,7 +710,7 @@ const syncPartnerSubscription = async (supabase: any, subscriptionId: string) =>
     subscription = await findLocalSubscriptionFromPreapproval(supabase, preapproval, "partner");
 
     if (!subscription) {
-      return false;
+      return { success: false, localStatus: null, mpStatus: preapproval?.status || null };
     }
   }
 
@@ -644,7 +731,7 @@ const syncPartnerSubscription = async (supabase: any, subscriptionId: string) =>
     console.warn("Partner subscription return could not find Mercado Pago preapproval:", {
       subscriptionId,
     });
-    return false;
+    return { success: false, localStatus: subscription?.status || null, mpStatus: null };
   }
 
   console.log("[SubscriptionReturn][Partner] Mercado Pago preapproval resolved", {
@@ -698,7 +785,7 @@ const syncPartnerSubscription = async (supabase: any, subscriptionId: string) =>
       subscriptionId,
       error: updateError.message,
     });
-    return false;
+    return { success: false, localStatus: String(updatePayload.status || mappedStatus), mpStatus: preapproval?.status || null };
   }
 
   console.log("[SubscriptionReturn][Partner] Synced local subscription", {
@@ -745,7 +832,7 @@ const syncPartnerSubscription = async (supabase: any, subscriptionId: string) =>
       });
     }
   }
-  return true;
+  return { success: true, localStatus: String(updatePayload.status || mappedStatus), mpStatus: preapproval?.status || null };
 };
 
 Deno.serve(async (req: Request) => {
@@ -764,6 +851,7 @@ Deno.serve(async (req: Request) => {
       (externalReference.startsWith("partner:") ? "partner" : "user"),
   );
   const target = String(url.searchParams.get("target") || "").trim() || null;
+  const partnerId = String(url.searchParams.get("business_id") || pathParams.partnerId || "").trim() || null;
   const rawSubscriptionId = subscriptionIdParam || pathParams.subscriptionId || externalReference || null;
   const subscriptionId = isUuid(subscriptionIdParam)
     ? subscriptionIdParam
@@ -773,7 +861,7 @@ Deno.serve(async (req: Request) => {
       ? externalReference
       : null;
   const syncReferenceId = subscriptionId || preapprovalIdParam || null;
-  const deepLink = buildDeepLink(rawSubscriptionId, scope, target);
+  let syncResult: SubscriptionReturnSyncResult | null = null;
 
   console.log("[SubscriptionReturn] Incoming return request", {
     url: url.toString(),
@@ -784,6 +872,7 @@ Deno.serve(async (req: Request) => {
     path_params: pathParams,
     scope,
     target,
+    partner_id: partnerId,
     resolved_subscription_id: subscriptionId,
     sync_reference_id: syncReferenceId,
   });
@@ -796,15 +885,28 @@ Deno.serve(async (req: Request) => {
       if (supabaseUrl && supabaseServiceKey) {
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
         if (scope === "partner") {
-          await syncPartnerSubscription(supabase, syncReferenceId);
+          syncResult = await syncPartnerSubscription(supabase, syncReferenceId);
         } else {
-          await syncUserSubscription(supabase, syncReferenceId);
+          syncResult = await syncUserSubscription(supabase, syncReferenceId);
         }
       }
     }
   } catch (error) {
     console.error("subscription-return sync failed:", error);
   }
+
+  const resolvedStatus = syncResult?.localStatus || syncResult?.mpStatus || "unknown";
+  const subscriptionMessage = buildReturnMessage(
+    scope,
+    syncResult?.localStatus || null,
+    syncResult?.mpStatus || null,
+    Boolean(syncResult?.success),
+  );
+  const deepLink = buildDeepLink(rawSubscriptionId, scope, target, {
+    partner_id: partnerId,
+    subscription_status: resolvedStatus,
+    subscription_message: subscriptionMessage,
+  });
 
   return redirectResponse(deepLink);
 });

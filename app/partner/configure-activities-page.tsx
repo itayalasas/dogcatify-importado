@@ -8,6 +8,14 @@ export default function ConfigureActivitiesPageRedirect() {
     const partnerId = Array.isArray(params.partnerId) ? params.partnerId[0] : params.partnerId;
     const businessType = Array.isArray(params.businessType) ? params.businessType[0] : params.businessType;
 
+    if (partnerId && businessType === 'shelter') {
+      router.replace({
+        pathname: '/partner/manage-adoptions',
+        params: { partnerId },
+      });
+      return;
+    }
+
     router.replace(
       partnerId
         ? {

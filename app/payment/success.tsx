@@ -136,6 +136,11 @@ export default function PaymentSuccess() {
                 order.status,
         paymentId: order.payment_id ? `#mp${order.payment_id.slice(-6)}` : 'Pendiente',
         isBooking: order.order_type === 'service_booking',
+        isSplitPurchase: Boolean(
+          order.is_split_master ||
+          Number(order.partner_breakdown?.total_partners || 0) > 1 ||
+          Object.keys(order.partner_breakdown?.partners || {}).length > 1
+        ),
         partnerName: order.partner_name,
         serviceName: order.service_name,
         items: order.items || [],
@@ -175,7 +180,8 @@ export default function PaymentSuccess() {
         total: '$430.00',
         status: 'Confirmado',
         paymentId: paymentId ? `#mp${paymentId}` : 'Procesando...',
-        isBooking: paymentType === 'booking'
+        isBooking: paymentType === 'booking',
+        isSplitPurchase: false,
       });
       setLoading(false);
     }
@@ -219,7 +225,9 @@ export default function PaymentSuccess() {
             ? 'Estamos validando tu pago con Mercado Pago. Esto puede tardar unos segundos.'
             : orderDetails?.isBooking 
               ? 'Tu reserva ha sido confirmada y el pago procesado correctamente.'
-              : 'Tu pedido ha sido confirmado y el pago procesado correctamente.'
+              : orderDetails?.isSplitPurchase
+                ? 'Tu compra ha sido confirmada y se dividió automáticamente por tienda.'
+                : 'Tu pedido ha sido confirmado y el pago procesado correctamente.'
           }
         </Text>
 
@@ -276,6 +284,11 @@ export default function PaymentSuccess() {
                 <Text style={styles.successItem}>
                   • Recibirás una confirmación por email
                 </Text>
+                {orderDetails?.isSplitPurchase && (
+                  <Text style={styles.successItem}>
+                    • Tu compra se dividió automáticamente por tienda
+                  </Text>
+                )}
                 <Text style={styles.successItem}>
                   • Te notificaremos cuando tu pedido sea enviado
                 </Text>

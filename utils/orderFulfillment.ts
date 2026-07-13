@@ -38,6 +38,8 @@ export const getOrderStatusLabel = (
       return 'Reservado';
     case 'payment_failed':
       return 'Pago fallido';
+    case 'insufficient_stock':
+      return 'Sin stock';
     case 'confirmed':
       return 'Confirmado';
     case 'processing':
@@ -49,7 +51,7 @@ export const getOrderStatusLabel = (
     case 'shipped':
       return isPickup ? 'Listo para retirar' : 'En reparto';
     case 'delivered':
-      return 'Entregado';
+      return isPickup ? 'Retirado' : 'Entregado';
     case 'completed':
       return 'Completado';
     case 'cancelled':

@@ -2,10 +2,12 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator, Alert, Linking, Platform } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Check, Clock, Crown, RefreshCw, Shield, Sparkles } from 'lucide-react-native';
+import { SubscriptionReturnBanner } from '@/components/SubscriptionReturnBanner';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { buildSubscriptionDeepLink, getSingleParam } from '../../utils/subscriptionReturn';
 import { buildUserLimitSummary, resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
 
 type BillingCycle = 'monthly' | 'yearly';
@@ -66,14 +68,6 @@ const getPlanCardTone = (plan: SubscriptionPlan, cycle: BillingCycle) => {
 const getPlanMercadoPagoId = (plan: SubscriptionPlan, cycle: BillingCycle) =>
   cycle === 'monthly' ? plan.mercadopago_monthly_plan_id : plan.mercadopago_yearly_plan_id;
 
-const getSingleParam = (value?: string | string[]) =>
-  Array.isArray(value) ? value[0] : value;
-
-const buildSubscriptionDeepLink = (subscriptionId?: string | string[]) => {
-  const id = getSingleParam(subscriptionId);
-  return `dogcatify://profile/subscription${id ? `?subscription_id=${encodeURIComponent(id)}` : ''}`;
-};
-
 const isMobileWebBrowser = () => {
   const userAgent = String((globalThis as any).navigator?.userAgent || '');
   return /Android|iPhone|iPad|iPod/i.test(userAgent);
@@ -83,7 +77,15 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function Subscription() {
   const { currentUser } = useAuth();
-  const { subscription_id } = useLocalSearchParams<{ subscription_id?: string }>();
+  const params = useLocalSearchParams();
+  const subscription_id = getSingleParam(params.subscription_id);
+  const subscription_status = getSingleParam(params.subscription_status);
+  const subscription_message = getSingleParam(params.subscription_message);
+  const subscription_scope = getSingleParam(params.subscription_scope) || getSingleParam(params.scope);
+  const target_param = getSingleParam(params.target);
+  const external_reference_param = getSingleParam(params.external_reference);
+  const business_id_param = getSingleParam(params.businessId);
+  const business_id_legacy_param = getSingleParam(params.business_id);
   const [loading, setLoading] = useState(true);
   const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null);
   const [syncingSubscriptionId, setSyncingSubscriptionId] = useState<string | null>(null);
@@ -114,13 +116,25 @@ export default function Subscription() {
     if (Platform.OS !== 'web' || !isMobileWebBrowser()) return;
 
     const timeoutId = setTimeout(() => {
-      Linking.openURL(buildSubscriptionDeepLink(subscription_id)).catch((error) => {
+      Linking.openURL(buildSubscriptionDeepLink({
+        ...params,
+        target: 'dogcatify://profile/subscription',
+      })).catch((error) => {
         console.warn('Could not open subscription deep link from web:', error);
       });
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [subscription_id]);
+  }, [
+    subscription_id,
+    subscription_status,
+    subscription_message,
+    subscription_scope,
+    target_param,
+    external_reference_param,
+    business_id_param,
+    business_id_legacy_param,
+  ]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -507,6 +521,14 @@ export default function Subscription() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {(getSingleParam(subscription_status) || getSingleParam(subscription_message)) && (
+          <SubscriptionReturnBanner
+            scope={subscription_scope}
+            status={subscription_status}
+            message={subscription_message}
+          />
+        )}
+
         {isWaitingForMpConfirmation && !userSubscription && (
           <Card style={styles.syncingCard}>
             <View style={styles.syncingHeader}>

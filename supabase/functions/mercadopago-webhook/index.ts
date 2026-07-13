@@ -133,8 +133,8 @@ async function syncOrderPaymentByOrderId(supabase: any, orderId: string): Promis
         continue;
       }
 
-      const approvedAccredited = results.find((payment: any) => payment.status === 'approved' && payment.status_detail === 'accredited');
-      const selectedPayment = approvedAccredited || results[0];
+      const approvedPayment = results.find((payment: any) => payment.status === 'approved');
+      const selectedPayment = approvedPayment || results[0];
 
       if (!selectedPayment?.id) {
         continue;
@@ -420,6 +420,323 @@ serve(async (req: Request) => {
   }
 });
 
+const roundMoney = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
+
+const cleanText = (value: unknown) => String(value || '').trim();
+
+const isPickupFulfillment = (shippingAddress: string | null | undefined) =>
+  /retiro/i.test(String(shippingAddress || ''));
+
+const buildPartnerBusinessAddress = (partner: any) => {
+  const directAddress = cleanText(partner?.business_address || partner?.address || partner?.location);
+  if (directAddress) return directAddress;
+
+  const street = cleanText(partner?.calle);
+  const number = cleanText(partner?.numero);
+  const neighborhood = cleanText(partner?.barrio);
+  const zipCode = cleanText(partner?.codigo_postal);
+
+  const streetLine = [street, number].filter(Boolean).join(' ').trim();
+  const addressLine = [streetLine, neighborhood].filter(Boolean).join(', ').trim();
+
+  if (zipCode) {
+    return addressLine ? `${addressLine} - CP ${zipCode}` : `CP ${zipCode}`;
+  }
+
+  return addressLine;
+};
+
+const buildPickupAddress = (partner: any, fallbackName?: string | null) => {
+  const businessName = cleanText(partner?.business_name || fallbackName);
+  const businessAddress = buildPartnerBusinessAddress(partner);
+  const addressParts = [businessName, businessAddress].filter(Boolean).join(' - ').trim();
+
+  return addressParts ? `Retiro en tienda: ${addressParts}` : 'Retiro en tienda';
+};
+
+const getSplitPartnerIds = (orderData: any) => {
+  const partnerIds = new Set<string>();
+  const breakdownPartners = orderData?.partner_breakdown?.partners || {};
+
+  Object.keys(breakdownPartners).forEach((partnerId) => {
+    const cleanPartnerId = cleanText(partnerId);
+    if (cleanPartnerId) partnerIds.add(cleanPartnerId);
+  });
+
+  if (Array.isArray(orderData?.items)) {
+    orderData.items.forEach((item: any) => {
+      const partnerId = cleanText(item?.partnerId || item?.partner_id);
+      if (partnerId) partnerIds.add(partnerId);
+    });
+  }
+
+  if (partnerIds.size === 0 && orderData?.partner_id) {
+    partnerIds.add(cleanText(orderData.partner_id));
+  }
+
+  return Array.from(partnerIds);
+};
+
+const buildSplitChildItems = (orderData: any, partnerId: string, breakdownPartner: any) => {
+  const sourceItems = Array.isArray(breakdownPartner?.items) && breakdownPartner.items.length > 0
+    ? breakdownPartner.items
+    : (Array.isArray(orderData?.items)
+        ? orderData.items.filter((item: any) =>
+            cleanText(item?.partnerId || item?.partner_id) === partnerId
+          )
+        : []);
+
+  return sourceItems.map((item: any) => ({
+    ...item,
+    partnerId,
+    partner_id: partnerId,
+    partner_name: cleanText(breakdownPartner?.partner_name || item?.partner_name || item?.partnerName || orderData?.partner_name || ''),
+  }));
+};
+
+const buildSplitChildPartnerBreakdown = (
+  partnerId: string,
+  partnerName: string,
+  partnerAddress: string,
+  items: any[],
+  subtotal: number,
+  commissionAmount: number,
+  shippingCost: number,
+  ivaAmount: number,
+  ivaRate: number,
+  ivaIncluded: boolean,
+) => ({
+  partners: {
+    [partnerId]: {
+      partner_id: partnerId,
+      partner_name: partnerName,
+      partner_address: partnerAddress,
+      items,
+      subtotal,
+    },
+  },
+  total_partners: 1,
+  commission_split: commissionAmount,
+  shipping_cost: shippingCost,
+  iva_rate: ivaRate,
+  iva_amount: ivaAmount,
+  iva_included: ivaIncluded,
+});
+
+const createSplitChildOrders = async (
+  supabase: any,
+  masterOrder: any,
+  paymentData: any,
+  paymentStatus: string,
+  statusDetail: string,
+  orderStatus: string,
+) => {
+  if (masterOrder?.order_type !== 'product_purchase') {
+    return { createdCount: 0, totalCount: 0 };
+  }
+
+  const partnerIds = getSplitPartnerIds(masterOrder);
+  if (partnerIds.length <= 1) {
+    return { createdCount: 0, totalCount: partnerIds.length };
+  }
+
+  const { data: existingChildren, error: existingChildrenError } = await supabase
+    .from('orders')
+    .select('id, partner_id')
+    .eq('parent_order_id', masterOrder.id);
+
+  if (existingChildrenError) {
+    console.warn('[MP Webhook][Split] Could not check existing split children', {
+      orderId: masterOrder.id,
+      error: existingChildrenError.message,
+    });
+  }
+
+  const existingPartnerIds = new Set(
+    (existingChildren || [])
+      .map((row: any) => cleanText(row?.partner_id))
+      .filter(Boolean),
+  );
+
+  const { data: partnersData, error: partnersError } = await supabase
+    .from('partners')
+    .select('id, business_name, email, phone, address, location, calle, numero, barrio, codigo_postal, commission_percentage')
+    .in('id', partnerIds);
+
+  if (partnersError) {
+    throw partnersError;
+  }
+
+  const partnersMap = new Map((partnersData || []).map((partner: any) => [partner.id, partner]));
+  const breakdownPartners = masterOrder?.partner_breakdown?.partners || {};
+  const groupData: any[] = partnerIds.map((partnerId) => {
+    const breakdownPartner = (breakdownPartners[partnerId] || {}) as any;
+    const partnerInfo = (partnersMap.get(partnerId) || {}) as any;
+    const items = buildSplitChildItems(masterOrder, partnerId, breakdownPartner);
+    const subtotal = roundMoney(
+      Number.isFinite(Number(breakdownPartner?.subtotal))
+        ? Number(breakdownPartner.subtotal)
+        : items.reduce((sum: number, item: any) => sum + Number(item?.subtotal || 0), 0),
+    );
+    const grossTotal = roundMoney(items.reduce((sum: number, item: any) => {
+      const itemTotal = Number(item?.total);
+      if (Number.isFinite(itemTotal)) return sum + itemTotal;
+
+      const price = Number(item?.price || 0);
+      const quantity = Number(item?.quantity || 1);
+      return sum + (price * quantity);
+    }, 0));
+    const ivaAmount = roundMoney(items.reduce((sum: number, item: any) => sum + Number(item?.iva_amount || 0), 0) || (grossTotal - subtotal));
+    const partnerName = cleanText(partnerInfo?.business_name || breakdownPartner?.partner_name || masterOrder?.partner_name || 'Tienda');
+    const partnerAddress = buildPartnerBusinessAddress(partnerInfo);
+    const commissionPercentage = Number(partnerInfo?.commission_percentage ?? masterOrder?.commission_percentage ?? 5);
+
+    return {
+      partnerId,
+      partnerName,
+      partnerAddress,
+      partnerInfo,
+      items,
+      subtotal,
+      grossTotal,
+      ivaAmount,
+      commissionPercentage,
+      isExisting: existingPartnerIds.has(partnerId),
+    };
+  });
+
+  const totalShippingCost = roundMoney(Number(masterOrder?.shipping_cost || 0));
+  const totalGross = roundMoney(groupData.reduce((sum: number, group: any) => sum + group.grossTotal, 0));
+  let shippingRemainder = totalShippingCost;
+
+  groupData.forEach((group: any, index: number) => {
+    if (groupData.length === 0) {
+      group.shippingShare = 0;
+      return;
+    }
+
+    if (index === groupData.length - 1) {
+      group.shippingShare = roundMoney(shippingRemainder);
+      return;
+    }
+
+    const baseShare = totalShippingCost > 0
+      ? (totalGross > 0
+        ? totalShippingCost * (group.grossTotal / totalGross)
+        : totalShippingCost / groupData.length)
+      : 0;
+    group.shippingShare = roundMoney(baseShare);
+    shippingRemainder = roundMoney(shippingRemainder - group.shippingShare);
+  });
+
+  let createdCount = 0;
+  const now = new Date().toISOString();
+  const masterShippingIsPickup = isPickupFulfillment(masterOrder?.shipping_address);
+
+  for (const group of groupData) {
+    if (group.isExisting) {
+      console.log('[MP Webhook][Split] Child order already exists, skipping insert', {
+        parentOrderId: masterOrder.id,
+        partnerId: group.partnerId,
+      });
+      continue;
+    }
+
+    const childCommissionAmount = roundMoney((group.subtotal * group.commissionPercentage) / 100);
+    const childPartnerAmount = roundMoney(group.subtotal - childCommissionAmount);
+    const childShippingAddress = masterShippingIsPickup
+      ? buildPickupAddress(group.partnerInfo, group.partnerName)
+      : String(masterOrder?.shipping_address || '').trim() || null;
+    const childItems = group.items;
+    const childPartnerBreakdown = buildSplitChildPartnerBreakdown(
+      group.partnerId,
+      group.partnerName,
+      group.partnerAddress,
+      childItems,
+      group.subtotal,
+      childCommissionAmount,
+      group.shippingShare,
+      group.ivaAmount,
+      Number(masterOrder?.iva_rate || 0),
+      Boolean(masterOrder?.iva_included_in_price),
+    );
+
+    const childOrderData = {
+      partner_id: group.partnerId,
+      customer_id: masterOrder.customer_id,
+      items: childItems,
+      status: orderStatus,
+      total_amount: roundMoney(group.subtotal + group.ivaAmount + group.shippingShare),
+      shipping_address: childShippingAddress,
+      created_at: now,
+      updated_at: now,
+      payment_preference_id: masterOrder.payment_preference_id || null,
+      payment_id: paymentData?.id || masterOrder.payment_id || null,
+      payment_method: masterOrder.payment_method || 'mercadopago',
+      payment_status: paymentStatus,
+      payment_data: paymentData,
+      commission_amount: childCommissionAmount,
+      partner_amount: childPartnerAmount,
+      partner_breakdown: childPartnerBreakdown,
+      booking_id: masterOrder.booking_id || null,
+      order_type: masterOrder.order_type || 'product_purchase',
+      service_id: masterOrder.service_id || null,
+      appointment_date: masterOrder.appointment_date || null,
+      appointment_time: masterOrder.appointment_time || null,
+      pet_id: masterOrder.pet_id || null,
+      booking_notes: masterOrder.booking_notes || null,
+      subtotal: group.subtotal,
+      iva_rate: masterOrder.iva_rate || 0,
+      iva_amount: group.ivaAmount,
+      iva_included_in_price: masterOrder.iva_included_in_price || false,
+      partner_name: group.partnerName,
+      service_name: masterOrder.service_name || null,
+      pet_name: masterOrder.pet_name || null,
+      customer_name: masterOrder.customer_name || null,
+      customer_email: masterOrder.customer_email || null,
+      customer_phone: masterOrder.customer_phone || null,
+      shipping_cost: group.shippingShare,
+      payment_link_expires_at: masterOrder.payment_link_expires_at || null,
+      payment_retry_count: masterOrder.payment_retry_count || 0,
+      last_payment_url: masterOrder.last_payment_url || null,
+      payment_status_detail: paymentData?.status_detail || statusDetail || null,
+      parent_order_id: masterOrder.id,
+      is_split_master: false,
+      skip_stock_sync: !Boolean(masterOrder?.skip_stock_sync),
+    };
+
+    const { data: insertedChild, error: insertChildError } = await supabase
+      .from('orders')
+      .insert(childOrderData)
+      .select('id')
+      .single();
+
+    if (insertChildError) {
+      if (insertChildError.code === '23505') {
+        console.warn('[MP Webhook][Split] Duplicate child order ignored', {
+          parentOrderId: masterOrder.id,
+          partnerId: group.partnerId,
+        });
+        continue;
+      }
+
+      throw insertChildError;
+    }
+
+    createdCount += 1;
+    console.log('[MP Webhook][Split] Child order created', {
+      parentOrderId: masterOrder.id,
+      childOrderId: insertedChild?.id || null,
+      partnerId: group.partnerId,
+    });
+  }
+
+  return {
+    createdCount,
+    totalCount: groupData.length,
+  };
+};
+
 async function processPaymentNotification(supabase: any, notification: WebhookNotification) {
   try {
     const paymentId = notification.data.id;
@@ -632,14 +949,19 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
     const paymentStatus = paymentData.status;
     const statusDetail = paymentData.status_detail;
     const orderStatus = mapPaymentStatusToOrderStatus(paymentStatus);
+    const isSplitMasterOrder = Boolean(orderData.is_split_master)
+      || Number(orderData?.partner_breakdown?.total_partners || 0) > 1
+      || Object.keys(orderData?.partner_breakdown?.partners || {}).length > 1;
 
     console.log(`💰 Payment validation:`);
     console.log(`   MP Status: ${paymentStatus}`);
     console.log(`   MP Status Detail: ${statusDetail}`);
     console.log(`   Order Status (mapped): ${orderStatus}`);
 
-    const isApproved = paymentStatus === 'approved' && statusDetail === 'accredited';
-    console.log(`   Is Approved & Accredited: ${isApproved}`);
+    const isApproved = paymentStatus === 'approved';
+    const isAccredited = statusDetail === 'accredited';
+    console.log(`   Is Approved: ${isApproved}`);
+    console.log(`   Is Accredited: ${isAccredited}`);
 
     const totalAmount = paymentData.transaction_amount;
     const commissionAmount = orderData.commission_amount || (totalAmount * 0.05);
@@ -676,13 +998,36 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
     console.log(`✅ Order ${orderId} updated successfully`);
 
     if (isApproved) {
-      console.log('🎉 Payment is APPROVED and ACCREDITED! Processing...');
+      console.log('🎉 Payment is APPROVED! Processing...');
+
+      if (isSplitMasterOrder) {
+        const splitResult = await createSplitChildOrders(
+          supabase,
+          orderData,
+          paymentData,
+          paymentStatus,
+          statusDetail,
+          orderStatus,
+        );
+
+        console.log('🧩 Split order processing completed', {
+          masterOrderId: orderId,
+          splitChildrenCreated: splitResult.createdCount,
+          splitChildrenTotal: splitResult.totalCount,
+        });
+      }
 
       await updateProductStock(supabase, orderId);
 
       if (orderData.order_type === 'service_booking' && orderData.booking_id) {
         console.log(`📅 Updating booking ${orderData.booking_id} status to confirmed`);
         await updateBookingStatus(supabase, orderData.booking_id, 'confirmed', paymentId);
+      }
+
+      if (isSplitMasterOrder) {
+        console.log('🧾 Skipping accounting fallback for split master order');
+        console.log('✅ All post-payment actions completed');
+        return;
       }
 
       // Fallback robusto: disparar envío contable explícitamente al confirmar pago
