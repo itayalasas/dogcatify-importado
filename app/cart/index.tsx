@@ -62,7 +62,7 @@ export default function Cart() {
   const hasMixedStores = cartStores.length > 1;
   const cartStoreLabel = cartStores.map((store) => store.partnerName).join(', ');
   const mixedStoreMessage = hasMixedStores
-    ? `Tu carrito contiene productos de ${cartStoreLabel}. Tu compra se dividirá automáticamente en pedidos separados por tienda.`
+    ? `Tu carrito contiene productos de ${cartStoreLabel}. Solo puedes comprar productos de una tienda por vez.`
     : '';
   const [newAddress, setNewAddress] = useState({
     street: '',
@@ -324,6 +324,18 @@ export default function Cart() {
 
     if (!cart || cart.length === 0) {
       Alert.alert('Error', 'Tu carrito está vacío');
+      return;
+    }
+
+    if (hasMixedStores) {
+      Alert.alert(
+        'Solo una tienda por compra',
+        'Tu carrito tiene productos de distintas tiendas. Vacíalo y comienza una nueva compra con una sola tienda.',
+        [
+          { text: 'Vaciar carrito', style: 'destructive', onPress: clearCart },
+          { text: 'Cancelar', style: 'cancel' },
+        ]
+      );
       return;
     }
 
@@ -730,9 +742,9 @@ export default function Cart() {
               
               {hasMixedStores ? (
                 <View style={styles.mixedStoreWarning}>
-                  <Text style={styles.mixedStoreWarningTitle}>Compra dividida por tienda</Text>
+                  <Text style={styles.mixedStoreWarningTitle}>Solo una tienda por compra</Text>
                   <Text style={styles.mixedStoreWarningText}>
-                    {mixedStoreMessage || 'Cada tienda recibirá su pedido por separado después del pago.'}
+                    {mixedStoreMessage || 'Vacía el carrito para continuar con productos de una sola tienda.'}
                   </Text>
                   <View style={styles.mixedStoreWarningActions}>
                     <View style={styles.mixedStoreWarningAction}>

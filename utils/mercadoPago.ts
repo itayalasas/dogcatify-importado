@@ -601,7 +601,7 @@ export const createMultiPartnerOrder = async (
   totalShippingCost: number
 ): Promise<{ orders: any[], paymentPreferences: any[], isTestMode: boolean }> => {
   try {
-    logger.info('Creating multi-partner order with partner OAuth fees');
+    logger.info('Creating single-store order with partner OAuth fees');
     console.log('Cart items received:', cartItems.map(item => ({
       id: item.id,
       name: item.name,
@@ -609,8 +609,16 @@ export const createMultiPartnerOrder = async (
       partnerName: item.partnerName
     })));
 
-    // Use the first partner as the primary partner for the unified order
-    const primaryPartnerId = cartItems[0].partnerId;
+    const uniquePartnerIds = [...new Set(cartItems.map((item) => String(item.partnerId || '').trim()).filter(Boolean))];
+    if (uniquePartnerIds.length > 1) {
+      throw new Error('Tu carrito solo puede contener productos de una sola tienda. Vacía el carrito para cambiar de tienda.');
+    }
+
+    // Use the single partner in the cart as the primary partner for the order
+    const primaryPartnerId = uniquePartnerIds[0] || String(cartItems[0]?.partnerId || '').trim();
+    if (!primaryPartnerId) {
+      throw new Error('No se pudo determinar la tienda del carrito.');
+    }
 
     // Get primary partner's configuration including commission percentage and IVA
     const primaryPartnerConfig = await getPartnerMercadoPagoConfig(primaryPartnerId);
@@ -674,9 +682,8 @@ export const createMultiPartnerOrder = async (
       };
     });
 
-    const uniquePartnerIds = [...new Set(itemsWithIVA.map((item) => item.partnerId).filter(Boolean))];
-    const totalPartners = uniquePartnerIds.length;
-    const isSplitMasterOrder = totalPartners > 1;
+    const totalPartners = 1;
+    const isSplitMasterOrder = false;
     // Prepare order data
     console.log('ðŸ” DEBUG Order Data BEFORE saving:', {
       subtotal: ivaCalculation.subtotal,
