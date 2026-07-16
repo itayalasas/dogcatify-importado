@@ -167,6 +167,11 @@ export default function AddService() {
   };
 
   const config = getServiceConfig(businessType || '');
+  const isShopBusiness = businessType === 'shop';
+  const isBoardingBusiness = businessType === 'boarding';
+  const isWalkingBusiness = businessType === 'walking';
+  const showServicePolicyFields = !isShopBusiness && !isBoardingBusiness;
+  const showPricingFields = isShopBusiness || hasCost;
 
   const CURRENCY_OPTIONS = [
     { code: 'UYU', dgiCode: '858', name: 'Peso Uruguayo', symbol: '$' },
@@ -279,14 +284,16 @@ export default function AddService() {
       return;
     }
 
-    if (!cancellationHours || parseInt(cancellationHours) < 1) {
-      Alert.alert('Error', 'Por favor especifica las horas mínimas para cancelar (mínimo 1 hora)');
-      return;
-    }
+    if (showServicePolicyFields) {
+      if (!cancellationHours || parseInt(cancellationHours) < 1) {
+        Alert.alert('Error', 'Por favor especifica las horas mínimas para cancelar (mínimo 1 hora)');
+        return;
+      }
 
-    if (!hasCost && (!confirmationHours || parseInt(confirmationHours) < 1)) {
-      Alert.alert('Error', 'Para servicios sin costo, debes especificar las horas para enviar confirmación (mínimo 1 hora)');
-      return;
+      if (!hasCost && (!confirmationHours || parseInt(confirmationHours) < 1)) {
+        Alert.alert('Error', 'Para servicios sin costo, debes especificar las horas para enviar confirmación (mínimo 1 hora)');
+        return;
+      }
     }
 
     if (config.needsStock && !stock) {
@@ -659,6 +666,8 @@ export default function AddService() {
                 ? 'Completa la información de tu producto para agregarlo a tu tienda'
                 : businessType === 'boarding'
                 ? 'Configura las capacidades y precios de tu servicio de hospedaje'
+                : isWalkingBusiness
+                ? 'Configura tu servicio de paseo y define luego los cupos por horario en la agenda'
                 : 'Completa la información del servicio que ofreces a tus clientes'}
             </Text>
           </View>
@@ -675,8 +684,10 @@ export default function AddService() {
           />
 
           <Input
-            label="Descripción *"
-            placeholder="Describe detalladamente el servicio..."
+            label={businessType === 'shop' ? 'Descripción del producto *' : 'Descripción del servicio *'}
+            placeholder={businessType === 'shop'
+              ? 'Describe detalladamente el producto...'
+              : 'Describe detalladamente el servicio...'}
             value={description}
             onChangeText={setDescription}
             multiline
@@ -708,52 +719,56 @@ export default function AddService() {
                 </View>
               </View>
 
-              {/* Switch para indicar si el servicio tiene costo */}
-              <View style={styles.switchContainer}>
-                <View style={styles.switchLabelContainer}>
-                  <Text style={styles.switchLabel}>¿El servicio tiene costo?</Text>
-                  <Text style={styles.switchHint}>
-                    Desactiva esta opción si el servicio es gratuito
-                  </Text>
-                </View>
-                <Switch
-                  value={hasCost}
-                  onValueChange={setHasCost}
-                  trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
-                  thumbColor={hasCost ? '#FFFFFF' : '#F3F4F6'}
-                />
-              </View>
-
-              {/* Campos de política de cancelación y confirmación */}
-              <Input
-                label="Horas para cancelar cita *"
-                placeholder="24"
-                value={cancellationHours}
-                onChangeText={setCancellationHours}
-                keyboardType="numeric"
-                leftIcon={<Clock size={20} color="#6B7280" />}
-              />
-              <Text style={styles.fieldHint}>
-                ⏰ Tiempo mínimo (en horas) para que el cliente pueda cancelar la cita
-              </Text>
-
-              {!hasCost && (
+              {showServicePolicyFields && (
                 <>
+                  {/* Switch para indicar si el servicio tiene costo */}
+                  <View style={styles.switchContainer}>
+                    <View style={styles.switchLabelContainer}>
+                      <Text style={styles.switchLabel}>¿El servicio tiene costo?</Text>
+                      <Text style={styles.switchHint}>
+                        Desactiva esta opción si el servicio es gratuito
+                      </Text>
+                    </View>
+                    <Switch
+                      value={hasCost}
+                      onValueChange={setHasCost}
+                      trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
+                      thumbColor={hasCost ? '#FFFFFF' : '#F3F4F6'}
+                    />
+                  </View>
+
+                  {/* Campos de política de cancelación y confirmación */}
                   <Input
-                    label="Horas para confirmar reserva *"
-                    placeholder="48"
-                    value={confirmationHours}
-                    onChangeText={setConfirmationHours}
+                    label="Horas para cancelar cita *"
+                    placeholder="24"
+                    value={cancellationHours}
+                    onChangeText={setCancellationHours}
                     keyboardType="numeric"
                     leftIcon={<Clock size={20} color="#6B7280" />}
                   />
                   <Text style={styles.fieldHint}>
-                    📧 Se enviará un email de confirmación con este tiempo de anticipación (solo para servicios sin costo)
+                    ⏰ Tiempo mínimo (en horas) para que el cliente pueda cancelar la cita
                   </Text>
+
+                  {!hasCost && (
+                    <>
+                      <Input
+                        label="Horas para confirmar reserva *"
+                        placeholder="48"
+                        value={confirmationHours}
+                        onChangeText={setConfirmationHours}
+                        keyboardType="numeric"
+                        leftIcon={<Clock size={20} color="#6B7280" />}
+                      />
+                      <Text style={styles.fieldHint}>
+                        📧 Se enviará un email de confirmación con este tiempo de anticipación (solo para servicios sin costo)
+                      </Text>
+                    </>
+                  )}
                 </>
               )}
 
-              {hasCost && (
+              {showPricingFields && (
                 <>
                   <Input
                     label={config.priceLabel + ' *'}
@@ -885,6 +900,15 @@ export default function AddService() {
               keyboardType="numeric"
               leftIcon={<Clock size={20} color="#6B7280" />}
             />
+          )}
+
+          {isWalkingBusiness && (
+            <View style={styles.walkingHint}>
+              <Text style={styles.walkingHintTitle}>Cupos por horario</Text>
+              <Text style={styles.walkingHintText}>
+                La cantidad de perros que puedes aceptar en una misma franja se define en la agenda de horarios.
+              </Text>
+            </View>
           )}
 
           <View style={styles.imageSection}>
@@ -1067,6 +1091,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
+    lineHeight: 18,
+  },
+  walkingHint: {
+    backgroundColor: '#ECFDF5',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  walkingHintTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#065F46',
+    marginBottom: 6,
+  },
+  walkingHintText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#047857',
     lineHeight: 18,
   },
   boardingSection: {

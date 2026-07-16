@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, TextInput, ActivityIndicator, Linking, Image, Animated, AppState, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -14,6 +14,14 @@ import { supabaseClient } from '@/lib/supabase';
 import { createServiceBookingOrder, openMercadoPagoPayment, isTestEnvironment } from '../../../utils/mercadoPago';
 import { envConfig } from '../../../utils/envConfig';
 import { getActivePromotionForItem } from '@/utils/promotions';
+import {
+  generateAvailableTimeOptions,
+  isTimeSlotAvailable,
+  type AvailableTimeOption,
+  type BookingSlotEntry,
+  type ScheduleSlotEntry,
+} from '@/utils/bookingAvailability';
+import { isDateClosed, type ScheduleClosureEntry } from '@/utils/scheduleExceptions';
 
 interface CardType {
   name: string;
@@ -55,10 +63,11 @@ export default function ServiceBooking() {
   // Date and time selection
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [availableTimes, setAvailableTimes] = useState<string[]>([]);
+  const [availableTimeOptions, setAvailableTimeOptions] = useState<AvailableTimeOption[]>([]);
   const [notes, setNotes] = useState('');
-  const [bookedTimes, setBookedTimes] = useState<string[]>([]);
-  const [partnerSchedule, setPartnerSchedule] = useState<any[]>([]);
+  const [bookedBookings, setBookedBookings] = useState<BookingSlotEntry[]>([]);
+  const [partnerSchedule, setPartnerSchedule] = useState<ScheduleSlotEntry[]>([]);
+  const [scheduleClosures, setScheduleClosures] = useState<ScheduleClosureEntry[]>([]);
   
   // Payment flow
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -236,7 +245,29 @@ export default function ServiceBooking() {
         .eq('is_active', true);
 
       if (scheduleError) throw scheduleError;
-      setPartnerSchedule(scheduleData || []);
+      const formattedSchedule = (scheduleData || []).map((item: any) => ({
+        id: item.id,
+        partnerId: item.partner_id,
+        dayOfWeek: item.day_of_week,
+        startTime: item.start_time,
+        endTime: item.end_time,
+        breakStartTime: item.break_start_time,
+        breakEndTime: item.break_end_time,
+        slotDuration: item.slot_duration,
+        maxSlots: item.max_slots,
+        isActive: item.is_active,
+      }));
+      setPartnerSchedule(formattedSchedule);
+
+      const { data: closureData, error: closureError } = await supabaseClient
+        .from('business_schedule_closures')
+        .select('id, partner_id, closed_date, reason, closure_type, source_year')
+        .eq('partner_id', partnerId)
+        .order('closed_date', { ascending: true });
+
+      if (closureError) throw closureError;
+
+      setScheduleClosures(closureData || []);
     } catch (error) {
       console.error('Error fetching booking data:', error);
       Alert.alert('Error', 'No se pudo cargar la información de la reserva');
@@ -245,84 +276,69 @@ export default function ServiceBooking() {
     }
   };
 
-  // Generar horarios disponibles cuando el servicio esté cargado
-  useEffect(() => {
-    if (service) {
-      generateAvailableTimes();
-    }
-  }, [service]);
-
-  const generateAvailableTimes = async () => {
-    if (!service) return;
-
-    const times = [];
-    const serviceDuration = service.duration || 60; // Duración en minutos
-    const startHour = 9;
-    const endHour = 17;
-
-    // Generar slots según la duración del servicio
-    let currentTime = startHour * 60; // Convertir a minutos desde medianoche
-    const endTime = endHour * 60;
-
-    while (currentTime + serviceDuration <= endTime) {
-      const hour = Math.floor(currentTime / 60);
-      const minutes = currentTime % 60;
-      const timeString = `${hour.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-      times.push(timeString);
-      currentTime += serviceDuration; // Incrementar por la duración del servicio
-    }
-
-    setAvailableTimes(times);
-  };
-
   const fetchBookedTimes = async (date: Date) => {
-    if (!partnerId || !serviceId) return;
+    if (!partnerId || !serviceId) return [];
 
     try {
       console.log('🔍 Fetching booked times for date:', date.toDateString(), 'service:', serviceId);
 
       const dateString = date.toISOString().split('T')[0];
 
-      // IMPORTANTE: Consultar ORDERS (no bookings) porque ahí están las reservas confirmadas
-      // Filtrar por:
-      // 1. service_id = el servicio actual
-      // 2. appointment_date = la fecha seleccionada
-      // 3. status != 'cancelled' (solo reservas activas)
-      // 4. order_type = 'service_booking' (solo reservas de servicios)
-      const { data: orders, error: ordersError } = await supabaseClient
-        .from('orders')
-        .select('id, appointment_time, appointment_date, status, order_type, service_name')
-        .eq('service_id', serviceId)
-        .gte('appointment_date', `${dateString}T00:00:00`)
-        .lte('appointment_date', `${dateString}T23:59:59`)
-        .neq('status', 'cancelled')
-        .eq('order_type', 'service_booking');
+      const { data: bookingsData, error } = await supabaseClient
+        .from('bookings')
+        .select('id, time, service_duration, date, status, service_id')
+        .eq('partner_id', partnerId)
+        .in('status', ['pending', 'pending_payment', 'confirmed'])
+        .gte('date', `${dateString}T00:00:00`)
+        .lte('date', `${dateString}T23:59:59`);
 
-      if (ordersError) {
-        console.error('❌ Error fetching booked times from orders:', ordersError);
-        return;
+      if (error) {
+        console.error('❌ Error fetching booked times from bookings:', error);
+        return [];
       }
 
-      console.log('📊 Found orders for date:', orders);
+      const formattedBookings: BookingSlotEntry[] = bookingsData?.map((booking) => ({
+        appointment_time: booking.time,
+        service_duration: booking.service_duration,
+      })) || [];
 
-      // Extraer las horas ya reservadas
-      const bookedTimeSlots = orders
-        ?.filter(order => order.appointment_time) // Solo las que tienen hora
-        .map(order => order.appointment_time) || [];
-
-      console.log('⏰ Booked time slots from ORDERS:', bookedTimeSlots);
-      setBookedTimes(bookedTimeSlots);
+      console.log('⏰ Booked bookings from BOOKINGS:', formattedBookings);
+      setBookedBookings(formattedBookings);
+      return formattedBookings;
     } catch (error) {
       console.error('❌ Error fetching booked times:', error);
+      return [];
     }
   };
 
-  // Fetch booked times when date or service changes
+  const refreshAvailability = async (date: Date) => {
+    const bookedBookings = await fetchBookedTimes(date);
+    const timeOptions = generateAvailableTimeOptions({
+      date,
+      schedules: partnerSchedule,
+      bookings: bookedBookings,
+      serviceDuration: service?.duration || undefined,
+      closures: scheduleClosures,
+    });
+
+    setAvailableTimeOptions(timeOptions);
+    setSelectedTime(null);
+  };
+
   useEffect(() => {
-    if (selectedDate && partnerId && serviceId) {
-      fetchBookedTimes(selectedDate);
+    if (selectedDate && partnerSchedule.length > 0 && service) {
+      void refreshAvailability(selectedDate);
     }
-  }, [selectedDate, partnerId, serviceId]);
+  }, [selectedDate, partnerSchedule, service, scheduleClosures]);
+
+  useEffect(() => {
+    if (selectedDate && isDateClosed(selectedDate, scheduleClosures)) {
+      setSelectedDate(null);
+      setSelectedTime(null);
+      setAvailableTimeOptions([]);
+      setBookedBookings([]);
+    }
+  }, [selectedDate, scheduleClosures]);
 
   // Validar fecha seleccionada cuando cambia la categoría
   useEffect(() => {
@@ -347,13 +363,16 @@ export default function ServiceBooking() {
     }
   }, [boardingCategory]);
 
-  const generateAvailableDates = () => {
-    const dates: Date[] = [];
+  const generateAvailableDates = (
+    schedules = partnerSchedule,
+    closures = scheduleClosures,
+  ) => {
+    const dates: Array<{ date: Date; isAvailable: boolean }> = [];
     const today = new Date();
     const now = new Date();
 
     // Obtener los días de la semana que tienen horario configurado
-    const scheduledDays = partnerSchedule.map(s => s.day_of_week);
+    const scheduledDays = schedules.map(s => s.dayOfWeek);
 
     // Si no hay horarios configurados, no mostrar fechas
     if (scheduledDays.length === 0) {
@@ -369,13 +388,18 @@ export default function ServiceBooking() {
       const dayOfWeek = date.getDay();
 
       // Verificar si este día tiene horario configurado
-      const daySchedule = partnerSchedule.find(s => s.day_of_week === dayOfWeek);
+      const daySchedule = schedules.find(s => s.dayOfWeek === dayOfWeek);
 
       if (!daySchedule) continue;
 
       // Si es hoy, verificar si aún está dentro del horario
       if (i === 0) {
-        const [endHour, endMinute] = daySchedule.end_time.split(':').map(Number);
+        const endTimeValue = daySchedule.endTime ?? daySchedule.end_time;
+        if (!endTimeValue) {
+          continue;
+        }
+
+        const [endHour, endMinute] = endTimeValue.split(':').map(Number);
         const endTime = new Date(now);
         endTime.setHours(endHour, endMinute, 0, 0);
 
@@ -398,7 +422,9 @@ export default function ServiceBooking() {
         }
       }
 
-      dates.push(date);
+      const isAvailable = !isDateClosed(date, closures);
+
+      dates.push({ date, isAvailable });
 
       // Limitar la cantidad de fechas mostradas
       if (boardingCategory === 'Fin de semana' && dates.length >= 9) break;
@@ -554,23 +580,33 @@ export default function ServiceBooking() {
         const dateString = selectedDate.toISOString().split('T')[0];
 
         console.log('🔍 Validando disponibilidad de horario para servicio gratuito...');
-        const { data: existingOrders, error: checkError } = await supabaseClient
-          .from('orders')
-          .select('id, appointment_time, status')
-          .eq('service_id', service.id)
-          .gte('appointment_date', `${dateString}T00:00:00`)
-          .lte('appointment_date', `${dateString}T23:59:59`)
-          .eq('appointment_time', selectedTime)
-          .neq('status', 'cancelled')
-          .eq('order_type', 'service_booking');
+        const { data: existingBookings, error: checkError } = await supabaseClient
+          .from('bookings')
+          .select('id, time, service_duration, status')
+          .eq('partner_id', partner.id)
+          .in('status', ['pending', 'pending_payment', 'confirmed'])
+          .gte('date', `${dateString}T00:00:00`)
+          .lte('date', `${dateString}T23:59:59`);
 
         if (checkError) {
           console.error('❌ Error verificando disponibilidad:', checkError);
           throw new Error('No se pudo verificar la disponibilidad del horario');
         }
 
-        if (existingOrders && existingOrders.length > 0) {
-          console.warn('⚠️ Ya existe una reserva para esta fecha/hora/servicio:', existingOrders);
+        const slotStillAvailable = isTimeSlotAvailable({
+          date: selectedDate,
+          selectedTime,
+          schedules: partnerSchedule,
+          bookings: (existingBookings || []).map((booking: any) => ({
+            appointment_time: booking.time,
+            service_duration: booking.service_duration,
+          })),
+          serviceDuration: service.duration || undefined,
+          closures: scheduleClosures,
+        });
+
+        if (!slotStillAvailable) {
+          console.warn('⚠️ Ya existe una reserva para esta fecha/hora/servicio:', existingBookings);
           setPaymentLoading(false);
           Alert.alert(
             'Horario No Disponible',
@@ -579,9 +615,7 @@ export default function ServiceBooking() {
               {
                 text: 'Entendido',
                 onPress: () => {
-                  // Recargar los horarios ocupados
-                  fetchBookedTimes(selectedDate);
-                  setSelectedTime(null);
+                  void refreshAvailability(selectedDate);
                 }
               }
             ]
@@ -866,23 +900,33 @@ export default function ServiceBooking() {
         const dateString = selectedDate.toISOString().split('T')[0];
 
         console.log('🔍 Validando disponibilidad de horario...');
-        const { data: existingOrders, error: checkError } = await supabaseClient
-          .from('orders')
-          .select('id, appointment_time, status')
-          .eq('service_id', service.id)
-          .gte('appointment_date', `${dateString}T00:00:00`)
-          .lte('appointment_date', `${dateString}T23:59:59`)
-          .eq('appointment_time', selectedTime)
-          .neq('status', 'cancelled')
-          .eq('order_type', 'service_booking');
+        const { data: existingBookings, error: checkError } = await supabaseClient
+          .from('bookings')
+          .select('id, time, service_duration, status')
+          .eq('partner_id', partner.id)
+          .in('status', ['pending', 'pending_payment', 'confirmed'])
+          .gte('date', `${dateString}T00:00:00`)
+          .lte('date', `${dateString}T23:59:59`);
 
         if (checkError) {
           console.error('❌ Error verificando disponibilidad:', checkError);
           throw new Error('No se pudo verificar la disponibilidad del horario');
         }
 
-        if (existingOrders && existingOrders.length > 0) {
-          console.warn('⚠️ Ya existe una reserva para esta fecha/hora/servicio:', existingOrders);
+        const slotStillAvailable = isTimeSlotAvailable({
+          date: selectedDate,
+          selectedTime,
+          schedules: partnerSchedule,
+          bookings: (existingBookings || []).map((booking: any) => ({
+            appointment_time: booking.time,
+            service_duration: booking.service_duration,
+          })),
+          serviceDuration: service.duration || undefined,
+          closures: scheduleClosures,
+        });
+
+        if (!slotStillAvailable) {
+          console.warn('⚠️ Ya existe una reserva para esta fecha/hora/servicio:', existingBookings);
           setPaymentLoading(false);
           setPaymentStep('methods');
           Alert.alert(
@@ -892,9 +936,7 @@ export default function ServiceBooking() {
               {
                 text: 'Entendido',
                 onPress: () => {
-                  // Recargar los horarios ocupados
-                  fetchBookedTimes(selectedDate);
-                  setSelectedTime(null);
+                  void refreshAvailability(selectedDate);
                 }
               }
             ]
@@ -1136,11 +1178,11 @@ export default function ServiceBooking() {
             </View>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.datesScroll}>
-              {generateAvailableDates().map((date, index) => {
-              const dateInfo = formatDate(date);
-              const isSelected = selectedDate?.toDateString() === date.toDateString();
-              const today = new Date();
-              const isToday = date.toDateString() === today.toDateString();
+              {generateAvailableDates().map(({ date, isAvailable }, index) => {
+               const dateInfo = formatDate(date);
+               const isSelected = selectedDate?.toDateString() === date.toDateString();
+               const today = new Date();
+               const isToday = date.toDateString() === today.toDateString();
 
               return (
                 <TouchableOpacity
@@ -1148,9 +1190,11 @@ export default function ServiceBooking() {
                   style={[
                     styles.dateOption,
                     isSelected && styles.selectedDateOption,
-                    isToday && !isSelected && styles.todayDateOption
+                    isToday && !isSelected && styles.todayDateOption,
+                    !isAvailable && { opacity: 0.35 }
                   ]}
-                  onPress={() => setSelectedDate(date)}
+                  onPress={() => isAvailable && setSelectedDate(date)}
+                  disabled={!isAvailable}
                 >
                   {isToday && (
                     <View style={styles.todayBadge}>
@@ -1190,8 +1234,15 @@ export default function ServiceBooking() {
           <Card style={styles.timeCard}>
             <Text style={styles.sectionTitle}>Selecciona una hora</Text>
             <View style={styles.timesGrid}>
-              {availableTimes.map((time) => {
-                const isBooked = bookedTimes.includes(time);
+              {availableTimeOptions.map((option) => {
+                const { time, availableSlots, maxSlots } = option;
+                const isBooked = availableSlots <= 0;
+                const showAvailableSlots = maxSlots > 1 && availableSlots > 1;
+                const availabilityLabel = isBooked
+                  ? 'Reservado'
+                  : showAvailableSlots
+                    ? `${availableSlots} turnos`
+                    : null;
 
                 const isToday = selectedDate.toDateString() === new Date().toDateString();
                 let isPastTime = false;
@@ -1223,13 +1274,24 @@ export default function ServiceBooking() {
                     isBooked ? "#9CA3AF" :
                     selectedTime === time ? "#FFFFFF" : "#6B7280"
                   } />
-                  <Text style={[
-                    styles.timeText,
-                    selectedTime === time && styles.selectedTimeText,
-                    isBooked && styles.bookedTimeText
-                  ]}>
-                    {time}
-                  </Text>
+                  <View style={styles.timeLabelContainer}>
+                    <Text style={[
+                      styles.timeText,
+                      selectedTime === time && styles.selectedTimeText,
+                      isBooked && styles.bookedTimeText
+                    ]}>
+                      {time}
+                    </Text>
+                    {availabilityLabel && (
+                      <Text style={[
+                        styles.availableSlotsText,
+                        selectedTime === time && styles.selectedAvailableSlotsText,
+                        isBooked && styles.bookedAvailableSlotsText,
+                      ]}>
+                        {availabilityLabel}
+                      </Text>
+                    )}
+                  </View>
                 </TouchableOpacity>
                 );
               })}
@@ -1514,6 +1576,10 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
     width: '31.5%',
   },
+  timeLabelContainer: {
+    marginLeft: 6,
+    alignItems: 'center',
+  },
   selectedTimeOption: {
     backgroundColor: '#4285F4',
     borderColor: '#4285F4',
@@ -1527,14 +1593,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     color: '#111827',
-    marginLeft: 6,
+    marginLeft: 0,
+  },
+  availableSlotsText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
   },
   selectedTimeText: {
     color: '#FFFFFF',
   },
+  selectedAvailableSlotsText: {
+    color: '#E0F2FE',
+  },
   bookedTimeText: {
     color: '#9CA3AF',
     textDecorationLine: 'line-through',
+  },
+  bookedAvailableSlotsText: {
+    color: '#9CA3AF',
   },
   notesCard: {
     marginBottom: 16,
