@@ -188,7 +188,7 @@ IMPORTANTE: Responde en español, solo el array JSON válido, sin texto adiciona
   }
 });
 
-import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
+/*import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -376,4 +376,4 @@ IMPORTANTE: Responde en español, solo el array JSON válido, sin texto adiciona
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+});*/
