@@ -1,5 +1,7 @@
 trigger:
-  - main   # o la rama que uses
+  branches:
+    include:
+      - main
 
 pool:
   name: 'Default'
@@ -7,110 +9,249 @@ pool:
     - Agent.Name -equals dogcatify-androide
 
 variables:
-  # 🔐 Grupo de variables con los secretos del keystore
-  - group: android-signing          # ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+  - group: android-signing
 
-  # Versión de Node
   - name: NODE_VERSION
     value: '18.x'
 
-  # 🔢 versionCode incremental (2, 3, 4, ...)
-  # Como ya usaste el 1 en Google Play, arrancamos en 2
   - name: ANDROID_VERSION_CODE
     value: $[counter('android_version', 2)]
 
-  # 📛 versionName: puedes cambiar el formato si quieres
   - name: ANDROID_VERSION_NAME
     value: '1.0.$(Build.BuildId)'
 
+  - name: NPM_CACHE_FOLDER
+    value: '$(Pipeline.Workspace)/.npm'
+
+  - name: GRADLE_USER_HOME
+    value: '$(Pipeline.Workspace)/.gradle'
+
 steps:
-  # 1. Instalar Node.js
+  # ============================================================
+  # 1. INSTALAR NODE
+  # ============================================================
+
   - task: NodeTool@0
     inputs:
       versionSpec: '$(NODE_VERSION)'
     displayName: 'Instalar Node.js'
 
-  # 2. Instalar dependencias del proyecto
   - script: |
-      npm install
-    displayName: 'Instalar dependencias (npm install)'
+      node --version
+      npm --version
+    displayName: 'Validar Node.js y npm'
 
-  # 3. Actualizar versionCode/version en app.json ANTES del prebuild
+  # ============================================================
+  # 2. RESTAURAR CACHÉ NPM
+  # ============================================================
+
+  - task: Cache@2
+    inputs:
+      key: 'npm | "$(Agent.OS)" | package-lock.json'
+      restoreKeys: |
+        npm | "$(Agent.OS)"
+      path: '$(NPM_CACHE_FOLDER)'
+    displayName: 'Restaurar caché de npm'
+
+  # ============================================================
+  # 3. INSTALAR DEPENDENCIAS
+  # ============================================================
+
   - script: |
-      echo "Actualizando app.json con versionCode=$(ANDROID_VERSION_CODE) y version=$(ANDROID_VERSION_NAME)"
+      npm ci \
+        --cache "$(NPM_CACHE_FOLDER)" \
+        --prefer-offline \
+        --no-audit \
+        --no-fund
+    displayName: 'Instalar dependencias'
+    env:
+      CI: 'true'
+
+  # ============================================================
+  # 4. ACTUALIZAR VERSIONES
+  # ============================================================
+
+  - script: |
+      set -e
+
+      echo "versionCode=$(ANDROID_VERSION_CODE)"
+      echo "versionName=$(ANDROID_VERSION_NAME)"
 
       node - << 'EOF'
       const fs = require('fs');
+
       const path = './app.json';
+      const versionCode = Number.parseInt(
+        process.env.ANDROID_VERSION_CODE,
+        10
+      );
+      const versionName = process.env.ANDROID_VERSION_NAME;
 
-      const code = parseInt(process.env.ANDROID_VERSION_CODE, 10);
-      const name = process.env.ANDROID_VERSION_NAME;
+      if (!Number.isInteger(versionCode) || versionCode <= 0) {
+        throw new Error(
+          `ANDROID_VERSION_CODE inválido: ${process.env.ANDROID_VERSION_CODE}`
+        );
+      }
 
-      const json = JSON.parse(fs.readFileSync(path, 'utf8'));
+      if (!versionName) {
+        throw new Error('ANDROID_VERSION_NAME no fue definido');
+      }
 
-      if (!json.expo) json.expo = {};
-      if (!json.expo.android) json.expo.android = {};
+      const json = JSON.parse(
+        fs.readFileSync(path, 'utf8')
+      );
 
-      json.expo.android.versionCode = code;
-      json.expo.version = name;
+      json.expo ??= {};
+      json.expo.android ??= {};
 
-      fs.writeFileSync(path, JSON.stringify(json, null, 2));
-      console.log(`✅ app.json actualizado -> android.versionCode=${code}, version=${name}`);
+      json.expo.version = versionName;
+      json.expo.android.versionCode = versionCode;
+
+      fs.writeFileSync(
+        path,
+        `${JSON.stringify(json, null, 2)}\n`
+      );
+
+      console.log(
+        `app.json actualizado: version=${versionName}, versionCode=${versionCode}`
+      );
       EOF
-    displayName: 'Actualizar versionCode / version en app.json'
+    displayName: 'Actualizar app.json'
     env:
       ANDROID_VERSION_CODE: $(ANDROID_VERSION_CODE)
       ANDROID_VERSION_NAME: $(ANDROID_VERSION_NAME)
 
-  # 4. Generar código nativo de Android (Expo prebuild)
-  - script: |
-      npx expo prebuild --platform android --non-interactive
-    displayName: 'Expo prebuild Android'
+  # ============================================================
+  # 5. ACTUALIZAR VERSIONES DIRECTAMENTE EN ANDROID
+  # ============================================================
 
-  # 5. Dar permisos de ejecución a gradlew
+  - script: |
+      set -e
+
+      BUILD_GRADLE="android/app/build.gradle"
+
+      if [ ! -f "$BUILD_GRADLE" ]; then
+        echo "No se encontró $BUILD_GRADLE"
+        exit 1
+      fi
+
+      sed -i \
+        "s/versionCode [0-9][0-9]*/versionCode $(ANDROID_VERSION_CODE)/" \
+        "$BUILD_GRADLE"
+
+      sed -i \
+        "s/versionName \"[^\"]*\"/versionName \"$(ANDROID_VERSION_NAME)\"/" \
+        "$BUILD_GRADLE"
+
+      echo "Versiones configuradas en android/app/build.gradle:"
+      grep -E "versionCode|versionName" "$BUILD_GRADLE"
+    displayName: 'Actualizar versión nativa Android'
+
+  # ============================================================
+  # 6. PREPARAR GRADLE
+  # ============================================================
+
   - script: |
       chmod +x android/gradlew
-    displayName: 'Dar permisos a gradlew'
+    displayName: 'Dar permisos a Gradle'
 
-  # 6. Descargar el keystore desde Secure Files
+  - task: Cache@2
+    inputs:
+      key: 'gradle | "$(Agent.OS)" | **/*.gradle* | **/gradle-wrapper.properties'
+      restoreKeys: |
+        gradle | "$(Agent.OS)"
+      path: '$(GRADLE_USER_HOME)'
+    displayName: 'Restaurar caché de Gradle'
+
+  # ============================================================
+  # 7. DESCARGAR KEYSTORE
+  # ============================================================
+
   - task: DownloadSecureFile@1
     name: downloadKeystore
     inputs:
-      secureFile: 'dogcatify-release.jks'   # 👈 nombre EXACTO en Secure Files
-    displayName: 'Descargar keystore desde Secure Files'
+      secureFile: 'dogcatify-release.jks'
+    displayName: 'Descargar keystore'
 
-  # 7. Copiar el keystore a una carpeta conocida dentro del agente
   - script: |
-      echo "System.DefaultWorkingDirectory = $SYSTEM_DEFAULTWORKINGDIRECTORY"
-      echo "Keystore descargado en        = $DOWNLOAD_KEYSTORE_PATH"
+      set -e
 
-      mkdir -p "$SYSTEM_DEFAULTWORKINGDIRECTORY/android_keystore"
-      cp "$DOWNLOAD_KEYSTORE_PATH" "$SYSTEM_DEFAULTWORKINGDIRECTORY/android_keystore/release.jks"
+      KEYSTORE_DIR="$(System.DefaultWorkingDirectory)/android_keystore"
+      KEYSTORE_PATH="$KEYSTORE_DIR/release.jks"
 
-      ls -l "$SYSTEM_DEFAULTWORKINGDIRECTORY/android_keystore"
-    displayName: 'Copiar keystore para el build'
-    env:
-      SYSTEM_DEFAULTWORKINGDIRECTORY: $(System.DefaultWorkingDirectory)
-      DOWNLOAD_KEYSTORE_PATH: $(downloadKeystore.secureFilePath)
+      mkdir -p "$KEYSTORE_DIR"
 
-  # 8. Construir AAB firmado
+      cp \
+        "$(downloadKeystore.secureFilePath)" \
+        "$KEYSTORE_PATH"
+
+      chmod 600 "$KEYSTORE_PATH"
+
+      test -f "$KEYSTORE_PATH"
+
+      echo "Keystore preparado correctamente."
+    displayName: 'Preparar keystore'
+
+  # ============================================================
+  # 8. CONSTRUIR AAB
+  # ============================================================
+
   - script: |
+      set -e
+
       cd android
-      ./gradlew bundleRelease
-    displayName: 'Construir Android App Bundle (bundleRelease)'
+
+      ./gradlew bundleRelease \
+        --build-cache \
+        --parallel \
+        --no-daemon \
+        --stacktrace
+    displayName: 'Construir Android App Bundle'
     env:
+      NODE_ENV: production
+      CI: 'true'
+
       ANDROID_HOME: /home/azureuser/android-sdk
       ANDROID_SDK_ROOT: /home/azureuser/android-sdk
       JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
-      ANDROID_KEYSTORE_PATH: '$(System.DefaultWorkingDirectory)/android_keystore/release.jks'
-      ANDROID_KEYSTORE_PASSWORD: '$(ANDROID_KEYSTORE_PASSWORD)'
-      ANDROID_KEY_ALIAS: '$(ANDROID_KEY_ALIAS)'
-      ANDROID_KEY_PASSWORD: '$(ANDROID_KEY_PASSWORD)'
 
-  # 9. Publicar el artefacto (AAB)
-  - task: PublishBuildArtifacts@1
+      GRADLE_USER_HOME: $(GRADLE_USER_HOME)
+
+      ANDROID_KEYSTORE_PATH: $(System.DefaultWorkingDirectory)/android_keystore/release.jks
+      ANDROID_KEYSTORE_PASSWORD: $(ANDROID_KEYSTORE_PASSWORD)
+      ANDROID_KEY_ALIAS: $(ANDROID_KEY_ALIAS)
+      ANDROID_KEY_PASSWORD: $(ANDROID_KEY_PASSWORD)
+
+  # ============================================================
+  # 9. PREPARAR ARTEFACTO
+  # ============================================================
+
+  - script: |
+      set -e
+
+      SOURCE_AAB="android/app/build/outputs/bundle/release/app-release.aab"
+      DEST_DIR="$(Build.ArtifactStagingDirectory)/android"
+      DEST_AAB="$DEST_DIR/dogcatify-$(ANDROID_VERSION_NAME)-$(ANDROID_VERSION_CODE).aab"
+
+      if [ ! -f "$SOURCE_AAB" ]; then
+        echo "No se encontró el AAB:"
+        echo "$SOURCE_AAB"
+        exit 1
+      fi
+
+      mkdir -p "$DEST_DIR"
+      cp "$SOURCE_AAB" "$DEST_AAB"
+
+      ls -lh "$DEST_AAB"
+    displayName: 'Preparar artefacto Android'
+
+  # ============================================================
+  # 10. PUBLICAR ARTEFACTO
+  # ============================================================
+
+  - task: PublishPipelineArtifact@1
     inputs:
-      pathToPublish: 'android/app/build/outputs/bundle/release'
-      artifactName: 'android-app'
-      publishLocation: 'Container'
+      targetPath: '$(Build.ArtifactStagingDirectory)/android'
+      artifact: 'android-app'
+      publishLocation: 'pipeline'
     displayName: 'Publicar artefacto Android'
