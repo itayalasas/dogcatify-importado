@@ -104,6 +104,7 @@ Deno.serve(async (req: Request) => {
       const isSupabaseFunctionTarget = invoiceApiUrl.includes('/functions/v1/');
       const requestHeaders: Record<string, string> = {
         'Content-Type': 'application/json',
+        'x-api-key': invoiceApiKey,
         // Compatibilidad hacia atrÃ¡s con integraciones existentes
         'X-Integration-Key': invoiceApiKey,
         // Algunos endpoints nuevos validan Authorization en lugar de X-Integration-Key

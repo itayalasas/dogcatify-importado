@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, TextInput, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { ArrowLeft, Trash2, TriangleAlert as AlertTriangle, Shield } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
@@ -9,6 +11,9 @@ import { supabaseClient } from '../../lib/supabase';
 import { envConfig } from '../../utils/envConfig';
 
 const DOGCATIFY_STORAGE_BUCKET = 'dogcatify';
+const SAVED_CREDENTIALS_KEY = '@saved_credentials';
+const BIOMETRIC_EMAIL_KEY = 'biometric_email';
+const BIOMETRIC_PASSWORD_KEY = 'biometric_password';
 
 const extractDogcatifyStoragePath = (value?: string | null) => {
   const rawValue = String(value || '').replace(/^VIDEO:/, '');
@@ -44,6 +49,25 @@ const removeDogcatifyStorageObjects = async (values: Array<string | null | undef
 
   if (error) {
     console.warn('Could not remove some user storage objects during account deletion:', error);
+  }
+};
+
+const clearLocalAuthArtifacts = async () => {
+  try {
+    await AsyncStorage.removeItem(SAVED_CREDENTIALS_KEY);
+  } catch (error) {
+    console.warn('Could not clear saved credentials during account deletion:', error);
+  }
+
+  if (Platform.OS === 'web') {
+    return;
+  }
+
+  try {
+    await SecureStore.deleteItemAsync(BIOMETRIC_EMAIL_KEY);
+    await SecureStore.deleteItemAsync(BIOMETRIC_PASSWORD_KEY);
+  } catch (error) {
+    console.warn('Could not clear biometric credentials during account deletion:', error);
   }
 };
 
@@ -544,6 +568,7 @@ export default function DeleteAccount() {
       // Sign out user from current session
       setDeletionProgress(prev => [...prev, 'Cerrando sesión...']);
       console.log('Signing out user...');
+      await clearLocalAuthArtifacts();
       await logout();
       
       setDeletionProgress(prev => [...prev, '✅ Datos del usuario eliminados exitosamente']);

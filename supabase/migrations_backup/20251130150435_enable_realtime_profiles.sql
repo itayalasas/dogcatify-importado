@@ -1,0 +1,2 @@
+/*\n  # Enable Realtime for profiles table\n\n  1. Changes\n    - Enable realtime replication for the profiles table\n    - This allows Supabase Realtime to broadcast changes (INSERT, UPDATE, DELETE) to subscribed clients\n\n  2. Purpose\n    - Enable real-time updates for Dotty assistant visibility toggle\n    - Allow instant UI updates when users change their Dotty preferences\n*/\n\n-- Enable realtime for profiles table\nALTER PUBLICATION supabase_realtime ADD TABLE profiles;
+\n;

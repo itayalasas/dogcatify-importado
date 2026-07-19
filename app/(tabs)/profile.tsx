@@ -11,7 +11,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { useBiometric } from '../../contexts/BiometricContext';
-import { supabaseClient } from '../../lib/supabase';
+import { supabaseClient, updateUserProfile } from '../../lib/supabase';
 import { getAvailableRoles } from '../../utils/onboarding';
 import { getSingleParam } from '../../utils/subscriptionReturn';
 import {
@@ -62,7 +62,7 @@ const resolvePartnerAccountPlan = (partnerRows: any[]) => {
 };
 
 export default function Profile() {
-  const { currentUser, logout, activeRole } = useAuth();
+  const { currentUser, logout, activeRole, updateCurrentUser } = useAuth();
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
   const { expoPushToken, notificationsEnabled, registerForPushNotifications, disableNotifications } = useNotifications();
@@ -88,6 +88,7 @@ export default function Profile() {
   const [isDottyEnabled, setIsDottyEnabled] = useState(true);
   const [dottyPlanEnabled, setDottyPlanEnabled] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isRoleUpgradeLoading, setIsRoleUpgradeLoading] = useState(false);
   const skipInitialFocusRefreshRef = React.useRef(true);
   const subscriptionReturnParams = useLocalSearchParams();
   const availableRoles = getAvailableRoles(currentUser);
@@ -534,7 +535,7 @@ export default function Profile() {
   };
 
   const handleChangeRole = () => {
-    router.push({
+    router.replace({
       pathname: '/auth/select-role',
       params: { source: 'profile' },
     });
@@ -545,6 +546,39 @@ export default function Profile() {
       router.push('/(partner-tabs)/business-selector');
     } else {
       router.push('/partner-register');
+    }
+  };
+
+  const handleEnableOwnerRole = async () => {
+    if (!currentUser?.id || currentUser.isOwner || isRoleUpgradeLoading) {
+      return;
+    }
+
+    try {
+      setIsRoleUpgradeLoading(true);
+
+      await updateUserProfile(currentUser.id, {
+        email: currentUser.email,
+        is_owner: true,
+      });
+
+      updateCurrentUser({
+        ...currentUser,
+        isOwner: true,
+      });
+
+      Alert.alert(
+        'Perfil de dueño activado',
+        'Tu cuenta ahora también puede entrar como dueño. Ya puedes usar "Cambiar rol" desde tu perfil para alternar entre aliado y dueño.'
+      );
+    } catch (error) {
+      console.error('Error enabling owner role:', error);
+      Alert.alert(
+        'No pudimos activar el perfil de dueño',
+        'Inténtalo nuevamente en unos segundos.'
+      );
+    } finally {
+      setIsRoleUpgradeLoading(false);
     }
   };
 
@@ -970,6 +1004,36 @@ export default function Profile() {
             </TouchableOpacity>
           )}
 
+          {!currentUser.isPartner && (
+            <TouchableOpacity style={styles.menuOption} onPress={handlePartnerMode}>
+              <View style={styles.menuOptionLeft}>
+                <Building size={20} color="#6B7280" />
+                <Text style={styles.menuOptionText}>Convertirme en aliado</Text>
+              </View>
+              <ChevronRight size={16} color="#6B7280" />
+            </TouchableOpacity>
+          )}
+
+          {isPartnerView && !currentUser.isOwner && (
+            <TouchableOpacity
+              style={[styles.menuOption, isRoleUpgradeLoading && styles.menuOptionDisabled]}
+              onPress={handleEnableOwnerRole}
+              disabled={isRoleUpgradeLoading}
+            >
+              <View style={styles.menuOptionLeft}>
+                <User size={20} color="#6B7280" />
+                <Text style={styles.menuOptionText}>
+                  {isRoleUpgradeLoading ? 'Activando perfil de dueño...' : 'Habilitar perfil de dueño'}
+                </Text>
+              </View>
+              {isRoleUpgradeLoading ? (
+                <ActivityIndicator size="small" color="#6B7280" />
+              ) : (
+                <ChevronRight size={16} color="#6B7280" />
+              )}
+            </TouchableOpacity>
+          )}
+
           {!isPartnerView && (
             <>
               <TouchableOpacity style={styles.menuOption} onPress={handleMyOrders}>
@@ -1366,6 +1430,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
+  },
+  menuOptionDisabled: {
+    opacity: 0.7,
   },
   menuOptionLeft: {
     flexDirection: 'row',

@@ -20,6 +20,7 @@ import { supabaseClient } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { envConfig } from '@/utils/envConfig';
 import { type AppRole, getStoredActivePartnerBusinessId } from '@/utils/onboarding';
+import { resolveSubscriptionPlanLimits } from '@/utils/subscriptionPlanLimits';
 import { router, usePathname, useSegments } from 'expo-router';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -262,6 +263,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const [inputText, setInputText] = useState('');
   const [showQuickActions, setShowQuickActions] = useState(true);
   const [isDottyEnabled, setIsDottyEnabled] = useState<boolean | null>(null);
+  const [dottyPlanEnabled, setDottyPlanEnabled] = useState<boolean | null>(null);
   const [activePartnerBusinessId, setActivePartnerBusinessId] = useState<string | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [petSummary, setPetSummary] = useState<PetSummaryState>({
@@ -398,7 +400,15 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       return false;
     }
 
-    // Check 2: Dotty habilitado por el usuario
+    // Check 2: Dotty debe estar incluido en el plan activo
+    if (dottyPlanEnabled !== true) {
+      console.log('[Dotty] shouldShowDotty: NO - Dotty not included in current plan', {
+        dottyPlanEnabled,
+      });
+      return false;
+    }
+
+    // Check 3: Dotty habilitado por el usuario
     if (isDottyEnabled === false) {
       console.log('[Dotty] shouldShowDotty: NO - Dotty disabled by user (isDottyEnabled=false)');
       return false;
@@ -423,7 +433,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     const firstSegment = segments?.[0];
     const isAuthRoute = firstSegment === 'auth';
 
-    // Check 3: Ruta permitida
+    // Check 4: Ruta permitida
     if (isAuthRoute || isHiddenRoute) {
       console.log('[Dotty] shouldShowDotty: NO - Hidden route', {
         pathname: currentPath,
@@ -441,7 +451,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     });
 
     return true;
-  }, [isDottyEnabled, currentUser, pathname, segments]);
+  }, [dottyPlanEnabled, isDottyEnabled, currentUser, pathname, segments]);
 
   useEffect(() => {
     loadPosition(); // Cargar posición guardada
@@ -477,6 +487,30 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     if (currentUser) {
       try {
         console.log('[Dotty] Checking status for user:', currentUser.id);
+        const { data: subscriptionData, error: subscriptionError } = await supabaseClient
+          .from('user_subscriptions')
+          .select(`
+            status,
+            subscription_plans (
+              tier,
+              audience_target,
+              limits
+            )
+          `)
+          .eq('user_id', currentUser.id)
+          .in('status', ['active', 'trialing', 'pending', 'paused'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (subscriptionError) {
+          console.error('[Dotty] Error checking subscription limits:', subscriptionError);
+        }
+
+        const userPlanLimits = resolveSubscriptionPlanLimits(subscriptionData?.subscription_plans || null);
+        const planAllowsDotty = userPlanLimits.users.dottyEnabled;
+        setDottyPlanEnabled(planAllowsDotty);
+
         const { data, error } = await supabaseClient
           .from('profiles')
           .select('dotty_enabled')
@@ -491,28 +525,31 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
         }
 
         if (data) {
-          // Si dotty_enabled es null o undefined, tratar como true (activado por defecto)
-          // Si es explícitamente false, respetar esa configuración
-          const isEnabled = data.dotty_enabled !== false;
+          // Si dotty_enabled es null o undefined, tratar como false hasta que el plan lo permita
+          // y el usuario lo habilite explícitamente desde su perfil.
+          const isEnabled = planAllowsDotty && data.dotty_enabled !== false;
           console.log('[Dotty] Status loaded from DB:', {
             raw_value: data.dotty_enabled,
             computed_value: isEnabled,
+            plan_allows_dotty: planAllowsDotty,
             is_null: data.dotty_enabled === null,
             is_undefined: data.dotty_enabled === undefined
           });
           setIsDottyEnabled(isEnabled);
         } else {
-          console.log('[Dotty] No profile data found, defaulting to enabled');
-          setIsDottyEnabled(true);
+          console.log('[Dotty] No profile data found, defaulting to hidden');
+          setIsDottyEnabled(false);
         }
       } catch (error) {
         console.error('[Dotty] Exception checking Dotty status:', error);
         // En caso de excepción, mantener null (no mostrar hasta confirmar)
         setIsDottyEnabled(null);
+        setDottyPlanEnabled(false);
       }
     } else {
       console.log('[Dotty] No current user, hiding Dotty');
       setIsDottyEnabled(false);
+      setDottyPlanEnabled(false);
     }
   };
 
@@ -581,6 +618,39 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     };
   }, [currentUser?.id]);
 
+  // Escuchar cambios en la suscripción del usuario para ocultar/mostrar Dotty según el plan
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    console.log('[Dotty] Setting up subscription plan listener for user:', currentUser.id);
+
+    const channelName = `dotty-plan-${currentUser.id}`;
+
+    const subscription = supabaseClient
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_subscriptions',
+          filter: `user_id=eq.${currentUser.id}`,
+        },
+        () => {
+          console.log('[Dotty] Subscription change detected, reloading access state');
+          checkDottyStatus();
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Dotty] Subscription plan listener status:', status);
+      });
+
+    return () => {
+      console.log('[Dotty] Cleaning up subscription plan listener');
+      supabaseClient.removeChannel(subscription);
+    };
+  }, [currentUser?.id]);
+
   // Recargar estado cuando cambia el usuario
   useEffect(() => {
     if (currentUser?.id) {
@@ -589,6 +659,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     } else {
       console.log('[Dotty] No user, hiding Dotty');
       setIsDottyEnabled(false);
+      setDottyPlanEnabled(false);
     }
   }, [currentUser?.id]);
 

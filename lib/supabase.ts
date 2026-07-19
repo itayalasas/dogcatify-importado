@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+﻿import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 import { envConfig } from '@/utils/envConfig';
 
@@ -9,7 +9,7 @@ if (!global.__supabaseClient) {
   global.__supabaseClient = null;
 }
 
-// Supabase configuration - Ahora se carga dinámicamente
+// Supabase configuration - Ahora se carga dinÃ¡micamente
 let supabaseUrl: string | undefined;
 let supabaseAnonKey: string | undefined;
 
@@ -25,13 +25,13 @@ function setSupabaseClientInstance(client: SupabaseClient | null): void {
 }
 
 /**
- * Inicializa el cliente de Supabase con la configuración del API Gateway
+ * Inicializa el cliente de Supabase con la configuraciÃ³n del API Gateway
  */
 export const initializeSupabase = async (): Promise<void> => {
   try {
-    // Asegurarse de que envConfig esté inicializado
+    // Asegurarse de que envConfig estÃ© inicializado
     if (!envConfig.isInitialized()) {
-      console.log('[Supabase] ⏳ Waiting for envConfig initialization...');
+      console.log('[Supabase] â³ Waiting for envConfig initialization...');
       await envConfig.initialize();
     }
 
@@ -42,26 +42,26 @@ export const initializeSupabase = async (): Promise<void> => {
     // Si ya existe un cliente, reutilizarlo
     const existingClient = getSupabaseClientInstance();
     if (existingClient) {
-      console.log('[Supabase] ♻️ Reusing existing Supabase client (Hot Reload)');
+      console.log('[Supabase] â™»ï¸ Reusing existing Supabase client (Hot Reload)');
       return;
     }
 
-    console.log('[Supabase] 🚀 Initializing Supabase client...');
+    console.log('[Supabase] ðŸš€ Initializing Supabase client...');
 
-    console.log('[Supabase] 🔗 Raw Supabase URL from config:', supabaseUrl);
-    console.log('[Supabase] 🔑 Raw Anon Key from config:', supabaseAnonKey);
-    console.log('[Supabase] 📊 URL type:', typeof supabaseUrl, 'length:', supabaseUrl?.length);
-    console.log('[Supabase] 📊 Key type:', typeof supabaseAnonKey, 'length:', supabaseAnonKey?.length);
+    console.log('[Supabase] ðŸ”— Raw Supabase URL from config:', supabaseUrl);
+    console.log('[Supabase] ðŸ”‘ Raw Anon Key from config:', supabaseAnonKey);
+    console.log('[Supabase] ðŸ“Š URL type:', typeof supabaseUrl, 'length:', supabaseUrl?.length);
+    console.log('[Supabase] ðŸ“Š Key type:', typeof supabaseAnonKey, 'length:', supabaseAnonKey?.length);
 
     if (!supabaseUrl || !supabaseAnonKey) {
-      console.error('[Supabase] ❌ Missing variables:');
+      console.error('[Supabase] âŒ Missing variables:');
       console.error('  - URL:', supabaseUrl ? 'Present' : 'MISSING');
       console.error('  - Key:', supabaseAnonKey ? 'Present' : 'MISSING');
       throw new Error('Missing Supabase environment variables from API Gateway');
     }
 
-    console.log('[Supabase] 🔗 Supabase URL:', supabaseUrl);
-    console.log('[Supabase] 🔑 Anon Key (first 50 chars):', supabaseAnonKey.substring(0, 50) + '...');
+    console.log('[Supabase] ðŸ”— Supabase URL:', supabaseUrl);
+    console.log('[Supabase] ðŸ”‘ Anon Key (first 50 chars):', supabaseAnonKey.substring(0, 50) + '...');
 
     // Crear cliente de Supabase
     const newClient = createClient(supabaseUrl, supabaseAnonKey, {
@@ -80,16 +80,16 @@ export const initializeSupabase = async (): Promise<void> => {
     });
 
     setSupabaseClientInstance(newClient);
-    console.log('[Supabase] ✅ Supabase client initialized successfully');
+    console.log('[Supabase] âœ… Supabase client initialized successfully');
   } catch (error) {
-    console.error('[Supabase] ❌ Failed to initialize Supabase client:', error);
+    console.error('[Supabase] âŒ Failed to initialize Supabase client:', error);
     throw error;
   }
 };
 
 /**
  * Obtiene el cliente de Supabase
- * IMPORTANTE: Debe llamarse después de initializeSupabase()
+ * IMPORTANTE: Debe llamarse despuÃ©s de initializeSupabase()
  */
 export const getSupabaseClient = (): SupabaseClient => {
   const client = getSupabaseClientInstance();
@@ -99,12 +99,12 @@ export const getSupabaseClient = (): SupabaseClient => {
   return client;
 };
 
-// Export para compatibilidad con código existente
+// Export para compatibilidad con cÃ³digo existente
 export const supabaseClient = new Proxy({} as SupabaseClient, {
   get(target, prop) {
     const client = getSupabaseClientInstance();
     if (!client) {
-      console.warn('[Supabase] ⚠️ Accessing supabaseClient before initialization');
+      console.warn('[Supabase] âš ï¸ Accessing supabaseClient before initialization');
       throw new Error('Supabase client not initialized. Call initializeSupabase() first.');
     }
     return (client as any)[prop];
@@ -112,12 +112,12 @@ export const supabaseClient = new Proxy({} as SupabaseClient, {
 });
 
 /**
- * Configura los listeners de auth después de inicializar Supabase
+ * Configura los listeners de auth despuÃ©s de inicializar Supabase
  */
 export const setupAuthListeners = () => {
   const client = getSupabaseClientInstance();
   if (!client) {
-    console.warn('[Supabase] ⚠️ Cannot setup auth listeners before initialization');
+    console.warn('[Supabase] âš ï¸ Cannot setup auth listeners before initialization');
     return;
   }
 
@@ -281,8 +281,8 @@ export const getUserProfile = async (userId: string) => {
         is_owner: roleFlags.isOwner,
         is_partner: roleFlags.isPartner,
         is_admin: roleFlags.isAdmin,
-        email_confirmed: user.email_confirmed_at !== null,
-        email_confirmed_at: user.email_confirmed_at,
+        email_confirmed: false,
+        email_confirmed_at: null,
         onboarding_completed: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -367,10 +367,40 @@ export const getUserProfile = async (userId: string) => {
 
 export const updateUserProfile = async (userId: string, updates: any) => {
   try {
+    const { data: existingProfile, error: existingProfileError } = await supabaseClient
+      .from('profiles')
+      .select('email')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (existingProfileError) {
+      console.warn('Error reading existing profile before update:', existingProfileError);
+    }
+
+    let resolvedEmail = String(updates?.email || '').trim();
+
+    if (!resolvedEmail) {
+      resolvedEmail = String(existingProfile?.email || '').trim();
+    }
+
+    if (!resolvedEmail) {
+      try {
+        const { data: authData } = await supabaseClient.auth.getUser();
+        resolvedEmail = String(authData?.user?.email || '').trim();
+      } catch (authError) {
+        console.warn('Could not resolve email from auth session before profile update:', authError);
+      }
+    }
+
+    if (!resolvedEmail) {
+      throw new Error(`Unable to resolve email for profile update: ${userId}`);
+    }
+
     const { error } = await supabaseClient
       .from('profiles')
       .upsert({
         id: userId,
+        email: resolvedEmail,
         ...updates,
         updated_at: new Date().toISOString(),
       });
@@ -475,3 +505,5 @@ export const deletePet = async (petId: string) => {
     throw error;
   }
 };
+
+

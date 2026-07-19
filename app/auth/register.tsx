@@ -21,6 +21,7 @@ import {
   generateConfirmationUrl,
   sendConfirmationEmailAPI,
 } from '../../utils/emailConfirmation';
+import { getFriendlyAuthErrorMessage } from '../../utils/authErrorMessages';
 import {
   validatePassword,
   getPasswordStrengthKey,
@@ -201,15 +202,23 @@ export default function Register() {
 
       console.log('=== REGISTRATION COMPLETED ===');
 
+      const confirmationTitle = emailResult.success ? 'Registro exitoso' : 'Cuenta creada';
+      const confirmationMessage = emailResult.success
+        ? `Tu cuenta ha sido creada exitosamente.\n\nHemos enviado un correo de confirmación a:\n${trimmedEmail}\n\nPor favor revisa tu bandeja de entrada y la carpeta de spam, y haz clic en el enlace de confirmación.\n\nEl enlace expira en 24 horas.`
+        : `Tu cuenta ha sido creada, pero no pudimos enviar el correo de confirmación automáticamente.\n\nRevisa tu conexión o intenta reenviar el correo desde la pantalla de inicio de sesión.\n\nCorreo registrado:\n${trimmedEmail}`;
+
       Alert.alert(
-        'Registro exitoso',
-        `Tu cuenta ha sido creada exitosamente.\n\nHemos enviado un correo de confirmación a:\n${trimmedEmail}\n\nPor favor revisa tu bandeja de entrada y la carpeta de spam, y haz clic en el enlace de confirmación.\n\nEl enlace expira en 24 horas.`,
+        confirmationTitle,
+        confirmationMessage,
         [{ text: 'ENTENDIDO', onPress: () => router.replace('/auth/login') }]
       );
     } catch (error: any) {
       console.error('Registration error:', error);
       console.error('Error stack:', error.stack);
-      Alert.alert('Error', error.message || 'Error al crear la cuenta');
+      Alert.alert(
+        'No pudimos crear tu cuenta',
+        getFriendlyAuthErrorMessage(error, 'owner')
+      );
     } finally {
       setLoading(false);
     }

@@ -5,7 +5,14 @@ import { ArrowLeft, Briefcase, CircleCheck as CheckCircle, Chrome as Home, Shiel
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { AppRole, getAvailableRoles, getStoredActiveRole, resolveRoleRoute, setStoredActiveRole } from '../../utils/onboarding';
+import {
+  AppRole,
+  clearStoredActivePartnerBusinessId,
+  getAvailableRoles,
+  getStoredActiveRole,
+  resolveRoleRoute,
+  setStoredActiveRole,
+} from '../../utils/onboarding';
 
 type RoleOption = {
   role: AppRole;
@@ -143,6 +150,7 @@ export default function SelectRoleScreen() {
     setSelectedRole(role);
 
     try {
+      await clearStoredActivePartnerBusinessId(currentUser.id);
       await setStoredActiveRole(currentUser.id, role);
       setActiveRole(role);
 

@@ -1,0 +1,12 @@
+/*\n  # Actualizar Función Cron para Incluir user_email\n\n  1. Cambios\n    - Agrega user_email a los logs del cron\n    - Mejora los detalles guardados en audit_logs\n    - Agrega más información útil para análisis\n\n  2. Campos Agregados\n    - user_email: Identifica quien/qué generó el log\n    - Más detalles en el objeto details\n*/\n\nCREATE OR REPLACE FUNCTION check_alert_thresholds_cron()\nRETURNS void\nLANGUAGE plpgsql\nSECURITY DEFINER\nAS $$\nDECLARE\n  request_id bigint;
+\n  supabase_url text := 'https://hpvzjuionqvgxlvhyqgz.supabase.co';
+\n  service_role_key text;
+\nBEGIN\n  service_role_key := current_setting('app.settings.service_role_key', true);
+\n  \n  IF service_role_key IS NULL THEN\n    service_role_key := current_setting('supabase.service_role_key', true);
+\n  END IF;
+\n  \n  SELECT INTO request_id net.http_post(\n    url := supabase_url || '/functions/v1/check-alert-thresholds',\n    headers := jsonb_build_object(\n      'Authorization', 'Bearer ' || COALESCE(service_role_key, ''),\n      'Content-Type', 'application/json'\n    ),\n    body := '{}'::jsonb,\n    timeout_milliseconds := 30000\n  );
+\n  \n  INSERT INTO audit_logs (\n    user_email,\n    action,\n    resource_type,\n    success,\n    details\n  ) VALUES (\n    'system@dogcatify.com',\n    'CRON_ALERT_CHECK',\n    'system_cron',\n    true,\n    jsonb_build_object(\n      'job', 'check_alert_thresholds',\n      'executed_at', NOW(),\n      'request_id', request_id,\n      'cron_schedule', '*/5 * * * *',\n      'function_url', supabase_url || '/functions/v1/check-alert-thresholds'\n    )\n  );
+\n  \nEXCEPTION\n  WHEN OTHERS THEN\n    INSERT INTO audit_logs (\n      user_email,\n      action,\n      resource_type,\n      success,\n      error_message,\n      details\n    ) VALUES (\n      'system@dogcatify.com',\n      'CRON_ALERT_CHECK',\n      'system_cron',\n      false,\n      SQLERRM,\n      jsonb_build_object(\n        'job', 'check_alert_thresholds',\n        'executed_at', NOW(),\n        'error_detail', SQLSTATE,\n        'error_context', SQLERRM\n      )\n    );
+\nEND;
+\n$$;
+\n;
