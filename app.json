@@ -49,7 +49,7 @@
       },
       "apiGateway": {
         "url": "https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/get-env",
-        "apiKey": "3f74c928844b161da0fbb3d6a4bd19abc3b4e61024f2813a26ca66003dcd4fad"
+        "apiKey": "5ab77aa971422c10964faf2500a6f14ff71524a4e48a72e8f0241cfcec352ef5"
       }
     },
     "ios": {
