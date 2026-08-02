@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>867298215472-u8m30pnqavp8oej13diuk80ld1ldf28d.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.867298215472-u8m30pnqavp8oej13diuk80ld1ldf28d</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>867298215472-b7ibgsnusroea58d4kb5mvc9p6bq0ubd.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>AIzaSyCLAo1Cp4ylIvEeXFzFk1WrjB9BNqOurgc</string>
+	<key>GCM_SENDER_ID</key>
+	<string>867298215472</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.dogcatify.app2</string>
+	<key>PROJECT_ID</key>
+	<string>app-mascota-7db30</string>
+	<key>STORAGE_BUCKET</key>
+	<string>app-mascota-7db30.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:867298215472:ios:192d66005959a85b7acff5</string>
+</dict>
+</plist>

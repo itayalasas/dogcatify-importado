@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, TextInput, ActivityIndicator, Linking, Image, Animated, AppState, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -6,10 +6,22 @@ import { ArrowLeft, Calendar, Clock, CreditCard, X, Lock, User, FileText, Circle
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
+import { PaymentMethodModal } from '../../../components/PaymentMethodModal';
 import { LoadingScreen } from '../../../components/ui/LoadingScreen';
+import { MercadoPagoRedirectModal } from '../../../components/MercadoPagoRedirectModal';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 import { createServiceBookingOrder, openMercadoPagoPayment, isTestEnvironment } from '../../../utils/mercadoPago';
+import { envConfig } from '../../../utils/envConfig';
+import { getActivePromotionForItem } from '@/utils/promotions';
+import {
+  generateAvailableTimeOptions,
+  isTimeSlotAvailable,
+  type AvailableTimeOption,
+  type BookingSlotEntry,
+  type ScheduleSlotEntry,
+} from '@/utils/bookingAvailability';
+import { isDateClosed, type ScheduleClosureEntry } from '@/utils/scheduleExceptions';
 
 interface CardType {
   name: string;
@@ -51,10 +63,11 @@ export default function ServiceBooking() {
   // Date and time selection
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [availableTimes, setAvailableTimes] = useState<string[]>([]);
+  const [availableTimeOptions, setAvailableTimeOptions] = useState<AvailableTimeOption[]>([]);
   const [notes, setNotes] = useState('');
-  const [bookedTimes, setBookedTimes] = useState<string[]>([]);
-  const [partnerSchedule, setPartnerSchedule] = useState<any[]>([]);
+  const [bookedBookings, setBookedBookings] = useState<BookingSlotEntry[]>([]);
+  const [partnerSchedule, setPartnerSchedule] = useState<ScheduleSlotEntry[]>([]);
+  const [scheduleClosures, setScheduleClosures] = useState<ScheduleClosureEntry[]>([]);
   
   // Payment flow
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -76,19 +89,51 @@ export default function ServiceBooking() {
   const [processing, setProcessing] = useState(false);
   const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
 
+  const handleBackPress = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    if (serviceId && partnerId) {
+      router.replace(`/services/${serviceId}?partnerId=${partnerId}`);
+      return;
+    }
+
+    router.replace('/(tabs)/services');
+  };
+
   useEffect(() => {
-    if (serviceId && partnerId && petId) {
+    const normalizedServiceId = Array.isArray(serviceId) ? serviceId[0] : serviceId;
+    const normalizedPartnerId = Array.isArray(partnerId) ? partnerId[0] : partnerId;
+    const normalizedPetId = Array.isArray(petId) ? petId[0] : petId;
+    const normalizedDiscount = Array.isArray(discount) ? discount[0] : discount;
+
+    if (normalizedServiceId && normalizedPartnerId && normalizedPetId) {
       fetchBookingData();
     }
 
     // Apply discount from promotion if provided
-    if (discount) {
-      const discountValue = parseFloat(discount);
+    if (normalizedDiscount) {
+      const discountValue = parseFloat(normalizedDiscount);
       if (!isNaN(discountValue) && discountValue > 0 && discountValue <= 100) {
         setAppliedDiscount(discountValue);
       }
+    } else if (normalizedServiceId) {
+      loadActivePromotion(normalizedServiceId);
     }
   }, [serviceId, partnerId, petId, discount]);
+
+  const loadActivePromotion = async (currentServiceId: string) => {
+    try {
+      const promotion = await getActivePromotionForItem(currentServiceId, 'service');
+      if (promotion?.discount_percentage && promotion.discount_percentage > 0) {
+        setAppliedDiscount(promotion.discount_percentage);
+      }
+    } catch (error) {
+      console.error('Error loading active promotion in booking:', error);
+    }
+  };
 
   // Animar barra de progreso cuando se activa el loading
   useEffect(() => {
@@ -200,7 +245,29 @@ export default function ServiceBooking() {
         .eq('is_active', true);
 
       if (scheduleError) throw scheduleError;
-      setPartnerSchedule(scheduleData || []);
+      const formattedSchedule = (scheduleData || []).map((item: any) => ({
+        id: item.id,
+        partnerId: item.partner_id,
+        dayOfWeek: item.day_of_week,
+        startTime: item.start_time,
+        endTime: item.end_time,
+        breakStartTime: item.break_start_time,
+        breakEndTime: item.break_end_time,
+        slotDuration: item.slot_duration,
+        maxSlots: item.max_slots,
+        isActive: item.is_active,
+      }));
+      setPartnerSchedule(formattedSchedule);
+
+      const { data: closureData, error: closureError } = await supabaseClient
+        .from('business_schedule_closures')
+        .select('id, partner_id, closed_date, reason, closure_type, source_year')
+        .eq('partner_id', partnerId)
+        .order('closed_date', { ascending: true });
+
+      if (closureError) throw closureError;
+
+      setScheduleClosures(closureData || []);
     } catch (error) {
       console.error('Error fetching booking data:', error);
       Alert.alert('Error', 'No se pudo cargar la información de la reserva');
@@ -209,84 +276,69 @@ export default function ServiceBooking() {
     }
   };
 
-  // Generar horarios disponibles cuando el servicio esté cargado
-  useEffect(() => {
-    if (service) {
-      generateAvailableTimes();
-    }
-  }, [service]);
-
-  const generateAvailableTimes = async () => {
-    if (!service) return;
-
-    const times = [];
-    const serviceDuration = service.duration || 60; // Duración en minutos
-    const startHour = 9;
-    const endHour = 17;
-
-    // Generar slots según la duración del servicio
-    let currentTime = startHour * 60; // Convertir a minutos desde medianoche
-    const endTime = endHour * 60;
-
-    while (currentTime + serviceDuration <= endTime) {
-      const hour = Math.floor(currentTime / 60);
-      const minutes = currentTime % 60;
-      const timeString = `${hour.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-      times.push(timeString);
-      currentTime += serviceDuration; // Incrementar por la duración del servicio
-    }
-
-    setAvailableTimes(times);
-  };
-
   const fetchBookedTimes = async (date: Date) => {
-    if (!partnerId || !serviceId) return;
+    if (!partnerId || !serviceId) return [];
 
     try {
       console.log('🔍 Fetching booked times for date:', date.toDateString(), 'service:', serviceId);
 
       const dateString = date.toISOString().split('T')[0];
 
-      // IMPORTANTE: Consultar ORDERS (no bookings) porque ahí están las reservas confirmadas
-      // Filtrar por:
-      // 1. service_id = el servicio actual
-      // 2. appointment_date = la fecha seleccionada
-      // 3. status != 'cancelled' (solo reservas activas)
-      // 4. order_type = 'service_booking' (solo reservas de servicios)
-      const { data: orders, error: ordersError } = await supabaseClient
-        .from('orders')
-        .select('id, appointment_time, appointment_date, status, order_type, service_name')
-        .eq('service_id', serviceId)
-        .gte('appointment_date', `${dateString}T00:00:00`)
-        .lte('appointment_date', `${dateString}T23:59:59`)
-        .neq('status', 'cancelled')
-        .eq('order_type', 'service_booking');
+      const { data: bookingsData, error } = await supabaseClient
+        .from('bookings')
+        .select('id, time, service_duration, date, status, service_id')
+        .eq('partner_id', partnerId)
+        .in('status', ['pending', 'pending_payment', 'confirmed'])
+        .gte('date', `${dateString}T00:00:00`)
+        .lte('date', `${dateString}T23:59:59`);
 
-      if (ordersError) {
-        console.error('❌ Error fetching booked times from orders:', ordersError);
-        return;
+      if (error) {
+        console.error('❌ Error fetching booked times from bookings:', error);
+        return [];
       }
 
-      console.log('📊 Found orders for date:', orders);
+      const formattedBookings: BookingSlotEntry[] = bookingsData?.map((booking) => ({
+        appointment_time: booking.time,
+        service_duration: booking.service_duration,
+      })) || [];
 
-      // Extraer las horas ya reservadas
-      const bookedTimeSlots = orders
-        ?.filter(order => order.appointment_time) // Solo las que tienen hora
-        .map(order => order.appointment_time) || [];
-
-      console.log('⏰ Booked time slots from ORDERS:', bookedTimeSlots);
-      setBookedTimes(bookedTimeSlots);
+      console.log('⏰ Booked bookings from BOOKINGS:', formattedBookings);
+      setBookedBookings(formattedBookings);
+      return formattedBookings;
     } catch (error) {
       console.error('❌ Error fetching booked times:', error);
+      return [];
     }
   };
 
-  // Fetch booked times when date or service changes
+  const refreshAvailability = async (date: Date) => {
+    const bookedBookings = await fetchBookedTimes(date);
+    const timeOptions = generateAvailableTimeOptions({
+      date,
+      schedules: partnerSchedule,
+      bookings: bookedBookings,
+      serviceDuration: service?.duration || undefined,
+      closures: scheduleClosures,
+    });
+
+    setAvailableTimeOptions(timeOptions);
+    setSelectedTime(null);
+  };
+
   useEffect(() => {
-    if (selectedDate && partnerId && serviceId) {
-      fetchBookedTimes(selectedDate);
+    if (selectedDate && partnerSchedule.length > 0 && service) {
+      void refreshAvailability(selectedDate);
     }
-  }, [selectedDate, partnerId, serviceId]);
+  }, [selectedDate, partnerSchedule, service, scheduleClosures]);
+
+  useEffect(() => {
+    if (selectedDate && isDateClosed(selectedDate, scheduleClosures)) {
+      setSelectedDate(null);
+      setSelectedTime(null);
+      setAvailableTimeOptions([]);
+      setBookedBookings([]);
+    }
+  }, [selectedDate, scheduleClosures]);
 
   // Validar fecha seleccionada cuando cambia la categoría
   useEffect(() => {
@@ -311,21 +363,24 @@ export default function ServiceBooking() {
     }
   }, [boardingCategory]);
 
-  const generateAvailableDates = () => {
-    const dates = [];
+  const generateAvailableDates = (
+    schedules = partnerSchedule,
+    closures = scheduleClosures,
+  ) => {
+    const dates: Array<{ date: Date; isAvailable: boolean }> = [];
     const today = new Date();
     const now = new Date();
 
     // Obtener los días de la semana que tienen horario configurado
-    const scheduledDays = partnerSchedule.map(s => s.day_of_week);
+    const scheduledDays = schedules.map(s => s.dayOfWeek);
 
     // Si no hay horarios configurados, no mostrar fechas
     if (scheduledDays.length === 0) {
       return dates;
     }
 
-    // Generar fechas para el mes en curso
-    const daysInMonth = 30; // Aproximadamente un mes
+    // Generar fechas para más adelante y no quedarnos cortos si la agenda se llena
+    const daysInMonth = 60;
 
     for (let i = 0; i < daysInMonth; i++) {
       const date = new Date(today);
@@ -333,13 +388,18 @@ export default function ServiceBooking() {
       const dayOfWeek = date.getDay();
 
       // Verificar si este día tiene horario configurado
-      const daySchedule = partnerSchedule.find(s => s.day_of_week === dayOfWeek);
+      const daySchedule = schedules.find(s => s.dayOfWeek === dayOfWeek);
 
       if (!daySchedule) continue;
 
       // Si es hoy, verificar si aún está dentro del horario
       if (i === 0) {
-        const [endHour, endMinute] = daySchedule.end_time.split(':').map(Number);
+        const endTimeValue = daySchedule.endTime ?? daySchedule.end_time;
+        if (!endTimeValue) {
+          continue;
+        }
+
+        const [endHour, endMinute] = endTimeValue.split(':').map(Number);
         const endTime = new Date(now);
         endTime.setHours(endHour, endMinute, 0, 0);
 
@@ -362,12 +422,14 @@ export default function ServiceBooking() {
         }
       }
 
-      dates.push(date);
+      const isAvailable = !isDateClosed(date, closures);
+
+      dates.push({ date, isAvailable });
 
       // Limitar la cantidad de fechas mostradas
-      if (boardingCategory === 'Fin de semana' && dates.length >= 9) break;
-      if (boardingCategory === 'Semanal' && dates.length >= 7) break;
-      if (!boardingCategory && dates.length >= 7) break;
+      if (boardingCategory === 'Fin de semana' && dates.length >= 14) break;
+      if (boardingCategory === 'Semanal' && dates.length >= 14) break;
+      if (!boardingCategory && dates.length >= 14) break;
     }
 
     return dates;
@@ -394,7 +456,7 @@ export default function ServiceBooking() {
     }).format(amount);
   };
 
-  const getServicePrice = () => {
+  const getBaseServicePrice = () => {
     if (!service) return 0;
 
     if (boardingCategory) {
@@ -413,6 +475,14 @@ export default function ServiceBooking() {
     }
 
     return service.price || 0;
+  };
+
+  const getServicePrice = () => {
+    const basePrice = getBaseServicePrice();
+    if (appliedDiscount > 0) {
+      return basePrice * (1 - appliedDiscount / 100);
+    }
+    return basePrice;
   };
 
   // Card formatting functions
@@ -510,23 +580,33 @@ export default function ServiceBooking() {
         const dateString = selectedDate.toISOString().split('T')[0];
 
         console.log('🔍 Validando disponibilidad de horario para servicio gratuito...');
-        const { data: existingOrders, error: checkError } = await supabaseClient
-          .from('orders')
-          .select('id, appointment_time, status')
-          .eq('service_id', service.id)
-          .gte('appointment_date', `${dateString}T00:00:00`)
-          .lte('appointment_date', `${dateString}T23:59:59`)
-          .eq('appointment_time', selectedTime)
-          .neq('status', 'cancelled')
-          .eq('order_type', 'service_booking');
+        const { data: existingBookings, error: checkError } = await supabaseClient
+          .from('bookings')
+          .select('id, time, service_duration, status')
+          .eq('partner_id', partner.id)
+          .in('status', ['pending', 'pending_payment', 'confirmed'])
+          .gte('date', `${dateString}T00:00:00`)
+          .lte('date', `${dateString}T23:59:59`);
 
         if (checkError) {
           console.error('❌ Error verificando disponibilidad:', checkError);
           throw new Error('No se pudo verificar la disponibilidad del horario');
         }
 
-        if (existingOrders && existingOrders.length > 0) {
-          console.warn('⚠️ Ya existe una reserva para esta fecha/hora/servicio:', existingOrders);
+        const slotStillAvailable = isTimeSlotAvailable({
+          date: selectedDate,
+          selectedTime,
+          schedules: partnerSchedule,
+          bookings: (existingBookings || []).map((booking: any) => ({
+            appointment_time: booking.time,
+            service_duration: booking.service_duration,
+          })),
+          serviceDuration: service.duration || undefined,
+          closures: scheduleClosures,
+        });
+
+        if (!slotStillAvailable) {
+          console.warn('⚠️ Ya existe una reserva para esta fecha/hora/servicio:', existingBookings);
           setPaymentLoading(false);
           Alert.alert(
             'Horario No Disponible',
@@ -535,9 +615,7 @@ export default function ServiceBooking() {
               {
                 text: 'Entendido',
                 onPress: () => {
-                  // Recargar los horarios ocupados
-                  fetchBookedTimes(selectedDate);
-                  setSelectedTime(null);
+                  void refreshAvailability(selectedDate);
                 }
               }
             ]
@@ -567,7 +645,7 @@ export default function ServiceBooking() {
           customer_id: currentUser.id,
           customer_name: currentUser.displayName || currentUser.email,
           customer_email: currentUser.email,
-          customer_phone: currentUser.phoneNumber || null,
+          customer_phone: currentUser.phone || null,
           pet_id: petId,
           pet_name: pet.name,
           date: bookingDate.toISOString(),
@@ -609,41 +687,76 @@ export default function ServiceBooking() {
         }
       };
 
-      const { data: orderData, error: orderError } = await supabaseClient
+      const freeOrderPayload = {
+        partner_id: partnerId,
+        partner_name: partner.business_name,
+        customer_id: currentUser.id,
+        customer_name: currentUser.displayName || currentUser.email,
+        customer_email: currentUser.email,
+        customer_phone: currentUser.phone || null,
+        booking_id: bookingData.id,
+        service_id: serviceId,
+        service_name: service.name,
+        pet_id: petId,
+        pet_name: pet.name,
+        appointment_date: appointmentDate.toISOString(), // ✅ Fecha a medianoche UTC
+        appointment_time: selectedTime || null,
+        booking_notes: notes.trim() || null,
+        items: [serviceItem],
+        subtotal: 0,
+        iva_rate: 0,
+        iva_amount: 0,
+        iva_included_in_price: true,
+        total_amount: 0,
+        commission_amount: 0,
+        partner_amount: 0,
+        shipping_address: null,
+        payment_method: 'free',
+        payment_status: 'paid',
+        status: 'reserved',
+        order_type: 'service_booking',
+        partner_breakdown: partnerBreakdown,
+      };
+
+      const { data: existingOrder, error: existingOrderError } = await supabaseClient
         .from('orders')
-        .insert({
-          partner_id: partnerId,
-          partner_name: partner.business_name,
-          customer_id: currentUser.id,
-          customer_name: currentUser.displayName || currentUser.email,
-          customer_email: currentUser.email,
-          customer_phone: currentUser.phone || null,
-          booking_id: bookingData.id,
-          service_id: serviceId,
-          service_name: service.name,
-          pet_id: petId,
-          pet_name: pet.name,
-          appointment_date: appointmentDate.toISOString(), // ✅ Fecha a medianoche UTC
-          appointment_time: selectedTime || null,
-          booking_notes: notes.trim() || null,
-          items: [serviceItem],
-          subtotal: 0,
-          iva_rate: 0,
-          iva_amount: 0,
-          iva_included_in_price: true,
-          total_amount: 0,
-          commission_amount: 0,
-          partner_amount: 0,
-          shipping_address: null,
-          payment_method: 'free',
-          payment_status: 'paid',
-          status: 'reserved',
-          order_type: 'service_booking',
-          partner_breakdown: partnerBreakdown,
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .single();
+        .select('id')
+        .eq('booking_id', bookingData.id)
+        .maybeSingle();
+
+      if (existingOrderError) {
+        throw existingOrderError;
+      }
+
+      let orderData;
+      let orderError;
+
+      if (existingOrder?.id) {
+        const updateResult = await supabaseClient
+          .from('orders')
+          .update({
+            ...freeOrderPayload,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingOrder.id)
+          .select()
+          .single();
+
+        orderData = updateResult.data;
+        orderError = updateResult.error;
+      } else {
+        const insertResult = await supabaseClient
+          .from('orders')
+          .insert({
+            ...freeOrderPayload,
+            created_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        orderData = insertResult.data;
+        orderError = insertResult.error;
+      }
 
       if (orderError) {
         console.error('Error creating order:', orderError);
@@ -659,27 +772,48 @@ export default function ServiceBooking() {
 
       // Enviar notificación al partner mediante Edge Function
       try {
-        const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-        const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+        const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+        const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 
-        await fetch(`${supabaseUrl}/functions/v1/send-notification-fcm-v1`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${supabaseAnonKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId: partnerId,
-            title: '🎉 Nueva Reserva',
-            body: `${currentUser.displayName || 'Un cliente'} ha reservado ${service.name} para el ${bookingDate.toLocaleDateString()}`,
-            data: {
-              type: 'booking',
-              bookingId: bookingData.id,
-              orderId: orderData.id,
-              serviceId: serviceId
-            }
-          })
-        });
+        const { data: partnerData, error: partnerError } = await supabaseClient
+          .from('partners')
+          .select('user_id')
+          .eq('id', partnerId)
+          .single();
+
+        if (partnerError || !partnerData?.user_id) {
+          console.error('Error loading partner user for notification:', partnerError);
+        } else {
+          const { data: profileData, error: profileError } = await supabaseClient
+            .from('profiles')
+            .select('push_token, fcm_token')
+            .eq('id', partnerData.user_id)
+            .single();
+
+          if (profileError || (!profileData?.fcm_token && !profileData?.push_token)) {
+            console.warn('Partner has no fcm_token for booking notification:', profileError);
+          } else {
+            await fetch(`${supabaseUrl}/functions/v1/send-notification-fcm-v1`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${supabaseAnonKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                token: profileData.fcm_token || profileData.push_token,
+                expoPushToken: profileData.push_token || undefined,
+                title: '🎉 Nueva Reserva',
+                body: `${currentUser.displayName || 'Un cliente'} ha reservado ${service.name} para el ${bookingDate.toLocaleDateString()}`,
+                data: {
+                  type: 'booking',
+                  bookingId: bookingData.id,
+                  orderId: orderData.id,
+                  serviceId: serviceId
+                }
+              })
+            });
+          }
+        }
       } catch (notifError) {
         console.error('Error sending notification:', notifError);
       }
@@ -758,7 +892,7 @@ export default function ServiceBooking() {
         date: selectedDate.toISOString(),
         time: selectedTime || 'N/A', // Para servicios de pensión, la hora no aplica
         serviceName: service.name,
-        totalAmount: service.price
+        totalAmount: getServicePrice()
       });
 
       // VALIDACIÓN CRÍTICA: Verificar que no exista una reserva para esta fecha/hora/servicio
@@ -766,23 +900,33 @@ export default function ServiceBooking() {
         const dateString = selectedDate.toISOString().split('T')[0];
 
         console.log('🔍 Validando disponibilidad de horario...');
-        const { data: existingOrders, error: checkError } = await supabaseClient
-          .from('orders')
-          .select('id, appointment_time, status')
-          .eq('service_id', service.id)
-          .gte('appointment_date', `${dateString}T00:00:00`)
-          .lte('appointment_date', `${dateString}T23:59:59`)
-          .eq('appointment_time', selectedTime)
-          .neq('status', 'cancelled')
-          .eq('order_type', 'service_booking');
+        const { data: existingBookings, error: checkError } = await supabaseClient
+          .from('bookings')
+          .select('id, time, service_duration, status')
+          .eq('partner_id', partner.id)
+          .in('status', ['pending', 'pending_payment', 'confirmed'])
+          .gte('date', `${dateString}T00:00:00`)
+          .lte('date', `${dateString}T23:59:59`);
 
         if (checkError) {
           console.error('❌ Error verificando disponibilidad:', checkError);
           throw new Error('No se pudo verificar la disponibilidad del horario');
         }
 
-        if (existingOrders && existingOrders.length > 0) {
-          console.warn('⚠️ Ya existe una reserva para esta fecha/hora/servicio:', existingOrders);
+        const slotStillAvailable = isTimeSlotAvailable({
+          date: selectedDate,
+          selectedTime,
+          schedules: partnerSchedule,
+          bookings: (existingBookings || []).map((booking: any) => ({
+            appointment_time: booking.time,
+            service_duration: booking.service_duration,
+          })),
+          serviceDuration: service.duration || undefined,
+          closures: scheduleClosures,
+        });
+
+        if (!slotStillAvailable) {
+          console.warn('⚠️ Ya existe una reserva para esta fecha/hora/servicio:', existingBookings);
           setPaymentLoading(false);
           setPaymentStep('methods');
           Alert.alert(
@@ -792,9 +936,7 @@ export default function ServiceBooking() {
               {
                 text: 'Entendido',
                 onPress: () => {
-                  // Recargar los horarios ocupados
-                  fetchBookedTimes(selectedDate);
-                  setSelectedTime(null);
+                  void refreshAvailability(selectedDate);
                 }
               }
             ]
@@ -805,10 +947,8 @@ export default function ServiceBooking() {
         console.log('✅ Horario disponible, continuando con la reserva...');
       }
 
-      const originalPrice = getServicePrice();
-      const finalPrice = appliedDiscount > 0
-        ? originalPrice * (1 - appliedDiscount / 100)
-        : originalPrice;
+      const originalPrice = getBaseServicePrice();
+      const finalPrice = getServicePrice();
 
       const bookingData = {
         serviceId: service.id,
@@ -993,7 +1133,7 @@ export default function ServiceBooking() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>Reservar Servicio</Text>
@@ -1038,11 +1178,11 @@ export default function ServiceBooking() {
             </View>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.datesScroll}>
-              {generateAvailableDates().map((date, index) => {
-              const dateInfo = formatDate(date);
-              const isSelected = selectedDate?.toDateString() === date.toDateString();
-              const today = new Date();
-              const isToday = date.toDateString() === today.toDateString();
+              {generateAvailableDates().map(({ date, isAvailable }, index) => {
+               const dateInfo = formatDate(date);
+               const isSelected = selectedDate?.toDateString() === date.toDateString();
+               const today = new Date();
+               const isToday = date.toDateString() === today.toDateString();
 
               return (
                 <TouchableOpacity
@@ -1050,9 +1190,11 @@ export default function ServiceBooking() {
                   style={[
                     styles.dateOption,
                     isSelected && styles.selectedDateOption,
-                    isToday && !isSelected && styles.todayDateOption
+                    isToday && !isSelected && styles.todayDateOption,
+                    !isAvailable && { opacity: 0.35 }
                   ]}
-                  onPress={() => setSelectedDate(date)}
+                  onPress={() => isAvailable && setSelectedDate(date)}
+                  disabled={!isAvailable}
                 >
                   {isToday && (
                     <View style={styles.todayBadge}>
@@ -1092,8 +1234,31 @@ export default function ServiceBooking() {
           <Card style={styles.timeCard}>
             <Text style={styles.sectionTitle}>Selecciona una hora</Text>
             <View style={styles.timesGrid}>
-              {availableTimes.map((time) => {
-                const isBooked = bookedTimes.includes(time);
+              {availableTimeOptions.map((option) => {
+                const { time, availableSlots, maxSlots } = option;
+                const isBooked = availableSlots <= 0;
+                const showAvailableSlots = maxSlots > 1 && availableSlots > 1;
+                const availabilityLabel = isBooked
+                  ? 'Reservado'
+                  : showAvailableSlots
+                    ? `${availableSlots} turnos`
+                    : null;
+
+                const isToday = selectedDate.toDateString() === new Date().toDateString();
+                let isPastTime = false;
+
+                if (isToday) {
+                  const now = new Date();
+                  const [hours, minutes] = time.split(':').map(Number);
+                  const timeDate = new Date();
+                  timeDate.setHours(hours, minutes, 0, 0);
+                  isPastTime = timeDate < now;
+                }
+
+                if (isPastTime) {
+                  return null;
+                }
+
                 return (
                 <TouchableOpacity
                   key={time}
@@ -1109,13 +1274,24 @@ export default function ServiceBooking() {
                     isBooked ? "#9CA3AF" :
                     selectedTime === time ? "#FFFFFF" : "#6B7280"
                   } />
-                  <Text style={[
-                    styles.timeText,
-                    selectedTime === time && styles.selectedTimeText,
-                    isBooked && styles.bookedTimeText
-                  ]}>
-                    {time}
-                  </Text>
+                  <View style={styles.timeLabelContainer}>
+                    <Text style={[
+                      styles.timeText,
+                      selectedTime === time && styles.selectedTimeText,
+                      isBooked && styles.bookedTimeText
+                    ]}>
+                      {time}
+                    </Text>
+                    {availabilityLabel && (
+                      <Text style={[
+                        styles.availableSlotsText,
+                        selectedTime === time && styles.selectedAvailableSlotsText,
+                        isBooked && styles.bookedAvailableSlotsText,
+                      ]}>
+                        {availabilityLabel}
+                      </Text>
+                    )}
+                  </View>
                 </TouchableOpacity>
                 );
               })}
@@ -1160,239 +1336,17 @@ export default function ServiceBooking() {
           />
         </View>
       )}
-
-      {/* Payment Modal - Single Modal with Steps */}
-      <Modal
+      <PaymentMethodModal
         visible={showPaymentModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPaymentModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {paymentStep === 'methods' ? 'Método de Pago' : 
-                 paymentStep === 'card' ? 'Pago con Tarjeta' : 'Procesando...'}
-              </Text>
-              <TouchableOpacity onPress={() => {
-                setShowPaymentModal(false);
-                setPaymentStep('methods');
-              }}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Payment Methods Step */}
-            {paymentStep === 'methods' && (
-              <View style={styles.methodsContent}>
-                <View style={styles.methodsHeader}>
-                  <CreditCard size={40} color="#2D6A6F" />
-                  <Text style={styles.methodsTitle}>Selecciona tu método de pago</Text>
-                  <Text style={styles.methodsSubtitle}>
-                    Total: {formatCurrency(getServicePrice())}
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.paymentMethodCard}
-                  onPress={() => handlePaymentMethodSelect('mercadopago')}
-                  disabled={paymentLoading}
-                >
-                  <View style={styles.paymentMethodLogoCircle}>
-                    <Image
-                      source={require('../../../assets/images/mercadopago.png')}
-                      style={styles.mercadoPagoLogo}
-                      resizeMode="contain"
-                    />
-                  </View>
-                  <View style={styles.paymentMethodInfo}>
-                    <Text style={styles.paymentMethodTitle}>Mercado Pago</Text>
-                    <Text style={styles.paymentMethodDescription}>
-                      Pago seguro con tarjetas, transferencias y más
-                    </Text>
-                  </View>
-                  {paymentLoading && <ActivityIndicator size="small" color="#00A650" />}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.paymentMethodCard, styles.disabledMethod]}
-                  disabled
-                >
-                  <View style={[styles.paymentMethodIconCircle, { backgroundColor: '#F3F4F6' }]}>
-                    <CreditCard size={32} color="#9CA3AF" />
-                  </View>
-                  <View style={styles.paymentMethodInfo}>
-                    <Text style={[styles.paymentMethodTitle, { color: '#9CA3AF' }]}>Tarjeta de Crédito/Débito</Text>
-                    <Text style={[styles.paymentMethodDescription, { color: '#9CA3AF' }]}>
-                      Visa, Mastercard, American Express
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <Text style={styles.paymentNote}>
-                  Serás redirigido para completar el pago de forma segura
-                </Text>
-              </View>
-            )}
-
-            {/* Card Form Step */}
-            {paymentStep === 'card' && (
-              <ScrollView style={styles.cardFormContainer} showsVerticalScrollIndicator={false}>
-                {/* Booking Summary */}
-                <View style={styles.bookingSummary}>
-                  <Text style={styles.summaryTitle}>Resumen de la Reserva</Text>
-                  <Text style={styles.summaryService}>{service?.name}</Text>
-                  <Text style={styles.summaryDateTime}>
-                    {boardingCategory
-                      ? `${selectedDate?.toLocaleDateString()} - ${boardingCategory}`
-                      : `${selectedDate?.toLocaleDateString()} a las ${selectedTime}`
-                    }
-                  </Text>
-                  <Text style={styles.summaryTotal}>
-                    Total: {formatCurrency(getServicePrice())}
-                  </Text>
-                </View>
-
-                {/* Personal Information */}
-                <View style={styles.formSection}>
-                  <Text style={styles.formSectionTitle}>Información Personal</Text>
-                  
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Nombre completo *</Text>
-                    <View style={styles.inputContainer}>
-                      <User size={20} color="#6B7280" />
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="Juan Pérez"
-                        value={fullName}
-                        onChangeText={setFullName}
-                        autoCapitalize="words"
-                        autoComplete="name"
-                      />
-                    </View>
-                  </View>
-
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Tipo de documento *</Text>
-                    <TouchableOpacity
-                      style={styles.selectInput}
-                      onPress={() => setShowDocumentTypes(true)}
-                    >
-                      <FileText size={20} color="#6B7280" />
-                      <Text style={styles.selectText}>
-                        {documentTypes.find(type => type.value === documentType)?.label || 'Seleccionar'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Número de documento *</Text>
-                    <View style={styles.inputContainer}>
-                      <FileText size={20} color="#6B7280" />
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="12345678"
-                        value={documentNumber}
-                        onChangeText={setDocumentNumber}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                  </View>
-                </View>
-
-
-                {/* Card Information */}
-                <View style={styles.formSection}>
-                  <Text style={styles.formSectionTitle}>Información de la Tarjeta</Text>
-                  
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Número de tarjeta *</Text>
-                    <View style={[styles.inputContainer, styles.cardInputContainer]}>
-                      <CreditCard size={20} color="#6B7280" />
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="1234 5678 9012 3456"
-                        value={cardNumber}
-                        onChangeText={handleCardNumberChange}
-                        keyboardType="numeric"
-                        maxLength={19}
-                        autoComplete="cc-number"
-                      />
-                      {detectedCardType && (
-                        <View style={[styles.cardTypeBadge, { backgroundColor: detectedCardType.color }]}>
-                          <Text style={styles.cardTypeText}>{detectedCardType.name}</Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-
-                  <View style={styles.cardDetailsRow}>
-                    <View style={styles.cardDetailInput}>
-                      <Text style={styles.inputLabel}>Vencimiento *</Text>
-                      <View style={styles.inputContainer}>
-                        <Calendar size={20} color="#6B7280" />
-                        <TextInput
-                          style={styles.textInput}
-                          placeholder="MM/AA"
-                          value={expiryDate}
-                          onChangeText={handleExpiryChange}
-                          keyboardType="numeric"
-                          maxLength={5}
-                          autoComplete="cc-exp"
-                        />
-                      </View>
-                    </View>
-
-                    <View style={styles.cardDetailInput}>
-                      <Text style={styles.inputLabel}>CVV *</Text>
-                      <View style={styles.inputContainer}>
-                        <Lock size={20} color="#6B7280" />
-                        <TextInput
-                          style={styles.textInput}
-                          placeholder="123"
-                          value={cvv}
-                          onChangeText={handleCvvChange}
-                          keyboardType="numeric"
-                          maxLength={4}
-                          secureTextEntry={true}
-                          autoComplete="cc-csc"
-                        />
-                      </View>
-                    </View>
-                  </View>
-                </View>
-
-
-                {/* Security Notice */}
-                <View style={styles.securityNotice}>
-                  <Lock size={16} color="#10B981" />
-                  <Text style={styles.securityText}>
-                    Tu información está protegida con encriptación SSL de 256 bits
-                  </Text>
-                </View>
-                
-                {/* Actions */}
-                <View style={styles.cardFormActions}>
-                  <Button
-                    title="Volver"
-                    onPress={() => setPaymentStep('methods')}
-                    variant="outline"
-                    size="large"
-                  />
-                  <Button
-                    title={processing ? 'Procesando...' : `Pagar ${formatCurrency(getServicePrice())}`}
-                    onPress={handleCardPayment}
-                    loading={processing}
-                    disabled={!validateCardForm() || processing}
-                    size="large"
-                  />
-                </View>
-              </ScrollView>
-            )}
-          </View>
-        </View>
-      </Modal>
+        totalLabel={formatCurrency(getServicePrice())}
+        onClose={() => {
+          setShowPaymentModal(false);
+          setPaymentStep('methods');
+        }}
+        onMercadoPago={() => handlePaymentMethodSelect('mercadopago')}
+        loadingMercadoPago={paymentLoading}
+        secureNote="Seras redirigido para completar el pago de forma segura"
+      />
 
       {/* Document Type Modal */}
       <Modal
@@ -1428,52 +1382,12 @@ export default function ServiceBooking() {
         </View>
       </Modal>
 
-      {/* Payment Loading Overlay con Barra de Progreso */}
-      {paymentLoading && (
-        <Modal
-          visible={paymentLoading}
-          transparent
-          animationType="fade"
-          statusBarTranslucent
-        >
-          <View style={styles.paymentLoadingOverlay}>
-            <View style={styles.paymentLoadingContent}>
-              {/* Logo de Mercado Pago */}
-              <View style={styles.mpLogoContainer}>
-                <Image
-                  source={require('../../../assets/images/mercadopago.png')}
-                  style={styles.mpLoadingLogo}
-                  resizeMode="contain"
-                />
-              </View>
-
-              <ActivityIndicator size="large" color="#00A650" style={{ marginBottom: 20 }} />
-
-              <Text style={styles.paymentLoadingTitle}>Procesando pago...</Text>
-              <Text style={styles.paymentLoadingSubtitle}>
-                {paymentMessage}
-              </Text>
-
-              {/* Barra de progreso animada */}
-              <View style={styles.progressBarContainer}>
-                <Animated.View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: progressAnim.interpolate({
-                        inputRange: [0, 100],
-                        outputRange: ['0%', '100%'],
-                      }),
-                    },
-                  ]}
-                />
-              </View>
-
-              <Text style={styles.loadingHint}>🔒 Serás redirigido a Mercado Pago de forma segura</Text>
-            </View>
-          </View>
-        </Modal>
-      )}
+      <MercadoPagoRedirectModal
+        visible={paymentLoading}
+        message={paymentMessage}
+        progress={progressAnim}
+        hint="Seras redirigido a Mercado Pago de forma segura"
+      />
     </SafeAreaView>
   );
 }
@@ -1662,6 +1576,10 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
     width: '31.5%',
   },
+  timeLabelContainer: {
+    marginLeft: 6,
+    alignItems: 'center',
+  },
   selectedTimeOption: {
     backgroundColor: '#4285F4',
     borderColor: '#4285F4',
@@ -1675,14 +1593,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     color: '#111827',
-    marginLeft: 6,
+    marginLeft: 0,
+  },
+  availableSlotsText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
   },
   selectedTimeText: {
     color: '#FFFFFF',
   },
+  selectedAvailableSlotsText: {
+    color: '#E0F2FE',
+  },
   bookedTimeText: {
     color: '#9CA3AF',
     textDecorationLine: 'line-through',
+  },
+  bookedAvailableSlotsText: {
+    color: '#9CA3AF',
   },
   notesCard: {
     marginBottom: 16,
@@ -2039,77 +1968,5 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
-  },
-  paymentLoadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 9999,
-  },
-  paymentLoadingContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 48,
-    alignItems: 'center',
-    width: '85%',
-    maxWidth: 360,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 15,
-  },
-  mpLogoContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#009EE3',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  mpLoadingLogo: {
-    width: 65,
-    height: 65,
-  },
-  paymentLoadingTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#1F2937',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  paymentLoadingSubtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#00A650',
-    marginBottom: 28,
-    textAlign: 'center',
-    lineHeight: 24,
-    paddingHorizontal: 8,
-  },
-  progressBarContainer: {
-    width: '100%',
-    height: 8,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 20,
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#00A650',
-    borderRadius: 4,
-  },
-  loadingHint: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
-    textAlign: 'center',
   },
 });

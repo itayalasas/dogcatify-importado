@@ -1,13 +1,103 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions, Modal, TextInput, FlatList, ActivityIndicator, ScrollView, Image, Share, Platform, KeyboardAvoidingView, StatusBar } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { Heart, MessageCircle, Share2, MoveHorizontal as MoreHorizontal, ArrowLeft, Send, Play, Pause } from 'lucide-react-native';
+import { Heart, MessageCircle, Share2, MoveHorizontal as MoreHorizontal, ArrowLeft, Send, Play, Pause, TriangleAlert as AlertTriangle, MapPin, Phone } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { supabaseClient } from '../lib/supabase';
 import { FollowButton } from './FollowButton';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, runOnJS } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
 const STATUS_BAR_HEIGHT = Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0;
+
+const ZoomableImage = ({ uri, style, onDoubleTap }: { uri: string; style?: any; onDoubleTap?: () => void }) => {
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((e) => {
+      scale.value = savedScale.value * e.scale;
+    })
+    .onEnd(() => {
+      if (scale.value < 1) {
+        scale.value = withSpring(1);
+        savedScale.value = 1;
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      } else if (scale.value > 3) {
+        scale.value = withSpring(3);
+        savedScale.value = 3;
+      } else {
+        savedScale.value = scale.value;
+      }
+    });
+
+  const panGesture = Gesture.Pan()
+    .enabled(false)
+    .manualActivation(true)
+    .enableTrackpadTwoFingerGesture(true)
+    .onTouchesDown((e) => {
+      if (savedScale.value > 1) {
+        (panGesture as any).activate();
+      }
+    })
+    .onUpdate((e) => {
+      if (savedScale.value > 1) {
+        translateX.value = savedTranslateX.value + e.translationX;
+        translateY.value = savedTranslateY.value + e.translationY;
+      }
+    })
+    .onEnd(() => {
+      if (savedScale.value > 1) {
+        savedTranslateX.value = translateX.value;
+        savedTranslateY.value = translateY.value;
+      }
+    })
+    .onFinalize(() => {
+      if (savedScale.value <= 1) {
+        panGesture.enabled(false);
+      }
+    });
+
+  const doubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => {
+      // Trigger like on double tap
+      if (onDoubleTap) {
+        runOnJS(onDoubleTap)();
+      }
+    });
+
+  const composedGesture = Gesture.Exclusive(
+    doubleTapGesture,
+    Gesture.Simultaneous(pinchGesture, panGesture)
+  );
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  return (
+    <GestureDetector gesture={composedGesture}>
+      <Animated.Image
+        source={{ uri }}
+        resizeMode="cover"
+        style={[style, animatedStyle]}
+      />
+    </GestureDetector>
+  );
+};
 
 // Memoized video component to prevent unnecessary re-renders
 const VideoPlayer = memo(({
@@ -56,6 +146,12 @@ const VideoPlayer = memo(({
     videoRef(ref);
   };
 
+  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+    if (status.isLoaded && status.didJustFinish && !status.isLooping) {
+      onTogglePlay();
+    }
+  };
+
   return (
     <View style={styles.videoContainer}>
       <Video
@@ -63,11 +159,12 @@ const VideoPlayer = memo(({
         source={source}
         style={style}
         resizeMode={ResizeMode.COVER}
-        isLooping
+        isLooping={false}
         shouldPlay={isInViewport && isPlaying}
         isMuted={false}
         useNativeControls={false}
         progressUpdateIntervalMillis={500}
+        onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
         onReadyForDisplay={() => {}}
         onError={(error) => {
           console.log('Video error:', error);
@@ -131,7 +228,6 @@ const PostCard: React.FC<PostCardProps> = ({
   const [newComment, setNewComment] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
   const [replyTo, setReplyTo] = useState<any>(null);
-  const [doubleTapTimer, setDoubleTapTimer] = useState<NodeJS.Timeout | null>(null);
   const [showLikeAnimation, setShowLikeAnimation] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [playingVideos, setPlayingVideos] = useState<{[key: number]: boolean}>({});
@@ -139,6 +235,15 @@ const PostCard: React.FC<PostCardProps> = ({
   const [videosInitialized, setVideosInitialized] = useState<{[key: number]: boolean}>({});
   const commentInputRef = useRef<TextInput>(null);
   const videoRefs = useRef<{[key: number]: Video | null}>({});
+
+  useEffect(() => {
+    // Reset carousel state when the card starts representing a different post.
+    setCurrentImageIndex(0);
+    setPlayingVideos({});
+    setVideoSpeeds({});
+    setVideosInitialized({});
+    videoRefs.current = {};
+  }, [post.id]);
 
   useEffect(() => {
     if (currentUser && post.likes) {
@@ -176,6 +281,21 @@ const PostCard: React.FC<PostCardProps> = ({
     setPlayingVideos({});
     setVideoSpeeds({});
   }, [currentImageIndex]);
+
+  useEffect(() => {
+    if (!post.albumImages || post.albumImages.length === 0) {
+      return;
+    }
+
+    post.albumImages.forEach((mediaUrl: string) => {
+      if (!mediaUrl || isVideoUrl(mediaUrl)) {
+        return;
+      }
+
+      const cleanUrl = getCleanUrl(mediaUrl);
+      Image.prefetch(cleanUrl).catch(() => {});
+    });
+  }, [post.albumImages]);
 
   // Pause videos when post is not in viewport
   useEffect(() => {
@@ -466,7 +586,7 @@ const PostCard: React.FC<PostCardProps> = ({
         }
         // Also check replies
         if (comment.replies && comment.replies.length > 0) {
-          const updatedReplies = comment.replies.map(reply => 
+          const updatedReplies = comment.replies.map((reply: any) => 
             reply.id === commentId 
               ? { ...reply, likes: newLikes }
               : reply
@@ -581,6 +701,7 @@ const PostCard: React.FC<PostCardProps> = ({
     try {
       // Determine if it's an album or regular post
       const isAlbum = post.type === 'album';
+      const isLostPet = post.type === 'lost_pet';
       const contentType = isAlbum ? 'álbum' : 'publicación';
 
       // Create Universal Link (web URL que abre la app automáticamente)
@@ -589,7 +710,9 @@ const PostCard: React.FC<PostCardProps> = ({
         : `https://app-dogcatify.netlify.app/post/${post.id}`;
 
       // Prepare share message with clickable universal link
-      const shareMessage = isAlbum
+      const shareMessage = isLostPet
+        ? `🚨 ALERTA MASCOTA PERDIDA 🚨\n\n${post.pet?.name || 'Esta mascota'} se encuentra perdida.\n\n📍 ${post.pet?.lostPetAlert?.lastSeenLocation || 'Ubicación no especificada'}\n📞 ${post.pet?.lostPetAlert?.contactPhone || 'Sin contacto'}\n\n${webLink}\n\n🙏 Si tienes información, por favor comunícate.`
+        : isAlbum
         ? `🐾 ¡Mira este ${contentType} de ${post.pet?.name || 'mascota'} compartido por ${post.author?.name} en DogCatiFy!\n\n📸 ${post.album_images?.length || 1} foto(s)\n\n${webLink}\n\n✨ Abre el link para ver el contenido directo en la app DogCatiFy`
         : `🐾 ¡Mira esta ${contentType} de ${post.author?.name} en DogCatiFy!\n\n${webLink}\n\n✨ Abre el link para ver el contenido directo en la app DogCatiFy`;
 
@@ -682,23 +805,6 @@ const PostCard: React.FC<PostCardProps> = ({
     }
   }, [videoSpeeds]);
 
-  const handleImagePress = () => {
-    if (doubleTapTimer) {
-      // This is a double tap
-      clearTimeout(doubleTapTimer);
-      setDoubleTapTimer(null);
-      handleDoubleTap();
-    } else {
-      // This might be a single tap or the first tap of a double tap
-      const timer = setTimeout(() => {
-        // This was a single tap
-        setDoubleTapTimer(null);
-        // Do nothing on single tap
-      }, 300);
-      setDoubleTapTimer(timer as unknown as NodeJS.Timeout);
-    }
-  };
-
   const handleNextImage = () => {
     if (post.albumImages && post.albumImages.length > 0) {
       setCurrentImageIndex((prevIndex) => 
@@ -726,6 +832,9 @@ const PostCard: React.FC<PostCardProps> = ({
     return date.toLocaleDateString();
   };
 
+  const isLostPetAlert = post.type === 'lost_pet';
+  const lostPetAlert = post.pet?.lostPetAlert || {};
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -739,13 +848,42 @@ const PostCard: React.FC<PostCardProps> = ({
             <Text style={styles.authorName}>{post.author?.name || 'Usuario'}</Text>
             <FollowButton userId={post.userId} authorName={post.author?.name || 'Usuario'} compact={true} />
           </View>
-          <Text style={styles.petName}>con {post.pet?.name || 'mascota'}</Text>
+          <Text style={styles.petName}>
+            {isLostPetAlert ? '🚨 Alerta de mascota perdida' : `con ${post.pet?.name || 'mascota'}`}
+          </Text>
           <Text style={styles.timestamp}>{post.timeAgo || formatDate(post.createdAt)}</Text>
         </View>
         <TouchableOpacity style={styles.moreButton}>
           <MoreHorizontal size={20} color="#666" />
         </TouchableOpacity>
       </View>
+
+      {isLostPetAlert && (
+        <View style={styles.lostAlertContainer}>
+          <View style={styles.lostAlertHeader}>
+            <AlertTriangle size={18} color="#B91C1C" />
+            <Text style={styles.lostAlertTitle}>Se busca a {post.pet?.name || 'esta mascota'}</Text>
+          </View>
+
+          {!!lostPetAlert.lastSeenLocation && (
+            <View style={styles.lostAlertRow}>
+              <MapPin size={14} color="#B91C1C" />
+              <Text style={styles.lostAlertText}>Última ubicación: {lostPetAlert.lastSeenLocation}</Text>
+            </View>
+          )}
+
+          {!!lostPetAlert.contactPhone && (
+            <View style={styles.lostAlertRow}>
+              <Phone size={14} color="#B91C1C" />
+              <Text style={styles.lostAlertText}>Contacto: {lostPetAlert.contactPhone}</Text>
+            </View>
+          )}
+
+          {!!lostPetAlert.reward && (
+            <Text style={styles.lostAlertReward}>💰 Recompensa: {lostPetAlert.reward}</Text>
+          )}
+        </View>
+      )}
 
       {/* Content */}
       {post.content && (
@@ -777,14 +915,18 @@ const PostCard: React.FC<PostCardProps> = ({
                 index={0}
               />
             ) : (
-              <TouchableOpacity activeOpacity={0.9} onPress={handleImagePress}>
-                <Image source={{ uri: post.imageURL }} style={styles.singleImage} />
+              <View>
+                <ZoomableImage
+                  uri={post.imageURL}
+                  style={styles.singleImage}
+                  onDoubleTap={handleDoubleTap}
+                />
                 {showLikeAnimation && (
                   <View style={styles.likeAnimationContainer}>
                     <Heart size={80} color="#FFFFFF" fill="#FFFFFF" />
                   </View>
                 )}
-              </TouchableOpacity>
+              </View>
             )}
           </>
         )}
@@ -793,13 +935,23 @@ const PostCard: React.FC<PostCardProps> = ({
         {post.albumImages && post.albumImages.length > 0 && (
           <View style={styles.albumContainer}>
             <ScrollView
+              key={`album-${post.id}`}
+              style={styles.albumScrollView}
+              contentContainerStyle={styles.albumScrollContent}
               horizontal
               pagingEnabled
+              snapToInterval={width}
+              snapToAlignment="start"
+              decelerationRate="fast"
               showsHorizontalScrollIndicator={false}
+              scrollEnabled={true}
+              directionalLockEnabled={true}
+              nestedScrollEnabled={true}
+              removeClippedSubviews={false}
               onMomentumScrollEnd={(e) => {
                 const contentOffset = e.nativeEvent.contentOffset;
                 const viewSize = e.nativeEvent.layoutMeasurement;
-                const pageNum = Math.floor(contentOffset.x / viewSize.width);
+                const pageNum = Math.round(contentOffset.x / viewSize.width);
                 setCurrentImageIndex(pageNum);
               }}
               onScrollBeginDrag={() => {
@@ -847,15 +999,13 @@ const PostCard: React.FC<PostCardProps> = ({
                         </View>
                       )
                     ) : (
-                      <TouchableOpacity
-                        activeOpacity={0.9}
-                        onPress={handleImagePress}
-                      >
-                        <Image
-                          source={{ uri: cleanUrl }}
+                      <View>
+                        <ZoomableImage
+                          uri={cleanUrl}
                           style={styles.albumMainImage}
+                          onDoubleTap={handleDoubleTap}
                         />
-                      </TouchableOpacity>
+                      </View>
                     )}
                     {showLikeAnimation && currentImageIndex === index && (
                       <View style={styles.likeAnimationContainer}>
@@ -869,7 +1019,7 @@ const PostCard: React.FC<PostCardProps> = ({
             
             {post.albumImages.length > 1 && (
               <View style={styles.albumPagination}>
-                {post.albumImages.map((_, index) => (
+                {post.albumImages.map((_: string, index: number) => (
                   <View 
                     key={index} 
                     style={[
@@ -883,7 +1033,7 @@ const PostCard: React.FC<PostCardProps> = ({
                         
             <View style={styles.albumOverlay}>
               <Text style={styles.albumCount}>
-                {isVideoUrl(post.albumImages[currentImageIndex]) ? '🎥 ' : '📸 '}
+                {((post.albumImages[currentImageIndex] || post.albumImages[0] || '') as string).startsWith('VIDEO:') ? '🎥 ' : '📸 '}
                 {currentImageIndex + 1}/{post.albumImages.length}
               </Text>
             </View>
@@ -1057,6 +1207,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 12,
   },
+  lostAlertContainer: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    gap: 6,
+  },
+  lostAlertHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  lostAlertTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#B91C1C',
+  },
+  lostAlertRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  lostAlertText: {
+    fontSize: 13,
+    color: '#7F1D1D',
+    flex: 1,
+  },
+  lostAlertReward: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#991B1B',
+  },
   imageContainer: {
     position: 'relative',
     marginBottom: 8,
@@ -1071,10 +1256,16 @@ const styles = StyleSheet.create({
     width: width,
     height: width, 
   },
-  albumImageWrapper: {
-    width: '100%',
-    height: width,
+  albumScrollView: {
     width: width,
+    height: width,
+  },
+  albumScrollContent: {
+    alignItems: 'stretch',
+  },
+  albumImageWrapper: {
+    width: width,
+    height: width,
   },
   albumMainImage: {
     width: width,

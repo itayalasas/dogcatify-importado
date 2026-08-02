@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Linking, Modal, Dimensions } from 'react-native';
 import { router } from 'expo-router';
-import { MapPin, Star, Phone, Navigation } from 'lucide-react-native';
+import { MapPin, Star, Phone, Navigation, X } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface Place {
   id: string;
@@ -19,6 +21,7 @@ interface Place {
   description: string;
   petAmenities: string[];
   imageUrl?: string;
+  images?: string[];
   coordinates?: { latitude: number; longitude: number };
   isActive: boolean;
   createdAt: Date;
@@ -43,6 +46,11 @@ export default function Places() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Estados para funcionalidades nuevas
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set());
+  const [currentImageIndex, setCurrentImageIndex] = useState<{ [placeId: string]: number }>({});
 
   useEffect(() => {
     fetchPlaces();
@@ -75,6 +83,7 @@ export default function Places() {
         description: item.description,
         petAmenities: item.pet_amenities || [],
         imageUrl: item.image_url,
+        images: item.images || (item.image_url ? [item.image_url] : []),
         coordinates: item.coordinates,
         isActive: item.is_active,
         createdAt: new Date(item.created_at),
@@ -170,6 +179,26 @@ export default function Places() {
     return category?.name || categoryId;
   };
 
+  const toggleDescription = (placeId: string) => {
+    setExpandedDescriptions(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(placeId)) {
+        newSet.delete(placeId);
+      } else {
+        newSet.add(placeId);
+      }
+      return newSet;
+    });
+  };
+
+  const isDescriptionExpanded = (placeId: string) => {
+    return expandedDescriptions.has(placeId);
+  };
+
+  const shouldTruncateDescription = (description: string) => {
+    return description.length > 100;
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -239,8 +268,40 @@ export default function Places() {
         ) : (
           filteredPlaces.map((place) => (
             <Card key={place.id} style={styles.placeCard}>
-              {place.imageUrl && (
-                <Image source={{ uri: place.imageUrl }} style={styles.placeImage} />
+              {place.images && place.images.length > 0 && (
+                <View style={styles.carouselContainer}>
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    onScroll={(event) => {
+                      const offsetX = event.nativeEvent.contentOffset.x;
+                      const index = Math.round(offsetX / SCREEN_WIDTH);
+                      setCurrentImageIndex(prev => ({ ...prev, [place.id]: index }));
+                    }}
+                    scrollEventThrottle={16}
+                  >
+                    {place.images.map((imageUrl, index) => (
+                      <TouchableOpacity key={index} onPress={() => setSelectedImage(imageUrl)}>
+                        <Image source={{ uri: imageUrl }} style={styles.placeImage} />
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  
+                  {place.images.length > 1 && (
+                    <View style={styles.carouselIndicators}>
+                      {place.images.map((_, index) => (
+                        <View
+                          key={index}
+                          style={[
+                            styles.indicator,
+                            (currentImageIndex[place.id] || 0) === index && styles.activeIndicator
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  )}
+                </View>
               )}
               
               <View style={styles.placeContent}>
@@ -255,9 +316,19 @@ export default function Places() {
                 </View>
 
                 <Text style={styles.placeCategory}>{getCategoryName(place.category)}</Text>
-                <Text style={styles.placeDescription} numberOfLines={2}>
-                  {place.description}
-                </Text>
+                
+                <View>
+                  <Text style={styles.placeDescription} numberOfLines={isDescriptionExpanded(place.id) ? undefined : 2}>
+                    {place.description}
+                  </Text>
+                  {shouldTruncateDescription(place.description) && (
+                    <TouchableOpacity onPress={() => toggleDescription(place.id)}>
+                      <Text style={styles.seeMoreText}>
+                        {isDescriptionExpanded(place.id) ? 'Ver menos' : 'Ver más'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
 
                 <View style={styles.placeDetails}>
                   <View style={styles.placeDetail}>
@@ -320,6 +391,39 @@ export default function Places() {
           ))
         )}
       </ScrollView>
+
+      {/* Modal para zoom de imagen */}
+      <Modal
+        visible={!!selectedImage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedImage(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity 
+            style={styles.modalCloseArea} 
+            activeOpacity={1}
+            onPress={() => setSelectedImage(null)}
+          >
+            <View style={styles.modalContent}>
+              <TouchableOpacity 
+                style={styles.closeButton}
+                onPress={() => setSelectedImage(null)}
+              >
+                <X size={28} color="#FFFFFF" />
+              </TouchableOpacity>
+              
+              {selectedImage && (
+                <Image 
+                  source={{ uri: selectedImage }} 
+                  style={styles.zoomedImage}
+                  resizeMode="contain"
+                />
+              )}
+            </View>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -438,10 +542,33 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     overflow: 'hidden',
   },
+  carouselContainer: {
+    position: 'relative',
+  },
   placeImage: {
-    width: '100%',
+    width: SCREEN_WIDTH - 32,
     height: 200,
     resizeMode: 'cover',
+  },
+  carouselIndicators: {
+    position: 'absolute',
+    bottom: 12,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  indicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  activeIndicator: {
+    backgroundColor: '#FFFFFF',
+    width: 24,
   },
   placeContent: {
     padding: 16,
@@ -556,5 +683,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
+  },
+  seeMoreText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#2D6A6F',
+    marginTop: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseArea: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 20,
+    padding: 8,
+  },
+  zoomedImage: {
+    width: SCREEN_WIDTH,
+    height: '80%',
   },
 });

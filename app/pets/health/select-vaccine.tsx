@@ -5,6 +5,7 @@ import { ArrowLeft, Search, Syringe, Shield, Clock, TriangleAlert as AlertTriang
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Card } from '../../../components/ui/Card';
 import { supabaseClient } from '../../../lib/supabase';
+import { envConfig } from '../../../utils/envConfig';
 
 export default function SelectVaccine() {
   const { petId, species, returnPath, currentValue, currentVeterinarian, currentNotes, currentNextDueDate } = useLocalSearchParams<{
@@ -84,7 +85,7 @@ export default function SelectVaccine() {
       }
 
       const response = await fetch(
-        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/generate-vaccine-recommendations`,
+        `${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/functions/v1/generate-vaccine-recommendations`,
         {
           method: 'POST',
           headers: {
@@ -192,7 +193,7 @@ export default function SelectVaccine() {
     }
 
     router.push({
-      pathname: returnPath,
+      pathname: returnPath as any,
       params: {
         selectedVaccine: JSON.stringify(vaccine),
         // Preserve other form values

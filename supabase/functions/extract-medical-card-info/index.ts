@@ -78,10 +78,21 @@ Deno.serve(async (req: Request) => {
 
 Analiza cuidadosamente esta imagen y extrae información de TODAS LAS VACUNAS visibles en el carnet.
 
+**IMPORTANTE SOBRE LAS FECHAS**:
+- En el carnet puede haber STICKERS con fechas impresas Y fechas escritas a mano
+- **SIEMPRE PRIORIZA las fechas escritas A MANO en la columna de "Firma Veterinario Responsable y Fecha"**
+- Las fechas en stickers pueden ser antiguas o para referencia del lote
+- La fecha CORRECTA de aplicación es la que está escrita a mano junto a la firma del veterinario
+- Busca la columna de firma/fecha del veterinario para obtener la fecha real de aplicación
+
 Para cada vacuna encontrada, busca:
 
-1. **Nombre de la vacuna** (ej: "DHPP", "Rabia", "Quíntuple", "Triple Felina", "FVRCP", etc.)
-2. **Fecha de aplicación** (formato DD/MM/YYYY preferiblemente)
+1. **Nombre de la vacuna** (ej: "DHPP", "Rabia", "Quíntuple", "Triple Felina", "FVRCP", "Recombitek", etc.)
+2. **Fecha de aplicación** - **CRÍTICO**: 
+   - Busca la fecha en la columna "Firma Veterinario Responsable y Fecha"
+   - Esta es la fecha escrita A MANO junto a la firma
+   - **IGNORA las fechas impresas en stickers** a menos que no haya fecha escrita a mano
+   - Formato DD/MM/YYYY o DD/MM/YY
 3. **PRÓXIMA DOSIS/REFUERZO** - MUY IMPORTANTE:
    - Busca INTENSAMENTE en el carnet: "próxima dosis", "refuerzo", "revacunación", "next dose", fecha futura
    - Busca columnas como "Próx. Dosis", "Refuerzo", "Vencimiento"

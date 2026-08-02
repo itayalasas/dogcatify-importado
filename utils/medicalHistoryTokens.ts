@@ -1,4 +1,5 @@
 import { supabaseClient } from '../lib/supabase';
+import { envConfig } from './envConfig';
 
 export interface MedicalHistoryToken {
   id: string;
@@ -100,7 +101,9 @@ export const createMedicalHistoryToken = async (
     console.error('Error in createMedicalHistoryToken:', error);
     
     // Check if this is a session error
-    if (error?.message?.includes('JWT') || error?.message?.includes('expired') || error?.message?.includes('session')) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (message.includes('JWT') || message.includes('expired') || message.includes('session')) {
       return { success: false, error: 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.' };
     }
     
@@ -223,9 +226,7 @@ export const generateSecureMedicalHistoryUrl = async (
       return { success: false, error: tokenResult.error };
     }
 
-    const appDomain = process.env.EXPO_PUBLIC_APP_DOMAIN || 
-                     process.env.EXPO_PUBLIC_APP_URL || 
-                     'https://app-dogcatify.netlify.app';
+    const appDomain = envConfig.getOrDefault('EXPO_PUBLIC_APP_DOMAIN', 'https://app-dogcatify.netlify.app');
     const secureUrl = `${appDomain}/medical-history/${petId}?token=${tokenResult.token}`;
 
     return {
@@ -237,7 +238,9 @@ export const generateSecureMedicalHistoryUrl = async (
   } catch (error) {
     
     // Check if this is a session error
-    if (error?.message?.includes('JWT') || error?.message?.includes('expired') || error?.message?.includes('session')) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (message.includes('JWT') || message.includes('expired') || message.includes('session')) {
       return { success: false, error: 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.' };
     }
     

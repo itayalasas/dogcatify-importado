@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Search, Pill } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { supabaseClient } from '../../../lib/supabase';
+import { envConfig } from '../../../utils/envConfig';
 
 export default function SelectTreatment() {
   const { petId, conditionId, species, illnessName, ageInMonths, weight, returnPath, currentValue, currentCondition, currentSelectedCondition, currentVeterinarian, currentNotes } = useLocalSearchParams<{
@@ -38,64 +39,69 @@ export default function SelectTreatment() {
     try {
       const illness = illnessName || currentCondition;
       const petSpecies = species || 'dog';
-      const petAge = ageInMonths ? parseInt(ageInMonths) : undefined;
+
+      if (!illness) {
+        setLoading(false);
+        return;
+      }
+
+      console.log(`Searching cache for ${petSpecies} - ${illness}`);
+
+      const { data: cachedData, error: cacheError } = await supabaseClient
+        .from('treatments_ai_cache')
+        .select('*')
+        .eq('species', petSpecies)
+        .eq('illness_name', illness)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cachedData && cachedData.treatments) {
+        console.log('✓ Using cached treatment data for', illness);
+        const cachedTreatments = typeof cachedData.treatments === 'string'
+          ? JSON.parse(cachedData.treatments)
+          : cachedData.treatments;
+        setTreatments(cachedTreatments);
+        setFilteredTreatments(cachedTreatments);
+        setLoading(false);
+        return;
+      }
+
+      console.log('⚠ No cache found, generating with AI...');
+      const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+      const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+
+      const petAge = ageInMonths ? parseInt(ageInMonths) : 24;
       const petWeight = weight ? parseFloat(weight) : undefined;
 
-      if (illness && petSpecies && petAge) {
-        const cacheKey = `${petSpecies}_${illness}_${petAge}_${petWeight || 'any'}`;
-        console.log('Checking AI cache for treatments:', cacheKey);
-
-        const { data: cachedData, error: cacheError } = await supabaseClient
-          .from('treatments_ai_cache')
-          .select('*')
-          .eq('species', petSpecies)
-          .eq('illness_name', illness)
-          .eq('age_in_months', petAge)
-          .eq('cache_key', cacheKey)
-          .gt('expires_at', new Date().toISOString())
-          .maybeSingle();
-
-        if (cachedData && cachedData.treatments) {
-          console.log('Using cached treatment data');
-          const cachedTreatments = typeof cachedData.treatments === 'string'
-            ? JSON.parse(cachedData.treatments)
-            : cachedData.treatments;
-          setTreatments(cachedTreatments);
-          setFilteredTreatments(cachedTreatments);
-          setLoading(false);
-          return;
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/generate-treatment-recommendations`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+          },
+          body: JSON.stringify({
+            species: petSpecies,
+            illnessName: illness,
+            ageInMonths: petAge,
+            weight: petWeight
+          })
         }
+      );
 
-        console.log('No cache found, generating with AI...');
-        const supabaseUrl = Deno.env ? Deno.env.get('SUPABASE_URL') : process.env.EXPO_PUBLIC_SUPABASE_URL;
-        const supabaseAnonKey = Deno.env ? Deno.env.get('SUPABASE_ANON_KEY') : process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      if (!response.ok) {
+        throw new Error('Error generating treatment recommendations');
+      }
 
-        const response = await fetch(
-          `${supabaseUrl}/functions/v1/generate-treatment-recommendations`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseAnonKey}`,
-            },
-            body: JSON.stringify({
-              species: petSpecies,
-              illnessName: illness,
-              ageInMonths: petAge,
-              weight: petWeight
-            })
-          }
-        );
+      const { treatments: aiTreatments } = await response.json();
+      console.log(`✓ Generated ${aiTreatments.length} treatment recommendations via AI`);
 
-        if (!response.ok) {
-          throw new Error('Error generating treatment recommendations');
-        }
-
-        const { treatments: aiTreatments } = await response.json();
-        console.log(`Generated ${aiTreatments.length} treatment recommendations`);
-
-        await supabaseClient
-          .from('treatments_ai_cache')
+      const cacheKey = `${petSpecies}_${illness}_general`;
+      await supabaseClient
+        .from('treatments_ai_cache')
           .insert({
             species: petSpecies,
             illness_name: illness,
@@ -103,26 +109,11 @@ export default function SelectTreatment() {
             weight: petWeight,
             treatments: aiTreatments,
             cache_key: cacheKey
-          });
+        });
 
-        setTreatments(aiTreatments);
-        setFilteredTreatments(aiTreatments);
-      } else {
-        let query = supabaseClient
-          .from('medical_treatments')
-          .select('*')
-          .eq('is_active', true);
-
-        if (conditionId) {
-          query = query.eq('condition_id', conditionId);
-        }
-
-        const { data, error } = await query.order('name', { ascending: true });
-
-        if (error) throw error;
-        setTreatments(data || []);
-        setFilteredTreatments(data || []);
-      }
+      console.log('✓ Saved to cache for future use');
+      setTreatments(aiTreatments);
+      setFilteredTreatments(aiTreatments);
     } catch (error) {
       console.error('Error fetching treatments:', error);
     } finally {
@@ -146,7 +137,7 @@ export default function SelectTreatment() {
   const handleSelectTreatment = (treatment: any) => {
     console.log('Navigating back with treatment:', treatment.name);
     router.replace({
-      pathname: returnPath,
+      pathname: returnPath as any,
       params: {
         selectedTreatment: JSON.stringify(treatment),
         ...(currentSelectedCondition && { currentSelectedCondition }),

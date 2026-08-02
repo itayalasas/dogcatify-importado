@@ -1,0 +1,9 @@
+"shadow*" style props are deprecated. Use "boxShadow".
+[EnvConfig] ⚠️ Trying to get 'EXPO_PUBLIC_MERCADOPAGO_BASE_URL' before initialization
+[EnvConfig]    Initialized: false, Config exists: false
+[expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality.
+"textShadow*" style props are deprecated. Use "textShadow".
+[EnvConfig] ⚠️ Trying to get 'EXPO_PUBLIC_SUPABASE_URL' before initialization
+[EnvConfig]    Initialized: false, Config exists: false
+[EnvConfig] ⚠️ Trying to get 'EXPO_PUBLIC_SUPABASE_ANON_KEY' before initialization
+[EnvConfig]    Initialized: false, Config exists: false

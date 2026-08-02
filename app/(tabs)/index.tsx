@@ -5,11 +5,11 @@ import { Platform, Linking, InteractionManager } from 'react-native';
 import Constants from 'expo-constants';
 import PostCard from '../../components/PostCard';
 import PromotionCard from '../../components/PromotionCard';
+import { DottyAssistant } from '../../components/DottyAssistant';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { NotificationPermissionPrompt } from '../../components/NotificationPermissionPrompt';
 import { LocationPermissionPrompt } from '../../components/LocationPermissionPrompt';
-import { MedicalAlertsWidget } from '../../components/MedicalAlertsWidget';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { supabaseClient } from '@/lib/supabase';
 
@@ -172,12 +172,13 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [postsLoaded, setPostsLoaded] = useState(false);
   const [promotionsLoaded, setPromotionsLoaded] = useState(false);
-  const [currentPage, setCurrentPage] = useState(0);
   const [hasMorePosts, setHasMorePosts] = useState(true);
   const [allPostsLoaded, setAllPostsLoaded] = useState(false);
   const [visiblePostIds, setVisiblePostIds] = useState<Set<string>>(new Set());
   const [isTabFocused, setIsTabFocused] = useState(true);
   const [shuffledPromotions, setShuffledPromotions] = useState<any[]>([]);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
   const { t } = useLanguage();
   const { currentUser } = useAuth();
   
@@ -200,6 +201,7 @@ export default function Home() {
 
   useEffect(() => {
     if (currentUser) {
+      checkOnboardingStatus();
       // Defer heavy operations until after initial render
       InteractionManager.runAfterInteractions(() => {
         fetchFeedData();
@@ -207,11 +209,102 @@ export default function Home() {
     }
   }, [currentUser]);
 
+  const checkOnboardingStatus = async () => {
+    if (!currentUser || onboardingChecked) return;
+
+    try {
+      const { data, error } = await supabaseClient
+        .from('profiles')
+        .select('onboarding_completed')
+        .eq('id', currentUser.id)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      // No abrir Dotty automáticamente en cuentas nuevas.
+      // El onboarding se maneja de forma explícita desde la pantalla dedicada.
+      if (data && !data.onboarding_completed) {
+        setShowOnboarding(false);
+      }
+
+      setOnboardingChecked(true);
+    } catch (error) {
+      console.error('Error checking onboarding status:', error);
+      setOnboardingChecked(true);
+    }
+  };
+
+  const handleOnboardingComplete = async () => {
+    if (!currentUser) return;
+
+    try {
+      const { error } = await supabaseClient
+        .from('profiles')
+        .update({
+          onboarding_completed: true,
+          onboarding_completed_at: new Date().toISOString(),
+        })
+        .eq('id', currentUser.id);
+
+      if (error) throw error;
+
+      setShowOnboarding(false);
+    } catch (error) {
+      console.error('Error completing onboarding:', error);
+      setShowOnboarding(false);
+    }
+  };
+
+  const onboardingMessages = [
+    {
+      id: '1',
+      title: '¡Bienvenido a DogCatiFy!',
+      message: 'Soy Dotty, tu asistente virtual. Estoy aquí para ayudarte a descubrir todas las funcionalidades de la app y hacer que tu experiencia sea increíble.',
+    },
+    {
+      id: '2',
+      title: 'Feed de mascotas',
+      message: 'Aquí verás publicaciones de otros usuarios con sus mascotas. Puedes dar like, comentar y compartir. ¡Es como Instagram pero solo para peluditos!',
+    },
+    {
+      id: '3',
+      title: 'Tus mascotas',
+      message: 'En la pestaña "Mascotas" podrás registrar a tus compañeros peludos, llevar su historial médico, vacunas, desparasitaciones y mucho más.',
+      action: {
+        label: 'Ver mis mascotas',
+        onPress: () => {},
+      },
+    },
+    {
+      id: '4',
+      title: 'Servicios y productos',
+      message: 'Encuentra veterinarios, peluquerías, tiendas y más servicios cercanos. También puedes comprar productos para tus mascotas directamente desde la app.',
+      action: {
+        label: 'Explorar servicios',
+        onPress: () => {},
+      },
+    },
+    {
+      id: '5',
+      title: 'Lugares pet-friendly',
+      message: 'Descubre restaurantes, parques y lugares donde puedes ir con tus mascotas. ¡Nunca más te quedarás sin opciones!',
+      action: {
+        label: 'Ver lugares',
+        onPress: () => {},
+      },
+    },
+    {
+      id: '6',
+      title: '¡Todo listo!',
+      message: 'Ya conoces lo básico. Recuerda que siempre puedes encontrar ayuda en tu perfil. ¡Disfruta de DogCatiFy y cuida bien de tus peluditos!',
+    },
+  ];
+
   const fetchFeedData = async () => {
     setLoading(true);
+    setLoadingMore(false);
     try {
       // Reset pagination for fresh load
-      setCurrentPage(0);
       setHasMorePosts(true);
       setAllPostsLoaded(false);
       
@@ -236,6 +329,8 @@ export default function Home() {
       const { data: postsData, error } = await supabaseClient
         .from('posts')
         .select('*')
+        .neq('type', 'lost_pet_found')
+        .neq('type', 'lost_pet_disabled')
         .order('created_at', { ascending: false })
         .limit(INITIAL_LOAD); // Carga inicial muy pequeña
 
@@ -258,7 +353,6 @@ export default function Home() {
 
 
       setPosts(processedPosts);
-      setCurrentPage(1); // Ya cargamos la primera "página"
       setHasMorePosts(processedPosts.length === INITIAL_LOAD);
       setPostsLoaded(true);
 
@@ -276,11 +370,13 @@ export default function Home() {
     setLoadingMore(true);
     
     try {
-      const offset = currentPage * POSTS_PER_PAGE;
+      const offset = posts.length;
       
       const { data: morePosts, error } = await supabaseClient
         .from('posts')
         .select('*')
+        .neq('type', 'lost_pet_found')
+        .neq('type', 'lost_pet_disabled')
         .order('created_at', { ascending: false })
         .range(offset, offset + POSTS_PER_PAGE - 1);
 
@@ -309,7 +405,6 @@ export default function Home() {
 
       // Append new posts to existing ones
       setPosts(prevPosts => [...prevPosts, ...processedNewPosts]);
-      setCurrentPage(prev => prev + 1);
       
       // Check if we got fewer posts than requested (end of data)
       if (morePosts.length < POSTS_PER_PAGE) {
@@ -379,9 +474,9 @@ export default function Home() {
 
   // Intercalar promociones en el feed cada 3 posts
   useEffect(() => {
-    // Only process when both data sources are loaded
-    if (!postsLoaded || !promotionsLoaded) return;
-    if (shuffledPromotions.length === 0 && promotions.length > 0) return; // Esperar al shuffle
+    // Render posts as soon as they are ready; promotions are optional and can
+    // be interleaved once they finish loading.
+    if (!postsLoaded) return;
 
     const interleaveFeedItems = () => {
       const items = [];
@@ -390,8 +485,8 @@ export default function Home() {
       for (let i = 0; i < posts.length; i++) {
         items.push({ type: 'post', data: posts[i] });
 
-        // Insertar promoción cada 3 posts
-        if ((i + 1) % 3 === 0 && shuffledPromotions.length > 0) {
+        // Insertar promoción cada 3 posts, solo cuando ya estén listas
+        if (promotionsLoaded && shuffledPromotions.length > 0 && (i + 1) % 3 === 0) {
           const promo = shuffledPromotions[promoIndex % shuffledPromotions.length];
           items.push({ type: 'promotion', data: promo });
           promoIndex++;
@@ -676,23 +771,15 @@ export default function Home() {
         }
       }
     } catch (error) {
-    try {
-      // Faster refresh - load in parallel
-      await Promise.all([
-        fetchPosts(),
-        fetchPromotions()
-      ]);
-    } catch (error) {
-      console.error('Error refreshing feed:', error);
-    }
+      console.error('Error handling promotion press:', error);
     }
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
+    setLoadingMore(false);
     try {
       // Reset pagination
-      setCurrentPage(0);
       setHasMorePosts(true);
       setAllPostsLoaded(false);
       // Resetear promociones shuffleadas para re-ordenar
@@ -711,6 +798,9 @@ export default function Home() {
   };
 
   const handleEndReached = () => {
+    if (initialLoading || loading || refreshing || loadingMore || !postsLoaded || posts.length === 0 || allPostsLoaded || !hasMorePosts) {
+      return;
+    }
     console.log('🔚 End reached, loading more posts...');
     fetchMorePosts();
   };
@@ -756,7 +846,7 @@ export default function Home() {
   }).current;
 
   const renderFooter = () => {
-    if (!loadingMore) return null;
+    if (!loadingMore || feedItems.length === 0) return null;
     
     return (
       <View style={styles.footerLoader}>
@@ -780,18 +870,7 @@ export default function Home() {
   };
 
   // Memoizar el header para evitar re-renders que causen saltos
-  const listHeader = React.useMemo(() => <MedicalAlertsWidget />, []);
-
-  // Manejar redirección cuando no hay usuario - FUERA del render condicional
-  useEffect(() => {
-    if (!currentUser) {
-      const timer = setTimeout(() => {
-        router.replace('/auth/login');
-      }, 100);
-
-      return () => clearTimeout(timer);
-    }
-  }, [currentUser]);
+  const listHeader = React.useMemo(() => null, []);
 
   // Show initial loader while feed is loading
   if (initialLoading) {
@@ -800,9 +879,6 @@ export default function Home() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <NotificationPermissionPrompt />
-      <LocationPermissionPrompt />
-      {__DEV__ && <NotificationDebugInfo />}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>DogCatiFy</Text>
       </View>
@@ -812,7 +888,10 @@ export default function Home() {
         renderItem={renderFeedItem}
         keyExtractor={(item, index) => `${item.type}-${item.data.id}-${index}`}
         style={styles.content}
+        contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        scrollEnabled={true}
+        nestedScrollEnabled={true}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -825,7 +904,12 @@ export default function Home() {
         onEndReachedThreshold={0.3}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
-        ListHeaderComponent={listHeader}
+        ListHeaderComponent={() => (
+          <>
+            {__DEV__ && <NotificationDebugInfo />}
+            {listHeader}
+          </>
+        )}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmpty}
         initialNumToRender={INITIAL_LOAD}
@@ -840,6 +924,15 @@ export default function Home() {
         }
         getItemLayout={undefined}
       />
+
+      {showOnboarding && (
+        <DottyAssistant
+          messages={onboardingMessages}
+          onComplete={handleOnboardingComplete}
+          onSkip={handleOnboardingComplete}
+        />
+      )}
+
     </SafeAreaView>
   );
 }
@@ -865,6 +958,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  contentContainer: {
+    flexGrow: 1,
   },
   loadingContainer: {
     flex: 1,

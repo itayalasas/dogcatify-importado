@@ -5,6 +5,7 @@ import { ArrowLeft, Send, Phone, Heart } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { supabaseClient } from '../../lib/supabase';
+import { envConfig } from '../../utils/envConfig';
 
 interface ChatMessage {
   id: string;
@@ -182,21 +183,22 @@ export default function AdoptionChat() {
           // Get partner's FCM token
           const { data: profileData } = await supabaseClient
             .from('profiles')
-            .select('fcm_token')
+            .select('push_token, fcm_token')
             .eq('id', partnerData.user_id)
             .single();
 
-          if (profileData?.fcm_token) {
+          if (profileData?.fcm_token || profileData?.push_token) {
             // Use FCM v1 endpoint
-            const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+            const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
             const response = await fetch(`${supabaseUrl}/functions/v1/send-notification-fcm-v1`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+                'Authorization': `Bearer ${envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY')}`,
               },
               body: JSON.stringify({
-                fcmToken: profileData.fcm_token,
+                token: profileData.fcm_token || profileData.push_token,
+                expoPushToken: profileData.push_token || undefined,
                 title: `Nuevo mensaje sobre ${petName}`,
                 body: `${currentUser!.displayName}: ${textToSend.substring(0, 100)}`,
                 data: {

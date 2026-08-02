@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Share, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, ShoppingCart, Star, Plus, Minus, Heart, Share2, Truck, Package, Clock } from 'lucide-react-native';
+import { ArrowLeft, ShoppingCart, Star, Plus, Minus, Heart, Share2, Truck, Package, Clock, MapPin, Phone } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { useCart } from '@/contexts/CartContext';
 import { getActivePromotionForItem, incrementPromotionClicks } from '@/utils/promotions';
+import { hasSeenHint } from '../../utils/oneTimeHints';
+import { normalizePartnerDisplayData } from '../../utils/partnerDisplay';
 
 export default function ProductDetail() {
   const { id, discount } = useLocalSearchParams<{ id: string; discount?: string }>();
@@ -24,6 +27,7 @@ export default function ProductDetail() {
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
   const [activePromotion, setActivePromotion] = useState<any>(null);
+  const [canShowCartHint, setCanShowCartHint] = useState(false);
 
   const cartCount = getCartCount();
 
@@ -42,6 +46,15 @@ export default function ProductDetail() {
       loadActivePromotion();
     }
   }, [id, discount]);
+
+  useEffect(() => {
+    const checkAddToCartHint = async () => {
+      const seen = await hasSeenHint('product_add_to_cart', currentUser?.id);
+      setCanShowCartHint(seen);
+    };
+
+    checkAddToCartHint();
+  }, [currentUser?.id, id]);
 
   const loadActivePromotion = async () => {
     try {
@@ -103,10 +116,7 @@ export default function ProductDetail() {
             .single();
 
           if (partnerData && !partnerError) {
-            setPartnerInfo({
-              id: partnerData.id,
-              ...partnerData
-            });
+            setPartnerInfo(normalizePartnerDisplayData(partnerData));
           }
 
           // Check for active promotions if no discount was passed
@@ -268,7 +278,8 @@ export default function ProductDetail() {
     } catch (error) {
       console.error('Error sharing product:', error);
       // No mostrar error si el usuario cancela
-      if (error.message && !error.message.includes('cancelled')) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message && !message.includes('cancelled')) {
         Alert.alert('Error', 'No se pudo compartir el producto');
       }
     }
@@ -290,6 +301,37 @@ export default function ProductDetail() {
       currency: 'ARS',
     }).format(price);
   };
+
+  const hasShipping = Boolean(partnerInfo?.has_shipping);
+  const shippingCost = Number(partnerInfo?.shipping_cost || 0);
+  const freeShippingThreshold = Number(partnerInfo?.free_shipping_threshold || 0);
+  const hasFreeShippingThreshold = hasShipping && freeShippingThreshold > 0;
+
+  const quickShippingLabel = hasShipping
+    ? hasFreeShippingThreshold
+      ? 'Envío gratis'
+      : 'Envío'
+    : 'Entrega';
+
+  const quickShippingValue = hasShipping
+    ? hasFreeShippingThreshold
+      ? `Comprando +${formatPrice(freeShippingThreshold)}`
+      : shippingCost > 0
+        ? `Desde ${formatPrice(shippingCost)}`
+        : 'Disponible'
+    : 'Retiro en tienda';
+
+  const shippingTitle = hasShipping
+    ? hasFreeShippingThreshold
+      ? `Envío gratis comprando +${formatPrice(freeShippingThreshold)}`
+      : shippingCost > 0
+        ? `Costo de envío ${formatPrice(shippingCost)}`
+        : 'Envío disponible'
+    : 'Retiro en tienda';
+
+  const shippingSubtitle = hasShipping
+    ? 'Llega en 24-48 horas • Envío rápido'
+    : 'Coordiná retiro directamente con la tienda';
 
   if (loading) {
     return (
@@ -319,14 +361,22 @@ export default function ProductDetail() {
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>Detalle del Producto</Text>
-        <TouchableOpacity onPress={() => router.push('/cart')} style={styles.cartButton}>
-          <ShoppingCart size={24} color="#111827" />
-          {cartCount > 0 && (
-            <View style={styles.cartBadge}>
-              <Text style={styles.cartBadgeText}>{cartCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        <OneTimeTooltip
+          hintKey="product_go_to_cart"
+          userId={currentUser?.id}
+          text="Tip: desde aquí ves y finalizás tu compra"
+          enabled={canShowCartHint}
+          placement="bottom"
+        >
+          <TouchableOpacity onPress={() => router.push('/cart')} style={styles.cartButton}>
+            <ShoppingCart size={24} color="#111827" />
+            {cartCount > 0 && (
+              <View style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>{cartCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </OneTimeTooltip>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -443,8 +493,8 @@ export default function ProductDetail() {
             </View>
             <View style={styles.quickInfoDivider} />
             <View style={styles.quickInfoItem}>
-              <Text style={styles.quickInfoLabel}>Envío gratis</Text>
-              <Text style={styles.quickInfoValue}>Comprando +$5.000</Text>
+              <Text style={styles.quickInfoLabel}>{quickShippingLabel}</Text>
+              <Text style={styles.quickInfoValue}>{quickShippingValue}</Text>
             </View>
           </View>
           
@@ -463,8 +513,24 @@ export default function ProductDetail() {
                   </Text>
                 </View>
               )}
-              <View>
+              <View style={styles.storeDetails}>
                 <Text style={styles.storeName}>{partnerInfo?.businessName || 'Tienda'}</Text>
+                {partnerInfo?.businessAddress ? (
+                  <View style={styles.storeMetaRow}>
+                    <MapPin size={12} color="#6B7280" />
+                    <Text style={styles.storeMetaText} numberOfLines={1}>
+                      {partnerInfo.businessAddress}
+                    </Text>
+                  </View>
+                ) : null}
+                {partnerInfo?.phone ? (
+                  <View style={styles.storeMetaRow}>
+                    <Phone size={12} color="#6B7280" />
+                    <Text style={styles.storeMetaText} numberOfLines={1}>
+                      {partnerInfo.phone}
+                    </Text>
+                  </View>
+                ) : null}
                 <Text style={styles.storeSubtitle}>Ver todos los productos</Text>
               </View>
             </View>
@@ -477,8 +543,8 @@ export default function ProductDetail() {
           <View style={styles.shippingCard}>
             <Truck size={24} color="#00A650" />
             <View style={styles.shippingInfo}>
-              <Text style={styles.shippingTitle}>Envío gratis comprando +$5.000</Text>
-              <Text style={styles.shippingSubtitle}>Llega en 24-48 horas • Envío rápido</Text>
+              <Text style={styles.shippingTitle}>{shippingTitle}</Text>
+              <Text style={styles.shippingSubtitle}>{shippingSubtitle}</Text>
             </View>
           </View>
         </View>
@@ -510,9 +576,16 @@ export default function ProductDetail() {
           </View>
 
           {product.stock > 0 ? (
-            <TouchableOpacity style={styles.buyButton} onPress={handleAddToCart}>
-              <Text style={styles.buyButtonText}>Agregar al carrito</Text>
-            </TouchableOpacity>
+            <OneTimeTooltip
+              hintKey="product_add_to_cart"
+              userId={currentUser?.id}
+              text="Tip: agregá primero al carrito"
+              onHidden={() => setCanShowCartHint(true)}
+            >
+              <TouchableOpacity style={styles.buyButton} onPress={handleAddToCart}>
+                <Text style={styles.buyButtonText}>Agregar al carrito</Text>
+              </TouchableOpacity>
+            </OneTimeTooltip>
           ) : (
             <View style={styles.outOfStockButton}>
               <Text style={styles.outOfStockButtonText}>Sin stock disponible</Text>
@@ -647,10 +720,10 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   errorContainer: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    paddingVertical: 40,
+    paddingHorizontal: 20,
   },
   errorText: {
     fontSize: 16,
@@ -842,6 +915,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  storeDetails: {
+    flex: 1,
+  },
   storeLogo: {
     width: 40,
     height: 40,
@@ -867,6 +943,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
     marginBottom: 2,
+  },
+  storeMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 2,
+  },
+  storeMetaText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
   },
   storeSubtitle: {
     fontSize: 12,

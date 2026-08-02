@@ -1,11 +1,67 @@
 import React from 'react';
 import { View, Text, StyleSheet, SafeAreaView, Platform } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import { Card } from '../components/ui/Card';
 
 export default function WebInfo() {
+  const params = useLocalSearchParams<{
+    status?: string | string[];
+    title?: string | string[];
+    message?: string | string[];
+    code?: string | string[];
+  }>();
+
+  const getFirst = (value?: string | string[]) =>
+    Array.isArray(value) ? (value[0] ?? '') : (value ?? '');
+
+  const status = getFirst(params.status);
+  const title = getFirst(params.title);
+  const message = getFirst(params.message);
+  const code = getFirst(params.code);
+
+  const hasApprovalResult = Boolean(status || title || message || code);
+
+  const statusTheme = {
+    success: { badge: 'OK', color: '#0f766e', bg: '#E6F4F2', border: '#4B9991' },
+    warning: { badge: 'ATENCIÓN', color: '#9a3412', bg: '#FFF7ED', border: '#fdba74' },
+    danger: { badge: 'ERROR', color: '#991b1b', bg: '#FEF2F2', border: '#fecaca' },
+    info: { badge: 'INFO', color: '#1d4ed8', bg: '#EEF6FF', border: '#93c5fd' },
+  }[status as 'success' | 'warning' | 'danger' | 'info'] || {
+    badge: 'INFO',
+    color: '#1d4ed8',
+    bg: '#EEF6FF',
+    border: '#93c5fd',
+  };
+
   // Solo mostrar en web
   if (Platform.OS !== 'web') {
     return null;
+  }
+
+  if (hasApprovalResult) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.content}>
+          <Card style={styles.infoCard}>
+            <View style={styles.header}>
+              <Text style={styles.logo}>🐾</Text>
+              <Text style={styles.title}>DogCatiFy</Text>
+            </View>
+
+            <View style={[styles.resultBadge, { backgroundColor: statusTheme.bg, borderColor: statusTheme.border }]}> 
+              <Text style={[styles.resultBadgeText, { color: statusTheme.color }]}>{statusTheme.badge}</Text>
+            </View>
+
+            <Text style={styles.resultTitle}>{title || 'Resultado de aprobación'}</Text>
+            <Text style={styles.resultMessage}>{message || 'Tu solicitud fue procesada.'}</Text>
+
+            <View style={[styles.resultCodeBox, { backgroundColor: statusTheme.bg, borderColor: statusTheme.border }]}>
+              <Text style={styles.resultCodeText}>Código: {code || '200'}</Text>
+            </View>
+          </Card>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -100,6 +156,45 @@ const styles = StyleSheet.create({
     color: '#374151',
     lineHeight: 24,
     textAlign: 'left',
+  },
+  resultBadge: {
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 14,
+  },
+  resultBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
+  resultTitle: {
+    fontSize: 24,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  resultMessage: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 16,
+  },
+  resultCodeBox: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+  },
+  resultCodeText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#374151',
+    textAlign: 'center',
   },
   downloadSection: {
     width: '100%',

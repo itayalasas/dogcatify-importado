@@ -1,0 +1,2 @@
+/*\n  # Corregir recursión infinita en políticas de profiles\n  \n  1. Problema\n    - La política "Admins can view all profiles" causa recursión infinita\n    - Al verificar is_admin consulta profiles dentro de la política de profiles\n  \n  2. Solución\n    - Eliminar la política problemática de profiles\n    - Los administradores ya pueden ver profiles a través de otras políticas\n*/\n\n-- Eliminar la política problemática que causa recursión infinita\nDROP POLICY IF EXISTS "Admins can view all profiles" ON profiles;
+\n;

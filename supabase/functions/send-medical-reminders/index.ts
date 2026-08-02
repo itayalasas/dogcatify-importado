@@ -58,7 +58,7 @@ Deno.serve(async (req: Request) => {
 
         const { data: userProfile, error: profileError } = await supabase
           .from('profiles')
-          .select('push_token, notification_preferences')
+          .select('push_token, fcm_token, notification_preferences')
           .eq('id', alert.user_id)
           .maybeSingle();
 
@@ -69,7 +69,7 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        if (!userProfile?.push_token) {
+        if (!userProfile?.fcm_token && !userProfile?.push_token) {
           console.log(`User ${alert.user_id} has no push token`);
           await supabase.rpc('mark_notification_sent', {
             p_alert_id: alert.alert_id,
@@ -79,38 +79,86 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        const expoPushMessage = {
-          to: userProfile.push_token,
-          sound: 'default',
-          title: title,
-          body: body,
-          data: {
+        let pushSent = false;
+        let pushResult: any = null;
+
+        if (userProfile.fcm_token) {
+          const dataPayload = {
             type: 'medical_reminder',
-            alertId: alert.alert_id,
-            petId: alert.pet_id,
-            alertType: alert.alert_type,
-            scheduledDate: alert.scheduled_date,
-          },
-          priority: 'high',
-          channelId: 'medical-reminders',
-        };
+            screen: 'PetCare',
+            alertId: String(alert.alert_id),
+            petId: String(alert.pet_id),
+            petName: String(alert.pet_name || ''),
+            alertType: String(alert.alert_type),
+            scheduledDate: String(alert.scheduled_date),
+          };
 
-        const expoPushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify(expoPushMessage),
-        });
+          const fcmResponse = await fetch(`${supabaseUrl}/functions/v1/send-notification-fcm-v1`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+            },
+            body: JSON.stringify({
+              token: userProfile.fcm_token,
+              expoPushToken: userProfile.push_token || undefined,
+              title,
+              body,
+              data: dataPayload,
+              channelId: 'medical-reminders',
+            }),
+          });
 
-        if (!expoPushResponse.ok) {
-          const errorText = await expoPushResponse.text();
-          console.error(`Failed to send push notification: ${errorText}`);
+          if (fcmResponse.ok) {
+            pushResult = await fcmResponse.json();
+            pushSent = true;
+            console.log('Push notification sent via FCM v1:', pushResult);
+          } else {
+            const fcmErrorText = await fcmResponse.text();
+            console.warn(`FCM v1 send failed, trying Expo fallback: ${fcmErrorText}`);
+          }
+        }
+
+        if (!pushSent && userProfile.push_token) {
+          const expoPushMessage = {
+            to: userProfile.push_token,
+            sound: 'default',
+            title: title,
+            body: body,
+            data: {
+              type: 'medical_reminder',
+              screen: 'PetCare',
+              alertId: alert.alert_id,
+              petId: alert.pet_id,
+              petName: alert.pet_name || '',
+              alertType: alert.alert_type,
+              scheduledDate: alert.scheduled_date,
+            },
+            priority: 'high',
+            channelId: 'medical-reminders',
+          };
+
+          const expoPushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(expoPushMessage),
+          });
+
+          if (expoPushResponse.ok) {
+            pushResult = await expoPushResponse.json();
+            pushSent = true;
+            console.log('Push notification sent via Expo legacy:', pushResult);
+          } else {
+            const errorText = await expoPushResponse.text();
+            console.error(`Failed to send push notification: ${errorText}`);
+          }
+        }
+
+        if (!pushSent) {
           errorCount++;
           results.push({ alert_id: alert.alert_id, success: false, error: 'Push send failed' });
           continue;
         }
-
-        const pushResult = await expoPushResponse.json();
-        console.log('Push notification sent:', pushResult);
 
         const { error: markError } = await supabase.rpc('mark_notification_sent', {
           p_alert_id: alert.alert_id,

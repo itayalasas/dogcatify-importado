@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowLeft, Building, Camera, MapPin, Phone, Mail, FileText, DollarSign } from 'lucide-react-native';
+import { ArrowLeft, Building, Camera, MapPin, Phone, Mail, FileText, DollarSign, Truck } from 'lucide-react-native';
 import { ChevronDown, Check } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -13,6 +13,11 @@ import { Modal, TextInput } from 'react-native';
 import { supabaseClient } from '../../lib/supabase';
 import { NotificationService } from '@/utils/notifications';
 import { PartnerServiceAgreement } from '../../components/PartnerServiceAgreement';
+import { envConfig } from '../../utils/envConfig';
+import { resolvePartnerPlanTier } from '../../utils/partnerPlans';
+import { resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
+
+const SYSTEM_CONFIG_KEY = 'system_config';
 
 const replicateMercadoPagoConfig = async (userId: string) => {
   try {
@@ -88,8 +93,15 @@ const businessTypes = [
   { id: 'shelter', name: 'Refugio', icon: '🐾', description: 'Adopción y rescate de mascotas' },
 ];
 
+type RegistrationPlanMeta = {
+  effectiveTier: 'starter' | 'growth' | 'pro';
+  effectiveStatus: string;
+  effectiveStartedAt: string | null;
+  effectiveExpiresAt: string | null;
+};
+
 export default function PartnerRegister() {
-  const { currentUser } = useAuth();
+  const { currentUser, updateCurrentUser } = useAuth();
   const { sendNotificationToAdmin } = useNotifications();
   const [selectedType, setSelectedType] = useState<string>('');
   const [businessName, setBusinessName] = useState('');
@@ -100,6 +112,7 @@ export default function PartnerRegister() {
   const [images, setImages] = useState<string[]>([]);
   const [hasShipping, setHasShipping] = useState(false);
   const [shippingCost, setShippingCost] = useState('');
+  const [freeShippingThreshold, setFreeShippingThreshold] = useState('');
   const [loading, setLoading] = useState(false);
   
   // Nuevos campos de ubicación
@@ -126,6 +139,7 @@ export default function PartnerRegister() {
   const [geocodingResults, setGeocodingResults] = useState<any[]>([]);
   const [showGeocodingResults, setShowGeocodingResults] = useState(false);
   const [selectedGeocodingResult, setSelectedGeocodingResult] = useState<any>(null);
+  const registrationPlanMetaRef = useRef<RegistrationPlanMeta | null>(null);
 
   // Estados para el contrato de servicio
   const [showAgreement, setShowAgreement] = useState(false);
@@ -134,10 +148,28 @@ export default function PartnerRegister() {
   // Estados para IVA
   const [ivaRate, setIvaRate] = useState('0');
   const [ivaIncludedInPrice, setIvaIncludedInPrice] = useState(false);
+  const [autoApprovePartners, setAutoApprovePartners] = useState(false);
 
   useEffect(() => {
     loadCountries();
+    loadSystemConfig();
   }, []);
+
+  const loadSystemConfig = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('admin_settings')
+        .select('value')
+        .eq('key', SYSTEM_CONFIG_KEY)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      setAutoApprovePartners(Boolean(data?.value?.auto_approve_partners));
+    } catch (error) {
+      console.error('Error loading system config for partner registration:', error);
+    }
+  };
 
   const loadCountries = async () => {
     try {
@@ -229,7 +261,7 @@ export default function PartnerRegister() {
 
     try {
       const query = `${calle.trim()}+${numero.trim()}+${selectedDepartment.name}+${selectedCountry.name}`;
-      const nominatimBaseUrl = process.env.EXPO_PUBLIC_NOMINATIM_BASE_URL || 'https://nominatim.openstreetmap.org';
+      const nominatimBaseUrl = envConfig.getOrDefault('EXPO_PUBLIC_NOMINATIM_BASE_URL', 'https://nominatim.openstreetmap.org');
       const searchUrl = `${nominatimBaseUrl}/search?q=${query}&format=json&limit=4&addressdetails=1`;
       
       const response = await fetch(searchUrl, {
@@ -271,7 +303,7 @@ export default function PartnerRegister() {
     
     // Extraer barrio
     let barrioFound = '';
-    const streetIndex = parts.findIndex(part => 
+    const streetIndex = parts.findIndex((part: string) => 
       part.toLowerCase().includes(calle.toLowerCase())
     );
     
@@ -313,7 +345,7 @@ export default function PartnerRegister() {
   const pickDocument = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
         quality: 1,
@@ -330,7 +362,7 @@ export default function PartnerRegister() {
   const handleTakePhoto = async () => {
     try {
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
         allowsEditing: true,
         aspect: [4, 3],
@@ -506,6 +538,86 @@ export default function PartnerRegister() {
       return;
     }
 
+    try {
+      const { data: partnerRows, error: partnerCountError } = await supabaseClient
+        .from('partners')
+        .select('subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at, subscription_plan_started_at')
+        .eq('user_id', currentUser.id);
+
+      if (partnerCountError) {
+        throw partnerCountError;
+      }
+
+      const order: Array<'starter' | 'growth' | 'pro'> = ['starter', 'growth', 'pro'];
+      const representativePartner = (partnerRows || []).reduce((best: any, row: any) => {
+        const resolvedTier = resolvePartnerPlanTier(
+          row.subscription_plan_tier,
+          row.subscription_plan_status,
+          row.subscription_plan_expires_at
+        ) as 'starter' | 'growth' | 'pro';
+
+        if (!best) {
+          return row;
+        }
+
+        const bestTier = resolvePartnerPlanTier(
+          best.subscription_plan_tier,
+          best.subscription_plan_status,
+          best.subscription_plan_expires_at
+        ) as 'starter' | 'growth' | 'pro';
+
+        return order.indexOf(resolvedTier) > order.indexOf(bestTier) ? row : best;
+      }, null);
+
+      const effectiveTier = representativePartner
+        ? (resolvePartnerPlanTier(
+            representativePartner.subscription_plan_tier,
+            representativePartner.subscription_plan_status,
+            representativePartner.subscription_plan_expires_at
+          ) as 'starter' | 'growth' | 'pro')
+        : 'starter';
+      const effectiveStatus = representativePartner?.subscription_plan_status || (autoApprovePartners ? 'active' : 'pending');
+      const effectiveStartedAt = representativePartner?.subscription_plan_started_at || (autoApprovePartners ? new Date().toISOString() : null);
+      const effectiveExpiresAt = representativePartner?.subscription_plan_expires_at || null;
+      registrationPlanMetaRef.current = {
+        effectiveTier,
+        effectiveStatus,
+        effectiveStartedAt,
+        effectiveExpiresAt,
+      };
+
+      const partnerLimits = resolveSubscriptionPlanLimits({
+        tier: effectiveTier,
+        audience_target: 'partners',
+      });
+
+      const maxBusinessesAllowed = partnerLimits.partners.maxBusinesses;
+      const { count: currentBusinessesCount, error: currentBusinessesError } = await supabaseClient
+        .from('partners')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', currentUser.id);
+
+      if (currentBusinessesError) {
+        throw currentBusinessesError;
+      }
+
+      if (maxBusinessesAllowed !== null && (currentBusinessesCount || 0) >= maxBusinessesAllowed) {
+        Alert.alert(
+          'Límite alcanzado',
+          `Tu plan actual permite registrar hasta ${maxBusinessesAllowed} negocio${maxBusinessesAllowed === 1 ? '' : 's'}. Actualiza tu suscripción para agregar otro negocio.`,
+          [
+            { text: 'Ver planes', onPress: () => router.push('/partner/subscription') },
+            { text: 'OK', style: 'cancel' },
+          ]
+        );
+        return;
+      }
+    } catch (limitError) {
+      console.error('Error validating partner business limit:', limitError);
+      Alert.alert('Error', 'No se pudo validar el límite de negocios de tu plan. Intenta nuevamente.');
+      return;
+    }
+
     setLoading(true);
     try {
       let logoUrl = null;
@@ -574,9 +686,14 @@ export default function PartnerRegister() {
 
   const proceedWithoutGallery = async () => {
     try {
+      const currentUserId = currentUser?.id;
+      if (!currentUserId) {
+        throw new Error('Usuario no autenticado');
+      }
+
       let logoUrl = null;
       if (logo) {
-        logoUrl = await uploadImage(logo, `partners/${currentUser.id}/${Date.now()}_logo.jpg`);
+        logoUrl = await uploadImage(logo, `partners/${currentUserId}/${Date.now()}_logo.jpg`);
       }
       await createPartnerRecord(logoUrl, []);
     } catch (error) {
@@ -590,46 +707,97 @@ export default function PartnerRegister() {
   const createPartnerRecord = async (logoUrl: string | null, imageUrls: string[]) => {
     try {
       console.log('Creating partner record in database...');
+      const currentUserId = currentUser?.id;
+
+      if (!currentUserId) {
+        throw new Error('Usuario no autenticado');
+      }
+
+      const registrationPlanMeta = registrationPlanMetaRef.current;
+      if (!registrationPlanMeta) {
+        throw new Error('No se pudieron resolver los datos de suscripción para el registro');
+      }
+
+      const {
+        effectiveTier,
+        effectiveStatus,
+        effectiveStartedAt,
+        effectiveExpiresAt,
+      } = registrationPlanMeta;
+
+      const parsedShippingCost = hasShipping ? parseFloat(shippingCost) || 0 : 0;
+      const parsedFreeShippingThreshold = hasShipping ? parseFloat(freeShippingThreshold) || 0 : 0;
+
+      const partnerPayload: any = {
+        user_id: currentUserId,
+        business_name: businessName.trim(),
+        business_type: selectedType,
+        subscription_plan_tier: effectiveTier,
+        subscription_plan_status: effectiveStatus,
+        subscription_plan_started_at: effectiveStartedAt,
+        subscription_plan_expires_at: effectiveTier === 'starter' ? null : effectiveExpiresAt,
+        description: description.trim(),
+        address: `${calle.trim()} ${numero.trim()}${barrio ? ', ' + barrio : ''}, ${selectedDepartment?.name || ''}, ${selectedCountry?.name || ''}`,
+        phone: phone.trim(),
+        email: email.trim(),
+        logo: logoUrl,
+        images: imageUrls,
+        has_shipping: hasShipping,
+        shipping_cost: parsedShippingCost,
+        country_id: selectedCountry?.id,
+        department_id: selectedDepartment?.id,
+        calle: calle.trim(),
+        numero: numero.trim(),
+        barrio: barrio.trim() || null,
+        codigo_postal: codigoPostal.trim() || null,
+        latitud: latitud.trim() || null,
+        longitud: longitud.trim() || null,
+        rut: rut.trim(),
+        iva_rate: parseFloat(ivaRate) || 0,
+        iva_included_in_price: ivaIncludedInPrice,
+        is_active: true,
+        is_verified: autoApprovePartners,
+        approval_status: autoApprovePartners ? 'approved' : 'pending',
+        rating: 0,
+        reviews_count: 0,
+        created_at: new Date().toISOString(),
+      };
+
+      if (selectedType === 'shop' && hasShipping) {
+        partnerPayload.free_shipping_threshold = parsedFreeShippingThreshold;
+      }
       
       // Create partner request
-      const { error } = await supabaseClient
+      let { error } = await supabaseClient
         .from('partners')
-        .insert({
-          user_id: currentUser.id,
-          business_name: businessName.trim(),
-          business_type: selectedType,
-          description: description.trim(),
-          address: `${calle.trim()} ${numero.trim()}${barrio ? ', ' + barrio : ''}, ${selectedDepartment?.name || ''}, ${selectedCountry?.name || ''}`,
-          phone: phone.trim(),
-          email: email.trim(),
-          logo: logoUrl,
-          images: imageUrls,
-          has_shipping: hasShipping,
-          shipping_cost: hasShipping ? parseFloat(shippingCost) || 0 : 0,
-          country_id: selectedCountry?.id,
-          department_id: selectedDepartment?.id,
-          calle: calle.trim(),
-          numero: numero.trim(),
-          barrio: barrio.trim() || null,
-          codigo_postal: codigoPostal.trim() || null,
-          latitud: latitud.trim() || null,
-          longitud: longitud.trim() || null,
-          rut: rut.trim(),
-          iva_rate: parseFloat(ivaRate) || 0,
-          iva_included_in_price: ivaIncludedInPrice,
-          is_active: true,
-          is_verified: false,
-          rating: 0,
-          reviews_count: 0,
-          created_at: new Date().toISOString(),
-        });
+        .insert(partnerPayload);
+
+      const errorText = String(error?.message || '');
+      const thresholdColumnMissing =
+        !!error &&
+        (
+          error?.code === '42703' ||
+          error?.code === 'PGRST204' ||
+          errorText.includes('free_shipping_threshold')
+        );
+
+      if (thresholdColumnMissing) {
+        console.warn('free_shipping_threshold column missing in partners table. Retrying insert without threshold.');
+        delete partnerPayload.free_shipping_threshold;
+
+        const retry = await supabaseClient
+          .from('partners')
+          .insert(partnerPayload);
+
+        error = retry.error;
+      }
 
       if (error) throw error;
       
       console.log('Partner record created successfully');
 
       // Check if user has other businesses with Mercado Pago configured
-      await replicateMercadoPagoConfig(currentUser.id);
+      await replicateMercadoPagoConfig(currentUserId);
       
       // Update user profile to be a partner
       const { error: profileError } = await supabaseClient
@@ -638,9 +806,16 @@ export default function PartnerRegister() {
           is_partner: true,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', currentUser.id);
+        .eq('id', currentUserId);
 
       if (profileError) throw profileError;
+
+      if (currentUser) {
+        updateCurrentUser({
+          ...currentUser,
+          isPartner: true,
+        });
+      }
 
       // Enviar notificación push al admin
       try {
@@ -651,7 +826,7 @@ export default function PartnerRegister() {
             type: 'partner_request',
             businessName: businessName.trim(),
             businessType: selectedType,
-            userId: currentUser.id,
+            userId: currentUserId,
             deepLink: '(admin-tabs)/requests'
           }
         );
@@ -662,7 +837,9 @@ export default function PartnerRegister() {
 
       Alert.alert(
         'Registro exitoso',
-        'Tu solicitud para ser aliado ha sido enviada. Te notificaremos cuando sea aprobada.',
+        autoApprovePartners
+          ? 'Tu negocio fue aprobado automáticamente y ya quedó activo dentro de la plataforma.'
+          : 'Tu solicitud para ser aliado ha sido enviada. Te notificaremos cuando sea aprobada.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (error) {
@@ -873,13 +1050,13 @@ export default function PartnerRegister() {
             </View>
           )}
 
-          {/* Sección de IVA */}
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>💰 Configuración de IVA</Text>
+        {/* Sección de IVA */}
+        <View style={styles.sectionHeader}>
+            <Text style={styles.sectionHeaderTitle}>💰 Configuración de IVA</Text>
             <Text style={styles.sectionSubtitle}>
               Configura el IVA que se aplicará a tus servicios y productos
             </Text>
-          </View>
+        </View>
 
           <View style={styles.row}>
             <View style={styles.halfWidth}>
@@ -995,14 +1172,25 @@ export default function PartnerRegister() {
               </TouchableOpacity>
 
               {hasShipping && (
-                <Input
-                  label="Costo de envío"
-                  placeholder="Ej: 500"
-                  value={shippingCost}
-                  onChangeText={setShippingCost}
-                  keyboardType="numeric"
-                  leftIcon={<DollarSign size={20} color="#6B7280" />}
-                />
+                <>
+                  <Input
+                    label="Costo de envío"
+                    placeholder="Ej: 500"
+                    value={shippingCost}
+                    onChangeText={setShippingCost}
+                    keyboardType="numeric"
+                    leftIcon={<DollarSign size={20} color="#6B7280" />}
+                  />
+
+                  <Input
+                    label="Umbral envío gratis"
+                    placeholder="Ej: 5000"
+                    value={freeShippingThreshold}
+                    onChangeText={setFreeShippingThreshold}
+                    keyboardType="numeric"
+                    leftIcon={<Truck size={20} color="#6B7280" />}
+                  />
+                </>
               )}
             </View>
           )}
@@ -1306,7 +1494,7 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 16,
   },
-  sectionTitle: {
+  sectionHeaderTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
     color: '#111827',

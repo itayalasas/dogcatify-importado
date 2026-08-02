@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, MapPin, Clock, Phone, Star, Search, User, Heart, MessageCircle, Stethoscope, Scissors, Home, Dog, ShoppingBag, Syringe, Activity, Pill, Droplet, Bath } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
-import { LoadingSpinner } from '../../../components/ui/LoadingSpinner';
+import { LoadingScreen } from '../../../components/ui/LoadingScreen';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 
@@ -28,6 +28,15 @@ export default function PartnerServices() {
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [viewerImages, setViewerImages] = useState<string[]>([]);
+
+  const handleBackPress = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace('/(tabs)/services');
+  };
 
   useEffect(() => {
     fetchPartnerDetails();
@@ -233,10 +242,10 @@ export default function PartnerServices() {
         // Parse basic info
         const lines = description.split('\n');
         const basicInfo = lines[0] || '';
-        const healthInfo = lines.find(line => line.includes('🩺')) || '';
-        const temperamentInfo = lines.find(line => line.includes('🧠')) || '';
-        const adoptionInfo = lines.find(line => line.includes('🏡')) || '';
-        const contactInfo = lines.find(line => line.includes('📞')) || '';
+        const healthInfo = lines.find((line: string) => line.includes('🩺')) || '';
+        const temperamentInfo = lines.find((line: string) => line.includes('🧠')) || '';
+        const adoptionInfo = lines.find((line: string) => line.includes('🏡')) || '';
+        const contactInfo = lines.find((line: string) => line.includes('📞')) || '';
         
         return {
           id: service.id,
@@ -673,7 +682,8 @@ export default function PartnerServices() {
       router.push(`/chat/${conversationId}?petName=${petName}`);
     } catch (error) {
       console.error('Error starting adoption chat:', error);
-      Alert.alert('Error', `No se pudo iniciar la conversación: ${error?.message || error || 'Error desconocido'}`);
+      const message = error instanceof Error ? error.message : String(error);
+      Alert.alert('Error', `No se pudo iniciar la conversación: ${message || 'Error desconocido'}`);
     }
   };
 
@@ -819,17 +829,13 @@ export default function PartnerServices() {
   );
   
   if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <LoadingSpinner message="Cargando servicios..." />
-      </SafeAreaView>
-    );
+    return <LoadingScreen message="Cargando servicios..." />;
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.titleContainer}>

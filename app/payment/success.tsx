@@ -6,14 +6,24 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { supabaseClient } from '@/lib/supabase';
 import { useCart } from '../../contexts/CartContext';
+import { logResourceAction } from '../../services/auditService';
+import { envConfig } from '../../utils/envConfig';
+
+const getSingleParam = (value?: string | string[]) =>
+  Array.isArray(value) ? value[0] : value;
 
 export default function PaymentSuccess() {
-  const { order_id, type, payment_id } = useLocalSearchParams<{
-    order_id: string;
+  const { order_id, external_reference, type, payment_id, collection_id } = useLocalSearchParams<{
+    order_id?: string;
+    external_reference?: string;
     type?: string;
     payment_id?: string;
+    collection_id?: string;
   }>();
 
+  const orderId = getSingleParam(order_id) || getSingleParam(external_reference) || '';
+  const paymentId = getSingleParam(payment_id) || getSingleParam(collection_id) || '';
+  const paymentType = getSingleParam(type);
   const { clearCart } = useCart();
   const [orderDetails, setOrderDetails] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -23,10 +33,10 @@ export default function PaymentSuccess() {
     loadOrderDetails();
     // Limpiar el carrito cuando llegamos a la pantalla de éxito
     clearCart();
-  }, [order_id, type]);
+  }, [orderId, paymentId, paymentType]);
 
   const loadOrderDetails = async () => {
-    if (!order_id) {
+    if (!orderId) {
       console.error('No order_id provided');
       setError('No se encontró el ID de la orden');
       setLoading(false);
@@ -34,13 +44,13 @@ export default function PaymentSuccess() {
     }
 
     try {
-      console.log('Loading order details:', { order_id, type, payment_id });
+      console.log('Loading order details:', { orderId, type: paymentType, paymentId });
 
       // Load order from database
-      const { data: order, error: orderError } = await supabaseClient
+      const { data: initialOrder, error: orderError } = await supabaseClient
         .from('orders')
         .select('*')
-        .eq('id', order_id)
+        .eq('id', orderId)
         .single();
 
       if (orderError) {
@@ -48,8 +58,60 @@ export default function PaymentSuccess() {
         throw new Error('No se pudo cargar la orden');
       }
 
-      if (!order) {
+      if (!initialOrder) {
         throw new Error('Orden no encontrada');
+      }
+
+      let order = initialOrder;
+
+      const deepLinkPaymentId = paymentId;
+      const shouldSyncFromDeepLink = (!order.payment_id || order.status === 'pending');
+
+      if (shouldSyncFromDeepLink) {
+        try {
+          const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+          const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+
+          const syncPayload = deepLinkPaymentId
+            ? {
+                type: 'payment',
+                action: 'payment.updated',
+                data: { id: String(deepLinkPaymentId) }
+              }
+            : {
+                order_id: String(orderId)
+              };
+
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+          try {
+            await fetch(`${supabaseUrl}/functions/v1/mercadopago-webhook`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseAnonKey}`,
+              },
+              body: JSON.stringify(syncPayload),
+              signal: controller.signal,
+            });
+          } finally {
+            clearTimeout(timeoutId);
+          }
+
+          // Recargar orden para mostrar datos actualizados
+          const { data: refreshedOrder } = await supabaseClient
+            .from('orders')
+            .select('*')
+            .eq('id', orderId)
+            .single();
+
+          if (refreshedOrder) {
+            order = refreshedOrder;
+          }
+        } catch (syncError) {
+          console.error('Error syncing payment from deep link:', syncError);
+        }
       }
 
       console.log('Order loaded:', {
@@ -60,9 +122,11 @@ export default function PaymentSuccess() {
       });
 
       // Format order details for display
+      const isPendingValidation = order.status === 'pending' || !order.payment_id;
+
       const formattedOrder = {
         id: order.id,
-        displayId: `#${order.id.slice(-6)}`,
+        displayId: order.order_number || `#${order.id.slice(-6)}`,
         total: new Intl.NumberFormat('es-UY', {
           style: 'currency',
           currency: 'UYU',
@@ -72,25 +136,52 @@ export default function PaymentSuccess() {
                 order.status,
         paymentId: order.payment_id ? `#mp${order.payment_id.slice(-6)}` : 'Pendiente',
         isBooking: order.order_type === 'service_booking',
+        isSplitPurchase: Boolean(
+          order.is_split_master ||
+          Number(order.partner_breakdown?.total_partners || 0) > 1 ||
+          Object.keys(order.partner_breakdown?.partners || {}).length > 1
+        ),
         partnerName: order.partner_name,
         serviceName: order.service_name,
-        items: order.items || []
+        items: order.items || [],
+        isPendingValidation,
       };
 
       setOrderDetails(formattedOrder);
       setLoading(false);
+      
+      // Registrar pago exitoso en auditoría
+      logResourceAction('PAYMENT_SUCCESS', 'payment', order.id, {
+        success: true,
+        resource_id: order.id,
+        details: {
+          order_id: order.id,
+          order_number: order.order_number,
+          amount: order.total_amount,
+          payment_method: order.payment_method,
+          order_type: order.order_type,
+          partner_id: order.partner_id,
+          partner_name: order.partner_name,
+          customer_id: order.customer_id,
+          service_name: order.service_name,
+          items_count: order.items?.length || 0,
+          created_at: order.created_at
+        }
+      }).catch(err => console.error('Error logging payment audit:', err));
+      
     } catch (err: any) {
       console.error('Error loading order details:', err);
       setError(err.message || 'Error al cargar la orden');
 
       // Fallback: use provided parameters
       setOrderDetails({
-        id: order_id,
-        displayId: `#${order_id.slice(-6)}`,
+        id: orderId,
+        displayId: `#${orderId.slice(-6)}`,
         total: '$430.00',
         status: 'Confirmado',
-        paymentId: payment_id ? `#mp${payment_id}` : 'Procesando...',
-        isBooking: type === 'booking'
+        paymentId: paymentId ? `#mp${paymentId}` : 'Procesando...',
+        isBooking: paymentType === 'booking',
+        isSplitPurchase: false,
       });
       setLoading(false);
     }
@@ -128,11 +219,15 @@ export default function PaymentSuccess() {
           <CheckCircle size={80} color="#10B981" />
         </View>
 
-        <Text style={styles.title}>¡Pago Exitoso!</Text>
+        <Text style={styles.title}>{orderDetails?.isPendingValidation ? 'Pago Recibido' : 'Pago Exitoso'}</Text>
         <Text style={styles.subtitle}>
-          {orderDetails?.isBooking 
-            ? 'Tu reserva ha sido confirmada y el pago procesado correctamente.'
-            : 'Tu pedido ha sido confirmado y el pago procesado correctamente.'
+          {orderDetails?.isPendingValidation
+            ? 'Estamos validando tu pago con Mercado Pago. Esto puede tardar unos segundos.'
+            : orderDetails?.isBooking 
+              ? 'Tu reserva ha sido confirmada y el pago procesado correctamente.'
+              : orderDetails?.isSplitPurchase
+                ? 'Tu compra ha sido confirmada y se dividió automáticamente por tienda.'
+                : 'Tu pedido ha sido confirmado y el pago procesado correctamente.'
           }
         </Text>
 
@@ -155,7 +250,7 @@ export default function PaymentSuccess() {
           
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Estado:</Text>
-            <Text style={[styles.detailValue, styles.successStatus]}>
+            <Text style={[styles.detailValue, orderDetails?.isPendingValidation ? styles.pendingStatus : styles.successStatus]}>
               {orderDetails?.status}
             </Text>
           </View>
@@ -166,7 +261,10 @@ export default function PaymentSuccess() {
           </View>
         </Card>
 
-        <Card style={styles.successCard}>
+        <Card style={orderDetails?.isPendingValidation
+          ? { ...styles.successCard, ...styles.pendingCard }
+          : styles.successCard}
+        >
           <Text style={styles.successTitle}>¡Gracias por tu {orderDetails?.isBooking ? 'reserva' : 'compra'}!</Text>
           <View style={styles.successList}>
             {orderDetails?.isBooking ? (
@@ -186,6 +284,11 @@ export default function PaymentSuccess() {
                 <Text style={styles.successItem}>
                   • Recibirás una confirmación por email
                 </Text>
+                {orderDetails?.isSplitPurchase && (
+                  <Text style={styles.successItem}>
+                    • Tu compra se dividió automáticamente por tienda
+                  </Text>
+                )}
                 <Text style={styles.successItem}>
                   • Te notificaremos cuando tu pedido sea enviado
                 </Text>
@@ -290,11 +393,18 @@ const styles = StyleSheet.create({
   successStatus: {
     color: '#10B981',
   },
+  pendingStatus: {
+    color: '#D97706',
+  },
   successCard: {
     backgroundColor: '#F0FDF4',
     borderWidth: 1,
     borderColor: '#BBF7D0',
     marginBottom: 20,
+  },
+  pendingCard: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FCD34D',
   },
   successTitle: {
     fontSize: 16,
@@ -302,6 +412,9 @@ const styles = StyleSheet.create({
     color: '#166534',
     marginBottom: 12,
     textAlign: 'center',
+  },
+  pendingTitle: {
+    color: '#92400E',
   },
   successList: {
     gap: 8,
@@ -311,6 +424,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#166534',
     lineHeight: 20,
+  },
+  pendingItem: {
+    color: '#92400E',
   },
   actionsContainer: {
     paddingHorizontal: 20,
@@ -322,3 +438,4 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 });
+

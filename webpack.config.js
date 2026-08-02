@@ -1,4 +1,5 @@
 const createExpoWebpackConfigAsync = require('@expo/webpack-config');
+const path = require('path');
 
 module.exports = async function (env, argv) {
   const config = await createExpoWebpackConfigAsync(env, argv);
@@ -7,6 +8,7 @@ module.exports = async function (env, argv) {
   config.resolve.alias = {
     ...config.resolve.alias,
     'html2canvas': false,
+    ws: path.resolve(__dirname, 'shims/ws.js'),
   };
 
   // Add fallbacks for Node.js modules

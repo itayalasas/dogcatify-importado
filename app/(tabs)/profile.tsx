@@ -1,19 +1,70 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
-import { router } from 'expo-router';
-import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, Shield, CircleHelp as HelpCircle, Globe, Building, CreditCard, Fingerprint, ChevronRight, ArrowRight, Trash2, Crown } from 'lucide-react-native';
+﻿import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, ActivityIndicator } from 'react-native';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, CircleHelp as HelpCircle, Building, Fingerprint, ChevronRight, ArrowRight, Trash2, Crown, Sparkles, RefreshCw } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { SubscriptionReturnBanner } from '../../components/SubscriptionReturnBanner';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { useBiometric } from '../../contexts/BiometricContext';
-import { supabaseClient } from '../../lib/supabase';
+import { supabaseClient, updateUserProfile } from '../../lib/supabase';
+import { getAvailableRoles } from '../../utils/onboarding';
+import { getSingleParam } from '../../utils/subscriptionReturn';
+import {
+  getPartnerPlan,
+  getPartnerSubscriptionStatusLabel,
+  resolvePartnerPlanTier,
+} from '../../utils/partnerPlans';
+import { resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
+
+const partnerPlanOrder = ['starter', 'growth', 'pro'] as const;
+
+const resolvePartnerAccountPlan = (partnerRows: any[]) => {
+  return (partnerRows || []).reduce((best: any, row: any) => {
+    const resolvedTier = resolvePartnerPlanTier(
+      row.subscription_plan_tier,
+      row.subscription_plan_status,
+      row.subscription_plan_expires_at,
+    ) as 'starter' | 'growth' | 'pro';
+
+    if (!best) {
+      return {
+        id: row.id,
+        businessName: row.business_name,
+        businessType: row.business_type,
+        subscriptionPlanTier: resolvedTier,
+        subscriptionPlanStatus: row.subscription_plan_status,
+        subscriptionPlanExpiresAt: row.subscription_plan_expires_at,
+      };
+    }
+
+    const currentBestTier = best.subscriptionPlanTier || 'starter';
+    const currentBestIndex = partnerPlanOrder.indexOf(currentBestTier);
+    const resolvedIndex = partnerPlanOrder.indexOf(resolvedTier);
+
+    if (resolvedIndex > currentBestIndex) {
+      return {
+        id: row.id,
+        businessName: row.business_name,
+        businessType: row.business_type,
+        subscriptionPlanTier: resolvedTier,
+        subscriptionPlanStatus: row.subscription_plan_status,
+        subscriptionPlanExpiresAt: row.subscription_plan_expires_at,
+      };
+    }
+
+    return best;
+  }, null);
+};
 
 export default function Profile() {
-  const { currentUser, logout } = useAuth();
-  const { t, language, setLanguage } = useLanguage();
+  const { currentUser, logout, activeRole, updateCurrentUser } = useAuth();
+  const { t } = useLanguage();
+  const insets = useSafeAreaInsets();
   const { expoPushToken, notificationsEnabled, registerForPushNotifications, disableNotifications } = useNotifications();
   const { 
     isBiometricSupported, 
@@ -30,9 +81,46 @@ export default function Profile() {
     followingCount: 0
   });
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
+  const [deliveryProfile, setDeliveryProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
   const [userSubscription, setUserSubscription] = useState<any>(null);
+  const [isDottyEnabled, setIsDottyEnabled] = useState(true);
+  const [dottyPlanEnabled, setDottyPlanEnabled] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isRoleUpgradeLoading, setIsRoleUpgradeLoading] = useState(false);
+  const skipInitialFocusRefreshRef = React.useRef(true);
+  const subscriptionReturnParams = useLocalSearchParams();
+  const availableRoles = getAvailableRoles(currentUser);
+  const effectiveRole = activeRole ?? (availableRoles.length === 1 ? availableRoles[0] : null);
+  const isPartnerView = effectiveRole === 'partner';
+  const subscriptionReturnStatus = getSingleParam(subscriptionReturnParams.subscription_status);
+  const subscriptionReturnMessage = getSingleParam(subscriptionReturnParams.subscription_message);
+  const subscriptionReturnTarget = getSingleParam(subscriptionReturnParams.target);
+  const subscriptionReturnScope = subscriptionReturnTarget?.includes('://partner/subscription')
+    ? 'partner'
+    : getSingleParam(
+        subscriptionReturnParams.subscription_scope
+        ?? subscriptionReturnParams.scope
+        ?? subscriptionReturnParams.account_scope,
+      ) || (isPartnerView ? 'partner' : 'user');
+  const subscriptionReturnId = getSingleParam(subscriptionReturnParams.subscription_id);
+  const subscriptionReturnReference = getSingleParam(subscriptionReturnParams.external_reference);
+  const showSubscriptionReturnBanner = Boolean(
+    subscriptionReturnStatus ||
+    subscriptionReturnMessage ||
+    subscriptionReturnId ||
+    subscriptionReturnReference,
+  );
+  const personalSubscriptionStatusLabel = (() => {
+    const status = String(userSubscription?.status || '').toLowerCase();
+
+    if (status === 'active') return 'Activo';
+    if (status === 'trialing') return 'En prueba';
+    if (status === 'pending') return 'Pendiente';
+    if (status === 'paused') return 'Pausado';
+    return userSubscription ? 'Sin estado' : 'Activo';
+  })();
 
   useEffect(() => {
     if (currentUser) {
@@ -42,6 +130,80 @@ export default function Profile() {
       fetchUserSubscription();
     }
   }, [currentUser?.id, currentUser?.displayName, currentUser?.photoURL]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!currentUser?.id) {
+        return;
+      }
+
+      if (skipInitialFocusRefreshRef.current) {
+        skipInitialFocusRefreshRef.current = false;
+        return;
+      }
+
+      fetchPartnerProfile();
+      fetchUserSubscription();
+      checkSubscriptionSettings();
+    }, [currentUser?.id])
+  );
+
+  const fetchDottyStatus = async () => {
+    if (!currentUser?.id) {
+      return;
+    }
+
+    const userId = currentUser.id;
+
+    try {
+      const { data: subscriptionData, error: subscriptionError } = await supabaseClient
+        .from('user_subscriptions')
+        .select(`
+          status,
+          subscription_plans (
+            tier,
+            audience_target,
+            limits
+          )
+        `)
+        .eq('user_id', userId)
+        .in('status', ['active', 'trialing', 'pending', 'paused'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (subscriptionError) {
+        console.error('Error fetching Dotty subscription limits:', subscriptionError);
+      }
+
+      const userPlanLimits = resolveSubscriptionPlanLimits(subscriptionData?.subscription_plans || null);
+      const planAllowsDotty = userPlanLimits.users.dottyEnabled;
+      setDottyPlanEnabled(planAllowsDotty);
+
+      const { data } = await supabaseClient
+        .from('profiles')
+        .select('dotty_enabled')
+        .eq('id', userId)
+        .single();
+
+      if (data) {
+        const shouldEnableDotty = data.dotty_enabled !== false;
+
+        if (!planAllowsDotty && shouldEnableDotty) {
+          await supabaseClient
+            .from('profiles')
+            .update({ dotty_enabled: false })
+            .eq('id', userId);
+          setIsDottyEnabled(false);
+          return;
+        }
+
+        setIsDottyEnabled(shouldEnableDotty);
+      }
+    } catch (error) {
+      console.error('Error fetching Dotty status:', error);
+    }
+  };
 
   const checkSubscriptionSettings = async () => {
     try {
@@ -65,26 +227,65 @@ export default function Profile() {
     }
   };
 
-  const fetchUserSubscription = async () => {
+      const fetchUserSubscription = async () => {
+    if (!currentUser?.id) {
+      return;
+    }
+
+    const userId = currentUser.id;
+
     try {
       const { data, error } = await supabaseClient
         .from('user_subscriptions')
         .select(`
-          *,
+          status,
           subscription_plans (
-            name,
-            description,
-            features
+            tier,
+            audience_target,
+            limits
           )
         `)
-        .eq('user_id', currentUser.id)
-        .eq('status', 'active')
+        .eq('user_id', userId)
+        .in('status', ['active', 'trialing', 'pending', 'paused'])
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (error) throw error;
 
       if (data) {
         setUserSubscription(data);
+      } else {
+        setUserSubscription(null);
+      }
+
+      const userPlanLimits = resolveSubscriptionPlanLimits(data?.subscription_plans || null);
+      const planAllowsDotty = userPlanLimits.users.dottyEnabled;
+      setDottyPlanEnabled(planAllowsDotty);
+
+      const { data: profileData, error: profileError } = await supabaseClient
+        .from('profiles')
+        .select('dotty_enabled')
+        .eq('id', userId)
+        .single();
+
+      if (profileError) {
+        console.error('Error fetching Dotty profile flag:', profileError);
+      }
+
+      if (profileData) {
+        const shouldEnableDotty = profileData.dotty_enabled !== false;
+
+        if (!planAllowsDotty && shouldEnableDotty) {
+          await supabaseClient
+            .from('profiles')
+            .update({ dotty_enabled: false })
+            .eq('id', userId);
+          setIsDottyEnabled(false);
+          return;
+        }
+
+        setIsDottyEnabled(shouldEnableDotty);
       }
     } catch (error) {
       console.error('Error fetching user subscription:', error);
@@ -134,6 +335,17 @@ export default function Profile() {
             console.log('User', payload.new?.display_name, isNowFollowing ? 'started following' : 'stopped following', 'current user');
             fetchUserStats();
           }
+        }
+      )
+      .on('postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_subscriptions',
+          filter: `user_id=eq.${currentUser.id}`,
+        },
+        () => {
+          fetchUserSubscription();
         }
       )
       .subscribe();
@@ -242,25 +454,41 @@ export default function Profile() {
   };
 
   const fetchPartnerProfile = async () => {
+    if (!currentUser?.id) {
+      setPartnerProfile(null);
+      return;
+    }
+
+    const userId = currentUser.id;
+
     try {
-      console.log('Fetching partner profile for user:', currentUser!.id);
-      
+      console.log('Fetching partner profile for user:', userId);
+
       const { data, error } = await supabaseClient
         .from('partners')
-        .select('*')
-        .eq('user_id', currentUser!.id)
-        .eq('is_verified', true);
+        .select('id, business_name, business_type, subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at, is_verified, is_active')
+        .eq('user_id', userId)
+        .eq('is_verified', true)
+        .order('created_at', { ascending: false });
       
       console.log('Partner query result:', { data, error });
 
       if (data && data.length > 0 && !error) {
         console.log('Partner profile found:', data[0]);
+        const accountPlan = resolvePartnerAccountPlan(data as any[]);
+        const primaryPartner = data[0];
+
         setPartnerProfile({
-          id: data[0].id,
-          businessName: data[0].business_name,
-          businessType: data[0].business_type,
-          isVerified: data[0].is_verified,
-          isActive: data[0].is_active
+          id: primaryPartner.id,
+          businessName: primaryPartner.business_name,
+          businessType: primaryPartner.business_type,
+          businessCount: data.length,
+          subscriptionPlanTier: accountPlan?.subscriptionPlanTier || primaryPartner.subscription_plan_tier,
+          subscriptionPlanStatus: accountPlan?.subscriptionPlanStatus || primaryPartner.subscription_plan_status,
+          subscriptionPlanExpiresAt: accountPlan?.subscriptionPlanExpiresAt || primaryPartner.subscription_plan_expires_at,
+          activeBusinessName: accountPlan?.businessName || primaryPartner.business_name,
+          isVerified: primaryPartner.is_verified,
+          isActive: primaryPartner.is_active
         });
       } else {
         console.log('No partner profile found or error:', error);
@@ -272,28 +500,119 @@ export default function Profile() {
     }
   };
 
+  const fetchDeliveryProfile = async () => {
+    if (!currentUser?.id) {
+      setDeliveryProfile(null);
+      return;
+    }
+
+    const userId = currentUser.id;
+
+    try {
+      const { data, error } = await supabaseClient
+        .from('delivery_profiles')
+        .select('id, delivery_mode, is_active, approval_status')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error) {
+        const errorText = String(error.message || '').toLowerCase();
+        const relationMissing = errorText.includes('delivery_profiles');
+        if (!relationMissing) {
+          throw error;
+        }
+      }
+
+      setDeliveryProfile(data || null);
+    } catch (error) {
+      console.error('Error fetching delivery profile:', error);
+      setDeliveryProfile(null);
+    }
+  };
+
   const handleEditProfile = () => {
     router.push('/profile/edit');
   };
 
+  const handleChangeRole = () => {
+    router.replace({
+      pathname: '/auth/select-role',
+      params: { source: 'profile' },
+    });
+  };
+
   const handlePartnerMode = () => {
     if (partnerProfile) {
-      router.push({
-        pathname: '/(partner-tabs)/business-selector',
-        params: { businessId: partnerProfile.id }
-      });
+      router.push('/(partner-tabs)/business-selector');
     } else {
-      router.push('/(tabs)/partner-register');
+      router.push('/partner-register');
     }
   };
 
-  const handleAdminMode = () => {
-    router.push('/(admin-tabs)/requests');
+  const handleEnableOwnerRole = async () => {
+    if (!currentUser?.id || currentUser.isOwner || isRoleUpgradeLoading) {
+      return;
+    }
+
+    try {
+      setIsRoleUpgradeLoading(true);
+
+      await updateUserProfile(currentUser.id, {
+        email: currentUser.email,
+        is_owner: true,
+      });
+
+      updateCurrentUser({
+        ...currentUser,
+        isOwner: true,
+      });
+
+      Alert.alert(
+        'Perfil de dueño activado',
+        'Tu cuenta ahora también puede entrar como dueño. Ya puedes usar "Cambiar rol" desde tu perfil para alternar entre aliado y dueño.'
+      );
+    } catch (error) {
+      console.error('Error enabling owner role:', error);
+      Alert.alert(
+        'No pudimos activar el perfil de dueño',
+        'Inténtalo nuevamente en unos segundos.'
+      );
+    } finally {
+      setIsRoleUpgradeLoading(false);
+    }
   };
+
+  const handlePartnerSubscription = () => {
+    if (!partnerProfile?.id) {
+      router.push('/partner-register');
+      return;
+    }
+
+    router.push('/partner/subscription');
+  };
+
 
   const handleMyOrders = () => {
     router.push('/orders');
   };
+
+  const partnerPlanTier = partnerProfile
+    ? resolvePartnerPlanTier(
+        partnerProfile.subscriptionPlanTier,
+        partnerProfile.subscriptionPlanStatus,
+        partnerProfile.subscriptionPlanExpiresAt,
+      )
+    : null;
+  const partnerPlan = partnerPlanTier ? getPartnerPlan(partnerPlanTier) : null;
+  const partnerPlanStatusLabel = partnerProfile
+    ? getPartnerSubscriptionStatusLabel(
+        partnerProfile.subscriptionPlanStatus,
+        partnerProfile.subscriptionPlanExpiresAt,
+      )
+    : null;
+  const partnerLinkedBusinessesLabel = partnerProfile
+    ? `${partnerProfile.businessCount || 0} negocio${(partnerProfile.businessCount || 0) === 1 ? '' : 's'} vinculados`
+    : null;
 
   const handleToggleBiometric = async () => {
     try {
@@ -328,6 +647,95 @@ export default function Profile() {
     }
   };
 
+  const handleToggleDottyAssistant = async () => {
+    try {
+      if (!currentUser?.id) {
+        return;
+      }
+
+      if (!dottyPlanEnabled && !isDottyEnabled) {
+        Alert.alert(
+          'Dotty no incluido',
+          'Tu plan actual no incluye el asistente Dotty. Actualiza tu suscripción para activarlo.'
+        );
+        return;
+      }
+
+      const userId = currentUser.id;
+
+      if (isDottyEnabled) {
+        Alert.alert(
+          'Ocultar Asistente Dotty',
+          'Puedes arrastrar a Dotty hacia la parte inferior de la pantalla para ocultarlo, o hacerlo desde aquí. ¿Deseas ocultarlo?',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Ocultar',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  console.log('[Profile] Updating dotty_enabled to false for user:', userId);
+                  const { data, error } = await supabaseClient
+                    .from('profiles')
+                    .update({ dotty_enabled: false })
+                    .eq('id', userId)
+                    .select();
+
+                  if (error) {
+                    console.error('[Profile] Error updating dotty_enabled:', error);
+                    Alert.alert('Error', 'No se pudo ocultar el asistente');
+                    return;
+                  }
+
+                  console.log('[Profile] Successfully updated dotty_enabled to false:', data);
+                  setIsDottyEnabled(false);
+                } catch (error) {
+                  console.error('[Profile] Exception updating dotty_enabled:', error);
+                  Alert.alert('Error', 'No se pudo ocultar el asistente');
+                }
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Mostrar Asistente Dotty',
+          '¿Deseas volver a mostrar a Dotty, tu asistente personal?',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Mostrar',
+              onPress: async () => {
+                try {
+                  console.log('[Profile] Updating dotty_enabled to true for user:', userId);
+                  const { data, error } = await supabaseClient
+                    .from('profiles')
+                    .update({ dotty_enabled: true })
+                    .eq('id', userId)
+                    .select();
+
+                  if (error) {
+                    console.error('[Profile] Error updating dotty_enabled:', error);
+                    Alert.alert('Error', 'No se pudo mostrar el asistente');
+                    return;
+                  }
+
+                  console.log('[Profile] Successfully updated dotty_enabled to true:', data);
+                  setIsDottyEnabled(true);
+                } catch (error) {
+                  console.error('[Profile] Exception updating dotty_enabled:', error);
+                  Alert.alert('Error', 'No se pudo mostrar el asistente');
+                }
+              }
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Error toggling Dotty:', error);
+    }
+  };
+
   const handleToggleNotifications = async () => {
     try {
       if (notificationsEnabled) {
@@ -357,27 +765,20 @@ export default function Profile() {
     }
   };
 
-  const handleLanguageChange = () => {
-    Alert.alert(
-      'Cambiar idioma',
-      'Selecciona tu idioma preferido',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Español', 
-          onPress: () => setLanguage('es'),
-          style: language === 'es' ? 'default' : 'default'
-        },
-        { 
-          text: 'English', 
-          onPress: () => setLanguage('en'),
-          style: language === 'en' ? 'default' : 'default'
-        }
-      ]
-    );
+  const performLogout = async () => {
+    try {
+      setIsLoggingOut(true);
+      await logout();
+    } catch (error: any) {
+      console.error('Error logging out:', error);
+      setIsLoggingOut(false);
+      Alert.alert('Error', error?.message || 'No se pudo cerrar sesión. Intenta nuevamente.');
+    }
   };
 
   const handleLogout = () => {
+    if (isLoggingOut) return;
+
     Alert.alert(
       'Cerrar sesión',
       '¿Estás seguro de que quieres cerrar sesión?',
@@ -386,7 +787,7 @@ export default function Profile() {
         { 
           text: 'Cerrar sesión', 
           style: 'destructive',
-          onPress: logout
+          onPress: performLogout
         }
       ]
     );
@@ -404,8 +805,6 @@ export default function Profile() {
     return types[type] || type;
   };
 
-  const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
-
   if (!currentUser) {
     return (
       <SafeAreaView style={styles.container}>
@@ -419,11 +818,26 @@ export default function Profile() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{t('profile')}</Text>
+        <Text style={styles.headerTitle}>
+          {isPartnerView ? 'Perfil de Aliado' : t('profile')}
+        </Text>
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {showSubscriptionReturnBanner && (
+          <SubscriptionReturnBanner
+            scope={subscriptionReturnScope}
+            status={subscriptionReturnStatus}
+            message={subscriptionReturnMessage}
+          />
+        )}
+
         {/* Profile Header */}
         <Card style={styles.profileCard}>
           <View style={styles.profileHeader}>
@@ -444,103 +858,127 @@ export default function Profile() {
             </View>
           </View>
 
-          {/* Stats */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{userStats.petsCount}</Text>
-              <Text style={styles.statLabel}>{t('pets')}</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{userStats.postsCount}</Text>
-              <Text style={styles.statLabel}>{t('posts')}</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{userStats.followersCount}</Text>
-              <Text style={styles.statLabel}>{t('followers')}</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{userStats.followingCount}</Text>
-              <Text style={styles.statLabel}>{t('following')}</Text>
-            </View>
-          </View>
-        </Card>
-
-        {/* Admin Mode - Solo para administradores */}
-        {isAdmin && (
-          <Card style={styles.adminCard}>
-            <TouchableOpacity style={styles.adminOption} onPress={handleAdminMode}>
-              <View style={styles.adminInfo}>
-                <Shield size={24} color="#DC2626" />
-                <View style={styles.adminDetails}>
-                  <Text style={styles.adminTitle}>{t('adminMode')}</Text>
-                  <Text style={styles.adminDescription}>
-                    {t('adminModeDescription')}
-                  </Text>
-                </View>
+          {!isPartnerView && (
+            <View style={styles.statsContainer}>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{userStats.petsCount}</Text>
+                <Text style={styles.statLabel}>{t('pets')}</Text>
               </View>
-              <ArrowRight size={20} color="#DC2626" />
-            </TouchableOpacity>
-          </Card>
-        )}
-
-        {/* Partner Mode Card */}
-        <Card style={styles.partnerCard}>
-          <View style={styles.partnerHeader}>
-            <Building size={24} color="#2D6A6F" />
-            <Text style={styles.partnerTitle}>{t('partnerMode')}</Text>
-          </View>
-          
-          {partnerProfile ? (
-            <View style={styles.partnerActive}>
-              <View style={styles.partnerButtons}>
-                <Button
-                  title="Ir al Dashboard de Aliado"
-                  onPress={handlePartnerMode}
-                  size="large"
-                  style={styles.partnerButton}
-                />
-                <Button
-                  title="Registrar Otro Negocio"
-                  onPress={() => router.push('/(tabs)/partner-register')}
-                  variant="outline"
-                  size="large"
-                  style={styles.partnerButton}
-                />
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{userStats.postsCount}</Text>
+                <Text style={styles.statLabel}>{t('posts')}</Text>
               </View>
-            </View>
-          ) : (
-            <View style={styles.partnerInactive}>
-              <Button
-                title={t('registerBusiness')}
-                onPress={handlePartnerMode}
-                size="large"
-              />
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{userStats.followersCount}</Text>
+                <Text style={styles.statLabel}>{t('followers')}</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statNumber}>{userStats.followingCount}</Text>
+                <Text style={styles.statLabel}>{t('following')}</Text>
+              </View>
             </View>
           )}
         </Card>
 
+        {!isPartnerView && (
+          <Card style={styles.smartCareCard}>
+            <View style={styles.smartCareHeader}>
+              <View style={styles.smartCareIcon}>
+                <Sparkles size={24} color="#2D6A6F" />
+              </View>
+              <View style={styles.smartCareCopy}>
+                <Text style={styles.smartCareTitle}>Cuidado inteligente</Text>
+                <Text style={styles.smartCareSubtitle}>
+                  Recomendaciones personalizadas y modo emergencia
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.smartCareBody}>
+              Abre el centro para ver vacunas, peso, conducta, alergias y compartir la historia
+              clínica de tus mascotas cuando lo necesites.
+            </Text>
+
+            <Button
+              title="Abrir centro"
+              onPress={() => router.push('/pets/care')}
+              size="medium"
+            />
+          </Card>
+        )}
+
         {/* Premium Subscription Card */}
-        {subscriptionsEnabled && (
-          <Card style={[styles.menuCard, styles.premiumCard]}>
+        {subscriptionsEnabled && !isPartnerView && (
+          <Card style={styles.partnerCard}>
+            <View style={styles.partnerHeader}>
+              <Crown size={24} color="#2D6A6F" />
+              <Text style={styles.partnerTitle}>
+                {userSubscription ? 'Mi suscripción de mascota' : 'Suscripción de mascota'}
+              </Text>
+            </View>
+
             <TouchableOpacity
-              style={styles.premiumOption}
+              style={styles.partnerActive}
               onPress={() => router.push('/profile/subscription')}
+              activeOpacity={0.85}
             >
-              <View style={styles.premiumContent}>
-                <View style={styles.premiumIconContainer}>
-                  <Crown size={28} color="#F59E0B" />
+              <View style={styles.partnerSubscriptionBox}>
+                <View style={styles.partnerSubscriptionRow}>
+                  <View style={styles.partnerSubscriptionCopy}>
+                    <Text style={styles.partnerSubscriptionTitle}>Suscripción de Mascota</Text>
+                    <Text style={styles.partnerSubscriptionSubtitle}>
+                      {userSubscription
+                        ? `Plan ${userSubscription.subscription_plans?.name || 'Premium'} · ${personalSubscriptionStatusLabel}`
+                        : 'Plan Free · Activo'}
+                    </Text>
+                  </View>
+                  <Crown size={22} color="#2D6A6F" />
                 </View>
-                <View style={styles.premiumTextContainer}>
-                  <Text style={styles.premiumTitle}>
-                    {userSubscription ? 'Mi Suscripción Premium' : '👑 Hazte Premium'}
-                  </Text>
-                  <Text style={styles.premiumSubtitle}>
-                    {userSubscription
-                      ? `Plan ${userSubscription.subscription_plans?.name || 'Premium'} Activo`
-                      : 'Desbloquea funciones exclusivas'}
-                  </Text>
+                <Text style={styles.partnerSubscriptionDescription}>
+                  {userSubscription
+                    ? userSubscription.status === 'pending'
+                      ? 'Tu suscripción personal está pendiente de confirmación en Mercado Pago.'
+                      : 'Tu suscripción personal se aplica a tu perfil y a tus mascotas.'
+                    : 'Desbloquea funciones para el perfil personal y tus mascotas.'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </Card>
+        )}
+
+        {subscriptionsEnabled && isPartnerView && (
+          <Card style={styles.partnerCard}>
+            <View style={styles.partnerHeader}>
+              <Building size={24} color="#2D6A6F" />
+              <Text style={styles.partnerTitle}>
+                {partnerPlan ? 'Mi suscripción de aliado' : 'Suscripción de aliado'}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.partnerActive}
+              onPress={handlePartnerSubscription}
+              activeOpacity={0.85}
+            >
+              <View style={styles.partnerSubscriptionBox}>
+                <View style={styles.partnerSubscriptionRow}>
+                  <View style={styles.partnerSubscriptionCopy}>
+                    <Text style={styles.partnerSubscriptionTitle}>Suscripción de Aliado</Text>
+                    <Text style={styles.partnerSubscriptionSubtitle}>
+                      {partnerPlan
+                        ? `Plan ${partnerPlan.name} · ${partnerPlanStatusLabel || 'Activa'}`
+                        : partnerProfile
+                          ? 'Sin plan activo'
+                          : 'Selecciona un negocio para ver tu suscripción'}
+                    </Text>
+                  </View>
+                  <Crown size={22} color="#2D6A6F" />
                 </View>
-                <ArrowRight size={20} color="#F59E0B" />
+                <Text style={styles.partnerSubscriptionDescription}>
+                  {partnerProfile
+                    ? `${partnerLinkedBusinessesLabel || '0 negocios vinculados'}. Tu suscripción de aliado aplica a tus negocios verificados.`
+                    : 'Debes registrar o seleccionar un negocio para gestionar la suscripción de aliado.'}
+                </Text>
               </View>
             </TouchableOpacity>
           </Card>
@@ -556,33 +994,64 @@ export default function Profile() {
             <ChevronRight size={16} color="#6B7280" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuOption} onPress={handleMyOrders}>
-            <View style={styles.menuOptionLeft}>
-              <ShoppingBag size={20} color="#6B7280" />
-              <Text style={styles.menuOptionText}>{t('myOrders')}</Text>
-            </View>
-            <ChevronRight size={16} color="#6B7280" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuOption} onPress={() => router.push('/cart')}>
-            <View style={styles.menuOptionLeft}>
-              <ShoppingBag size={20} color="#6B7280" />
-              <Text style={styles.menuOptionText}>Mi Carrito</Text>
-            </View>
-            <ChevronRight size={16} color="#6B7280" />
-          </TouchableOpacity>
-
-          {partnerProfile && (
-            <TouchableOpacity 
-              style={styles.menuOption} 
-              onPress={() => router.push('/profile/mercadopago-config')}
-            >
+          {availableRoles.length > 1 && (
+            <TouchableOpacity style={styles.menuOption} onPress={handleChangeRole}>
               <View style={styles.menuOptionLeft}>
-                <CreditCard size={20} color="#6B7280" />
-                <Text style={styles.menuOptionText}>Configurar Mercado Pago</Text>
+                <RefreshCw size={20} color="#6B7280" />
+                <Text style={styles.menuOptionText}>Cambiar rol</Text>
               </View>
               <ChevronRight size={16} color="#6B7280" />
             </TouchableOpacity>
+          )}
+
+          {!currentUser.isPartner && (
+            <TouchableOpacity style={styles.menuOption} onPress={handlePartnerMode}>
+              <View style={styles.menuOptionLeft}>
+                <Building size={20} color="#6B7280" />
+                <Text style={styles.menuOptionText}>Convertirme en aliado</Text>
+              </View>
+              <ChevronRight size={16} color="#6B7280" />
+            </TouchableOpacity>
+          )}
+
+          {isPartnerView && !currentUser.isOwner && (
+            <TouchableOpacity
+              style={[styles.menuOption, isRoleUpgradeLoading && styles.menuOptionDisabled]}
+              onPress={handleEnableOwnerRole}
+              disabled={isRoleUpgradeLoading}
+            >
+              <View style={styles.menuOptionLeft}>
+                <User size={20} color="#6B7280" />
+                <Text style={styles.menuOptionText}>
+                  {isRoleUpgradeLoading ? 'Activando perfil de dueño...' : 'Habilitar perfil de dueño'}
+                </Text>
+              </View>
+              {isRoleUpgradeLoading ? (
+                <ActivityIndicator size="small" color="#6B7280" />
+              ) : (
+                <ChevronRight size={16} color="#6B7280" />
+              )}
+            </TouchableOpacity>
+          )}
+
+          {!isPartnerView && (
+            <>
+              <TouchableOpacity style={styles.menuOption} onPress={handleMyOrders}>
+                <View style={styles.menuOptionLeft}>
+                  <ShoppingBag size={20} color="#6B7280" />
+                  <Text style={styles.menuOptionText}>{t('myOrders')}</Text>
+                </View>
+                <ChevronRight size={16} color="#6B7280" />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.menuOption} onPress={() => router.push('/cart')}>
+                <View style={styles.menuOptionLeft}>
+                  <ShoppingBag size={20} color="#6B7280" />
+                  <Text style={styles.menuOptionText}>Mi Carrito</Text>
+                </View>
+                <ChevronRight size={16} color="#6B7280" />
+              </TouchableOpacity>
+            </>
           )}
         </Card>
 
@@ -600,7 +1069,7 @@ export default function Profile() {
                     Autenticación {biometricType || 'Biométrica'}
                   </Text>
                   <Text style={styles.biometricDescription}>
-                    🔓 Habilitado para acceso instantáneo
+                    🔒 Habilitado para acceso instantáneo
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -640,18 +1109,19 @@ export default function Profile() {
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity style={styles.menuOption} onPress={handleLanguageChange}>
+          <TouchableOpacity style={styles.menuOption} onPress={handleToggleDottyAssistant}>
             <View style={styles.menuOptionLeft}>
-              <Globe size={20} color="#6B7280" />
-              <Text style={styles.menuOptionText}>{t('language')}</Text>
+              <HelpCircle size={20} color="#6B7280" />
+              <Text style={styles.menuOptionText}>Asistente Dotty</Text>
             </View>
-            <View style={styles.languageIndicator}>
-              <Text style={styles.languageText}>
-                {language === 'es' ? t('spanish') : t('english')}
-              </Text>
+            <View style={styles.toggleContainer}>
+              <Text style={styles.toggleStatus}>{isDottyEnabled ? 'Visible' : 'Oculto'}</Text>
               <ChevronRight size={16} color="#6B7280" />
             </View>
           </TouchableOpacity>
+          {!dottyPlanEnabled && (
+            <Text style={styles.planHintText}>Dotty no está incluido en tu plan actual.</Text>
+          )}
 
           <TouchableOpacity 
             style={styles.menuOption} 
@@ -681,12 +1151,32 @@ export default function Profile() {
         </Card>
         {/* Logout */}
         <Card style={styles.logoutCard}>
-          <TouchableOpacity style={styles.logoutOption} onPress={handleLogout}>
-            <LogOut size={20} color="#10B981" />
-            <Text style={[styles.logoutText, styles.logoutTextGreen]}>{t('signOut')}</Text>
+          <TouchableOpacity
+            style={[styles.logoutOption, isLoggingOut ? styles.logoutOptionDisabled : null]}
+            onPress={handleLogout}
+            disabled={isLoggingOut}
+          >
+            {isLoggingOut ? (
+              <ActivityIndicator size="small" color="#10B981" />
+            ) : (
+              <LogOut size={20} color="#10B981" />
+            )}
+            <Text style={[styles.logoutText, styles.logoutTextGreen]}>
+              {isLoggingOut ? 'Cerrando sesión...' : t('signOut')}
+            </Text>
           </TouchableOpacity>
         </Card>
       </ScrollView>
+
+      {isLoggingOut && (
+        <View style={styles.logoutOverlay}>
+          <View style={styles.logoutOverlayCard}>
+            <ActivityIndicator size="large" color="#10B981" />
+            <Text style={styles.logoutOverlayTitle}>Cerrando sesión</Text>
+            <Text style={styles.logoutOverlayText}>Estamos cerrando tu cuenta de forma segura.</Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -721,6 +1211,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
+  },
+  scrollContent: {
+    paddingBottom: 16,
   },
   loadingContainer: {
     flex: 1,
@@ -767,6 +1260,44 @@ const styles = StyleSheet.create({
     color: '#374151',
     lineHeight: 20,
   },
+  smartCareCard: {
+    marginBottom: 16,
+  },
+  smartCareHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  smartCareIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#E6F4F1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  smartCareCopy: {
+    flex: 1,
+  },
+  smartCareTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  smartCareSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  smartCareBody: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    lineHeight: 20,
+    marginBottom: 14,
+  },
   statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -787,39 +1318,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     marginTop: 4,
-  },
-  adminCard: {
-    marginBottom: 16,
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-  },
-  adminOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-  },
-  adminInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  adminDetails: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  adminTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#DC2626',
-    marginBottom: 2,
-  },
-  adminDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#991B1B',
-    lineHeight: 18,
   },
   partnerCard: {
     marginBottom: 16,
@@ -844,6 +1342,42 @@ const styles = StyleSheet.create({
   },
   partnerActive: {
     alignItems: 'center',
+  },
+  partnerSubscriptionBox: {
+    width: '100%',
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1,
+    borderColor: '#CCFBF1',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+  },
+  partnerSubscriptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 6,
+  },
+  partnerSubscriptionCopy: {
+    flex: 1,
+  },
+  partnerSubscriptionTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#134E4A',
+    marginBottom: 2,
+  },
+  partnerSubscriptionSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#0F766E',
+  },
+  partnerSubscriptionDescription: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#155E75',
+    lineHeight: 17,
   },
   partnerActiveText: {
     fontSize: 14,
@@ -897,6 +1431,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
+  menuOptionDisabled: {
+    opacity: 0.7,
+  },
   menuOptionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -925,9 +1462,9 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   premiumCard: {
-    backgroundColor: '#FFFBEB',
-    borderWidth: 2,
-    borderColor: '#F59E0B',
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1,
+    borderColor: '#CCFBF1',
   },
   premiumOption: {
     padding: 4,
@@ -936,12 +1473,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
   },
   premiumIconContainer: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: '#E6FFFA',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -952,13 +1490,13 @@ const styles = StyleSheet.create({
   premiumTitle: {
     fontSize: 17,
     fontFamily: 'Inter-Bold',
-    color: '#92400E',
+    color: '#134E4A',
     marginBottom: 4,
   },
   premiumSubtitle: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#D97706',
+    color: '#0F766E',
   },
   languageIndicator: {
     flexDirection: 'row',
@@ -979,6 +1517,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 16,
   },
+  logoutOptionDisabled: {
+    opacity: 0.75,
+  },
   logoutText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
@@ -987,6 +1528,40 @@ const styles = StyleSheet.create({
   },
   logoutTextGreen: {
     color: '#10B981',
+  },
+  logoutOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(17, 24, 39, 0.42)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  logoutOverlayCard: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  logoutOverlayTitle: {
+    marginTop: 16,
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+  },
+  logoutOverlayText: {
+    marginTop: 8,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   dangerText: {
     color: '#EF4444',
@@ -1000,6 +1575,14 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#059669',
     marginRight: 8,
+  },
+  planHintText: {
+    marginTop: -4,
+    marginBottom: 8,
+    marginLeft: 40,
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#B45309',
   },
   benefitsTitle: {
     fontSize: 14,
@@ -1085,3 +1668,8 @@ const styles = StyleSheet.create({
     borderColor: '#BAE6FD',
   },
 });
+
+
+
+
+

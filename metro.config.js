@@ -16,7 +16,14 @@ config.resolver.platforms = ['ios', 'android', 'native', 'web'];
 
 // Ensure proper module resolution
 config.resolver.alias = {
+  ...(config.resolver.alias || {}),
   '@': path.resolve(__dirname, './'),
+  ws: path.resolve(__dirname, './shims/ws.js'),
+};
+
+config.resolver.extraNodeModules = {
+  ...(config.resolver.extraNodeModules || {}),
+  ws: path.resolve(__dirname, './shims/ws.js'),
 };
 
 config.resolver.resolverMainFields = ['react-native', 'browser', 'main'];

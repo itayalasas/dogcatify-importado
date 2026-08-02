@@ -90,7 +90,7 @@ export default function ForgotPassword() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.replace('/auth/login')} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Image
@@ -124,7 +124,7 @@ export default function ForgotPassword() {
 
         <TouchableOpacity 
           style={styles.backToLoginButton}
-          onPress={() => router.back()}
+          onPress={() => router.replace('/auth/login')}
         >
           <Text style={styles.backToLoginText}>Volver al inicio de sesión</Text>
         </TouchableOpacity>

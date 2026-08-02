@@ -1,17 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Switch, Alert, Modal } from 'react-native';
-import { Bell, Shield, DollarSign, Mail, Globe, Database, LogOut, Send, CreditCard, Crown } from 'lucide-react-native';
+﻿import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Switch, Alert, Modal, ActivityIndicator } from 'react-native';
+import { Bell, Shield, Globe, Database, LogOut, CreditCard, Crown } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Input } from '../../components/ui/Input';
 import { supabaseClient } from '../../lib/supabase';
+import { envConfig } from '../../utils/envConfig';
+
+const SYSTEM_CONFIG_KEY = 'system_config';
+type SystemToggleKey =
+  | 'pushNotifications'
+  | 'maintenanceMode'
+  | 'autoApprovePartners'
+  | 'allowGuestAccess'
+  | 'enableAnalytics';
 
 export default function AdminSettings() {
   const { currentUser, logout } = useAuth();
+  const insets = useSafeAreaInsets();
   const [settings, setSettings] = useState({
-    emailNotifications: true,
     pushNotifications: true,
     maintenanceMode: false,
     autoApprovePartners: false,
@@ -20,18 +30,17 @@ export default function AdminSettings() {
     emailNotificationServer: 'smtpout.secureserver.net',
     emailNotificationPort: '465',
     emailNotificationUser: 'info@dogcatify.com',
-    globalCommission: '5.0',
-    commissionType: 'percentage', // 'percentage', 'fixed', 'subscription'
-    fixedCommission: '100',
   });
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [testEmail, setTestEmail] = useState('');
   const [testEmailLoading, setTestEmailLoading] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showMercadoPagoModal, setShowMercadoPagoModal] = useState(false);
   const [adminMpConfig, setAdminMpConfig] = useState({
     isConnected: false,
     accessToken: '',
     publicKey: '',
+    clientId: envConfig.get('EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID') || '',
     isTestMode: false,
     accountId: '',
     email: ''
@@ -45,14 +54,64 @@ export default function AdminSettings() {
   const [broadcastLoading, setBroadcastLoading] = useState(false);
   const [broadcastProgress, setBroadcastProgress] = useState({ sent: 0, total: 0 });
   const [batchSize, setBatchSize] = useState('20');
+  const [savingSystemSetting, setSavingSystemSetting] = useState<SystemToggleKey | null>(null);
+  const isAdmin = currentUser?.isAdmin === true;
 
   useEffect(() => {
-    if (currentUser?.email === 'admin@dogcatify.com') {
+    if (isAdmin) {
+      loadSystemSettings();
       loadAdminMpConfig();
-      loadCommissionConfig();
       loadSubscriptionSettings();
     }
-  }, [currentUser]);
+  }, [isAdmin]);
+
+  const loadSystemSettings = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('admin_settings')
+        .select('value')
+        .eq('key', SYSTEM_CONFIG_KEY)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      const config = data?.value || {};
+      setSettings((prev) => ({
+        ...prev,
+        pushNotifications: config.push_notifications_enabled ?? prev.pushNotifications,
+        maintenanceMode: config.maintenance_mode ?? prev.maintenanceMode,
+        autoApprovePartners: config.auto_approve_partners ?? prev.autoApprovePartners,
+        allowGuestAccess: config.allow_guest_access ?? prev.allowGuestAccess,
+        enableAnalytics: config.advanced_analytics_enabled ?? prev.enableAnalytics,
+      }));
+    } catch (error) {
+      console.error('Error loading system settings:', error);
+    }
+  };
+
+  const saveSystemSettings = async (nextSettings: typeof settings) => {
+    const systemConfig = {
+      push_notifications_enabled: nextSettings.pushNotifications,
+      maintenance_mode: nextSettings.maintenanceMode,
+      auto_approve_partners: nextSettings.autoApprovePartners,
+      allow_guest_access: nextSettings.allowGuestAccess,
+      advanced_analytics_enabled: nextSettings.enableAnalytics,
+      updated_by: currentUser?.id || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabaseClient
+      .from('admin_settings')
+      .upsert({
+        key: SYSTEM_CONFIG_KEY,
+        value: systemConfig,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'key',
+      });
+
+    if (error) throw error;
+  };
 
   const loadSubscriptionSettings = async () => {
     try {
@@ -88,7 +147,7 @@ export default function AdminSettings() {
           .from('subscription_settings')
           .insert({
             enabled: value,
-            updated_by: currentUser.id
+            updated_by: currentUser?.id || null
           });
 
         if (insertError) throw insertError;
@@ -98,7 +157,7 @@ export default function AdminSettings() {
           .from('subscription_settings')
           .update({
             enabled: value,
-            updated_by: currentUser.id
+            updated_by: currentUser?.id || null
           })
           .eq('id', settingsData.id);
 
@@ -124,28 +183,6 @@ export default function AdminSettings() {
     router.push('/(admin-tabs)/subscription-plans');
   };
 
-  const loadCommissionConfig = async () => {
-    try {
-      const { data, error } = await supabaseClient
-        .from('admin_settings')
-        .select('value')
-        .eq('key', 'commission_config')
-        .single();
-      
-      if (data && !error) {
-        const config = data.value || {};
-        setSettings(prev => ({
-          ...prev,
-          globalCommission: config.global_commission?.toString() || '5.0',
-          commissionType: config.commission_type || 'percentage',
-          fixedCommission: config.fixed_commission?.toString() || '100'
-        }));
-      }
-    } catch (error) {
-      console.error('Error loading commission config:', error);
-    }
-  };
-
   const loadAdminMpConfig = async () => {
     try {
       // Load admin MP configuration from a dedicated table or settings
@@ -161,6 +198,7 @@ export default function AdminSettings() {
           isConnected: config.is_connected || false,
           accessToken: config.access_token || '',
           publicKey: config.public_key || '',
+          clientId: config.client_id || config.clientId || config.app_id || config.oauth_client_id || envConfig.get('EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID') || '',
           isTestMode: config.is_test_mode || false,
           accountId: config.account_id || '',
           email: config.email || ''
@@ -171,16 +209,32 @@ export default function AdminSettings() {
     }
   };
 
-  const validateAdminMpCredentials = async (token: string, key: string) => {
+  const getMpCredentialMode = (credential: string) => {
+    const value = credential.trim();
+    if (value.startsWith('TEST-')) return 'test';
+    if (value.startsWith('APP_USR-')) return 'production';
+    return null;
+  };
+
+  const validateAdminMpCredentials = async (token: string, key: string, isTestMode: boolean) => {
     try {
-      const isValidToken = token.startsWith('APP_USR-') || token.startsWith('TEST-');
-      const isValidKey = key.startsWith('APP_USR-') || key.startsWith('TEST-');
-      
-      if (!isValidToken || !isValidKey) {
-        throw new Error('Formato de credenciales inválido');
+      const tokenMode = getMpCredentialMode(token);
+      const keyMode = getMpCredentialMode(key);
+      const expectedMode = isTestMode ? 'test' : 'production';
+
+      if (!tokenMode || !keyMode) {
+        throw new Error('Formato de credenciales invalido');
       }
 
-      // Try to validate with Mercado Pago API
+      if (tokenMode !== expectedMode || keyMode !== expectedMode) {
+        return {
+          isValid: false,
+          error: isTestMode
+            ? 'Modo prueba requiere Access Token y Public Key que empiecen con TEST-.'
+            : 'Modo produccion requiere Access Token y Public Key que empiecen con APP_USR-.',
+        };
+      }
+
       try {
         const response = await fetch('https://api.mercadopago.com/users/me', {
           headers: {
@@ -193,16 +247,23 @@ export default function AdminSettings() {
           return {
             isValid: true,
             accountId: userData.id,
-            email: userData.email
+            email: userData.email,
+            credentialMode: tokenMode,
           };
-        } else {
-          return { isValid: isValidToken && isValidKey };
         }
+
+        return {
+          isValid: false,
+          error: 'Mercado Pago no pudo validar el Access Token. Verifica que no este vencido o copiado incompleto.',
+        };
       } catch (apiError) {
-        return { isValid: isValidToken && isValidKey };
+        return {
+          isValid: false,
+          error: 'No se pudo validar el token contra Mercado Pago. Revisa la conexion e intenta nuevamente.',
+        };
       }
     } catch (error) {
-      return { isValid: false };
+      return { isValid: false, error: 'Formato de credenciales invalido.' };
     }
   };
 
@@ -214,9 +275,28 @@ export default function AdminSettings() {
 
     setMpLoading(true);
     try {
+      const { data: currentConfigData } = await supabaseClient
+        .from('admin_settings')
+        .select('value')
+        .eq('key', 'mercadopago_config')
+        .maybeSingle();
+
+      const currentConfig = currentConfigData?.value || {};
+      const {
+        client_secret: _legacyClientSecret,
+        clientSecret: _legacyClientSecretCamel,
+        ...safeCurrentConfig
+      } = currentConfig;
+      const currentClientId =
+        safeCurrentConfig.client_id ||
+        safeCurrentConfig.clientId ||
+        envConfig.get('EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID') ||
+        '';
+
       const validation = await validateAdminMpCredentials(
         adminMpConfig.accessToken.trim(), 
-        adminMpConfig.publicKey.trim()
+        adminMpConfig.publicKey.trim(),
+        adminMpConfig.isTestMode
       );
       
       if (!validation.isValid) {
@@ -229,10 +309,13 @@ export default function AdminSettings() {
       }
 
       const config = {
+        ...safeCurrentConfig,
         is_connected: true,
         access_token: adminMpConfig.accessToken.trim(),
         public_key: adminMpConfig.publicKey.trim(),
+        client_id: adminMpConfig.clientId.trim() || currentClientId,
         is_test_mode: adminMpConfig.isTestMode,
+        credential_mode: validation.credentialMode || (adminMpConfig.isTestMode ? 'test' : 'production'),
         account_id: validation.accountId || '',
         email: validation.email || '',
         connected_at: new Date().toISOString(),
@@ -245,6 +328,8 @@ export default function AdminSettings() {
           key: 'mercadopago_config',
           value: config,
           updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'key'
         });
 
       if (error) throw error;
@@ -258,7 +343,7 @@ export default function AdminSettings() {
 
       Alert.alert(
         '¡Éxito!',
-        'La cuenta de Mercado Pago del administrador ha sido configurada correctamente. Ahora la app puede recibir comisiones automáticamente.',
+        'La configuración legacy de Mercado Pago quedó guardada correctamente.',
         [{ text: 'Continuar', onPress: () => setShowMercadoPagoModal(false) }]
       );
     } catch (error) {
@@ -269,10 +354,67 @@ export default function AdminSettings() {
     }
   };
 
+  const handleSaveMercadoPagoClientId = async () => {
+    const clientId = adminMpConfig.clientId.trim();
+
+    if (!clientId) {
+      Alert.alert('Error', 'Por favor completa el Client ID / N° de aplicación');
+      return;
+    }
+
+    setMpLoading(true);
+    try {
+      const { data: currentConfigData } = await supabaseClient
+        .from('admin_settings')
+        .select('value')
+        .eq('key', 'mercadopago_config')
+        .maybeSingle();
+
+      const currentConfig = currentConfigData?.value || {};
+      const {
+        client_secret: _legacyClientSecret,
+        clientSecret: _legacyClientSecretCamel,
+        ...safeCurrentConfig
+      } = currentConfig;
+
+      const config = {
+        ...safeCurrentConfig,
+        client_id: clientId,
+        app_id: clientId,
+        oauth_client_id: clientId,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabaseClient
+        .from('admin_settings')
+        .upsert({
+          key: 'mercadopago_config',
+          value: config,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'key'
+        });
+
+      if (error) throw error;
+
+      setAdminMpConfig(prev => ({
+        ...prev,
+        clientId,
+      }));
+
+      Alert.alert('¡Éxito!', 'El Client ID quedó guardado correctamente.');
+    } catch (error) {
+      console.error('Error saving Mercado Pago client ID:', error);
+      Alert.alert('Error', 'No se pudo guardar el Client ID.');
+    } finally {
+      setMpLoading(false);
+    }
+  };
+
   const handleDisconnectAdminMp = () => {
     Alert.alert(
       'Desconectar Mercado Pago',
-      '¿Estás seguro? Esto deshabilitará la recepción de comisiones en toda la plataforma.',
+      '¿Estás seguro? Esto deshabilitará la configuración legacy de Mercado Pago.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -280,12 +422,35 @@ export default function AdminSettings() {
           style: 'destructive',
           onPress: async () => {
             try {
+              const { data: currentConfigData } = await supabaseClient
+                .from('admin_settings')
+                .select('value')
+                .eq('key', 'mercadopago_config')
+                .maybeSingle();
+
+              const currentConfig = currentConfigData?.value || {};
+              const {
+                client_secret: _legacyClientSecret,
+                clientSecret: _legacyClientSecretCamel,
+                ...safeCurrentConfig
+              } = currentConfig;
+
               const { error } = await supabaseClient
                 .from('admin_settings')
                 .upsert({
                   key: 'mercadopago_config',
-                  value: { is_connected: false },
+                  value: {
+                    ...safeCurrentConfig,
+                    is_connected: false,
+                    access_token: null,
+                    public_key: null,
+                    account_id: '',
+                    email: '',
+                    is_test_mode: false,
+                  },
                   updated_at: new Date().toISOString()
+                }, {
+                  onConflict: 'key'
                 });
 
               if (error) throw error;
@@ -310,11 +475,11 @@ export default function AdminSettings() {
   };
 
   // Función para enviar un correo de prueba directamente
-  const sendTestEmail = async (email: string): Promise<{success: boolean, error?: string}> => {
+  const sendTestEmail = async (email: string): Promise<{success: boolean, error?: string, messageId?: string}> => {
     try {
       // Construir la URL de la función de Supabase
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'your-anon-key';
+      const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+      const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY') || 'your-anon-key';
       const apiUrl = `${supabaseUrl}/functions/v1/send-email`;
       
       // Preparar los datos del correo
@@ -361,7 +526,7 @@ export default function AdminSettings() {
       }
     } catch (error) {
       console.error('Error enviando email de prueba:', error);
-      return { success: false, error: error.message || 'Error desconocido' };
+      return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
     }
   };
   const handleSettingChange = (key: string, value: boolean) => {
@@ -369,7 +534,39 @@ export default function AdminSettings() {
     // Here you would typically save to Firebase
   };
 
+  const handleSystemSettingChange = async (key: SystemToggleKey, value: boolean) => {
+    const previousSettings = settings;
+    const nextSettings = { ...previousSettings, [key]: value };
+
+    setSettings(nextSettings);
+    setSavingSystemSetting(key);
+
+    try {
+      await saveSystemSettings(nextSettings);
+    } catch (error) {
+      console.error(`Error saving system setting ${key}:`, error);
+      setSettings(previousSettings);
+      Alert.alert('Error', 'No se pudo guardar la configuración. Intenta nuevamente.');
+      throw error;
+    } finally {
+      setSavingSystemSetting(null);
+    }
+  };
+
+  const performLogout = async () => {
+    try {
+      setIsLoggingOut(true);
+      await logout();
+    } catch (error: any) {
+      console.error('Error logging out:', error);
+      setIsLoggingOut(false);
+      Alert.alert('Error', error?.message || 'No se pudo cerrar sesion. Intenta nuevamente.');
+    }
+  };
+
   const handleLogout = async () => {
+    if (isLoggingOut) return;
+
     Alert.alert(
       'Cerrar Sesión',
       '¿Estás seguro que quieres cerrar sesión?',
@@ -378,10 +575,7 @@ export default function AdminSettings() {
         {
           text: 'Cerrar Sesión',
           style: 'destructive',
-          onPress: async () => {
-            await logout();
-            router.replace('/auth/login');
-          }
+          onPress: performLogout
         }
       ]
     );
@@ -419,69 +613,6 @@ export default function AdminSettings() {
     }
   };
 
-  const handleCommissionChange = (value: string) => {
-    // Validate that it's a valid number
-    const numValue = parseFloat(value);
-    if (!isNaN(numValue) && numValue >= 0 && numValue <= 100) {
-      setSettings(prev => ({ ...prev, globalCommission: value }));
-    }
-  };
-
-  const handleCommissionTypeChange = (type: string) => {
-    setSettings(prev => ({ ...prev, commissionType: type }));
-  };
-
-  const handleFixedCommissionChange = (value: string) => {
-    // Validate that it's a valid number
-    const numValue = parseFloat(value);
-    if (!isNaN(numValue) && numValue >= 0) {
-      setSettings(prev => ({ ...prev, fixedCommission: value }));
-    }
-  };
-
-  const handleSaveCommissionConfig = async () => {
-    try {
-      const configData = {
-        global_commission: parseFloat(settings.globalCommission),
-        commission_type: settings.commissionType,
-        fixed_commission: parseFloat(settings.fixedCommission),
-        updated_at: new Date().toISOString()
-      };
-
-      const { error } = await supabaseClient
-        .from('admin_settings')
-        .upsert({
-          key: 'commission_config',
-          value: configData,
-          updated_at: new Date().toISOString()
-        });
-
-      if (error) throw error;
-
-      Alert.alert('Éxito', 'Configuración de comisiones guardada correctamente');
-    } catch (error) {
-      console.error('Error saving commission config:', error);
-      Alert.alert('Error', 'No se pudo guardar la configuración de comisiones');
-    }
-  };
-
-  const handleBackupData = () => {
-    Alert.alert(
-      'Respaldo de Datos',
-      'Se iniciará el proceso de respaldo de la base de datos. Esto puede tomar varios minutos.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Iniciar Respaldo',
-          onPress: () => {
-            // Implement backup logic
-            Alert.alert('Respaldo Iniciado', 'El respaldo se está procesando en segundo plano.');
-          }
-        }
-      ]
-    );
-  };
-
   const handleSystemMaintenance = () => {
     Alert.alert(
       'Modo Mantenimiento',
@@ -493,12 +624,16 @@ export default function AdminSettings() {
         {
           text: settings.maintenanceMode ? 'Desactivar' : 'Activar',
           style: settings.maintenanceMode ? 'default' : 'destructive',
-          onPress: () => {
-            handleSettingChange('maintenanceMode', !settings.maintenanceMode);
-            Alert.alert(
-              'Modo Mantenimiento',
-              `Modo mantenimiento ${!settings.maintenanceMode ? 'activado' : 'desactivado'} correctamente.`
-            );
+          onPress: async () => {
+            try {
+              await handleSystemSettingChange('maintenanceMode', !settings.maintenanceMode);
+              Alert.alert(
+                'Modo Mantenimiento',
+                `Modo mantenimiento ${!settings.maintenanceMode ? 'activado' : 'desactivado'} correctamente.`
+              );
+            } catch (error) {
+              // El aviso ya se muestra dentro del guardado.
+            }
           }
         }
       ]
@@ -506,6 +641,14 @@ export default function AdminSettings() {
   };
 
   const handleBroadcastNotification = async () => {
+    if (!settings.pushNotifications) {
+      Alert.alert(
+        'Notificaciones push desactivadas',
+        'Activa primero las notificaciones push del sistema para poder programar envíos masivos.'
+      );
+      return;
+    }
+
     if (!broadcastTitle.trim() || !broadcastMessage.trim()) {
       Alert.alert('Error', 'Por favor completa el título y el mensaje');
       return;
@@ -604,8 +747,6 @@ export default function AdminSettings() {
     }
   };
 
-  const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
-  
   console.log('Current user email:', currentUser?.email);
   console.log('Is admin check result:', isAdmin);
   
@@ -631,7 +772,12 @@ export default function AdminSettings() {
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 140 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Notifications Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>🔔 Notificaciones</Text>
@@ -639,35 +785,18 @@ export default function AdminSettings() {
           <Card style={styles.settingsCard}>
             <View style={styles.settingItem}>
               <View style={styles.settingInfo}>
-                <Mail size={20} color="#DC2626" />
-                <Text style={styles.settingLabel}>Notificaciones por Email</Text>
-              </View>
-              <Switch
-                value={settings.emailNotifications}
-                onValueChange={(value) => handleSettingChange('emailNotifications', value)}
-                trackColor={{ false: '#E5E7EB', true: '#DC2626' }}
-                thumbColor={settings.emailNotifications ? '#FFFFFF' : '#FFFFFF'}
-              />
-            </View>
-
-            {settings.emailNotifications && (
-              <TouchableOpacity
-                style={styles.emailConfigButton}
-                onPress={() => setShowEmailModal(true)}
-              >
-                <Send size={16} color="#DC2626" />
-                <Text style={styles.emailConfigText}>Configurar servidor SMTP</Text>
-              </TouchableOpacity>
-            )}
-
-            <View style={styles.settingItem}>
-              <View style={styles.settingInfo}>
                 <Bell size={20} color="#6B7280" />
-                <Text style={styles.settingLabel}>Notificaciones Push</Text>
+                <View style={styles.settingCopy}>
+                  <Text style={styles.settingLabel}>Notificaciones Push</Text>
+                  <Text style={styles.settingDescription}>
+                    Se usan para avisos masivos y mensajes operativos en tiempo real.
+                  </Text>
+                </View>
               </View>
               <Switch
                 value={settings.pushNotifications}
-                onValueChange={(value) => handleSettingChange('pushNotifications', value)}
+                onValueChange={(value) => handleSystemSettingChange('pushNotifications', value)}
+                disabled={savingSystemSetting === 'pushNotifications'}
                 trackColor={{ false: '#E5E7EB', true: '#DC2626' }}
                 thumbColor={settings.pushNotifications ? '#FFFFFF' : '#FFFFFF'}
               />
@@ -693,7 +822,12 @@ export default function AdminSettings() {
             <View style={styles.settingItem}>
               <View style={styles.settingInfo}>
                 <Shield size={20} color="#6B7280" />
-                <Text style={styles.settingLabel}>Modo Mantenimiento</Text>
+                <View style={styles.settingCopy}>
+                  <Text style={styles.settingLabel}>Modo Mantenimiento</Text>
+                  <Text style={styles.settingDescription}>
+                    Bloquea la app para usuarios normales y muestra una pantalla de mantenimiento.
+                  </Text>
+                </View>
               </View>
               <TouchableOpacity
                 style={[
@@ -714,11 +848,17 @@ export default function AdminSettings() {
             <View style={styles.settingItem}>
               <View style={styles.settingInfo}>
                 <Globe size={20} color="#6B7280" />
-                <Text style={styles.settingLabel}>Acceso de Invitados</Text>
+                <View style={styles.settingCopy}>
+                  <Text style={styles.settingLabel}>Acceso de Invitados</Text>
+                  <Text style={styles.settingDescription}>
+                    Reserva esta opción para navegación sin cuenta. Por ahora se guarda a nivel global.
+                  </Text>
+                </View>
               </View>
               <Switch
                 value={settings.allowGuestAccess}
-                onValueChange={(value) => handleSettingChange('allowGuestAccess', value)}
+                onValueChange={(value) => handleSystemSettingChange('allowGuestAccess', value)}
+                disabled={savingSystemSetting === 'allowGuestAccess'}
                 trackColor={{ false: '#E5E7EB', true: '#DC2626' }}
                 thumbColor={settings.allowGuestAccess ? '#FFFFFF' : '#FFFFFF'}
               />
@@ -731,7 +871,8 @@ export default function AdminSettings() {
               </View>
               <Switch
                 value={settings.enableAnalytics}
-                onValueChange={(value) => handleSettingChange('enableAnalytics', value)}
+                onValueChange={(value) => handleSystemSettingChange('enableAnalytics', value)}
+                disabled={savingSystemSetting === 'enableAnalytics'}
                 trackColor={{ false: '#E5E7EB', true: '#DC2626' }}
                 thumbColor={settings.enableAnalytics ? '#FFFFFF' : '#FFFFFF'}
               />
@@ -747,11 +888,17 @@ export default function AdminSettings() {
             <View style={styles.settingItem}>
               <View style={styles.settingInfo}>
                 <Shield size={20} color="#6B7280" />
-                <Text style={styles.settingLabel}>Auto-aprobar Aliados</Text>
+                <View style={styles.settingCopy}>
+                  <Text style={styles.settingLabel}>Auto-aprobar Aliados</Text>
+                  <Text style={styles.settingDescription}>
+                    Las nuevas solicitudes de aliados quedarán aprobadas automáticamente al registrarse.
+                  </Text>
+                </View>
               </View>
               <Switch
                 value={settings.autoApprovePartners}
-                onValueChange={(value) => handleSettingChange('autoApprovePartners', value)}
+                onValueChange={(value) => handleSystemSettingChange('autoApprovePartners', value)}
+                disabled={savingSystemSetting === 'autoApprovePartners'}
                 trackColor={{ false: '#E5E7EB', true: '#DC2626' }}
                 thumbColor={settings.autoApprovePartners ? '#FFFFFF' : '#FFFFFF'}
               />
@@ -766,7 +913,7 @@ export default function AdminSettings() {
             <View style={styles.settingItem}>
               <View style={styles.settingInfo}>
                 <CreditCard size={20} color="#00A650" />
-                <Text style={styles.settingLabel}>Cuenta Mercado Pago Admin</Text>
+                <Text style={styles.settingLabel}>Cuenta Mercado Pago Legacy</Text>
               </View>
               <TouchableOpacity
                 style={[
@@ -799,75 +946,6 @@ export default function AdminSettings() {
             )}
           </Card>
         </View>
-
-        <Text style={styles.sectionTitle}>💰 Configuración de Comisiones</Text>
-        
-        <Card style={styles.commissionCard}>
-          <View style={styles.commissionHeader}>
-            <View style={styles.commissionTitleContainer}>
-              <DollarSign size={24} color="#10B981" style={styles.commissionIcon} />
-              <View>
-                <Text style={styles.commissionTitle}>Comisión Global</Text>
-                <Text style={styles.commissionDescription}>
-                  Comisión base para todos los aliados
-                </Text>
-              </View>
-            </View>
-            
-            <View style={styles.commissionInputContainer}>
-              <Input
-                placeholder="5.0"
-                value={settings.globalCommission}
-                onChangeText={handleCommissionChange}
-                keyboardType="numeric"
-                style={styles.commissionInput}
-              />
-              <Text style={styles.percentSymbol}>%</Text>
-            </View>
-          </View>
-          
-          <Text style={styles.commissionTypesTitle}>Tipos de Comisión</Text>
-          
-          <TouchableOpacity 
-            style={[
-              styles.commissionOption, 
-              settings.commissionType === 'percentage' && styles.commissionOptionSelected
-            ]}
-            onPress={() => handleCommissionTypeChange('percentage')}
-          >
-            <DollarSign size={20} color={settings.commissionType === 'percentage' ? "#3B82F6" : "#6B7280"} />
-            <Text style={styles.commissionOptionText}>Porcentaje del valor de la transacción</Text>
-            <Text style={styles.commissionOptionValue}>{settings.globalCommission}%</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[
-              styles.commissionOption, 
-              settings.commissionType === 'fixed' && styles.commissionOptionSelected
-            ]}
-            onPress={() => handleCommissionTypeChange('fixed')}
-          >
-            <DollarSign size={20} color={settings.commissionType === 'fixed' ? "#3B82F6" : "#6B7280"} />
-            <Text style={styles.commissionOptionText}>Monto fijo por transacción</Text>
-            <View style={styles.fixedCommissionContainer}>
-              <Text style={styles.fixedCommissionPrefix}>$</Text>
-              <Input
-                value={settings.fixedCommission}
-                onChangeText={handleFixedCommissionChange}
-                keyboardType="numeric"
-                style={styles.fixedCommissionInput}
-              />
-            </View>
-          </TouchableOpacity>
-          
-          <Button
-            title="Guardar Configuración"
-            onPress={handleSaveCommissionConfig}
-            variant="primary"
-            size="large"
-            style={styles.saveButton}
-          />
-        </Card>
 
         {/* Subscriptions Section */}
         <View style={styles.section}>
@@ -910,7 +988,7 @@ export default function AdminSettings() {
                   <Text style={styles.subscriptionStatusText}>✅ Sistema Activo</Text>
                 </View>
                 <Text style={styles.subscriptionStatusInfo}>
-                  Los usuarios pueden ver los planes de suscripción desde su perfil y gestionar su membresía a través del CRM integrado.
+                  Los usuarios pueden ver los planes de suscripción desde su perfil y gestionar su membresía a través de Mercado Pago.
                 </Text>
               </View>
             )}
@@ -927,25 +1005,13 @@ export default function AdminSettings() {
               <View style={styles.subscriptionInfoBox}>
                 <Text style={styles.subscriptionInfoTitle}>ℹ️ Información</Text>
                 <Text style={styles.subscriptionInfoText}>
-                  • Los planes se gestionan desde el CRM{'\n'}
+                  • Los planes pagos se conectan con Mercado Pago{'\n'}
                   • Los usuarios verán los planes configurados aquí{'\n'}
-                  • Los pagos se procesan mediante el CRM{'\n'}
+                  • Los pagos recurrentes se procesan mediante Mercado Pago{'\n'}
                   • Las suscripciones se sincronizan automáticamente
                 </Text>
               </View>
             </View>
-          </Card>
-        </View>
-
-        {/* Data Management */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📊 Gestión de Datos</Text>
-          
-          <Card style={styles.dataCard}>
-            <TouchableOpacity style={styles.dataAction} onPress={handleBackupData}>
-              <Database size={20} color="#3B82F6" />
-              <Text style={styles.dataActionText}>Respaldar Base de Datos</Text>
-            </TouchableOpacity>
           </Card>
         </View>
 
@@ -961,12 +1027,29 @@ export default function AdminSettings() {
           <Button
             title="Cerrar Sesión"
             onPress={handleLogout}
+            disabled={isLoggingOut}
+            loading={isLoggingOut}
             variant="primary"
             size="large"
             style={styles.logoutButton}
           />
         </Card>
       </ScrollView>
+
+      <Modal
+        visible={isLoggingOut}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.logoutOverlay}>
+          <View style={styles.logoutOverlayCard}>
+            <ActivityIndicator size="large" color="#2D6A6F" />
+            <Text style={styles.logoutOverlayTitle}>Cerrando sesion</Text>
+            <Text style={styles.logoutOverlayText}>Estamos cerrando tu cuenta de forma segura.</Text>
+          </View>
+        </View>
+      </Modal>
       
       {/* Email Configuration Modal */}
       <Modal
@@ -1005,6 +1088,8 @@ export default function AdminSettings() {
             <Input
               label="Contraseña"
               placeholder="••••••••"
+              value=""
+              onChangeText={() => {}}
               secureTextEntry
             />
             
@@ -1057,7 +1142,7 @@ export default function AdminSettings() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {adminMpConfig.isConnected ? 'Gestionar Mercado Pago' : 'Configurar Mercado Pago Admin'}
+                {adminMpConfig.isConnected ? 'Gestionar Mercado Pago' : 'Configurar Mercado Pago'}
               </Text>
               <TouchableOpacity onPress={() => setShowMercadoPagoModal(false)}>
                 <Text style={styles.modalCloseText}>✕</Text>
@@ -1081,6 +1166,32 @@ export default function AdminSettings() {
                 </View>
                 
                 <View style={styles.mpAccountInfo}>
+                  <Text style={styles.mpAccountLabel}>Client ID:</Text>
+                  <Text style={styles.mpAccountValue}>{adminMpConfig.clientId || 'No disponible'}</Text>
+                </View>
+
+                <Text style={styles.mpInfoText}>
+                  Si el Client ID no aparece aquí, puedes completarlo sin desconectar la cuenta.
+                </Text>
+
+                <Input
+                  label="N° de aplicación / App ID (client_id)"
+                  placeholder="Tu client_id de Mercado Pago"
+                  value={adminMpConfig.clientId}
+                  onChangeText={(value) => setAdminMpConfig(prev => ({ ...prev, clientId: value }))}
+                  autoCapitalize="none"
+                />
+
+                <Button
+                  title={mpLoading ? 'Guardando...' : 'Guardar App ID'}
+                  onPress={handleSaveMercadoPagoClientId}
+                  loading={mpLoading}
+                  variant="secondary"
+                  size="large"
+                  style={styles.mpSaveActionButton}
+                />
+                
+                <View style={styles.mpAccountInfo}>
                   <Text style={styles.mpAccountLabel}>Modo:</Text>
                   <Text style={styles.mpAccountValue}>
                     {adminMpConfig.isTestMode ? '🧪 Prueba' : '🚀 Producción'}
@@ -1089,7 +1200,7 @@ export default function AdminSettings() {
                 
                 <View style={styles.mpWarning}>
                   <Text style={styles.mpWarningText}>
-                    ⚠️ Esta es la cuenta principal donde se reciben todas las comisiones de la plataforma.
+                    ⚠️ Esta cuenta quedó como respaldo de compatibilidad y ya no debería usarse para cobrar a clientes.
                   </Text>
                 </View>
                 
@@ -1103,19 +1214,28 @@ export default function AdminSettings() {
             ) : (
               <View style={styles.mpConfigSection}>
                 <View style={styles.mpInfoSection}>
-                  <Text style={styles.mpInfoTitle}>🏦 Cuenta Principal de Comisiones</Text>
+                  <Text style={styles.mpInfoTitle}>🏦 Configuración legacy de comisiones</Text>
                   <Text style={styles.mpInfoText}>
-                    Esta cuenta recibirá automáticamente las comisiones de todas las ventas realizadas en la plataforma.
+                    Esta configuración quedó como respaldo de compatibilidad y no es el flujo principal para cobrar a los clientes.
                   </Text>
                 </View>
                 
                 <View style={styles.mpHelpSection}>
-                  <Text style={styles.mpHelpTitle}>💡 ¿Cómo obtener las credenciales?</Text>
+                  <Text style={styles.mpHelpTitle}>💡 ¿Cómo obtener las credenciales legacy?</Text>
                   <Text style={styles.mpHelpStep}>1. Ve a developers.mercadopago.com</Text>
-                  <Text style={styles.mpHelpStep}>2. Inicia sesión con la cuenta admin de MP</Text>
+                  <Text style={styles.mpHelpStep}>2. Inicia sesión con tu cuenta de Mercado Pago</Text>
                   <Text style={styles.mpHelpStep}>3. Ve a "Tus integraciones" → "Credenciales"</Text>
-                  <Text style={styles.mpHelpStep}>4. Copia el Access Token y Public Key</Text>
+                  <Text style={styles.mpHelpStep}>4. Copia el Access Token y Public Key si necesitas respaldo legacy</Text>
+                  <Text style={styles.mpHelpStep}>5. Completa el N° de aplicación / App ID si vas a usar OAuth para aliados</Text>
                 </View>
+
+                <Input
+                  label="N° de aplicación / App ID (client_id)"
+                  placeholder="Tu client_id de Mercado Pago"
+                  value={adminMpConfig.clientId}
+                  onChangeText={(value) => setAdminMpConfig(prev => ({ ...prev, clientId: value }))}
+                  autoCapitalize="none"
+                />
 
                 <Input
                   label="Access Token *"
@@ -1155,7 +1275,7 @@ export default function AdminSettings() {
                   disabled={mpLoading}
                 >
                   <Text style={styles.mpSaveButtonText}>
-                    {mpLoading ? 'Validando...' : 'Conectar Cuenta Admin'}
+                    {mpLoading ? 'Validando...' : 'Guardar respaldo legacy'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1163,6 +1283,7 @@ export default function AdminSettings() {
           </View>
         </View>
       </Modal>
+      {false && (
       <Modal
         visible={showMercadoPagoModal}
         transparent
@@ -1173,7 +1294,7 @@ export default function AdminSettings() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {adminMpConfig.isConnected ? 'Gestionar Mercado Pago' : 'Configurar Mercado Pago Admin'}
+                {adminMpConfig.isConnected ? 'Gestionar Mercado Pago' : 'Configurar Mercado Pago'}
               </Text>
               <TouchableOpacity onPress={() => setShowMercadoPagoModal(false)}>
                 <Text style={styles.modalCloseText}>✕</Text>
@@ -1205,7 +1326,7 @@ export default function AdminSettings() {
                 
                 <View style={styles.mpWarning}>
                   <Text style={styles.mpWarningText}>
-                    ⚠️ Esta es la cuenta principal donde se reciben todas las comisiones de la plataforma.
+                    ⚠️ Esta cuenta quedó como respaldo de compatibilidad y ya no debería usarse para cobrar a clientes.
                   </Text>
                 </View>
                 
@@ -1219,18 +1340,18 @@ export default function AdminSettings() {
             ) : (
               <View style={styles.mpConfigSection}>
                 <View style={styles.mpInfoSection}>
-                  <Text style={styles.mpInfoTitle}>🏦 Cuenta Principal de Comisiones</Text>
+                  <Text style={styles.mpInfoTitle}>🏦 Configuración legacy de comisiones</Text>
                   <Text style={styles.mpInfoText}>
-                    Esta cuenta recibirá automáticamente las comisiones de todas las ventas realizadas en la plataforma.
+                    Esta configuración quedó como respaldo de compatibilidad y no es el flujo principal para cobrar a los clientes.
                   </Text>
                 </View>
                 
                 <View style={styles.mpHelpSection}>
                   <Text style={styles.mpHelpTitle}>💡 ¿Cómo obtener las credenciales?</Text>
                   <Text style={styles.mpHelpStep}>1. Ve a developers.mercadopago.com</Text>
-                  <Text style={styles.mpHelpStep}>2. Inicia sesión con la cuenta admin de MP</Text>
+                  <Text style={styles.mpHelpStep}>2. Inicia sesión con tu cuenta de Mercado Pago</Text>
                   <Text style={styles.mpHelpStep}>3. Ve a "Tus integraciones" → "Credenciales"</Text>
-                  <Text style={styles.mpHelpStep}>4. Copia el Access Token y Public Key</Text>
+                  <Text style={styles.mpHelpStep}>4. Copia el Access Token y Public Key si necesitas respaldo legacy</Text>
                 </View>
 
                 <Input
@@ -1271,7 +1392,7 @@ export default function AdminSettings() {
                   disabled={mpLoading}
                 >
                   <Text style={styles.mpSaveButtonText}>
-                    {mpLoading ? 'Validando...' : 'Conectar Cuenta Admin'}
+                    {mpLoading ? 'Validando...' : 'Guardar respaldo legacy'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1279,6 +1400,7 @@ export default function AdminSettings() {
           </View>
         </View>
       </Modal>
+      )}
 
       {/* Broadcast Notification Modal */}
       <Modal
@@ -1421,6 +1543,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  scrollContent: {
+    paddingBottom: 16,
+  },
   section: {
     marginBottom: 24,
     paddingHorizontal: 16,
@@ -1449,11 +1574,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
+  settingCopy: {
+    flex: 1,
+    marginLeft: 12,
+  },
   settingLabel: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#111827',
-    marginLeft: 12,
+  },
+  settingDescription: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 4,
+    lineHeight: 18,
   },
   maintenanceButton: {
     paddingHorizontal: 12,
@@ -1472,19 +1607,28 @@ const styles = StyleSheet.create({
   commissionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 16,
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 18,
+    paddingBottom: 18,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
   commissionTitleContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
     flex: 1,
   },
-  commissionIcon: {
+  commissionIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#D1FAE5',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 12,
+  },
+  commissionTitleCopy: {
+    flex: 1,
   },
   commissionTitle: {
     fontSize: 18,
@@ -1496,66 +1640,95 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
+    lineHeight: 20,
   },
-  commissionInputContainer: {
-    flexDirection: 'row',
+  commissionSummaryBadge: {
+    minWidth: 82,
+    backgroundColor: '#ECFDF5',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     alignItems: 'center',
   },
-  commissionInput: {
-    width: 60,
-    textAlign: 'center',
-    marginRight: 0,
-    paddingRight: 0,
+  commissionSummaryLabel: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#047857',
+    marginBottom: 2,
   },
-  percentSymbol: {
+  commissionSummaryValue: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
-    marginLeft: 4,
+    fontFamily: 'Inter-Bold',
+    color: '#065F46',
   },
   commissionTypesTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  commissionOptionsGrid: {
+    gap: 12,
   },
   commissionOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#F9FAFB',
     padding: 16,
     borderRadius: 8,
-    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   commissionOptionSelected: {
-    backgroundColor: '#EBF8FF',
-    borderWidth: 1,
-    borderColor: '#3B82F6',
+    backgroundColor: '#F0FDF4',
+    borderColor: '#10B981',
   },
-  commissionOptionText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginLeft: 12,
-    flex: 1,
-  },
-  commissionOptionValue: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#3B82F6',
-  },
-  fixedCommissionContainer: {
+  commissionOptionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 8,
   },
-  fixedCommissionPrefix: {
+  commissionRadio: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#9CA3AF',
+    marginRight: 10,
+  },
+  commissionRadioSelected: {
+    borderColor: '#059669',
+    backgroundColor: '#059669',
+  },
+  commissionOptionTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  commissionOptionText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  commissionFieldRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+  },
+  commissionFieldPrefix: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#3B82F6',
+    color: '#047857',
     marginRight: 4,
   },
-  fixedCommissionInput: {
-    width: 60,
+  commissionFieldSuffix: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#047857',
+    marginLeft: 6,
+  },
+  commissionInput: {
+    width: 88,
     textAlign: 'center',
   },
   saveButton: {
@@ -1666,23 +1839,6 @@ const styles = StyleSheet.create({
     color: '#1E40AF',
     lineHeight: 20,
   },
-  dataCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-  },
-  dataAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  dataActionText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    marginLeft: 12,
-  },
   adminCard: {
     marginHorizontal: 16,
     marginBottom: 24,
@@ -1693,6 +1849,40 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     marginTop: 8,
+  },
+  logoutOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.42)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  logoutOverlayCard: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  logoutOverlayTitle: {
+    marginTop: 16,
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+  },
+  logoutOverlayText: {
+    marginTop: 8,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   adminEmail: {
     fontSize: 16,
@@ -1921,6 +2111,35 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     lineHeight: 16,
   },
+  mpDisconnectButton: {
+    backgroundColor: '#FEE2E2',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  mpDisconnectText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#B91C1C',
+  },
+  mpSaveButton: {
+    backgroundColor: '#00A650',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  mpSaveButtonDisabled: {
+    opacity: 0.6,
+  },
+  mpSaveButtonText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+  },
+  mpSaveActionButton: {
+    marginTop: 8,
+    marginBottom: 12,
+  },
   broadcastButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2036,9 +2255,5 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.5,
   },
-  modalScrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingVertical: 20,
-  },
 });
+

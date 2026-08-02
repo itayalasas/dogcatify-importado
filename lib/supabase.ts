@@ -1,100 +1,179 @@
-import { createClient } from '@supabase/supabase-js';
+﻿import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
+import { envConfig } from '@/utils/envConfig';
 
-// Supabase configuration
-export const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-export const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables. Please check your .env file.');
+// Global state que sobrevive al Hot Reload de Metro
+// @ts-ignore
+if (!global.__supabaseClient) {
+  // @ts-ignore
+  global.__supabaseClient = null;
 }
 
-export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-    flowType: 'pkce',
-  },
-  global: {
-    headers: {
-      'X-Client-Info': 'dogcatify-mobile',
-    },
-  },
-});
+// Supabase configuration - Ahora se carga dinÃ¡micamente
+let supabaseUrl: string | undefined;
+let supabaseAnonKey: string | undefined;
 
-supabaseClient.auth.onAuthStateChange((event, session) => {
-  if (event === 'TOKEN_REFRESHED') {
-    console.log('Token refreshed automatically by Supabase');
-  } else if (event === 'SIGNED_OUT') {
-    console.log('User signed out');
+// Usa el global en lugar de una variable local
+function getSupabaseClientInstance(): SupabaseClient | null {
+  // @ts-ignore
+  return global.__supabaseClient;
+}
+
+function setSupabaseClientInstance(client: SupabaseClient | null): void {
+  // @ts-ignore
+  global.__supabaseClient = client;
+}
+
+/**
+ * Inicializa el cliente de Supabase con la configuraciÃ³n del API Gateway
+ */
+export const initializeSupabase = async (): Promise<void> => {
+  try {
+    // Asegurarse de que envConfig estÃ© inicializado
+    if (!envConfig.isInitialized()) {
+      console.log('[Supabase] â³ Waiting for envConfig initialization...');
+      await envConfig.initialize();
+    }
+
+    // Hidratar variables exportadas siempre (incluso si se reutiliza cliente por Hot Reload)
+    supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+    supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+
+    // Si ya existe un cliente, reutilizarlo
+    const existingClient = getSupabaseClientInstance();
+    if (existingClient) {
+      console.log('[Supabase] â™»ï¸ Reusing existing Supabase client (Hot Reload)');
+      return;
+    }
+
+    console.log('[Supabase] ðŸš€ Initializing Supabase client...');
+
+    console.log('[Supabase] ðŸ”— Raw Supabase URL from config:', supabaseUrl);
+    console.log('[Supabase] ðŸ”‘ Raw Anon Key from config:', supabaseAnonKey);
+    console.log('[Supabase] ðŸ“Š URL type:', typeof supabaseUrl, 'length:', supabaseUrl?.length);
+    console.log('[Supabase] ðŸ“Š Key type:', typeof supabaseAnonKey, 'length:', supabaseAnonKey?.length);
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('[Supabase] âŒ Missing variables:');
+      console.error('  - URL:', supabaseUrl ? 'Present' : 'MISSING');
+      console.error('  - Key:', supabaseAnonKey ? 'Present' : 'MISSING');
+      throw new Error('Missing Supabase environment variables from API Gateway');
+    }
+
+    console.log('[Supabase] ðŸ”— Supabase URL:', supabaseUrl);
+    console.log('[Supabase] ðŸ”‘ Anon Key (first 50 chars):', supabaseAnonKey.substring(0, 50) + '...');
+
+    // Crear cliente de Supabase
+    const newClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+        flowType: 'pkce',
+      },
+      global: {
+        headers: {
+          'X-Client-Info': 'dogcatify-mobile',
+        },
+        fetch: createAuthAwareFetch(),
+      },
+    });
+
+    setSupabaseClientInstance(newClient);
+    console.log('[Supabase] âœ… Supabase client initialized successfully');
+  } catch (error) {
+    console.error('[Supabase] âŒ Failed to initialize Supabase client:', error);
+    throw error;
+  }
+};
+
+/**
+ * Obtiene el cliente de Supabase
+ * IMPORTANTE: Debe llamarse despuÃ©s de initializeSupabase()
+ */
+export const getSupabaseClient = (): SupabaseClient => {
+  const client = getSupabaseClientInstance();
+  if (!client) {
+    throw new Error('Supabase client not initialized. Call initializeSupabase() first.');
+  }
+  return client;
+};
+
+// Export para compatibilidad con cÃ³digo existente
+export const supabaseClient = new Proxy({} as SupabaseClient, {
+  get(target, prop) {
+    const client = getSupabaseClientInstance();
+    if (!client) {
+      console.warn('[Supabase] âš ï¸ Accessing supabaseClient before initialization');
+      throw new Error('Supabase client not initialized. Call initializeSupabase() first.');
+    }
+    return (client as any)[prop];
   }
 });
 
-// Add global error handler for API calls
-const originalFrom = supabaseClient.from;
-supabaseClient.from = function(table: string) {
-  const query = originalFrom.call(this, table);
-  
-  // Override the query methods to add error handling
-  const originalSelect = query.select;
-  const originalInsert = query.insert;
-  const originalUpdate = query.update;
-  const originalDelete = query.delete;
-  
-  query.select = function(...args: any[]) {
-    const result = originalSelect.apply(this, args);
-    return addErrorHandling(result);
-  };
-  
-  query.insert = function(...args: any[]) {
-    const result = originalInsert.apply(this, args);
-    return addErrorHandling(result);
-  };
-  
-  query.update = function(...args: any[]) {
-    const result = originalUpdate.apply(this, args);
-    return addErrorHandling(result);
-  };
-  
-  query.delete = function(...args: any[]) {
-    const result = originalDelete.apply(this, args);
-    return addErrorHandling(result);
-  };
-  
-  return query;
+/**
+ * Configura los listeners de auth despuÃ©s de inicializar Supabase
+ */
+export const setupAuthListeners = () => {
+  const client = getSupabaseClientInstance();
+  if (!client) {
+    console.warn('[Supabase] âš ï¸ Cannot setup auth listeners before initialization');
+    return;
+  }
+
+  client.auth.onAuthStateChange((event, session) => {
+    if (event === 'TOKEN_REFRESHED') {
+      console.log('Token refreshed automatically by Supabase');
+    } else if (event === 'SIGNED_OUT') {
+      console.log('User signed out');
+    }
+  });
 };
 
-// Add error handling to detect JWT expiration
-const addErrorHandling = (queryBuilder: any) => {
-  const originalThen = queryBuilder.then;
-  
-  queryBuilder.then = function(onFulfilled?: any, onRejected?: any) {
-    return originalThen.call(this, 
-      (result: any) => {
-        // Check for JWT errors in successful responses
-        if (result.error) {
-          handleSupabaseError(result.error);
-        }
-        return onFulfilled ? onFulfilled(result) : result;
-      },
-      (error: any) => {
-        handleSupabaseError(error);
-        return onRejected ? onRejected(error) : Promise.reject(error);
-      }
-    );
-  };
-  
-  return queryBuilder;
-};
-
+// Token expiration handling
 let tokenExpirationCallback: (() => void) | null = null;
 
 export const setTokenExpirationCallback = (callback: () => void) => {
   tokenExpirationCallback = callback;
 };
 
-const handleSupabaseError = (error: any) => {
+const isSessionErrorResponse = (status: number, responseText: string): boolean => {
+  const text = (responseText || '').toLowerCase();
+
+  return (
+    status === 401 ||
+    status === 403 ||
+    text.includes('jwt') ||
+    text.includes('expired') ||
+    text.includes('session_not_found') ||
+    text.includes('refresh_token_not_found') ||
+    text.includes('invalid refresh token') ||
+    text.includes('pgrst301')
+  );
+};
+
+const createAuthAwareFetch = () => {
+  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const response = await fetch(input, init);
+
+    if (!response.ok) {
+      try {
+        const responseClone = response.clone();
+        const responseText = await responseClone.text();
+
+        if (isSessionErrorResponse(response.status, responseText) && tokenExpirationCallback) {
+          console.log('Session error detected from Supabase HTTP response, triggering expiration callback');
+          tokenExpirationCallback();
+        }
+      } catch (inspectError) {
+        console.warn('Could not inspect Supabase response for session errors:', inspectError);
+      }
+    }
+
+    return response;
+  };
+};
+export const handleSupabaseError = (error: any) => {
   if (error && typeof error === 'object') {
     const errorMessage = (error.message || '').toLowerCase();
     const errorCode = (error.code || '').toLowerCase();
@@ -119,15 +198,166 @@ const handleSupabaseError = (error: any) => {
 };
 
 // User profile functions
+type ProfileRoleFlags = {
+  isOwner: boolean;
+  isPartner: boolean;
+  isAdmin: boolean;
+};
+
+const parseMetadataBoolean = (value: any): boolean | undefined => {
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  return undefined;
+};
+
+const resolveProfileRoleFlags = (metadata: any, existing?: Partial<ProfileRoleFlags> | null): ProfileRoleFlags => {
+  const accountRole = String(metadata?.account_role || '').toLowerCase();
+  const explicitOwner = parseMetadataBoolean(metadata?.is_owner);
+  const explicitPartner = parseMetadataBoolean(metadata?.is_partner);
+  const explicitAdmin = parseMetadataBoolean(metadata?.is_admin);
+  const currentOwner = existing?.isOwner ?? true;
+  const currentPartner = existing?.isPartner ?? false;
+  const currentAdmin = existing?.isAdmin ?? false;
+
+  if (accountRole === 'partner') {
+    return {
+      isOwner: existing ? currentOwner : false,
+      isPartner: true,
+      isAdmin: explicitAdmin ?? currentAdmin,
+    };
+  }
+
+  if (accountRole === 'admin') {
+    return {
+      isOwner: explicitOwner ?? currentOwner,
+      isPartner: explicitPartner ?? currentPartner,
+      isAdmin: true,
+    };
+  }
+
+  if (accountRole === 'owner') {
+    return {
+      isOwner: true,
+      isPartner: existing ? currentPartner : false,
+      isAdmin: explicitAdmin ?? currentAdmin,
+    };
+  }
+
+  return {
+    isOwner: explicitOwner ?? currentOwner,
+    isPartner: explicitPartner ?? currentPartner,
+    isAdmin: explicitAdmin ?? currentAdmin,
+  };
+};
+
 export const getUserProfile = async (userId: string) => {
   try {
     const { data, error } = await supabaseClient
       .from('profiles')
       .select('*')
       .eq('id', userId)
-      .single();
-    
+      .maybeSingle();
+
     if (error) throw error;
+
+    // If profile doesn't exist, create it automatically
+    if (!data) {
+      console.log('Profile not found for user:', userId);
+      console.log('Attempting to fetch user data from auth.users and create profile...');
+
+      // Get user data from auth
+      const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+
+      if (authError || !user) {
+        throw new Error('Could not fetch user data from auth');
+      }
+
+      // Create the missing profile
+      const roleFlags = resolveProfileRoleFlags(user?.user_metadata, null);
+      const newProfile = {
+        id: userId,
+        email: user.email!,
+        display_name: (user.user_metadata?.full_name as string) || user.email?.split('@')[0] || 'Usuario',
+        is_owner: roleFlags.isOwner,
+        is_partner: roleFlags.isPartner,
+        is_admin: roleFlags.isAdmin,
+        email_confirmed: false,
+        email_confirmed_at: null,
+        onboarding_completed: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        followers: [],
+        following: []
+      };
+
+      console.log('Creating missing profile:', newProfile);
+
+      const { data: createdProfile, error: createError } = await supabaseClient
+        .from('profiles')
+        .insert(newProfile)
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Error creating profile:', createError);
+        throw createError;
+      }
+
+      console.log('Profile created successfully');
+      return createdProfile;
+    }
+
+    // If the profile already exists, make sure its role matches the auth metadata
+    try {
+      const { data: authData } = await supabaseClient.auth.getUser();
+      const authUser = authData?.user;
+
+      if (authUser) {
+        const currentRoleFlags = {
+          isOwner: data.is_owner ?? true,
+          isPartner: data.is_partner ?? false,
+          isAdmin: data.is_admin ?? false,
+        };
+        const roleFlags = resolveProfileRoleFlags(authUser.user_metadata, currentRoleFlags);
+
+        if (
+          currentRoleFlags.isOwner !== roleFlags.isOwner ||
+          currentRoleFlags.isPartner !== roleFlags.isPartner ||
+          currentRoleFlags.isAdmin !== roleFlags.isAdmin
+        ) {
+          console.log('Syncing profile role flags with auth metadata for user:', userId);
+          const { data: updatedProfile, error: roleUpdateError } = await supabaseClient
+            .from('profiles')
+            .update({
+              is_owner: roleFlags.isOwner,
+              is_partner: roleFlags.isPartner,
+              is_admin: roleFlags.isAdmin,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', userId)
+            .select('*')
+            .single();
+
+          if (!roleUpdateError && updatedProfile) {
+            return updatedProfile;
+          }
+
+          if (roleUpdateError) {
+            console.warn('Could not sync profile role flags:', roleUpdateError);
+          }
+
+          return {
+            ...data,
+            is_owner: roleFlags.isOwner,
+            is_partner: roleFlags.isPartner,
+            is_admin: roleFlags.isAdmin,
+          };
+        }
+      }
+    } catch (syncError) {
+      console.warn('Error syncing profile role flags on fetch:', syncError);
+    }
+
     return data;
   } catch (error) {
     console.error('Error fetching user profile:', error);
@@ -137,10 +367,40 @@ export const getUserProfile = async (userId: string) => {
 
 export const updateUserProfile = async (userId: string, updates: any) => {
   try {
+    const { data: existingProfile, error: existingProfileError } = await supabaseClient
+      .from('profiles')
+      .select('email')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (existingProfileError) {
+      console.warn('Error reading existing profile before update:', existingProfileError);
+    }
+
+    let resolvedEmail = String(updates?.email || '').trim();
+
+    if (!resolvedEmail) {
+      resolvedEmail = String(existingProfile?.email || '').trim();
+    }
+
+    if (!resolvedEmail) {
+      try {
+        const { data: authData } = await supabaseClient.auth.getUser();
+        resolvedEmail = String(authData?.user?.email || '').trim();
+      } catch (authError) {
+        console.warn('Could not resolve email from auth session before profile update:', authError);
+      }
+    }
+
+    if (!resolvedEmail) {
+      throw new Error(`Unable to resolve email for profile update: ${userId}`);
+    }
+
     const { error } = await supabaseClient
       .from('profiles')
       .upsert({
         id: userId,
+        email: resolvedEmail,
         ...updates,
         updated_at: new Date().toISOString(),
       });
@@ -245,3 +505,5 @@ export const deletePet = async (petId: string) => {
     throw error;
   }
 };
+
+

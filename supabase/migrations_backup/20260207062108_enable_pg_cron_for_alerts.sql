@@ -1,0 +1,17 @@
+/*\n  # Habilitar pg_cron y Configurar Jobs Automáticos para Alertas\n\n  1. Extensiones\n    - Habilita pg_cron para ejecutar jobs programados\n    - Habilita http para hacer requests HTTP\n\n  2. Función\n    - check_alert_thresholds_cron: Llama a la edge function de alertas\n\n  3. Cron Job\n    - Nombre: check-alert-thresholds\n    - Frecuencia: cada 5 minutos\n    - Acción: verifica umbrales y envía alertas si es necesario\n\n  4. Logs\n    - Registra cada ejecución en audit_logs\n    - Registra errores para debugging\n*/\n\nCREATE EXTENSION IF NOT EXISTS pg_cron;
+\nCREATE EXTENSION IF NOT EXISTS http;
+\n\nCREATE OR REPLACE FUNCTION check_alert_thresholds_cron()\nRETURNS void\nLANGUAGE plpgsql\nSECURITY DEFINER\nAS $$\nDECLARE\n  supabase_url text;
+\n  service_role_key text;
+\nBEGIN\n  supabase_url := current_setting('app.settings.supabase_url', true);
+\n  service_role_key := current_setting('app.settings.service_role_key', true);
+\n  \n  PERFORM net.http_post(\n    url := supabase_url || '/functions/v1/check-alert-thresholds',\n    headers := jsonb_build_object(\n      'Authorization', 'Bearer ' || service_role_key,\n      'Content-Type', 'application/json'\n    ),\n    body := '{}'::jsonb,\n    timeout_milliseconds := 30000\n  );
+\n  \n  INSERT INTO audit_logs (\n    action,\n    resource_type,\n    success,\n    details\n  ) VALUES (\n    'CRON_ALERT_CHECK',\n    'system_cron',\n    true,\n    jsonb_build_object(\n      'job', 'check_alert_thresholds',\n      'executed_at', NOW()\n    )\n  );
+\n  \nEXCEPTION\n  WHEN OTHERS THEN\n    INSERT INTO audit_logs (\n      action,\n      resource_type,\n      success,\n      error_message,\n      details\n    ) VALUES (\n      'CRON_ALERT_CHECK',\n      'system_cron',\n      false,\n      SQLERRM,\n      jsonb_build_object(\n        'job', 'check_alert_thresholds',\n        'executed_at', NOW(),\n        'error_detail', SQLSTATE\n      )\n    );
+\nEND;
+\n$$;
+\n\nDO $$\nBEGIN\n  PERFORM cron.unschedule('check-alert-thresholds');
+\nEXCEPTION\n  WHEN OTHERS THEN NULL;
+\nEND $$;
+\n\nSELECT cron.schedule(\n  'check-alert-thresholds',\n  '*/5 * * * *',\n  $$SELECT check_alert_thresholds_cron();
+$$\n);
+\n;

@@ -16,7 +16,6 @@ export default function MercadoPagoCallback() {
   const [loading, setLoading] = useState(true);
   const [success, setSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [partnerId, setPartnerId] = useState<string | null>(null);
 
   useEffect(() => {
     handleCallback();
@@ -41,7 +40,6 @@ export default function MercadoPagoCallback() {
 
       if (result.success) {
         setSuccess(true);
-        setPartnerId(result.partnerId);
       } else {
         setErrorMessage(result.error || 'Error desconocido durante la autorización');
       }
@@ -54,16 +52,7 @@ export default function MercadoPagoCallback() {
   };
 
   const handleContinue = () => {
-    if (success && partnerId) {
-      // Redirect to partner dashboard or configuration
-      router.replace({
-        pathname: '/(partner-tabs)/dashboard',
-        params: { businessId: partnerId }
-      });
-    } else {
-      // Redirect to partner profile or configuration
-      router.replace('/profile/mercadopago-config');
-    }
+    router.replace('/profile/mercadopago-config');
   };
 
   if (loading) {
@@ -95,7 +84,7 @@ export default function MercadoPagoCallback() {
           
           <Text style={styles.subtitle}>
             {success 
-              ? 'Tu cuenta de Mercado Pago ha sido conectada correctamente. Ya puedes recibir pagos con split de comisiones automático.'
+              ? 'Tu cuenta de Mercado Pago quedó conectada correctamente para este aliado y sus negocios.'
               : errorMessage || 'No se pudo completar la autorización con Mercado Pago.'
             }
           </Text>
@@ -104,16 +93,15 @@ export default function MercadoPagoCallback() {
             <View style={styles.successInfo}>
               <Text style={styles.successInfoTitle}>¿Qué sigue?</Text>
               <Text style={styles.successInfoText}>
-                • Los pagos se dividirán automáticamente{'\n'}
-                • Recibirás el 95% de cada venta{'\n'}
-                • DogCatiFy retiene el 5% como comisión{'\n'}
-                • Los fondos llegan directamente a tu cuenta MP
+                • La conexión quedó registrada para todos tus negocios{'\n'}
+                • Los cobros usarán la cuenta de este aliado{'\n'}
+                • DogCatiFy aplicará su comisión automáticamente
               </Text>
             </View>
           )}
 
           <Button
-            title={success ? "Continuar al Dashboard" : "Volver a Configuración"}
+            title={success ? "Volver a configuración" : "Volver a configuración"}
             onPress={handleContinue}
             size="large"
           />

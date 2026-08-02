@@ -64,7 +64,7 @@ export default function PaymentPending() {
 
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Número de pedido:</Text>
-              <Text style={styles.detailValue}>{orderDetails?.id}</Text>
+              <Text style={styles.detailValue}>{orderDetails?.orderNumber || orderDetails?.id}</Text>
             </View>
 
             <View style={styles.detailRow}>

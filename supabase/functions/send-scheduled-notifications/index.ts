@@ -22,9 +22,29 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const expoAccessToken = Deno.env.get('EXPO_ACCESS_TOKEN');
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      const missing = [
+        !supabaseUrl ? 'SUPABASE_URL' : null,
+        !supabaseServiceKey ? 'SUPABASE_SERVICE_ROLE_KEY' : null,
+      ].filter(Boolean);
+
+      console.error('Missing required environment variables:', missing.join(', '));
+      return new Response(
+        JSON.stringify({
+          error: 'Missing required environment variables',
+          missing,
+          hint: 'Configure function secrets before running scheduled notifications',
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -64,14 +84,14 @@ Deno.serve(async (req: Request) => {
 
     for (const notification of pendingNotifications) {
       try {
-        // Obtener los tokens del usuario (FCM v1 y Expo legacy)
+        // Obtener tokens del usuario - PRIORIZAR fcm_token (FCM v1 API)
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('push_token, fcm_token')
           .eq('id', notification.user_id)
           .single();
 
-        if (profileError || (!profile?.push_token && !profile?.fcm_token)) {
+        if (profileError || (!profile?.fcm_token && !profile?.push_token)) {
           console.log(`No push tokens for user ${notification.user_id}`);
 
           // Marcar como fallida
@@ -96,7 +116,7 @@ Deno.serve(async (req: Request) => {
         let sendMethod = 'none';
         let ticket: PushTicket = { status: 'error', message: 'No method available' };
 
-        // Intentar con FCM v1 primero (si hay token)
+        // PRIORIDAD 1: FCM v1 (API actual y recomendada)
         if (profile.fcm_token) {
           try {
             console.log(`Attempting FCM v1 for notification ${notification.id}...`);
@@ -118,9 +138,11 @@ Deno.serve(async (req: Request) => {
                 headers: {
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${supabaseServiceKey}`,
+                  'apikey': supabaseServiceKey,
                 },
                 body: JSON.stringify({
                   token: profile.fcm_token,
+                  expoPushToken: profile.push_token || undefined,
                   title: notification.title,
                   body: notification.body,
                   data: serializedData,
@@ -136,16 +158,49 @@ Deno.serve(async (req: Request) => {
               sendMethod = 'fcm-v1';
               ticket = { status: 'ok', id: fcmResult.messageId };
             } else {
-              const errorData = await fcmResponse.json();
-              console.warn('FCM v1 failed, will try fallback:', errorData);
+              const errorText = await fcmResponse.text();
+              let errorData: any = {};
+              try {
+                errorData = errorText ? JSON.parse(errorText) : {};
+              } catch {
+                errorData = { raw: errorText };
+              }
+
+              if (fcmResponse.status === 401) {
+                ticket = {
+                  status: 'error',
+                  message: 'FCM v1 auth failed (Invalid JWT). Verify SUPABASE_SERVICE_ROLE_KEY secret in send-scheduled-notifications.',
+                  details: {
+                    status: 401,
+                    response: errorData,
+                  },
+                };
+              } else {
+                ticket = {
+                  status: 'error',
+                  message: errorData?.message || errorData?.error || 'FCM v1 request failed',
+                  details: {
+                    status: fcmResponse.status,
+                    response: errorData,
+                  },
+                };
+              }
+
+              console.warn('FCM v1 failed, will try fallback:', {
+                status: fcmResponse.status,
+                errorData,
+              });
             }
           } catch (fcmError) {
             console.warn('FCM v1 error, will try fallback:', fcmError.message);
           }
         }
 
-        // Fallback a Expo Push Service (API heredada) si FCM v1 falló
+        // PRIORIDAD 2: Fallback a Expo Push Service (API legacy/descontinuada)
+        // Solo si FCM v1 falló y el usuario tiene push_token legacy
         if (!notificationSent && profile.push_token) {
+          console.warn(`⚠️ Usando Expo legacy API (descontinuada) para notificación ${notification.id}`);
+          console.warn('⚠️ Usuario debería actualizar app para obtener fcm_token');
           console.log(`Attempting Expo Push Service for notification ${notification.id}...`);
 
           const message = {
@@ -174,14 +229,27 @@ Deno.serve(async (req: Request) => {
             body: JSON.stringify(message),
           });
 
-          const pushResult = await pushResponse.json();
-          console.log('Expo Push result:', JSON.stringify(pushResult));
+          if (!pushResponse.ok) {
+            const errorText = await pushResponse.text();
+            console.error('Expo Push HTTP error:', pushResponse.status, errorText);
+            ticket = {
+              status: 'error',
+              message: `HTTP ${pushResponse.status}: ${errorText}`,
+              details: { httpStatus: pushResponse.status }
+            };
+          } else {
+            const pushResult = await pushResponse.json();
+            console.log('Expo Push result:', JSON.stringify(pushResult));
 
-          ticket = pushResult.data?.[0] || pushResult;
+            ticket = pushResult.data?.[0] || pushResult;
 
-          if (ticket.status === 'ok') {
-            notificationSent = true;
-            sendMethod = 'expo-legacy';
+            if (ticket.status === 'ok') {
+              notificationSent = true;
+              sendMethod = 'expo-legacy';
+            } else {
+              // Log del error específico de Expo
+              console.error('Expo Push error:', JSON.stringify(ticket));
+            }
           }
         }
 
@@ -205,7 +273,14 @@ Deno.serve(async (req: Request) => {
             method: sendMethod,
           });
         } else {
-          // Error al enviar
+          // Error al enviar - capturar todos los detalles posibles
+          const errorMessage = ticket.message
+            || ticket.details?.error
+            || JSON.stringify(ticket.details || {})
+            || 'Unknown error - check logs';
+
+          console.error(`❌ Failed to send notification ${notification.id}:`, errorMessage);
+
           const retryCount = (notification.retry_count || 0) + 1;
           const maxRetries = 3;
 
@@ -215,7 +290,7 @@ Deno.serve(async (req: Request) => {
               .from('scheduled_notifications')
               .update({
                 retry_count: retryCount,
-                error_message: ticket.message || 'Unknown error',
+                error_message: errorMessage,
                 updated_at: new Date().toISOString(),
               })
               .eq('id', notification.id);
@@ -224,7 +299,7 @@ Deno.serve(async (req: Request) => {
               notification_id: notification.id,
               status: 'retry',
               retry_count: retryCount,
-              error: ticket.message,
+              error: errorMessage,
             });
           } else {
             // Máximo de reintentos alcanzado
@@ -233,7 +308,7 @@ Deno.serve(async (req: Request) => {
               .update({
                 status: 'failed',
                 retry_count: retryCount,
-                error_message: ticket.message || 'Max retries exceeded',
+                error_message: `Max retries exceeded. Last error: ${errorMessage}`,
                 updated_at: new Date().toISOString(),
               })
               .eq('id', notification.id);
@@ -242,6 +317,7 @@ Deno.serve(async (req: Request) => {
               notification_id: notification.id,
               status: 'failed',
               error: 'Max retries exceeded',
+              last_error: errorMessage,
             });
           }
         }

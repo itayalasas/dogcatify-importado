@@ -13,6 +13,9 @@ import { uploadImage as uploadImageUtil } from '../../utils/imageUpload';
 export default function EditService() {
   const { serviceId, partnerId, businessType } = useLocalSearchParams<{ serviceId: string; partnerId: string; businessType: string }>();
   const { currentUser } = useAuth();
+  const isShopBusiness = businessType === 'shop';
+  const isBoardingBusiness = businessType === 'boarding';
+  const isWalkingBusiness = businessType === 'walking';
 
   const [serviceName, setServiceName] = useState('');
   const [description, setDescription] = useState('');
@@ -100,7 +103,7 @@ export default function EditService() {
         }
       } else {
         Alert.alert('Error', 'Servicio no encontrado');
-        router.push('/(partner-tabs)/dashboard');
+        router.back();
       }
     } catch (error) {
       console.error('Error fetching service details:', error);
@@ -205,7 +208,7 @@ export default function EditService() {
     }
 
     // Validación específica para Pensión
-    if (businessType === 'boarding') {
+    if (isBoardingBusiness) {
       if (!priceDaily && !priceOvernight && !priceWeekend && !priceWeekly) {
         Alert.alert('Error', 'Por favor especifica al menos un precio para una categoría');
         return;
@@ -214,9 +217,18 @@ export default function EditService() {
         Alert.alert('Error', 'Por favor especifica al menos una capacidad para una categoría');
         return;
       }
+    } else if (isShopBusiness) {
+      if (!category.trim()) {
+        Alert.alert('Error', 'Por favor selecciona una categoría del producto');
+        return;
+      }
+      if (!price) {
+        Alert.alert('Error', 'Por favor especifica el precio del producto');
+        return;
+      }
     } else {
       // Validación para otros servicios
-      if (businessType !== 'shop' && (!category || !price)) {
+      if (!category || !price) {
         Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
         return;
       }
@@ -244,10 +256,10 @@ export default function EditService() {
       // Combine existing and new images
       const allImages = [...existingImages, ...uploadedImageUrls];
 
-      const isProduct = businessType === 'shop';
-      const tableName = isProduct ? 'partner_products' : 'partner_services';
+        const isProduct = isShopBusiness;
+        const tableName = isProduct ? 'partner_products' : 'partner_services';
 
-      if (isProduct) {
+        if (isProduct) {
         // Update product
         const productData = {
           name: serviceName.trim(),
@@ -292,7 +304,6 @@ export default function EditService() {
           images: allImages,
           currency: currency,
           currency_code_dgi: currencyCodeDgi,
-          updated_at: new Date().toISOString()
         };
 
         const { error } = await supabaseClient
@@ -313,7 +324,6 @@ export default function EditService() {
           images: allImages,
           currency: currency,
           currency_code_dgi: currencyCodeDgi,
-          updated_at: new Date().toISOString()
         };
 
         const { error } = await supabaseClient
@@ -329,7 +339,7 @@ export default function EditService() {
         `${isProduct ? 'Producto' : 'Servicio'} actualizado correctamente`,
         [{
           text: 'OK',
-          onPress: () => router.replace(`/services/partner/${partnerId}?refresh=${Date.now()}`)
+          onPress: () => router.back()
         }]
       );
     } catch (error) {
@@ -342,7 +352,7 @@ export default function EditService() {
 
       Alert.alert(
         'Error al actualizar',
-        `No se pudo actualizar el ${businessType === 'shop' ? 'producto' : 'servicio'}.\n\nDetalle: ${errorMessage}`
+        `No se pudo actualizar el ${isShopBusiness ? 'producto' : 'servicio'}.\n\nDetalle: ${errorMessage}`
       );
     } finally {
       setSaveLoading(false);
@@ -539,7 +549,7 @@ export default function EditService() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/(partner-tabs)/dashboard')} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>Editar {businessType === 'shop' ? 'Producto' : 'Servicio'}</Text>
@@ -555,6 +565,8 @@ export default function EditService() {
                 ? 'Actualiza la información de tu producto'
                 : businessType === 'boarding'
                 ? 'Actualiza las capacidades y precios de tu servicio de hospedaje'
+                : isWalkingBusiness
+                ? 'Actualiza tu servicio de paseo y recuerda que los cupos por horario se configuran en la agenda'
                 : 'Actualiza la información del servicio'}
             </Text>
           </View>
@@ -567,25 +579,27 @@ export default function EditService() {
           />
 
           <Input
-            label="Descripción *"
-            placeholder="Describe detalladamente..."
+            label={isShopBusiness ? 'Descripción del producto *' : 'Descripción del servicio *'}
+            placeholder={isShopBusiness
+              ? 'Describe detalladamente el producto...'
+              : 'Describe detalladamente el servicio...'}
             value={description}
             onChangeText={setDescription}
             multiline
             numberOfLines={3}
           />
 
-          {businessType !== 'boarding' && (
+          {!isBoardingBusiness && (
             <>
               <Input
-                label="Categoría"
-                placeholder="Categoría"
+                label={isShopBusiness ? 'Categoría del producto *' : 'Categoría *'}
+                placeholder={isShopBusiness ? 'Categoría del producto' : 'Categoría'}
                 value={category}
                 onChangeText={setCategory}
               />
 
               <Input
-                label="Precio *"
+                label={isShopBusiness ? 'Precio del producto *' : 'Precio *'}
                 placeholder="0.00"
                 value={price}
                 onChangeText={setPrice}
@@ -596,7 +610,7 @@ export default function EditService() {
               {/* Selector de Moneda */}
               <View style={styles.categorySection}>
                 <Text style={styles.categoryLabel}>Moneda 💰</Text>
-                <Text style={styles.categoryHint}>Selecciona la moneda en la que se vende este {businessType === 'shop' ? 'producto' : 'servicio'}</Text>
+                <Text style={styles.categoryHint}>Selecciona la moneda en la que se vende este {isShopBusiness ? 'producto' : 'servicio'}</Text>
                 <View style={styles.categories}>
                   {CURRENCY_OPTIONS.map((curr) => (
                     <TouchableOpacity
@@ -669,14 +683,25 @@ export default function EditService() {
           )}
 
           {businessType !== 'boarding' && businessType !== 'shop' && (
-            <Input
-              label="Duración (minutos) *"
-              placeholder="60"
-              value={duration}
-              onChangeText={setDuration}
-              keyboardType="numeric"
-              leftIcon={<Clock size={20} color="#6B7280" />}
-            />
+            <>
+              <Input
+                label="Duración (minutos) *"
+                placeholder="60"
+                value={duration}
+                onChangeText={setDuration}
+                keyboardType="numeric"
+                leftIcon={<Clock size={20} color="#6B7280" />}
+              />
+
+              {isWalkingBusiness && (
+                <View style={styles.walkingHint}>
+                  <Text style={styles.walkingHintTitle}>Cupos por horario</Text>
+                  <Text style={styles.walkingHintText}>
+                    Ajusta la agenda para definir cuántos perros puedes atender en la misma franja.
+                  </Text>
+                </View>
+              )}
+            </>
           )}
 
           <View style={styles.imageSection}>
@@ -814,6 +839,27 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  walkingHint: {
+    backgroundColor: '#ECFDF5',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  walkingHintTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#065F46',
+    marginBottom: 6,
+  },
+  walkingHintText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#047857',
+    lineHeight: 18,
   },
   formCard: {
     margin: 16,

@@ -23,44 +23,56 @@ export const ProtectedScreen: React.FC<ProtectedScreenProps> = ({
   const [isValid, setIsValid] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
+
     const validateAndRender = async () => {
       if (!authInitialized || loading) {
         return;
       }
 
-      if (requireAuth && !currentUser) {
-        console.log('ProtectedScreen: No user, redirecting to login');
-        router.replace(redirectTo);
-        return;
-      }
-
-      if (requirePartner && currentUser && !currentUser.isPartner) {
-        console.log('ProtectedScreen: User is not a partner, redirecting');
-        router.replace('/(tabs)');
-        return;
-      }
-
-      if (currentUser) {
-        console.log('ProtectedScreen: Validating token...');
-        const tokenValid = await checkTokenValidity();
-
-        if (!tokenValid) {
-          console.log('ProtectedScreen: Token invalid, redirecting to login');
-          router.replace(redirectTo);
+      try {
+        if (requireAuth && !currentUser) {
+          console.log('ProtectedScreen: No user, redirecting to login');
           setIsValid(false);
+          router.replace(redirectTo as any);
           return;
         }
 
-        console.log('ProtectedScreen: Token valid, rendering content');
-        setIsValid(true);
-      } else if (!requireAuth) {
-        setIsValid(true);
-      }
+        if (requirePartner && currentUser && !currentUser.isPartner) {
+          console.log('ProtectedScreen: User is not a partner, redirecting');
+          setIsValid(false);
+          router.replace('/(tabs)' as any);
+          return;
+        }
 
-      setIsValidating(false);
+        if (currentUser) {
+          console.log('ProtectedScreen: Validating token...');
+          const tokenValid = await checkTokenValidity();
+
+          if (!tokenValid) {
+            console.log('ProtectedScreen: Token invalid, redirecting to login');
+            setIsValid(false);
+            router.replace(redirectTo as any);
+            return;
+          }
+
+          console.log('ProtectedScreen: Token valid, rendering content');
+          setIsValid(true);
+        } else if (!requireAuth) {
+          setIsValid(true);
+        }
+      } finally {
+        if (mounted) {
+          setIsValidating(false);
+        }
+      }
     };
 
     validateAndRender();
+
+    return () => {
+      mounted = false;
+    };
   }, [currentUser, loading, authInitialized, requireAuth, requirePartner]);
 
   if (loading || !authInitialized || isValidating) {

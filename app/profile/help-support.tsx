@@ -1,11 +1,25 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Linking } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowLeft, Mail, MessageCircle, Phone, CircleHelp as HelpCircle, FileText, Bug, Star } from 'lucide-react-native';
+import { ArrowLeft, Mail, MessageCircle, Phone, CircleHelp as HelpCircle, FileText, Bug, Star, BookOpen, Users } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import Constants from 'expo-constants';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function HelpSupport() {
+  const { currentUser } = useAuth();
+  const [appVersion, setAppVersion] = useState('15.0.0');
+  const [isPartner, setIsPartner] = useState(false);
+
+  useEffect(() => {
+    const version = Constants.expoConfig?.version || '15.0.0';
+    setAppVersion(version);
+
+    if (currentUser?.isPartner || currentUser?.isAdmin) {
+      setIsPartner(true);
+    }
+  }, [currentUser]);
   const handleEmailSupport = async () => {
     try {
       const emailUrl = 'mailto:admin@dogcatify.com?subject=Soporte DogCatiFy - Consulta&body=Hola, necesito ayuda con:';
@@ -40,87 +54,27 @@ export default function HelpSupport() {
     try {
       const phoneNumber = '59892519111';
       const message = 'Hola, necesito ayuda con DogCatiFy';
-      
-      // Try multiple WhatsApp URL schemes for better compatibility
-      const whatsappUrls = [
-        `whatsapp://send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`,
-        `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`,
-        `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`
-      ];
-      
-      let opened = false;
-      
-      // Try each URL scheme until one works
-      for (const url of whatsappUrls) {
-        try {
-          const canOpen = await Linking.canOpenURL(url);
-          if (canOpen) {
-            await Linking.openURL(url);
-            opened = true;
-            break;
-          }
-        } catch (urlError) {
-          console.log(`Failed to open ${url}:`, urlError);
-          continue;
-        }
-      }
-      
-      if (!opened) {
-        // Enhanced fallback with multiple options
-        Alert.alert(
-          'Contactar por WhatsApp',
-          `WhatsApp no está disponible en este dispositivo.\n\n📱 Número: +${phoneNumber}\n💬 Mensaje: "${message}"\n\n¿Cómo prefieres contactarnos?`,
-          [
-            {
-              text: 'Llamar',
-              onPress: async () => {
-                try {
-                  const phoneUrl = `tel:+${phoneNumber}`;
-                  const canCall = await Linking.canOpenURL(phoneUrl);
-                  if (canCall) {
-                    await Linking.openURL(phoneUrl);
-                  } else {
-                    Alert.alert('Número de contacto', `+${phoneNumber}\n\nPuedes llamar desde tu aplicación de teléfono.`);
-                  }
-                } catch (error) {
-                  Alert.alert('Número de contacto', `+${phoneNumber}`);
-                }
-              }
-            },
-            {
-              text: 'Copiar número',
-              onPress: () => {
-                Alert.alert(
-                  'Número copiado',
-                  `+${phoneNumber}\n\nPuedes pegarlo en WhatsApp Web o en tu aplicación de mensajes.`
-                );
-              }
-            },
-            {
-              text: 'WhatsApp Web',
-              onPress: async () => {
-                try {
-                  const webUrl = `https://web.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
-                  await Linking.openURL(webUrl);
-                } catch (error) {
-                  Alert.alert(
-                    'WhatsApp Web',
-                    `Visita: https://web.whatsapp.com\n\nNúmero: +${phoneNumber}\nMensaje: ${message}`
-                  );
-                }
-              }
-            },
-            { text: 'Cerrar', style: 'cancel' }
-          ]
-        );
+
+      const whatsappUrl = `whatsapp://send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
+
+      const canOpen = await Linking.canOpenURL(whatsappUrl);
+      if (canOpen) {
+        await Linking.openURL(whatsappUrl);
+      } else {
+        const webUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+        await Linking.openURL(webUrl);
       }
     } catch (error) {
+      console.error('Error opening WhatsApp:', error);
       Alert.alert(
-        'Contacto por WhatsApp',
-        `Hubo un problema al abrir WhatsApp.\n\n📱 Puedes contactarnos directamente:\n+${phoneNumber}\n\n💬 Mensaje sugerido:\n"${message}"`
+        'Error',
+        'No se pudo abrir WhatsApp. Verifica que esté instalado en tu dispositivo.',
+        [
+          { text: 'OK' }
+        ]
       );
     }
-  }
+  };
 
   const handleReportBug = () => {
     Alert.alert(
@@ -148,10 +102,101 @@ export default function HelpSupport() {
     );
   };
 
+  const handleUserManual = () => {
+    Alert.alert(
+      '📖 Manual de Usuario',
+      'Funciones actuales de DogCatiFy:\n\n' +
+      '🏠 INICIO\n' +
+      '• Feed con publicaciones y promociones\n' +
+      '• Me gusta y comentarios\n\n' +
+      '🐾 MASCOTAS\n' +
+      '• Alta/edición de mascotas\n' +
+      '• Compartir mascota con otros usuarios\n' +
+      '• Salud: vacunas, enfermedades, alergias, desparasitaciones y peso\n' +
+      '• Álbumes y contenido de cada mascota\n\n' +
+      '🛒 TIENDA\n' +
+      '• Buscar y filtrar productos por categoría\n' +
+      '• Ver detalle de producto\n' +
+      '• Agregar al carrito y gestionar cantidades\n' +
+      '• Checkout y estados de pedido\n\n' +
+      '🏥 SERVICIOS\n' +
+      '• Buscar negocios por nombre/zona\n' +
+      '• Filtrar por tipo de servicio\n' +
+      '• Ver detalle, reseñas y disponibilidad\n' +
+      '• Reservar servicio seleccionando mascota\n\n' +
+      '📍 LUGARES PET-FRIENDLY\n' +
+      '• Explorar lugares y ver detalle\n' +
+      '• Registrar nuevos lugares\n\n' +
+      '👤 PERFIL Y CUENTA\n' +
+      '• Editar perfil\n' +
+      '• Ver pedidos y carrito\n' +
+      '• Configurar biometría/notificaciones\n' +
+      '• Ayuda/soporte y eliminación de cuenta\n\n' +
+      '💳 PAGOS\n' +
+      '• Integración con Mercado Pago\n\n' +
+      'Si necesitas ayuda paso a paso, contáctanos por WhatsApp o Email.',
+      [
+        { text: 'Contactar Soporte', onPress: handleEmailSupport },
+        { text: 'Cerrar' }
+      ]
+    );
+  };
+
+  const handlePartnerManual = () => {
+    Alert.alert(
+      '📚 Manual para Aliados',
+      'Funciones actuales para aliados comerciales:\n\n' +
+      '🏢 GESTIÓN DE NEGOCIO\n' +
+      '• Registro y configuración del negocio\n' +
+      '• Actividades, horarios y datos de contacto\n\n' +
+      '💼 SERVICIOS\n' +
+      '• Crear, editar y publicar servicios\n' +
+      '• Configurar precios y capacidades (incluye pensión)\n' +
+      '• Gestión de reservas y agenda\n\n' +
+      '📦 PRODUCTOS\n' +
+      '• Alta/edición de productos\n' +
+      '• Control de stock y precios\n' +
+      '• Gestión de pedidos\n\n' +
+      '📅 RESERVAS\n' +
+      '• Ver pendientes y estados\n' +
+      '• Confirmar/gestionar citas\n\n' +
+      '💰 PAGOS\n' +
+      '• Configurar Mercado Pago\n' +
+      '• Recibir pagos\n' +
+      '• Seguimiento de operaciones\n\n' +
+      '📊 ANÁLISIS\n' +
+      '• Panel de ventas\n' +
+      '• Métricas del negocio\n\n' +
+      'Para soporte técnico, contacta con nuestro equipo.',
+      [
+        { text: 'Contactar Soporte', onPress: handleEmailSupport },
+        { text: 'Cerrar' }
+      ]
+    );
+  };
+
   const handleFAQ = () => {
     Alert.alert(
       'Preguntas Frecuentes',
-      'Las preguntas más comunes:\n\n• ¿Cómo agregar una mascota?\n• ¿Cómo reservar servicios?\n• ¿Cómo funciona la tienda?\n• ¿Cómo ser aliado?\n\nPara más información, contacta con soporte.',
+      '❓ PREGUNTAS COMUNES\n\n' +
+      '¿Cómo agrego mi mascota?\n' +
+      'En Mascotas, toca el botón + y completa los datos.\n\n' +
+      '¿Dónde cargo vacunas o desparasitaciones?\n' +
+      'En el detalle de tu mascota, sección Salud.\n\n' +
+      '¿Cómo reservo un servicio?\n' +
+      'En Servicios, elige negocio/servicio, luego toca Reservar y selecciona mascota.\n\n' +
+      '¿Cómo compro en la tienda?\n' +
+      'Busca productos, agrégalos al carrito y finaliza el pago.\n\n' +
+      '¿Dónde veo mis pedidos?\n' +
+      'En Perfil > Mis Pedidos.\n\n' +
+      '¿Cómo contacto al soporte?\n' +
+      'Desde esta pantalla por WhatsApp o Email.\n\n' +
+      '¿La app tiene inicio con biometría?\n' +
+      'Sí, puedes habilitarlo cuando esté disponible en tu dispositivo.\n\n' +
+      '¿Cómo me registro como aliado?\n' +
+      'Desde Perfil, opción de registro de negocio/aliado.\n\n' +
+      '¿Los pagos son seguros?\n' +
+      'Sí, la app utiliza integración con Mercado Pago.',
       [
         { text: 'Contactar Soporte', onPress: handleEmailSupport },
         { text: 'Cerrar' }
@@ -218,6 +263,24 @@ export default function HelpSupport() {
         <Card style={styles.helpCard}>
           <Text style={styles.sectionTitle}>❓ Temas de Ayuda</Text>
           
+          <TouchableOpacity style={styles.helpOption} onPress={handleUserManual}>
+            <View style={styles.helpOptionLeft}>
+              <BookOpen size={20} color="#3B82F6" />
+              <Text style={styles.helpOptionText}>Manual de Usuario</Text>
+            </View>
+            <Text style={styles.helpArrow}>→</Text>
+          </TouchableOpacity>
+
+          {isPartner && (
+            <TouchableOpacity style={styles.helpOption} onPress={handlePartnerManual}>
+              <View style={styles.helpOptionLeft}>
+                <Users size={20} color="#10B981" />
+                <Text style={styles.helpOptionText}>Manual para Aliados</Text>
+              </View>
+              <Text style={styles.helpArrow}>→</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity style={styles.helpOption} onPress={handleFAQ}>
             <View style={styles.helpOptionLeft}>
               <FileText size={20} color="#6B7280" />
@@ -249,7 +312,7 @@ export default function HelpSupport() {
           
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Versión:</Text>
-            <Text style={styles.infoValue}>2.0.0</Text>
+            <Text style={styles.infoValue}>{appVersion}</Text>
           </View>
           
           <View style={styles.infoRow}>

@@ -10,6 +10,8 @@ interface ButtonProps {
   loading?: boolean;
   style?: ViewStyle;
   children?: ReactNode;
+  icon?: ReactNode;
+  iconPosition?: 'left' | 'right';
 }
 
 export const Button: React.FC<ButtonProps> = ({
@@ -21,6 +23,8 @@ export const Button: React.FC<ButtonProps> = ({
   loading = false,
   style,
   children,
+  icon,
+  iconPosition = 'left',
 }) => {
   const buttonStyle = [
     styles.button,
@@ -36,6 +40,22 @@ export const Button: React.FC<ButtonProps> = ({
     styles[`${size}Text`],
   ];
 
+  const renderChildren = () => {
+    const nodes = React.Children.toArray(children);
+
+    return nodes.map((child, index) => {
+      if (typeof child === 'string' || typeof child === 'number') {
+        return (
+          <Text key={`button-text-${index}`} style={textStyle}>
+            {child}
+          </Text>
+        );
+      }
+
+      return child;
+    });
+  };
+
   return (
     <TouchableOpacity
       style={buttonStyle}
@@ -45,10 +65,14 @@ export const Button: React.FC<ButtonProps> = ({
     >
       {loading ? (
         <ActivityIndicator color={variant === 'primary' ? '#FFFFFF' : '#3B82F6'} />
-      ) : children ? (
-        children
+      ) : children !== null && children !== undefined && children !== false ? (
+        renderChildren()
       ) : (
-        <Text style={textStyle}>{title}</Text>
+        <>
+          {icon && iconPosition === 'left' ? icon : null}
+          {title ? <Text style={textStyle}>{title}</Text> : null}
+          {icon && iconPosition === 'right' ? icon : null}
+        </>
       )}
     </TouchableOpacity>
   );

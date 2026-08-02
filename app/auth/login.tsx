@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Modal, Platform, Animated, Alert, KeyboardAvoidingView } from 'react-native';
-import { Link, router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Mail, Lock, Eye, EyeOff, Fingerprint, CircleAlert as AlertCircle, X, CircleCheck as CheckCircle } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -9,6 +9,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useBiometric } from '../../contexts/BiometricContext';
 import { resendConfirmationEmail } from '../../utils/emailConfirmation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { resolvePostLoginRoute } from '../../utils/onboarding';
 
 const SAVED_CREDENTIALS_KEY = '@saved_credentials';
 
@@ -228,12 +229,8 @@ export default function Login() {
             }
           });
         } else {
-          // Go to redirect URL if specified, otherwise go to main app
-          if (redirect) {
-            router.replace(redirect as any);
-          } else {
-            router.replace('/(tabs)');
-          }
+          const nextRoute = await resolvePostLoginRoute(result.id, redirect, result);
+          router.replace(nextRoute as any);
         }
       }
     } catch (error: any) {
@@ -300,6 +297,20 @@ export default function Login() {
   const dismissError = () => {
     setLoginError(null);
     clearAuthError();
+  };
+
+  const handleGoToRegister = () => {
+    dismissError();
+    setShowEmailConfirmationModal(false);
+    setPendingEmail('');
+    router.push('/auth/register');
+  };
+
+  const handleGoToBecomePartner = () => {
+    dismissError();
+    setShowEmailConfirmationModal(false);
+    setPendingEmail('');
+    router.push('/auth/become-partner');
   };
 
   return (
@@ -391,19 +402,32 @@ export default function Login() {
           />
 
           <View style={styles.forgotPasswordContainer}>
-            <Link href="/auth/forgot-password" style={styles.forgotPasswordLink}>
-              ¿Olvidaste tu contraseña?
-            </Link>
+            <TouchableOpacity
+              onPress={() => router.push('/auth/forgot-password')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.forgotPasswordLink}>
+                ¿Olvidaste tu contraseña?
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              ¿No tienes una cuenta?{' '}
-              <Link href="/auth/register" style={styles.link}>
-                Registrate
-              </Link>
-            </Text>
+            <View style={styles.footerRow}>
+              <Text style={styles.footerText}>¿No tienes una cuenta?</Text>
+              <TouchableOpacity onPress={handleGoToRegister} activeOpacity={0.8} style={styles.footerLinkButton}>
+                <Text style={styles.link}>Registrate</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              style={styles.partnerButton}
+              onPress={handleGoToBecomePartner}
+            >
+              <Text style={styles.partnerText}>
+                ¿Sos aliado? <Text style={styles.partnerLink}>{t('becomePartner')}</Text>
+              </Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -619,13 +643,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 16,
   },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
   footerText: {
     fontSize: 16,
     color: '#6B7280',
     fontFamily: 'Inter-Regular',
   },
+  footerLinkButton: {
+    marginLeft: 4,
+  },
   link: {
     color: '#3B82F6',
+    fontFamily: 'Inter-SemiBold',
+  },
+  partnerButton: {
+    marginTop: 14,
+  },
+  partnerText: {
+    fontSize: 15,
+    color: '#6B7280',
+    fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+  },
+  partnerLink: {
+    color: '#2D6A6F',
     fontFamily: 'Inter-SemiBold',
   },
   

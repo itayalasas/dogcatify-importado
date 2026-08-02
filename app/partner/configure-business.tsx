@@ -6,11 +6,15 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { canAccessPartnerModule, getPartnerLockedActionLabel, getPartnerPlan, resolvePartnerPlanTier } from '../../utils/partnerPlans';
 
 interface BusinessConfig {
   id: string;
   businessName: string;
   businessType: string;
+  subscriptionPlanTier: string;
+  subscriptionPlanStatus?: string | null;
+  subscriptionPlanExpiresAt?: string | null;
   features: {
     agenda?: boolean;
     products?: boolean;
@@ -44,6 +48,13 @@ export default function ConfigureBusiness() {
           id: data.id,
           businessName: data.business_name,
           businessType: data.business_type,
+          subscriptionPlanTier: resolvePartnerPlanTier(
+            data.subscription_plan_tier,
+            data.subscription_plan_status,
+            data.subscription_plan_expires_at,
+          ),
+          subscriptionPlanStatus: data.subscription_plan_status || null,
+          subscriptionPlanExpiresAt: data.subscription_plan_expires_at || null,
           features: data.features || {}
         });
       }
@@ -166,6 +177,12 @@ export default function ConfigureBusiness() {
             'Adultos',
             'Seniors'
           ],
+          services: [
+            'Visitas al refugio',
+            'Entrevistas de adopción',
+            'Seguimiento post adopción',
+            'Entrega de mascota'
+          ],
           products: [
             'Alimentos',
             'Accesorios',
@@ -194,10 +211,26 @@ export default function ConfigureBusiness() {
   };
 
   const handleConfigureAdoptions = () => {
+    if (!business || !canAccessPartnerModule(business.subscriptionPlanTier, 'adoptions', business.businessType)) {
+      Alert.alert(
+        'Plan requerido',
+        'La gestion de adopciones esta disponible solo para refugios con plan Pro.'
+      );
+      return;
+    }
+
     router.push(`/partner/manage-adoptions?partnerId=${businessId}`);
   };
 
   const handleAddService = () => {
+    if (business?.businessType === 'shelter') {
+      router.push({
+        pathname: '/partner/add-adoption-pet',
+        params: { partnerId: business?.id }
+      });
+      return;
+    }
+
     router.push({
       pathname: '/partner/add-service',
       params: {
@@ -246,6 +279,28 @@ export default function ConfigureBusiness() {
   }
 
   const config = getBusinessTypeConfig(business.businessType);
+  const plan = getPartnerPlan(business.subscriptionPlanTier);
+  const canManageAdoptions = business.businessType === 'shelter';
+  const adoptionPlanAllowed = canAccessPartnerModule(
+    business.subscriptionPlanTier,
+    'adoptions',
+    business.businessType,
+    business.subscriptionPlanStatus,
+    business.subscriptionPlanExpiresAt,
+  );
+  const showAgendaSection = business.businessType !== 'shop' && business.features?.agenda !== false;
+  const agendaTitle = business.businessType === 'shelter'
+    ? 'Agenda de Adopciones'
+    : 'Gestión de Agenda';
+  const agendaDescription = business.businessType === 'shelter'
+    ? 'Coordina visitas, entrevistas y entregas de adopción'
+    : 'Configura horarios, duración de citas y disponibilidad';
+  const agendaItemsTitle = business.businessType === 'shelter'
+    ? 'Citas disponibles:'
+    : 'Servicios disponibles:';
+  const agendaItems = business.businessType === 'shelter'
+    ? (config.services || [])
+    : (config.services || []);
 
   return (
     <SafeAreaView style={styles.container}> 
@@ -264,23 +319,29 @@ export default function ConfigureBusiness() {
             <View style={styles.businessInfo}> 
               <Text style={styles.businessName}>{business.businessName}</Text> 
               <Text style={styles.businessType}>{config.name}</Text> 
+              <View style={[styles.planBadge, { backgroundColor: plan.surface, borderColor: plan.border }]}>
+                <Text style={[styles.planBadgeText, { color: plan.accent }]}>
+                  Plan {plan.name}
+                </Text>
+              </View>
             </View>
           </View>
         </Card>
 
         {/* Configuración de Agenda */}
-        <Card style={styles.featureCard}>
+        {showAgendaSection && (
+          <Card style={styles.featureCard}>
           <View style={styles.featureHeader}>
             <Calendar size={24} color="#3B82F6" />
-            <Text style={styles.featureTitle}>Gestión de Agenda</Text>
+            <Text style={styles.featureTitle}>{agendaTitle}</Text>
           </View>
           <Text style={styles.featureDescription}>
-            Configura horarios, duración de citas y disponibilidad
+            {agendaDescription}
           </Text>
           
           <View style={styles.servicesList}>
-            <Text style={styles.servicesTitle}>Servicios disponibles:</Text>
-            {(config.services || []).map((service, index) => (
+            <Text style={styles.servicesTitle}>{agendaItemsTitle}</Text>
+            {agendaItems.map((service, index) => (
               <View key={index} style={styles.serviceItem}>
                 <Text style={styles.serviceText}>• {service}</Text>
               </View>
@@ -297,14 +358,15 @@ export default function ConfigureBusiness() {
               />
             </View>
             <View style={styles.actionButtonContainer}>
-              <Button
-                title="Agregar Servicio"
-                onPress={handleAddService}
-                size="medium"
-              />
+                <Button
+                  title={business.businessType === 'shelter' ? 'Agregar Mascota' : 'Agregar Servicio'}
+                  onPress={handleAddService}
+                  size="medium"
+                />
             </View>
           </View>
-        </Card>
+          </Card>
+        )}
 
         {/* Configuración de Productos - Solo para tiendas */}
         {business.businessType === 'shop' && (
@@ -370,7 +432,7 @@ export default function ConfigureBusiness() {
         )}
 
         {/* Configuración de Adopciones */}
-        {business.features.adoptions && (
+        {canManageAdoptions && (
           <Card style={styles.featureCard}>
             <View style={styles.featureHeader}>
               <Heart size={24} color="#EF4444" />
@@ -379,6 +441,15 @@ export default function ConfigureBusiness() {
             <Text style={styles.featureDescription}>
               Administra las mascotas disponibles para adopción
             </Text>
+
+            {!adoptionPlanAllowed && (
+              <View style={styles.lockedNotice}>
+                <Text style={styles.lockedNoticeTitle}>Disponible en plan Pro</Text>
+                <Text style={styles.lockedNoticeText}>
+                  {getPartnerLockedActionLabel('adoptions')}
+                </Text>
+              </View>
+            )}
             
             <View style={styles.servicesList}>
               <Text style={styles.servicesTitle}>Tipos de adopción:</Text>
@@ -392,10 +463,11 @@ export default function ConfigureBusiness() {
             <View style={styles.featureActions}>
               <View style={{ flex: 1 }}>
                 <Button
-                  title="Ver Adopciones"
+                  title={adoptionPlanAllowed ? 'Ver Adopciones' : 'Plan Pro requerido'}
                   onPress={handleConfigureAdoptions}
                   variant="outline"
                   size="medium"
+                  disabled={!adoptionPlanAllowed}
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -403,6 +475,7 @@ export default function ConfigureBusiness() {
                   title="Agregar Mascota"
                   onPress={handleAddService}
                   size="medium"
+                  disabled={!adoptionPlanAllowed}
                 />
               </View>
             </View>
@@ -494,6 +567,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#3B82F6',
   },
+  planBadge: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginTop: 8,
+  },
+  planBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
   featureCard: {
     marginBottom: 16,
   },
@@ -514,6 +599,26 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginBottom: 16,
     lineHeight: 20,
+  },
+  lockedNotice: {
+    backgroundColor: '#F5F3FF',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  lockedNoticeTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6D28D9',
+    marginBottom: 4,
+  },
+  lockedNoticeText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 18,
   },
   servicesList: {
     marginBottom: 16,

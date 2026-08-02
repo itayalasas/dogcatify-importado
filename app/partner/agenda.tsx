@@ -67,6 +67,40 @@ export default function PartnerAgenda() {
     }
   }, [selectedDate, partnerId]);
 
+  const getBookingDateTime = (booking: any) => {
+    const baseDate = booking.date ? new Date(booking.date) : new Date();
+    const bookingDateTime = new Date(baseDate);
+
+    if (booking.time && typeof booking.time === 'string') {
+      const timeMatch = booking.time.match(/^(\d{1,2}):(\d{2})/);
+      if (timeMatch) {
+        bookingDateTime.setHours(parseInt(timeMatch[1], 10), parseInt(timeMatch[2], 10), 0, 0);
+      }
+    } else {
+      bookingDateTime.setHours(23, 59, 59, 999);
+    }
+
+    return bookingDateTime;
+  };
+
+  const isExpiredBooking = (booking: any) => {
+    if (!booking) return false;
+    if (!['pending', 'confirmed'].includes(booking.status)) return false;
+
+    return getBookingDateTime(booking) < new Date();
+  };
+
+  const normalizeBookingStatus = (booking: any) => {
+    if (isExpiredBooking(booking)) {
+      return {
+        ...booking,
+        status: 'completed',
+      };
+    }
+
+    return booking;
+  };
+
   const fetchBookings = async () => {
     if (!partnerId) return;
     
@@ -106,9 +140,28 @@ export default function PartnerAgenda() {
         customerPhone: booking.customer_phone,
         status: booking.status || 'pending'
       }));
-      
-      setBookings(bookingsData);
-      console.log('Processed bookings:', bookingsData);
+
+      const expiredBookings = bookingsData.filter(isExpiredBooking);
+      if (expiredBookings.length > 0) {
+        const expiredIds = expiredBookings.map((booking) => booking.id);
+        const { error: expiredUpdateError } = await supabaseClient
+          .from('bookings')
+          .update({
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .in('id', expiredIds);
+
+        if (expiredUpdateError) {
+          console.error('Error updating expired bookings in agenda:', expiredUpdateError);
+        }
+      }
+
+      const normalizedBookings = bookingsData.map(normalizeBookingStatus);
+
+      setBookings(normalizedBookings);
+      console.log('Processed bookings:', normalizedBookings);
     } catch (error) {
       console.error('Error fetching bookings:', error);
       setError('Error al cargar las reservas');
@@ -122,6 +175,7 @@ export default function PartnerAgenda() {
         .from('bookings')
         .update({
           status: newStatus,
+          completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
           updated_at: new Date().toISOString()
         })
         .eq('id', bookingId);
@@ -284,7 +338,7 @@ export default function PartnerAgenda() {
           </View>
         )}
         
-        {(booking.status === 'confirmed' || booking.payment_status === 'paid') && (
+        {booking.status === 'confirmed' && (
           <View style={styles.confirmedActions}>
             <Button
               title="Cancelar"
@@ -390,7 +444,7 @@ export default function PartnerAgenda() {
       </View>
 
       <View style={styles.selectedDateInfo}>
-        <Text style={styles.selectedDateText}>
+        <Text style={styles.selectedDateInfoText}>
           {formatDate(selectedDate)}
         </Text>
         <Text style={styles.bookingsCount}>
@@ -532,7 +586,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  selectedDateText: {
+  selectedDateHeaderText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    textTransform: 'capitalize',
+  },
+  selectedDateInfoText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',

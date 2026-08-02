@@ -11,6 +11,7 @@ import {
   FlatList,
   Platform,
   StatusBar,
+  Linking,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Search, ShoppingCart, Store, MapPin, Phone, Tag } from 'lucide-react-native';
@@ -18,6 +19,7 @@ import { LoadingSpinner } from '../../../components/ui/LoadingSpinner';
 import { ProductCard } from '../../../components/ProductCard';
 import { supabaseClient } from '../../../lib/supabase';
 import { useCart } from '@/contexts/CartContext';
+import { normalizePartnerDisplayData } from '../../../utils/partnerDisplay';
 
 export default function StoreProducts() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -64,7 +66,7 @@ export default function StoreProducts() {
       ]);
 
       if (partnerRes.data) {
-        setPartner(partnerRes.data);
+        setPartner(normalizePartnerDisplayData(partnerRes.data));
       }
 
       if (productsRes.data) {
@@ -117,6 +119,20 @@ export default function StoreProducts() {
       style: 'currency',
       currency: 'ARS',
     }).format(price);
+  };
+
+  const handleCallStore = async (phone: string) => {
+    const normalizedPhone = String(phone || '').replace(/[^\d+]/g, '').trim();
+
+    if (!normalizedPhone) {
+      return;
+    }
+
+    try {
+      await Linking.openURL(`tel:${normalizedPhone}`);
+    } catch (error) {
+      console.error('Error opening store phone:', error);
+    }
   };
 
   const handleProductPress = (productId: string) => {
@@ -195,10 +211,14 @@ export default function StoreProducts() {
                 </View>
               )}
               {partner.phone && (
-                <View style={styles.storeInfoRow}>
+                <TouchableOpacity
+                  style={styles.storeInfoRow}
+                  onPress={() => handleCallStore(partner.phone)}
+                  activeOpacity={0.75}
+                >
                   <Phone size={14} color="#6B7280" />
                   <Text style={styles.storeInfoText}>{partner.phone}</Text>
-                </View>
+                </TouchableOpacity>
               )}
             </View>
           </View>

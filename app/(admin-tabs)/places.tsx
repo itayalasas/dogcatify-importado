@@ -7,6 +7,13 @@ import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
+import { uploadImage as uploadImageUtil } from '../../utils/imageUpload';
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return String(error);
+};
 
 interface Place {
   id: string;
@@ -18,6 +25,7 @@ interface Place {
   description: string;
   petAmenities: string[];
   imageUrl?: string;
+  images?: string[];
   coordinates?: { lat: number; lng: number };
   isActive: boolean;
   createdBy?: string;
@@ -60,13 +68,14 @@ export default function AdminPlaces() {
   const [placePhone, setPlacePhone] = useState('');
   const [placeRating, setPlaceRating] = useState(5);
   const [placeDescription, setPlaceDescription] = useState('');
-  const [placeImage, setPlaceImage] = useState<string | null>(null);
+  const [placeImages, setPlaceImages] = useState<string[]>([]);
   const [placeCoordinates, setPlaceCoordinates] = useState('');
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
+  const [customAmenity, setCustomAmenity] = useState('');
 
   useEffect(() => {
     if (!currentUser) return;
-    const isAdmin = currentUser.email?.toLowerCase() === 'admin@dogcatify.com';
+    const isAdmin = currentUser?.isAdmin === true;
     if (!isAdmin) return;
     fetchPlaces();
   }, [currentUser]);
@@ -90,6 +99,7 @@ export default function AdminPlaces() {
         description: item.description,
         petAmenities: item.pet_amenities || [],
         imageUrl: item.image_url,
+        images: item.images || (item.image_url ? [item.image_url] : []),
         coordinates: item.coordinates,
         isActive: item.is_active,
         createdBy: item.created_by,
@@ -117,7 +127,7 @@ export default function AdminPlaces() {
     });
 
     if (!result.canceled && result.assets[0]) {
-      setPlaceImage(result.assets[0].uri);
+      setPlaceImages(prev => [...prev, result.assets[0].uri]);
     }
   };
 
@@ -136,26 +146,23 @@ export default function AdminPlaces() {
     });
 
     if (!result.canceled && result.assets[0]) {
-      setPlaceImage(result.assets[0].uri);
+      setPlaceImages(prev => [...prev, result.assets[0].uri]);
     }
   };
 
+  const handleRemoveImage = (index: number) => {
+    setPlaceImages(prev => prev.filter((_, i) => i !== index));
+  };
+
   const uploadImage = async (imageUri: string): Promise<string> => {
-    const response = await fetch(imageUri);
-    const blob = await response.blob();
-    const filename = `places/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-
-    const { error } = await supabaseClient.storage
-      .from('dogcatify')
-      .upload(filename, blob);
-
-    if (error) throw error;
-
-    const { data: { publicUrl } } = supabaseClient.storage
-      .from('dogcatify')
-      .getPublicUrl(filename);
-
-    return publicUrl;
+    try {
+      const filename = `places/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+      const publicUrl = await uploadImageUtil(imageUri, filename);
+      return publicUrl;
+    } catch (error) {
+      console.error('Error subiendo imagen:', error);
+      throw error;
+    }
   };
 
   const handleCreatePlace = async () => {
@@ -166,9 +173,11 @@ export default function AdminPlaces() {
 
     setLoading(true);
     try {
-      let imageUrl = null;
-      if (placeImage) {
-        imageUrl = await uploadImage(placeImage);
+      // Subir todas las imágenes
+      let imageUrls: string[] = [];
+      if (placeImages.length > 0) {
+        const uploadPromises = placeImages.map(imageUri => uploadImage(imageUri));
+        imageUrls = await Promise.all(uploadPromises);
       }
 
       let coordinates = null;
@@ -191,7 +200,8 @@ export default function AdminPlaces() {
         rating: placeRating,
         description: placeDescription.trim(),
         pet_amenities: selectedAmenities,
-        image_url: imageUrl,
+        image_url: imageUrls.length > 0 ? imageUrls[0] : null, // Primera imagen como principal
+        images: imageUrls, // Array con todas las imágenes
         coordinates: coordinates,
         is_active: true,
         created_by: currentUser?.id,
@@ -210,15 +220,16 @@ export default function AdminPlaces() {
       setPlacePhone('');
       setPlaceRating(5);
       setPlaceDescription('');
-      setPlaceImage(null);
+      setPlaceImages([]);
       setPlaceCoordinates('');
       setSelectedAmenities([]);
+      setCustomAmenity('');
       setShowAddModal(false);
 
       Alert.alert('Éxito', 'Lugar agregado correctamente');
       fetchPlaces();
     } catch (error) {
-      Alert.alert('Error', 'No se pudo agregar el lugar');
+      Alert.alert('Error', `No se pudo agregar el lugar: ${getErrorMessage(error)}`);
     } finally {
       setLoading(false);
     }
@@ -244,6 +255,13 @@ export default function AdminPlaces() {
         ? prev.filter(a => a !== amenity)
         : [...prev, amenity]
     );
+  };
+
+  const handleAddCustomAmenity = () => {
+    if (customAmenity.trim() && !selectedAmenities.includes(customAmenity.trim())) {
+      setSelectedAmenities(prev => [...prev, customAmenity.trim()]);
+      setCustomAmenity('');
+    }
   };
 
   const getCategoryIcon = (category: string) => {
@@ -275,7 +293,7 @@ export default function AdminPlaces() {
     ));
   };
 
-  if (!currentUser || currentUser.email?.toLowerCase() !== 'admin@dogcatify.com') {
+  if (!currentUser?.isAdmin) {
     return (
       <View style={styles.accessDenied}>
         <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
@@ -580,29 +598,33 @@ export default function AdminPlaces() {
               />
 
               <View style={styles.imageSection}>
-                <Text style={styles.imageLabel}>Foto del lugar</Text>
+                <Text style={styles.imageLabel}>Fotos del lugar ({placeImages.length})</Text>
                 
-                {placeImage ? (
-                  <View style={styles.imagePreviewContainer}>
-                    <Image source={{ uri: placeImage }} style={styles.selectedImage} />
-                    <TouchableOpacity 
-                      style={styles.changeImageButton}
-                      onPress={() => setPlaceImage(null)}
-                    >
-                      <Text style={styles.changeImageText}>Cambiar imagen</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <View style={styles.imageActions}>
-                    <TouchableOpacity style={styles.imageActionButton} onPress={handleTakePhoto}>
-                      <Camera size={24} color="#6B7280" />
-                      <Text style={styles.imageActionText}>Tomar foto</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.imageActionButton} onPress={handleSelectImage}>
-                      <Text style={styles.imageActionText}>📷 Galería</Text>
-                    </TouchableOpacity>
-                  </View>
+                {placeImages.length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesPreviewScroll}>
+                    {placeImages.map((imageUri, index) => (
+                      <View key={index} style={styles.imagePreviewContainer}>
+                        <Image source={{ uri: imageUri }} style={styles.selectedImage} />
+                        <TouchableOpacity 
+                          style={styles.removeImageButton}
+                          onPress={() => handleRemoveImage(index)}
+                        >
+                          <Text style={styles.removeImageText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </ScrollView>
                 )}
+                
+                <View style={styles.imageActions}>
+                  <TouchableOpacity style={styles.imageActionButton} onPress={handleTakePhoto}>
+                    <Camera size={24} color="#6B7280" />
+                    <Text style={styles.imageActionText}>Tomar foto</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.imageActionButton} onPress={handleSelectImage}>
+                    <Text style={styles.imageActionText}>📷 Galería</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <View style={styles.amenitiesSection}>
@@ -629,6 +651,22 @@ export default function AdminPlaces() {
                     </TouchableOpacity>
                   ))}
                 </View>
+                
+                {/* Campo para agregar servicio personalizado */}
+                <View style={styles.customAmenityContainer}>
+                  <Input
+                    label="¿No encuentras el servicio? Agrégalo aquí"
+                    placeholder="Ej: Peluquería canina"
+                    value={customAmenity}
+                    onChangeText={setCustomAmenity}
+                  />
+                  <TouchableOpacity 
+                    style={styles.addAmenityButton}
+                    onPress={handleAddCustomAmenity}
+                  >
+                    <Text style={styles.addAmenityButtonText}>Agregar</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
               
               <View style={styles.modalActions}>
@@ -644,9 +682,10 @@ export default function AdminPlaces() {
                       setPlacePhone('');
                       setPlaceRating(5);
                       setPlaceDescription('');
-                      setPlaceImage(null);
+                      setPlaceImages([]);
                       setPlaceCoordinates('');
                       setSelectedAmenities([]);
+                      setCustomAmenity('');
                     }}
                   >
                     <Text style={styles.cancelModalButtonText}>Cancelar</Text>
@@ -996,14 +1035,33 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginBottom: 8,
   },
-  imagePreviewContainer: {
+  imagesPreviewScroll: {
     marginBottom: 12,
   },
+  imagePreviewContainer: {
+    marginRight: 12,
+    position: 'relative',
+  },
   selectedImage: {
-    width: '100%',
-    height: 200,
+    width: 150,
+    height: 150,
     borderRadius: 8,
-    marginBottom: 8,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(220, 38, 38, 0.9)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeImageText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
   },
   changeImageButton: {
     backgroundColor: '#3B82F6',
@@ -1077,6 +1135,22 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   selectedAmenityOptionText: {
+    color: '#FFFFFF',
+  },
+  customAmenityContainer: {
+    marginTop: 16,
+    gap: 8,
+  },
+  addAmenityButton: {
+    backgroundColor: '#2D6A6F',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  addAmenityButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
   },
   modalActions: {

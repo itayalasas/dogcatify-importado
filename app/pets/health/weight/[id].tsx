@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Dimensions, Platform, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Calendar, Scale, Plus, Info, TrendingUp, TriangleAlert as AlertTriangle, TrendingDown, CircleCheck as CheckCircle } from 'lucide-react-native';
+import { ArrowLeft, Calendar, Scale, Plus, Info, TrendingUp, TriangleAlert as AlertTriangle, TrendingDown, CircleCheck as CheckCircle, Sparkles } from 'lucide-react-native';
 import { Input } from '../../../../components/ui/Input';
 import { Button } from '../../../../components/ui/Button';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Card } from '../../../../components/ui/Card';
 import { supabaseClient } from '../../../../lib/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
+import { envConfig } from '../../../../utils/envConfig';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -51,6 +54,9 @@ export default function PetWeight() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [idealWeightRange, setIdealWeightRange] = useState<WeightRange | null>(null);
   const [weightStatus, setWeightStatus] = useState<'underweight' | 'ideal' | 'overweight' | 'unknown'>('unknown');
+  const [aiTips, setAiTips] = useState<string[]>([]);
+  const [loadingAI, setLoadingAI] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   useEffect(() => {
     if (id && currentUser) {
@@ -80,6 +86,13 @@ export default function PetWeight() {
       updateWeightStatus();
     }
   }, [weightRecords, idealWeightRange]);
+
+  useEffect(() => {
+    // Load cached tips or auto-generate when weight status is determined
+    if (weightStatus !== 'unknown' && weightRecords.length > 0 && aiTips.length === 0) {
+      loadOrGenerateTips();
+    }
+  }, [weightStatus, weightRecords.length, aiTips.length]);
 
   const createInitialWeightRecord = async () => {
     if (!pet || !pet.weight || !currentUser || weightRecords.length > 0) {
@@ -445,6 +458,99 @@ export default function PetWeight() {
   };
 
   const chartData = getChartData();
+
+  const loadOrGenerateTips = async () => {
+    try {
+      const cacheKey = `weight_ai_tips_${id}`;
+      const cached = await AsyncStorage.getItem(cacheKey);
+      if (cached) {
+        setAiTips(JSON.parse(cached));
+        return;
+      }
+    } catch (_e) {
+      // If cache read fails, just generate
+    }
+    generateWeightAdvice();
+  };
+
+
+  const getWeightTrend = (): { trend: 'increasing' | 'decreasing' | 'stable'; difference: number } => {
+    if (weightRecords.length < 2) return { trend: 'stable', difference: 0 };
+    const first = weightRecords[0].weight;
+    const last = weightRecords[weightRecords.length - 1].weight;
+    const diff = last - first;
+    if (diff > 0.1) return { trend: 'increasing', difference: diff };
+    if (diff < -0.1) return { trend: 'decreasing', difference: diff };
+    return { trend: 'stable', difference: diff };
+  };
+
+  const generateWeightAdvice = async () => {
+    if (!pet || weightStatus === 'unknown') return;
+
+    setLoadingAI(true);
+    setAiError(null);
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session) {
+        setAiError('Debes estar autenticado');
+        return;
+      }
+
+      const latestRecord = weightRecords[weightRecords.length - 1];
+      const { trend, difference } = getWeightTrend();
+
+
+      // Calculate age in months
+      let ageMonths: number | undefined;
+      if (pet.birth_date) {
+        const birth = new Date(pet.birth_date);
+        const now = new Date();
+        ageMonths = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
+      }
+
+      const response = await fetch(
+        `${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/functions/v1/generate-weight-advice`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            petName: pet.name,
+            species: pet.species || 'dog',
+            breed: pet.breed || '',
+            gender: pet.gender || 'male',
+            ageMonths,
+            currentWeight: latestRecord?.weight ?? pet.weight,
+            weightUnit: latestRecord?.weight_unit ?? 'kg',
+            weightStatus,
+            idealMin: idealWeightRange?.min,
+            idealMax: idealWeightRange?.max,
+            weightTrend: trend,
+            weightDifference: difference,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || 'Error al generar consejos');
+      }
+
+      const data = await response.json();
+      const tips = data.tips || [];
+      setAiTips(tips);
+      // Persist tips so they survive app restarts
+      await AsyncStorage.setItem(`weight_ai_tips_${id}`, JSON.stringify(tips));
+      setAiTips(data.tips || []);
+    } catch (error: any) {
+      console.error('Error generating weight advice:', error);
+      setAiError('No se pudieron generar los consejos. Intenta de nuevo.');
+    } finally {
+      setLoadingAI(false);
+    }
+  };
 
   const getWeightStatusInfo = () => {
     switch (weightStatus) {
@@ -953,6 +1059,52 @@ export default function PetWeight() {
           </Card>
         )}
 
+        {/* AI Weight Advice Card */}
+        {weightStatus !== 'unknown' && weightRecords.length > 0 && (
+          <Card style={styles.aiCard}>
+            <View style={styles.aiCardHeader}>
+              <Sparkles size={20} color="#8B5CF6" />
+              <Text style={styles.aiCardTitle}>Consejos de IA</Text>
+            </View>
+            <Text style={styles.aiCardSubtitle}>
+              Recomendaciones personalizadas basadas en el estado de peso de {pet?.name}
+            </Text>
+
+            {loadingAI && (
+              <View style={styles.aiLoadingContainer}>
+                <ActivityIndicator size="small" color="#8B5CF6" />
+                <Text style={styles.aiLoadingText}>Analizando el peso de {pet?.name}...</Text>
+              </View>
+            )}
+
+            {aiError && !loadingAI && (
+              <View style={styles.aiErrorContainer}>
+                <Text style={styles.aiErrorText}>{aiError}</Text>
+                <TouchableOpacity style={styles.aiRetryButton} onPress={generateWeightAdvice}>
+                  <Text style={styles.aiRetryButtonText}>Reintentar</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {aiTips.length > 0 && !loadingAI && (
+              <View style={styles.aiTipsContainer}>
+                {aiTips.map((tip, index) => (
+                  <View key={index} style={styles.aiTipItem}>
+                    <Text style={styles.aiTipText}>{tip}</Text>
+                  </View>
+                ))}
+                <TouchableOpacity style={styles.aiRefreshButton} onPress={() => {
+                    AsyncStorage.removeItem(`weight_ai_tips_${id}`);
+                    generateWeightAdvice();
+                  }}>
+                  <Sparkles size={14} color="#8B5CF6" />
+                  <Text style={styles.aiRefreshText}>Regenerar consejos</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </Card>
+        )}
+
         {/* History Card */}
         <Card style={styles.historyCard}>
           <Text style={styles.historyTitle}>Historial de Peso</Text>
@@ -1450,5 +1602,101 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignSelf: 'flex-start',
     marginTop: 4,
+  },
+  aiCard: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+  },
+  aiCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  aiCardTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginLeft: 8,
+  },
+  aiCardSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  aiGenerateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+    gap: 8,
+  },
+  aiGenerateButtonText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+  },
+  aiLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    gap: 12,
+  },
+  aiLoadingText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#8B5CF6',
+  },
+  aiErrorContainer: {
+    alignItems: 'center',
+    padding: 16,
+  },
+  aiErrorText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#EF4444',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  aiRetryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    backgroundColor: '#EDE9FE',
+    borderRadius: 20,
+  },
+  aiRetryButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#8B5CF6',
+  },
+  aiTipsContainer: {
+    gap: 12,
+  },
+  aiTipItem: {
+    backgroundColor: '#F9FAFB',
+    padding: 14,
+    borderRadius: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#8B5CF6',
+  },
+  aiTipText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    lineHeight: 20,
+  },
+  aiRefreshButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    gap: 6,
+  },
+  aiRefreshText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#8B5CF6',
   },
 });

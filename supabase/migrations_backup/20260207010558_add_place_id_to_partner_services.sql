@@ -1,0 +1,18 @@
+/*\n  # Agregar relación entre servicios y negocios\n\n  1. Cambios\n    - Agregar columna `place_id` a la tabla `partner_services` para relacionar servicios con negocios específicos\n    - Agregar columna `partner_id` a la tabla `places` si no existe para relacionar negocios con partners\n    - Agregar claves foráneas para mantener integridad referencial\n    \n  2. Seguridad\n    - Actualizar políticas RLS para permitir a partners gestionar sus negocios y servicios\n*/\n\n-- Agregar partner_id a places si no existe\nDO $$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1 FROM information_schema.columns\n    WHERE table_name = 'places' AND column_name = 'partner_id'\n  ) THEN\n    ALTER TABLE places ADD COLUMN partner_id uuid REFERENCES partners(id) ON DELETE CASCADE;
+\n    CREATE INDEX IF NOT EXISTS idx_places_partner_id ON places(partner_id);
+\n  END IF;
+\nEND $$;
+\n\n-- Agregar place_id a partner_services\nDO $$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1 FROM information_schema.columns\n    WHERE table_name = 'partner_services' AND column_name = 'place_id'\n  ) THEN\n    ALTER TABLE partner_services ADD COLUMN place_id uuid REFERENCES places(id) ON DELETE CASCADE;
+\n    CREATE INDEX IF NOT EXISTS idx_partner_services_place_id ON partner_services(place_id);
+\n  END IF;
+\nEND $$;
+\n\n-- Agregar políticas RLS para places si no existen\nDO $$\nBEGIN\n  -- Política para que partners puedan ver sus propios negocios\n  IF NOT EXISTS (\n    SELECT 1 FROM pg_policies \n    WHERE tablename = 'places' AND policyname = 'Partners can view own places'\n  ) THEN\n    CREATE POLICY "Partners can view own places"\n      ON places FOR SELECT\n      TO authenticated\n      USING (\n        partner_id IN (\n          SELECT id FROM partners WHERE user_id = auth.uid()\n        )\n      );
+\n  END IF;
+\n\n  -- Política para que partners puedan crear negocios\n  IF NOT EXISTS (\n    SELECT 1 FROM pg_policies \n    WHERE tablename = 'places' AND policyname = 'Partners can create own places'\n  ) THEN\n    CREATE POLICY "Partners can create own places"\n      ON places FOR INSERT\n      TO authenticated\n      WITH CHECK (\n        partner_id IN (\n          SELECT id FROM partners WHERE user_id = auth.uid()\n        )\n      );
+\n  END IF;
+\n\n  -- Política para que partners puedan actualizar sus negocios\n  IF NOT EXISTS (\n    SELECT 1 FROM pg_policies \n    WHERE tablename = 'places' AND policyname = 'Partners can update own places'\n  ) THEN\n    CREATE POLICY "Partners can update own places"\n      ON places FOR UPDATE\n      TO authenticated\n      USING (\n        partner_id IN (\n          SELECT id FROM partners WHERE user_id = auth.uid()\n        )\n      )\n      WITH CHECK (\n        partner_id IN (\n          SELECT id FROM partners WHERE user_id = auth.uid()\n        )\n      );
+\n  END IF;
+\n\n  -- Política para que partners puedan eliminar sus negocios\n  IF NOT EXISTS (\n    SELECT 1 FROM pg_policies \n    WHERE tablename = 'places' AND policyname = 'Partners can delete own places'\n  ) THEN\n    CREATE POLICY "Partners can delete own places"\n      ON places FOR DELETE\n      TO authenticated\n      USING (\n        partner_id IN (\n          SELECT id FROM partners WHERE user_id = auth.uid()\n        )\n      );
+\n  END IF;
+\nEND $$;
+;

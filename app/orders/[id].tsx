@@ -4,15 +4,23 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Package, Clock, Truck, CircleCheck as CheckCircle, Circle as XCircle, MapPin, Phone, Star, MessageSquare } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { OrderStatusBanner } from '../../components/OrderStatusBanner';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { OrderTracking } from '../../components/OrderTracking';
+import { StoreRouteMap } from '../../components/StoreRouteMap';
+import { getOrderFulfillmentMode, getOrderStatusLabel } from '../../utils/orderFulfillment';
+import { isServiceBookingOrder } from '../../utils/orderClassification';
 
 export default function OrderDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { currentUser } = useAuth();
   const [order, setOrder] = useState<any>(null);
+  const [partnerAddress, setPartnerAddress] = useState<string>('');  
+  const [partnerName, setPartnerName] = useState<string>('');
+  const [partnerLocation, setPartnerLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pickupConfirming, setPickupConfirming] = useState(false);
 
   useEffect(() => {
     if (!currentUser) {
@@ -27,6 +35,34 @@ export default function OrderDetail() {
     }
     
     fetchOrderDetails();
+
+    // Suscripción en tiempo real para actualizar el pedido cuando cambie el estado
+    const orderSubscription = supabaseClient
+      .channel(`order_${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: `id=eq.${id}`
+        },
+        (payload) => {
+          console.log('📦 Order detail updated in real-time:', payload.new);
+          // Actualizar el pedido en el estado local
+          setOrder((prevOrder: any) => ({
+            ...prevOrder,
+            status: payload.new.status,
+            updatedAt: new Date(payload.new.updated_at)
+          }));
+        }
+      )
+      .subscribe();
+
+    // Cleanup: desuscribirse cuando el componente se desmonte
+    return () => {
+      orderSubscription.unsubscribe();
+    };
   }, [currentUser, id]);
 
   const fetchOrderDetails = async () => {
@@ -41,18 +77,68 @@ export default function OrderDetail() {
       if (error) throw error;
       
       if (data) {
+        setPartnerAddress('');
+        setPartnerName('');
+        setPartnerLocation(null);
+
         setOrder({
           id: data.id,
+          orderNumber: data.order_number,
           partnerId: data.partner_id,
           customerId: data.customer_id,
           items: data.items || [],
           status: data.status || 'pending',
           orderType: data.order_type || 'product_purchase',
+          fulfillmentMode: getOrderFulfillmentMode(data.order_type || 'product_purchase', data.shipping_address),
           totalAmount: data.total_amount || 0,
+          subtotalAmount: data.subtotal,
+          shippingCost: Number(data.shipping_cost || 0),
           shippingAddress: data.shipping_address || '',
           createdAt: new Date(data.created_at),
           updatedAt: data.updated_at ? new Date(data.updated_at) : null
         });
+
+        // 1. Try partner_breakdown first (works for service bookings where trigger stores it)
+        let resolvedAddress = '';
+        if (data.partner_breakdown && data.partner_id) {
+          const pbPartner = data.partner_breakdown?.partners?.[data.partner_id];
+          if (pbPartner?.partner_address) {
+            resolvedAddress = pbPartner.partner_address;
+          }
+        }
+
+        // 2. Query direct partners table to enrich the order with store data
+        if (data.partner_id) {
+          const { data: partnerData } = await supabaseClient
+            .from('partners')
+            .select('business_name, address, calle, numero, barrio, codigo_postal, latitud, longitud')
+            .eq('id', data.partner_id)
+            .single();
+          if (partnerData) {
+            setPartnerName(partnerData.business_name || '');
+            const parts = [
+              partnerData.calle,
+              partnerData.numero,
+              partnerData.barrio,
+              partnerData.codigo_postal,
+            ].filter(Boolean);
+            if (!resolvedAddress) {
+              resolvedAddress = parts.length > 0
+                ? parts.join(', ')
+                : partnerData.address || '';
+            }
+
+            const latitude = Number(partnerData.latitud);
+            const longitude = Number(partnerData.longitud);
+            if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+              setPartnerLocation({ latitude, longitude });
+            } else {
+              setPartnerLocation(null);
+            }
+          }
+        }
+
+        if (resolvedAddress) setPartnerAddress(resolvedAddress);
       }
     } catch (error) {
       console.error('Error fetching order details:', error);
@@ -65,11 +151,18 @@ export default function OrderDetail() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return '#FEF3C7';
+      case 'reserved': return '#FEF3C7';
+      case 'payment_failed': return '#FECACA';
+      case 'insufficient_stock': return '#FEE2E2';
       case 'confirmed': return '#DBEAFE';
       case 'processing': return '#DBEAFE';
+      case 'preparing': return '#DBEAFE';
+      case 'ready_for_delivery': return '#DBEAFE';
       case 'shipped': return '#D1FAE5';
       case 'delivered': return '#D1FAE5';
+      case 'completed': return '#D1FAE5';
       case 'cancelled': return '#FEE2E2';
+      case 'refunded': return '#F3F4F6';
       default: return '#F3F4F6';
     }
   };
@@ -77,26 +170,33 @@ export default function OrderDetail() {
   const getStatusTextColor = (status: string) => {
     switch (status) {
       case 'pending': return '#92400E';
+      case 'reserved': return '#92400E';
+      case 'payment_failed': return '#991B1B';
+      case 'insufficient_stock': return '#991B1B';
       case 'confirmed': return '#1E40AF';
       case 'processing': return '#1E40AF';
+      case 'preparing': return '#1E40AF';
+      case 'ready_for_delivery': return '#1E40AF';
       case 'shipped': return '#065F46';
       case 'delivered': return '#065F46';
+      case 'completed': return '#065F46';
       case 'cancelled': return '#991B1B';
+      case 'refunded': return '#374151';
       default: return '#374151';
     }
   };
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'pending': return 'Pendiente';
-      case 'confirmed': return 'Confirmado';
-      case 'processing': return 'En proceso';
-      case 'shipped': return 'Enviado';
-      case 'delivered': return 'Entregado';
-      case 'cancelled': return 'Cancelado';
-      default: return 'Desconocido';
-    }
-  };
+  const isServiceOrder = isServiceBookingOrder(order);
+  const shippingAddressText = (order?.shippingAddress || '').trim();
+  const isStorePickup = !isServiceOrder && (
+    shippingAddressText.toLowerCase().startsWith('retiro en tienda') ||
+    shippingAddressText.toLowerCase().includes('retiro')
+  );
+
+  const shippingCost = isServiceOrder ? 0 : Number(order?.shippingCost || 0);
+  const subtotalAmount = Number(
+    order?.subtotalAmount ?? Math.max(0, Number(order?.totalAmount || 0) - shippingCost)
+  );
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-AR', {
@@ -108,8 +208,54 @@ export default function OrderDetail() {
   const handleContactSupport = () => {
     Alert.alert(
       'Contactar Soporte',
-      `Pedido #${order.id.slice(-6)}\n\nPuedes contactarnos por:\n\n📧 Email: soporte@dogcatify.com\n📱 WhatsApp: +54 11 1234-5678`,
+      `Pedido ${order.orderNumber || `#${order.id.slice(-6)}`}\n\nPuedes contactarnos por:\n\n📧 Email: soporte@dogcatify.com\n📱 WhatsApp: +54 11 1234-5678`,
       [{ text: 'Entendido' }]
+    );
+  };
+
+  const submitPickupConfirmation = async () => {
+    if (!order || !currentUser) {
+      return;
+    }
+
+    try {
+      setPickupConfirming(true);
+
+      const now = new Date().toISOString();
+      const { error } = await supabaseClient
+        .from('orders')
+        .update({
+          status: 'delivered',
+          delivered_at: now,
+          updated_at: now,
+        })
+        .eq('id', order.id)
+        .eq('customer_id', currentUser.id);
+
+      if (error) throw error;
+
+      Alert.alert(
+        'Retiro confirmado',
+        'Tu compra quedó marcada como retirada y el aliado recibirá la notificación.',
+      );
+
+      await fetchOrderDetails();
+    } catch (error) {
+      console.error('Error confirming pickup:', error);
+      Alert.alert('Error', 'No se pudo confirmar el retiro del pedido');
+    } finally {
+      setPickupConfirming(false);
+    }
+  };
+
+  const handleConfirmPickup = () => {
+    Alert.alert(
+      'Confirmar retiro',
+      '¿Ya retiraste tu compra en tienda?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Sí, confirmar', onPress: () => { void submitPickupConfirmation(); } },
+      ]
     );
   };
 
@@ -147,10 +293,12 @@ export default function OrderDetail() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <OrderStatusBanner />
+
         {/* Order Status */}
         <Card style={styles.statusCard}>
           <View style={styles.statusHeader}>
-            <Text style={styles.orderNumber}>Pedido #{order.id.slice(-6)}</Text>
+            <Text style={styles.orderNumber}>Pedido {order.orderNumber || `#${order.id.slice(-6)}`}</Text>
             <View style={[
               styles.statusBadge,
               { backgroundColor: getStatusColor(order.status) }
@@ -159,7 +307,7 @@ export default function OrderDetail() {
                 styles.statusText,
                 { color: getStatusTextColor(order.status) }
               ]}>
-                {getStatusText(order.status)}
+                {getOrderStatusLabel(order.status, order.orderType, order.shippingAddress)}
               </Text>
             </View>
           </View>
@@ -181,6 +329,7 @@ export default function OrderDetail() {
           <OrderTracking
             orderStatus={order.status}
             orderType={order.orderType}
+            fulfillmentMode={order.fulfillmentMode}
             orderDate={order.createdAt}
             cancelledDate={order.status === 'cancelled' ? order.updatedAt : undefined}
           />
@@ -188,7 +337,9 @@ export default function OrderDetail() {
 
         {/* Order Items */}
         <Card style={styles.itemsCard}>
-          <Text style={styles.sectionTitle}>Productos ({order.items.length})</Text>
+          <Text style={styles.sectionTitle}>
+            {isServiceOrder ? `Servicios (${order.items.length})` : `Productos (${order.items.length})`}
+          </Text>
           
           {order.items.map((item: any, index: number) => (
             <View key={index} style={styles.orderItem}>
@@ -196,7 +347,11 @@ export default function OrderDetail() {
                 <Image source={{ uri: item.image }} style={styles.itemImage} />
               )}
               <View style={styles.itemDetails}>
-                <Text style={styles.itemName}>{item.name || 'Producto'}</Text>
+                <Text style={styles.itemName}>
+                  {isServiceOrder
+                    ? item.service_name || item.name || 'Servicio'
+                    : item.name || 'Producto'}
+                </Text>
                 <Text style={styles.itemPartner}>{item.partnerName || 'Tienda'}</Text>
                 <View style={styles.itemPricing}>
                   <Text style={styles.itemQuantity}>Cantidad: {item.quantity || 1}</Text>
@@ -210,13 +365,22 @@ export default function OrderDetail() {
         </Card>
 
         {/* Shipping Information */}
-        {order.shippingAddress && (
+        {!isServiceOrder && order.shippingAddress && (
           <Card style={styles.shippingCard}>
-            <Text style={styles.sectionTitle}>Información de Envío</Text>
+            <Text style={styles.sectionTitle}>{isStorePickup ? 'Retiro en Tienda' : 'Información de Envío'}</Text>
             <View style={styles.shippingInfo}>
               <MapPin size={20} color="#6B7280" />
-              <Text style={styles.shippingAddress}>{order.shippingAddress}</Text>
+              <Text style={styles.shippingAddress}>
+                {isStorePickup && partnerAddress ? partnerAddress : order.shippingAddress}
+              </Text>
             </View>
+            {isStorePickup && (partnerAddress || partnerLocation) && (
+              <StoreRouteMap
+                storeName={partnerName || order.items?.[0]?.partnerName || 'Tienda'}
+                storeAddress={partnerAddress || order.shippingAddress}
+                destinationCoordinates={partnerLocation}
+              />
+            )}
           </Card>
         )}
 
@@ -227,13 +391,17 @@ export default function OrderDetail() {
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal</Text>
             <Text style={styles.summaryValue}>
-              {formatCurrency(order.totalAmount - 500)} {/* Assuming 500 shipping */}
+              {formatCurrency(subtotalAmount)}
             </Text>
           </View>
           
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Envío</Text>
-            <Text style={styles.summaryValue}>{formatCurrency(500)}</Text>
+            <Text style={styles.summaryLabel}>
+              {isServiceOrder ? 'Envío' : isStorePickup ? 'Retiro en tienda' : 'Envío'}
+            </Text>
+            <Text style={styles.summaryValue}>
+              {isServiceOrder || isStorePickup ? 'Sin costo' : formatCurrency(shippingCost)}
+            </Text>
           </View>
           
           <View style={styles.divider} />
@@ -246,6 +414,15 @@ export default function OrderDetail() {
 
         {/* Actions */}
         <View style={styles.actionsContainer}>
+          {isStorePickup && order.status === 'ready_for_delivery' && (
+            <Button
+              title="Confirmar retiro"
+              onPress={handleConfirmPickup}
+              loading={pickupConfirming}
+              size="large"
+            />
+          )}
+
           {order.status === 'delivered' && (
             <Button
               title="Reordenar Productos"

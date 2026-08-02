@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Modal, ActivityIndicator, Animated, AppState, Platform } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
@@ -6,6 +6,8 @@ import { ArrowLeft, ShoppingCart, Trash2, Plus, Minus, MapPin, ChevronDown, Chev
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { PaymentMethodModal } from '../../components/PaymentMethodModal';
+import { MercadoPagoRedirectModal } from '../../components/MercadoPagoRedirectModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import { createMultiPartnerOrder, openMercadoPagoPayment } from '../../utils/mercadoPago';
@@ -13,7 +15,7 @@ import { supabaseClient } from '../../lib/supabase';
 
 export default function Cart() {
   const { currentUser } = useAuth();
-  const { cart, updateQuantity, removeFromCart, clearCart, getCartTotal } = useCart();
+  const { cart, updateQuantity, removeFromCart, clearCart, getCartTotal, getCartSubtotalWithoutTax, getCartTaxAmount, getCartOriginalTotal, getCartDiscountAmount } = useCart();
   const [loading, setLoading] = useState(false);
   const [loadingAddress, setLoadingAddress] = useState(true);
   const [useNewAddress, setUseNewAddress] = useState(false);
@@ -27,6 +29,7 @@ export default function Cart() {
   const [partnerInfo, setPartnerInfo] = useState<{
     has_shipping: boolean;
     shipping_cost: number;
+    free_shipping_threshold: number;
     calle: string;
     barrio: string;
     city: string;
@@ -39,6 +42,28 @@ export default function Cart() {
     codigo_postal: '',
     phone: ''
   });
+
+  const cartStores = cart.reduce((stores, item) => {
+    const partnerId = String(item.partnerId || '').trim();
+    if (!partnerId) return stores;
+
+    const existingStore = stores.find((store) => store.partnerId === partnerId);
+    if (existingStore) {
+      return stores;
+    }
+
+    stores.push({
+      partnerId,
+      partnerName: item.partnerName || 'Tienda',
+    });
+    return stores;
+  }, [] as Array<{ partnerId: string; partnerName: string }>);
+
+  const hasMixedStores = cartStores.length > 1;
+  const cartStoreLabel = cartStores.map((store) => store.partnerName).join(', ');
+  const mixedStoreMessage = hasMixedStores
+    ? `Tu carrito contiene productos de ${cartStoreLabel}. Solo puedes comprar productos de una tienda por vez.`
+    : '';
   const [newAddress, setNewAddress] = useState({
     street: '',
     number: '',
@@ -89,7 +114,7 @@ export default function Cart() {
 
       // CRÍTICO: NO ocultar el loader si estamos procesando pago
       if (isProcessingPayment.current) {
-        console.log('⚠️  Estamos procesando pago, NO ocultar loader');
+        console.log('⚠️ Estamos procesando pago, NO ocultar loader');
         return;
       }
 
@@ -160,6 +185,11 @@ export default function Cart() {
   const loadPartnerShippingInfo = async () => {
     if (!cart || cart.length === 0) return;
 
+    if (hasMixedStores) {
+      setPartnerInfo(null);
+      return;
+    }
+
     try {
       // Obtener el partner_id del primer producto (asumiendo mismo partner)
       const firstItem = cart[0];
@@ -172,17 +202,20 @@ export default function Cart() {
       if (productData?.partner_id) {
         const { data: partnerData } = await supabaseClient
           .from('partners')
-          .select('has_shipping, shipping_cost, calle, barrio, city')
+          .select('has_shipping, shipping_cost, calle, barrio, numero, codigo_postal, address')
           .eq('id', productData.partner_id)
           .maybeSingle();
 
         if (partnerData) {
+          // Compose city/locality from available address fields
+          const cityPart = partnerData.barrio || partnerData.codigo_postal || '';
           setPartnerInfo({
             has_shipping: partnerData.has_shipping || false,
             shipping_cost: partnerData.shipping_cost || 0,
-            calle: partnerData.calle || '',
+            free_shipping_threshold: 0,
+            calle: partnerData.calle || partnerData.address || '',
             barrio: partnerData.barrio || '',
-            city: partnerData.city || '',
+            city: cityPart,
           });
         }
       }
@@ -294,6 +327,18 @@ export default function Cart() {
       return;
     }
 
+    if (hasMixedStores) {
+      Alert.alert(
+        'Solo una tienda por compra',
+        'Tu carrito tiene productos de distintas tiendas. Vacíalo y comienza una nueva compra con una sola tienda.',
+        [
+          { text: 'Vaciar carrito', style: 'destructive', onPress: clearCart },
+          { text: 'Cancelar', style: 'cancel' },
+        ]
+      );
+      return;
+    }
+
     const addressToUse = useNewAddress ? newAddress : savedAddress;
 
     // Solo validar dirección si tiene envío
@@ -328,7 +373,7 @@ export default function Cart() {
     // Guardar el tiempo de inicio para garantizar 5 segundos mínimos
     const startTime = Date.now();
     const MIN_LOADING_TIME = 5000; // 5 segundos
-    console.log(`⏱️  Tiempo mínimo de loading: ${MIN_LOADING_TIME}ms`);
+    console.log(`⏱️ Tiempo mínimo de loading: ${MIN_LOADING_TIME}ms`);
 
     try {
       console.log('=== Iniciando proceso de checkout ===');
@@ -356,7 +401,7 @@ export default function Cart() {
 
       console.log('Shipping address:', fullAddress);
 
-      const totalShippingCost = partnerInfo?.has_shipping ? (partnerInfo.shipping_cost || 0) : 0;
+      const totalShippingCost = getEffectiveShippingCost();
 
       // Esperar 800ms para que el loader sea visible
       await new Promise(resolve => setTimeout(resolve, 800));
@@ -379,9 +424,9 @@ export default function Cart() {
         let paymentUrl: string | undefined;
 
         if (isTestMode) {
-          paymentUrl = preference.sandbox_init_point || preference.init_point;
-          if (!preference.sandbox_init_point) {
-            console.warn('⚠️ sandbox_init_point not available, falling back to init_point');
+          paymentUrl = preference.sandbox_init_point;
+          if (!paymentUrl) {
+            throw new Error('Mercado Pago no devolvió sandbox_init_point en modo prueba');
           }
         } else {
           paymentUrl = preference.init_point;
@@ -506,6 +551,27 @@ export default function Cart() {
     }).format(amount);
   };
 
+  const getEffectiveShippingCost = () => {
+    if (!partnerInfo?.has_shipping) return 0;
+
+    const shippingCost = Number(partnerInfo.shipping_cost || 0);
+    const threshold = Number(partnerInfo.free_shipping_threshold || 0);
+    const cartTotal = Number(getCartTotal() || 0);
+
+    if (threshold > 0 && cartTotal >= threshold) {
+      return 0;
+    }
+
+    return shippingCost;
+  };
+
+  const hasFreeShippingApplied = () => {
+    if (!partnerInfo?.has_shipping) return false;
+
+    const threshold = Number(partnerInfo.free_shipping_threshold || 0);
+    return threshold > 0 && Number(getCartTotal() || 0) >= threshold;
+  };
+
   const getCompactAddress = () => {
     const addr = useNewAddress ? newAddress : savedAddress;
     if (!addr.street && !addr.number) return null;
@@ -528,13 +594,13 @@ export default function Cart() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>Mi Carrito</Text>
         <View style={styles.headerActions}>
           {cart && cart.length > 0 && (
-            <TouchableOpacity 
+              <TouchableOpacity 
               style={styles.cartButton}
               onPress={() => {
                 Alert.alert(
@@ -639,18 +705,78 @@ export default function Cart() {
             <Card style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Resumen del Pedido</Text>
               
+              {/* Mostrar descuento si existe alguno en el carrito */}
+              {getCartDiscountAmount() > 0 && (
+                <>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Subtotal Original</Text>
+                    <Text style={styles.summaryValue}>
+                      {formatCurrency(getCartOriginalTotal())}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.summaryRow}>
+                    <Text style={[styles.summaryLabel, { color: '#10B981' }]}>Descuento</Text>
+                    <Text style={[styles.summaryValue, { color: '#10B981' }]}>
+                      -{formatCurrency(getCartDiscountAmount())}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.divider} />
+                </>
+              )}
+              
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Subtotal</Text>
+                <Text style={styles.summaryLabel}>Subtotal (sin IVA)</Text>
                 <Text style={styles.summaryValue}>
-                  {formatCurrency(getCartTotal())}
+                  {formatCurrency(getCartSubtotalWithoutTax())}
                 </Text>
               </View>
               
-              {partnerInfo?.has_shipping ? (
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Envío</Text>
-                  <Text style={styles.summaryValue}>{formatCurrency(partnerInfo.shipping_cost)}</Text>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>IVA (22%)</Text>
+                <Text style={styles.summaryValue}>
+                  {formatCurrency(getCartTaxAmount())}
+                </Text>
+              </View>
+              
+              {hasMixedStores ? (
+                <View style={styles.mixedStoreWarning}>
+                  <Text style={styles.mixedStoreWarningTitle}>Solo una tienda por compra</Text>
+                  <Text style={styles.mixedStoreWarningText}>
+                    {mixedStoreMessage || 'Vacía el carrito para continuar con productos de una sola tienda.'}
+                  </Text>
+                  <View style={styles.mixedStoreWarningActions}>
+                    <View style={styles.mixedStoreWarningAction}>
+                      <Button
+                        title="Vaciar carrito"
+                        onPress={clearCart}
+                        variant="outline"
+                        size="medium"
+                      />
+                    </View>
+                    <View style={styles.mixedStoreWarningAction}>
+                      <Button
+                        title="Seguir comprando"
+                        onPress={() => router.push('/(tabs)/shop')}
+                        size="medium"
+                      />
+                    </View>
+                  </View>
                 </View>
+              ) : partnerInfo?.has_shipping ? (
+                <>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Envío</Text>
+                    <Text style={styles.summaryValue}>{formatCurrency(getEffectiveShippingCost())}</Text>
+                  </View>
+                  {hasFreeShippingApplied() && (
+                    <View style={styles.summaryRow}>
+                      <Text style={[styles.summaryLabel, { color: '#10B981' }]}>Beneficio</Text>
+                      <Text style={[styles.summaryValue, { color: '#10B981' }]}>Envío gratis aplicado</Text>
+                    </View>
+                  )}
+                </>
               ) : (
                 <View style={styles.pickupNotice}>
                   <Text style={styles.pickupNoticeText}>🏪 Retiro en tienda</Text>
@@ -662,13 +788,13 @@ export default function Cart() {
               <View style={styles.summaryRow}>
                 <Text style={styles.totalLabel}>Total</Text>
                 <Text style={styles.totalValue}>
-                  {formatCurrency(getCartTotal() + (partnerInfo?.has_shipping ? (partnerInfo.shipping_cost || 0) : 0))}
+                  {formatCurrency(getCartTotal() + getEffectiveShippingCost())}
                 </Text>
               </View>
 
               <View style={styles.divider} />
 
-              {/* Dirección de Envío Colapsable */}
+              {/* Dirección de envío colapsable */}
               <TouchableOpacity
                 style={styles.addressHeader}
                 onPress={() => setIsAddressExpanded(!isAddressExpanded)}
@@ -677,7 +803,7 @@ export default function Cart() {
                   <MapPin size={20} color="#3B82F6" />
                   <View style={styles.addressHeaderText}>
                     <Text style={styles.addressHeaderTitle}>
-                      {partnerInfo?.has_shipping ? 'Dirección de Envío' : 'Dirección de la Tienda'}
+                      {partnerInfo?.has_shipping ? 'Dirección de envío' : 'Dirección de retiro'}
                     </Text>
                     {!loadingAddress && !isAddressExpanded && (
                       <>
@@ -838,117 +964,21 @@ export default function Cart() {
         )}
       </ScrollView>
 
-      {/* Modal de Métodos de Pago */}
-      <Modal
+      <PaymentMethodModal
         visible={showPaymentMethodModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPaymentMethodModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Método de Pago</Text>
-              <TouchableOpacity onPress={() => setShowPaymentMethodModal(false)} style={styles.closeButton}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
+        totalLabel={formatCurrency(getCartTotal() + getEffectiveShippingCost())}
+        onClose={() => setShowPaymentMethodModal(false)}
+        onMercadoPago={handlePayWithMercadoPago}
+        loadingMercadoPago={paymentLoading}
+        secureNote="Seras redirigido para completar el pago de forma segura"
+      />
 
-            <View style={styles.methodsContent}>
-              <View style={styles.methodsHeader}>
-                <CreditCard size={40} color="#2D6A6F" />
-                <Text style={styles.methodsTitle}>Selecciona tu método de pago</Text>
-                <Text style={styles.methodsSubtitle}>
-                  Total: {formatCurrency(getCartTotal() + (partnerInfo?.has_shipping ? (partnerInfo.shipping_cost || 0) : 0))}
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={styles.paymentMethodCard}
-                onPress={handlePayWithMercadoPago}
-              >
-                <View style={styles.paymentMethodIcon}>
-                  <Image
-                    source={require('@/assets/images/mercadopago.png')}
-                    style={styles.mercadoPagoIcon}
-                    resizeMode="contain"
-                  />
-                </View>
-                <View style={styles.paymentMethodInfo}>
-                  <Text style={styles.paymentMethodTitle}>Mercado Pago</Text>
-                  <Text style={styles.paymentMethodDescription}>
-                    Pago seguro con tarjetas, transferencias y más
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.paymentMethodCard, styles.disabledMethod]}
-                disabled
-              >
-                <View style={[styles.paymentMethodIcon, { backgroundColor: '#F3F4F6' }]}>
-                  <CreditCard size={32} color="#9CA3AF" />
-                </View>
-                <View style={styles.paymentMethodInfo}>
-                  <Text style={[styles.paymentMethodTitle, { color: '#9CA3AF' }]}>Tarjeta de Crédito/Débito</Text>
-                  <Text style={[styles.paymentMethodDescription, { color: '#9CA3AF' }]}>
-                    Visa, Mastercard, American Express
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              <Text style={styles.paymentNote}>
-                Serás redirigido para completar el pago de forma segura
-              </Text>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Payment Loading Overlay con Barra de Progreso */}
-      {paymentLoading && (
-        <Modal
-          visible={paymentLoading}
-          transparent
-          animationType="fade"
-          statusBarTranslucent
-        >
-          <View style={styles.paymentLoadingOverlay}>
-            <View style={styles.paymentLoadingContent}>
-              {/* Logo de Mercado Pago */}
-              <View style={styles.mpLogoContainer}>
-                <Image
-                  source={require('@/assets/images/mercadopago.png')}
-                  style={styles.mpLoadingLogo}
-                  resizeMode="contain"
-                />
-              </View>
-
-              <Text style={styles.paymentLoadingTitle}>Procesando pago...</Text>
-              <Text style={styles.paymentLoadingSubtitle}>
-                {paymentMessage}
-              </Text>
-
-              {/* Barra de progreso animada */}
-              <View style={styles.progressBarContainer}>
-                <Animated.View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: progressAnim.interpolate({
-                        inputRange: [0, 100],
-                        outputRange: ['0%', '100%'],
-                      }),
-                    },
-                  ]}
-                />
-              </View>
-
-              <Text style={styles.loadingHint}>Serás redirigido a Mercado Pago</Text>
-            </View>
-          </View>
-        </Modal>
-      )}
+      <MercadoPagoRedirectModal
+        visible={paymentLoading}
+        message={paymentMessage}
+        progress={progressAnim}
+        hint="Seras redirigido a Mercado Pago"
+      />
     </SafeAreaView>
   );
 }
@@ -1220,6 +1250,34 @@ const styles = StyleSheet.create({
     color: '#92400E',
     textAlign: 'center',
   },
+  mixedStoreWarning: {
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 4,
+  },
+  mixedStoreWarningTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#9A3412',
+    marginBottom: 8,
+  },
+  mixedStoreWarningText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#9A3412',
+    lineHeight: 20,
+  },
+  mixedStoreWarningActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
+  mixedStoreWarningAction: {
+    flex: 1,
+  },
   summaryCard: {
     marginHorizontal: 16,
     marginBottom: 16,
@@ -1362,71 +1420,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
     lineHeight: 16,
   },
-  paymentLoadingOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  paymentLoadingContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 40,
-    alignItems: 'center',
-    width: 320,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  mpLogoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#009EE3',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  mpLoadingLogo: {
-    width: 50,
-    height: 50,
-  },
-  paymentLoadingTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#1F2937',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  paymentLoadingSubtitle: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#00A650',
-    marginBottom: 24,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  progressBarContainer: {
-    width: '100%',
-    height: 6,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 3,
-    overflow: 'hidden',
-    marginBottom: 16,
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#00A650',
-    borderRadius: 3,
-  },
-  loadingHint: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    textAlign: 'center',
-  },
   pickupNotice: {
     backgroundColor: '#DBEAFE',
     paddingVertical: 8,
@@ -1467,3 +1460,10 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 });
+
+
+
+
+
+
+

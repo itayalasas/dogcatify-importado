@@ -1,16 +1,24 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+﻿import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { Alert, AppState, AppStateStatus } from 'react-native';
 import { router } from 'expo-router';
 import { supabaseClient, getUserProfile, updateUserProfile, signIn as supabaseSignIn, signUp as supabaseSignUp, signOut as supabaseSignOut, setTokenExpirationCallback } from '../lib/supabase';
 import { User } from '../types';
 import { logger } from '@/utils/datadogLogger';
+import { logAction, logError } from '../services/auditService';
+import { AppRole, clearStoredActivePartnerBusinessId, getAvailableRoles, resolvePreferredActiveRole } from '../utils/onboarding';
 
 interface AuthContextType {
   currentUser: User | null;
+  activeRole: AppRole | null;
+  isPostLoginFlowPending: boolean;
   loading: boolean; 
   login: (email: string, password: string) => Promise<User | null>;
   register: (email: string, password: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateCurrentUser: (updatedUser: User) => void;
+  setActiveRole: (role: AppRole | null) => void;
+  startPostLoginFlow: () => void;
+  clearPostLoginFlow: () => void;
   isEmailConfirmed: boolean;
   authInitialized: boolean;
   authError: string | null;
@@ -19,6 +27,66 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+type AppEmailConfirmationStatus = {
+  confirmed: boolean;
+  confirmedBy: 'profile' | 'token' | 'profile+token' | 'auth' | null;
+};
+
+async function getAppEmailConfirmationStatus(
+  userId: string,
+  authConfirmed = false,
+): Promise<AppEmailConfirmationStatus> {
+  try {
+    const [{ data: profileData, error: profileError }, { data: tokenData, error: tokenError }] = await Promise.all([
+      supabaseClient
+        .from('profiles')
+        .select('email_confirmed')
+        .eq('id', userId)
+        .maybeSingle(),
+      supabaseClient
+        .from('email_confirmations')
+        .select('id, is_confirmed, created_at')
+        .eq('type', 'signup')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    if (profileError) {
+      console.warn('Error reading profile confirmation status:', profileError);
+    }
+
+    if (tokenError) {
+      console.warn('Error reading email confirmation token status:', tokenError);
+    }
+
+    const confirmedByProfile = profileData?.email_confirmed === true;
+    const hasTokenRecord = !!tokenData;
+    const confirmedByToken = tokenData?.is_confirmed === true;
+    const confirmed = hasTokenRecord
+      ? confirmedByProfile && confirmedByToken
+      : confirmedByProfile || authConfirmed;
+
+    return {
+      confirmed,
+      confirmedBy: confirmed
+        ? hasTokenRecord
+          ? 'profile+token'
+          : confirmedByProfile
+            ? 'profile'
+            : 'auth'
+        : null,
+    };
+  } catch (error) {
+    console.error('Error checking app email confirmation status:', error);
+    return {
+      confirmed: false,
+      confirmedBy: null,
+    };
+  }
+}
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -30,18 +98,32 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [activeRole, setActiveRoleState] = useState<AppRole | null>(null);
+  const [isPostLoginFlowPending, setIsPostLoginFlowPending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<any | null>(null);
   const [isEmailConfirmed, setIsEmailConfirmed] = useState(false);
   const [authInitialized, setAuthInitialized] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const tokenCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const tokenCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appState = useRef(AppState.currentState);
   const isHandlingExpirationRef = useRef(false);
   const lastValidationRef = useRef<number>(0);
 
   const updateCurrentUser = (updatedUser: User) => {
     setCurrentUser(updatedUser);
+  };
+
+  const setActiveRole = (role: AppRole | null) => {
+    setActiveRoleState(role);
+  };
+
+  const startPostLoginFlow = () => {
+    setIsPostLoginFlowPending(true);
+  };
+
+  const clearPostLoginFlow = () => {
+    setIsPostLoginFlowPending(false);
   };
 
   useEffect(() => {
@@ -64,20 +146,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, 10000);
 
     // Set up auth state listener
-    const subscription = supabaseClient.auth.onAuthStateChange(
+    const { data: authListener } = supabaseClient.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
-        
-        // Handle different auth events
-        if (event === 'SIGNED_UP') {
-          // Since we're not using signUp anymore, this shouldn't happen
-          // But if it does, just ignore it
-          return;
-        }
-        
+
         if (event === 'SIGNED_OUT' || !session) {
           if (!mounted) return;
+          if (currentUser?.id) {
+            await clearStoredActivePartnerBusinessId(currentUser.id);
+          }
           setCurrentUser(null);
+          setActiveRoleState(null);
+          setIsPostLoginFlowPending(false);
           setSession(null);
           setLoading(false);
           setAuthInitialized(true);
@@ -87,82 +167,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSession(session);
         
         // Only validate email confirmation for SIGNED_IN events (login)
-        if (event === 'SIGNED_IN' && session?.user) {
+        if (session?.user) {
           try {
-            // Check email confirmation strictly
-            console.log('AuthContext - Checking email confirmation for user:', session.user.email);
-            
-            // STRICT EMAIL CONFIRMATION VALIDATION
-            console.log('=== EMAIL CONFIRMATION VALIDATION START ===');
-            console.log('User ID:', session.user.id);
-            console.log('User email:', session.user.email);
-            
-            // Check both our custom confirmation system AND profiles table
-            console.log('Checking email_confirmations table...');
-            const { data: confirmationData, error: confirmationError } = await supabaseClient
-              .from('email_confirmations')
-              .select('*')
-              .eq('type', 'signup')
-              .eq('user_id', session.user.id)
-              .eq('is_confirmed', true)
-              .maybeSingle();
-            
-            console.log('Confirmation query result:', {
-              hasData: !!confirmationData,
-              error: confirmationError?.message,
-              errorCode: confirmationError?.code
-            });
-            
-            if (confirmationData) {
-              console.log('Confirmation data found:', {
-                userId: confirmationData.user_id,
-                email: confirmationData.email,
-                isConfirmed: confirmationData.is_confirmed,
-                type: confirmationData.type,
-                confirmedAt: confirmationData.confirmed_at
-              });
-            }
-            
-            // Also check profiles table for email_confirmed
-            console.log('Checking profiles table for email_confirmed...');
-            const { data: profileData, error: profileError } = await supabaseClient
-              .from('profiles')
-              .select('email_confirmed, email_confirmed_at')
-              .eq('id', session.user.id)
-              .maybeSingle();
-            
-            console.log('Profile email confirmation status:', {
-              hasData: !!profileData,
-              error: profileError?.message,
-              emailConfirmed: profileData?.email_confirmed,
-              confirmedAt: profileData?.email_confirmed_at
-            });
-            
-            // VALIDATION: Check both systems
-            const isConfirmedInEmailTable = confirmationData && 
-                                          confirmationData.user_id === session.user.id && 
-                                          confirmationData.is_confirmed === true;
-            
-            const isConfirmedInProfile = profileData && 
-                                       profileData.email_confirmed === true;
-            
-            // Also check Supabase Auth confirmation status
+            const confirmationStatus = await getAppEmailConfirmationStatus(
+              session.user.id,
+              session.user.email_confirmed_at !== null,
+            );
             const isConfirmedInAuth = session.user.email_confirmed_at !== null;
-            
-            // User is confirmed if ANY system shows confirmation
-            const isEmailConfirmed = isConfirmedInEmailTable || isConfirmedInProfile || isConfirmedInAuth;
-            
-            console.log('Final confirmation status:', {
-              emailTableConfirmed: isConfirmedInEmailTable,
-              profileTableConfirmed: isConfirmedInProfile,
+
+            console.log('AuthContext - Confirmation status for signed-in user:', {
+              userId: session.user.id,
+              email: session.user.email,
+              confirmed: confirmationStatus.confirmed,
+              confirmedBy: confirmationStatus.confirmedBy,
               authTableConfirmed: isConfirmedInAuth,
-              finalResult: isEmailConfirmed
             });
             
-            if (!isEmailConfirmed) {
-              
+            if (!confirmationStatus.confirmed) {
               console.log('=== EMAIL NOT CONFIRMED - BLOCKING ACCESS ===');
-              console.log('Neither email_confirmations nor profiles show confirmed status');
+              console.log('No confirmation record found in profile or token table');
               
               setIsEmailConfirmed(false);
               setAuthError(`EMAIL_NOT_CONFIRMED:${session.user.email}`);
@@ -171,17 +194,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
             
             console.log('=== EMAIL CONFIRMED - ACCESS GRANTED ===');
-            console.log('Confirmation validated for user:', session.user.email);
+            console.log('Confirmation validated for user:', session.user.email, {
+              confirmedBy: confirmationStatus.confirmedBy,
+            });
             setIsEmailConfirmed(true);
             setAuthError(null); // Clear any previous auth errors
             
             // Load user profile after email confirmation is validated
-            await loadUserProfile(session.user.id, session.user.email!);
+            await loadUserProfile(session.user.id, session.user.email!, true);
           } catch (error: any) {
             console.error('Error loading user profile after login:', error);
             
             // Set auth error for display in UI
-            if (error.message?.includes('perfil válido') || error.message?.includes('eliminada')) {
+            if (error.message?.includes('perfil vÃ¡lido') || error.message?.includes('eliminada')) {
               setAuthError(error.message);
             }
             
@@ -191,10 +216,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           }
         }
-        else if (session?.user && event !== 'SIGNED_UP') {
+        else if (session?.user) {
           // For other events, load profile without email validation
           try {
-            await loadUserProfile(session.user.id, session.user.email!);
+            await loadUserProfile(session.user.id, session.user.email!, true);
           } catch (error: any) {
             console.error('Error loading user profile:', error);
           }
@@ -208,11 +233,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     // Helper function to load user profile
-    const loadUserProfile = async (userId: string, userEmail: string) => {
+    const loadUserProfile = async (userId: string, userEmail: string, emailConfirmed = false) => {
       try {
         let profile;
         try {
           profile = await getUserProfile(userId);
+
+        if (emailConfirmed && profile?.email_confirmed !== true) {
+          const confirmedAt = new Date().toISOString();
+          await updateUserProfile(userId, {
+            email: userEmail,
+            email_confirmed: true,
+            email_confirmed_at: confirmedAt,
+          });
+          profile = {
+            ...profile,
+            email_confirmed: true,
+            email_confirmed_at: confirmedAt,
+          };
+        }
         } catch (profileError: any) {
           // Handle case where user exists in auth.users but not in profiles (deleted account)
           if (profileError.code === 'PGRST116' && profileError.message?.includes('0 rows')) {
@@ -227,13 +266,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (profile) {
           if (!mounted) return;
+          const availableRoles = getAvailableRoles({
+            isOwner: profile.is_owner ?? true,
+            isPartner: profile.is_partner ?? false,
+            isAdmin: profile.is_admin ?? false,
+          });
+          const resolvedActiveRole = await resolvePreferredActiveRole(userId, availableRoles);
           const user = {
             id: userId,
             email: userEmail,
             displayName: profile.display_name || '',
             photoURL: profile.photo_url,
-            isOwner: profile.is_owner || true,
-            isPartner: profile.is_partner || false,
+            isOwner: profile.is_owner ?? true,
+            isPartner: profile.is_partner ?? false,
+            isAdmin: profile.is_admin ?? false,
             location: profile.location,
             bio: profile.bio,
             phone: profile.phone,
@@ -243,6 +289,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             followersCount: (profile.followers || []).length,
             followingCount: (profile.following || []).length,
           };
+          setActiveRoleState(resolvedActiveRole);
           setCurrentUser(user);
 
           logger.setUser(userId, {
@@ -263,6 +310,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             photoURL: undefined,
             isOwner: true,
             isPartner: false,
+            isAdmin: false,
             createdAt: new Date(),
             followers: [],
             following: [],
@@ -276,6 +324,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             photo_url: newUser.photoURL,
             is_owner: newUser.isOwner,
             is_partner: newUser.isPartner,
+            is_admin: newUser.isAdmin,
             location: newUser.location,
             bio: newUser.bio,
             phone: newUser.phone,
@@ -285,6 +334,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             id: userId,
             ...newUser,
           };
+          const resolvedActiveRole = await resolvePreferredActiveRole(userId, ['owner']);
+          setActiveRoleState(resolvedActiveRole);
           setCurrentUser(user);
 
           logger.setUser(userId, {
@@ -315,33 +366,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           try {
             // Check email confirmation for initial session
             console.log('AuthContext - Initial session: Checking email confirmation for user:', session.user.email);
-            
-            // Check both confirmation systems
-            const { data: confirmationData, error: confirmationError } = await supabaseClient
-              .from('email_confirmations')
-              .select('*')
-              .eq('type', 'signup')
-              .eq('user_id', session.user.id)
-              .single();
-            
-            const { data: profileData, error: profileError } = await supabaseClient
-              .from('profiles')
-              .select('email_confirmed')
-              .eq('id', session.user.id)
-              .single();
-            
-            const isConfirmedInEmailTable = confirmationData && 
-                                          !confirmationError && 
-                                          confirmationData.user_id === session.user.id && 
-                                          confirmationData.is_confirmed === true;
-            
-            const isConfirmedInProfile = profileData && 
-                                       !profileError && 
-                                       profileData.email_confirmed === true;
-            
-            const isEmailConfirmed = isConfirmedInEmailTable || isConfirmedInProfile;
-            
-            if (!isEmailConfirmed) {
+            const confirmationStatus = await getAppEmailConfirmationStatus(
+              session.user.id,
+              session.user.email_confirmed_at !== null,
+            );
+
+            console.log('AuthContext - Initial session confirmation status:', {
+              userId: session.user.id,
+              email: session.user.email,
+              confirmed: confirmationStatus.confirmed,
+              confirmedBy: confirmationStatus.confirmedBy,
+            });
+
+            if (!confirmationStatus.confirmed) {
               
               console.log('AuthContext - Initial session: Email not confirmed, signing out');
               setIsEmailConfirmed(false);
@@ -352,7 +389,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             console.log('AuthContext - Initial session: Email confirmed, loading profile');
             setIsEmailConfirmed(true);
-            await loadUserProfile(session.user.id, session.user.email!);
+            await loadUserProfile(session.user.id, session.user.email!, true);
           } catch (error) {
             console.error('AuthContext - Error loading profile:', error);
           }
@@ -379,8 +416,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (tokenCheckIntervalRef.current) {
         clearInterval(tokenCheckIntervalRef.current);
       }
-      if (subscription && typeof subscription.unsubscribe === 'function') {
-        subscription.unsubscribe();
+      if (authListener?.subscription) {
+        authListener.subscription.unsubscribe();
       }
     };
   }, []);
@@ -571,6 +608,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setLoading(false);
       setCurrentUser(null);
+      setActiveRoleState(null);
+      setIsPostLoginFlowPending(false);
       setSession(null);
       setIsEmailConfirmed(false);
 
@@ -589,8 +628,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }, 100);
 
       Alert.alert(
-        'Sesión expirada',
-        'Tu sesión ha expirado por seguridad. Por favor inicia sesión nuevamente.',
+        'SesiÃ³n expirada',
+        'Tu sesiÃ³n ha expirado por seguridad. Por favor inicia sesiÃ³n nuevamente.',
         [
           {
             text: 'OK',
@@ -622,13 +661,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('AuthContext - Attempting login with Supabase for:', email);
 
+      // Registrar intento de login
+      await logAction('LOGIN_ATTEMPT', {
+        success: true,
+        user_email: email,
+        resource_type: 'user',
+        details: { email, method: 'email_password' }
+      });
+
       const { data, error } = await supabaseClient.auth.signInWithPassword({
         email,
         password
       });
       
       if (error) {
-        console.error('AuthContext - Login error:', error.message); 
+        console.error('AuthContext - Login error:', error.message);
+        
+        // Registrar fallo de login
+        await logAction('LOGIN_FAILED', {
+          success: false,
+          user_email: email,  // Importante: pasar email aunque no estÃ© autenticado
+          error_message: error.message,
+          resource_type: 'user',
+          details: { 
+            email, 
+            reason: error.message,
+            method: 'email_password',
+            error_code: error.code || 'unknown'
+          }
+        });
         
         // Handle specific session errors
         if (error.message?.includes('session_not_found') || error.message?.includes('JWT')) {
@@ -636,7 +697,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await supabaseClient.auth.signOut();
         }
         
-        // Mejorar mensajes de error específicos
+        // Mejorar mensajes de error especÃ­ficos
         if (error.message.includes('Invalid login credentials')) {
           throw new Error('Invalid login credentials');
         } else if (error.message.includes('Email not confirmed')) {
@@ -650,55 +711,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
       
-      if (data.user) {
-        // STRICT EMAIL CONFIRMATION VALIDATION - Check our custom system ONLY
+        if (data.user) {
+        // Validate app-level confirmation before allowing access
         console.log('=== STRICT EMAIL CONFIRMATION CHECK ===');
         console.log('User ID:', data.user.id);
         console.log('User email:', data.user.email);
-        
-        // Check both confirmation systems
-        const { data: confirmationData, error: confirmationError } = await supabaseClient
-          .from('email_confirmations')
-          .select('*')
-          .eq('user_id', data.user.id)
-          .eq('type', 'signup')
-          .single();
-        
-        const { data: profileData, error: profileError } = await supabaseClient
-          .from('profiles')
-          .select('email_confirmed')
-          .eq('id', data.user.id)
-          .single();
-        
-        console.log('Confirmation query result:', {
-          hasData: !!confirmationData,
-          error: confirmationError?.message,
-          errorCode: confirmationError?.code,
-          isConfirmed: confirmationData?.is_confirmed
+
+        const confirmationStatus = await getAppEmailConfirmationStatus(
+          data.user.id,
+          data.user.email_confirmed_at !== null,
+        );
+
+        console.log('Login confirmation status:', {
+          userId: data.user.id,
+          email: data.user.email,
+          confirmed: confirmationStatus.confirmed,
+          confirmedBy: confirmationStatus.confirmedBy,
         });
-        
-        console.log('Profile confirmation result:', {
-          hasData: !!profileData,
-          error: profileError?.message,
-          emailConfirmed: profileData?.email_confirmed
-        });
-        
-        // Check both systems for confirmation
-        const isConfirmedInEmailTable = confirmationData && 
-                                      !confirmationError && 
-                                      confirmationData.user_id === data.user.id && 
-                                      confirmationData.is_confirmed === true;
-        
-        const isConfirmedInProfile = profileData && 
-                                   !profileError && 
-                                   profileData.email_confirmed === true;
-        
-        const isEmailConfirmed = isConfirmedInEmailTable || isConfirmedInProfile;
-        
-        if (!isEmailConfirmed) {
+
+        if (!confirmationStatus.confirmed) {
           
           console.log('=== EMAIL NOT CONFIRMED - BLOCKING LOGIN ===');
-          console.log('Neither system shows email as confirmed');
+          console.log('Neither profile nor token table shows a confirmed email');
           
           setIsEmailConfirmed(false);
           setAuthError(`EMAIL_NOT_CONFIRMED:${data.user.email}`);
@@ -706,7 +740,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Sign out the user immediately
           await supabaseClient.auth.signOut();
           
-          throw new Error('Debes confirmar tu correo electrónico antes de iniciar sesión. Revisa tu bandeja de entrada.');
+          throw new Error('Debes confirmar tu correo electrÃ³nico antes de iniciar sesiÃ³n. Revisa tu bandeja de entrada.');
         }
         
         console.log('=== EMAIL CONFIRMED - LOGIN ALLOWED ===');
@@ -714,6 +748,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           // Check if user profile exists
           const profile = await getUserProfile(data.user.id);
+
+          if (profile && profile.email_confirmed !== true) {
+            const confirmedAt = new Date().toISOString();
+            await updateUserProfile(data.user.id, {
+              email: data.user.email,
+              email_confirmed: true,
+              email_confirmed_at: confirmedAt,
+            });
+            profile.email_confirmed = true;
+            profile.email_confirmed_at = confirmedAt;
+          }
           
           if (!profile) {
             // Profile doesn't exist, sign out and throw error
@@ -726,8 +771,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             email: data.user.email!,
             displayName: profile.display_name || '',
             photoURL: profile.photo_url,
-            isOwner: profile.is_owner || true,
-            isPartner: profile.is_partner || false,
+            isOwner: profile.is_owner ?? true,
+            isPartner: profile.is_partner ?? false,
+            isAdmin: profile.is_admin ?? false,
             location: profile.location,
             bio: profile.bio,
             phone: profile.phone,
@@ -737,9 +783,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             followersCount: (profile.followers || []).length,
             followingCount: (profile.following || []).length,
           };
+          const availableRoles = getAvailableRoles({
+            isOwner: profile.is_owner ?? true,
+            isPartner: profile.is_partner ?? false,
+            isAdmin: profile.is_admin ?? false,
+          });
+          const resolvedActiveRole = await resolvePreferredActiveRole(data.user.id, availableRoles);
           
           console.log('AuthContext - Login successful, setting user:', user.email);
+          setActiveRoleState(resolvedActiveRole);
           setCurrentUser(user);
+
+          // Registrar login exitoso
+          await logAction('LOGIN', {
+            success: true,
+            resource_type: 'user',
+            resource_id: user.id,
+            details: { 
+              email: user.email,
+              method: 'email_password',
+              is_owner: user.isOwner,
+              is_partner: user.isPartner,
+              display_name: user.displayName
+            }
+          });
+
+          // IMPORTANTE: Intentar registrar notificaciones push automÃ¡ticamente despuÃ©s del login
+          // Esto se hace de forma asÃ­ncrona para no bloquear el flujo de login
+          setTimeout(async () => {
+            try {
+              console.log('ðŸ”” Auto-registering push notifications after login...');
+              // La funciÃ³n validateAndUpdateTokens se ejecutarÃ¡ automÃ¡ticamente
+              // cuando NotificationContext detecte que currentUser cambiÃ³
+            } catch (notifError) {
+              console.log('âš ï¸ Could not auto-register notifications:', notifError);
+              // No bloquear el login si falla el registro de notificaciones
+            }
+          }, 1000);
+
           return user;
         } catch (error: any) {
           // Handle case where user exists in auth.users but not in profiles
@@ -774,14 +855,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     try {
       logger.info('User logging out', { userId: currentUser?.id });
+
+      // Registrar logout
+      if (currentUser?.id) {
+        await logAction('LOGOUT', {
+          success: true,
+          resource_type: 'user',
+          resource_id: currentUser.id,
+          suppressConsoleError: true,
+          details: { 
+            email: currentUser.email,
+            display_name: currentUser.displayName
+          }
+        });
+      }
+
+      // Limpiar tokens de notificaciÃ³n del usuario que cierra sesiÃ³n
+      if (currentUser?.id) {
+        try {
+          await supabaseClient
+            .from('profiles')
+            .update({
+              push_token: null,
+              fcm_token: null,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', currentUser.id);
+
+          console.log('âœ… Tokens de notificaciÃ³n limpiados en logout');
+        } catch (tokenError) {
+          console.warn('âš ï¸ Error limpiando tokens en logout:', tokenError);
+          // No fallar el logout si falla la limpieza de tokens
+        }
+      }
+
       const { error } = await supabaseClient.auth.signOut();
       if (error) throw error;
 
       logger.clearUser();
 
       setCurrentUser(null);
+      setActiveRoleState(null);
+      setIsPostLoginFlowPending(false);
       setSession(null);
       setIsEmailConfirmed(false);
+      setAuthError(null);
     } catch (error) {
       logger.error('Logout error', error as Error);
       throw error;
@@ -794,12 +912,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const value = {
     currentUser,
+    activeRole,
+    isPostLoginFlowPending,
     loading,
     authInitialized,
     login,
     register,
     logout,
     updateCurrentUser,
+    setActiveRole,
+    startPostLoginFlow,
+    clearPostLoginFlow,
     isEmailConfirmed,
     authError,
     clearAuthError,

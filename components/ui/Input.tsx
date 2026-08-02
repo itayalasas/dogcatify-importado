@@ -1,26 +1,27 @@
 import React from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ViewStyle, TextStyle } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ViewStyle, TextStyle, StyleProp, TextInputProps } from 'react-native';
 import { Eye, EyeOff } from 'lucide-react-native';
 
 interface InputProps {
   label?: string;
   placeholder?: string;
   value: string;
-  onChangeText: (text: string) => void;
+  onChangeText?: (text: string) => void;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
-  keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad';
+  keyboardType?: TextInputProps['keyboardType'];
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   multiline?: boolean;
   numberOfLines?: number;
   editable?: boolean;
-  style?: ViewStyle;
+  style?: StyleProp<TextStyle>;
   secureTextEntry?: boolean;
   showPasswordToggle?: boolean;
   isPasswordVisible?: boolean;
   onTogglePasswordVisibility?: () => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  error?: string;
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -42,17 +43,19 @@ export const Input: React.FC<InputProps> = ({
   onTogglePasswordVisibility,
   onFocus,
   onBlur,
+  error,
 }) => {
-  const inputStyle: TextStyle[] = [
+  const inputStyle: StyleProp<TextStyle> = [
     styles.input,
-    leftIcon && styles.inputWithLeftIcon,
-    (rightIcon || showPasswordToggle) && styles.inputWithRightIcon,
-    multiline && styles.multilineInput,
-    !editable && styles.disabledInput,
+    leftIcon ? styles.inputWithLeftIcon : null,
+    (rightIcon || showPasswordToggle) ? styles.inputWithRightIcon : null,
+    multiline ? styles.multilineInput : null,
+    !editable ? styles.disabledInput : null,
+    error ? ({ borderColor: '#EF4444' } as TextStyle) : null,
     style,
   ];
 
-  const containerStyle: ViewStyle[] = [
+  const containerStyle: StyleProp<ViewStyle> = [
     styles.container,
     !editable && styles.disabledContainer,
   ];
@@ -72,7 +75,7 @@ export const Input: React.FC<InputProps> = ({
           placeholder={placeholder}
           placeholderTextColor="#9CA3AF"
           value={value}
-          onChangeText={onChangeText}
+          onChangeText={onChangeText || (() => {})}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
           multiline={multiline}
@@ -102,6 +105,7 @@ export const Input: React.FC<InputProps> = ({
           </View>
         )}
       </View>
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
     </View>
   );
 };
@@ -118,6 +122,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#374151',
     marginBottom: 6,
+  },
+  errorText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#EF4444',
+    marginTop: 4,
+    marginLeft: 4,
   },
   inputContainer: {
     position: 'relative',

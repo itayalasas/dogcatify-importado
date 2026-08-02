@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, SafeAreaView, Alert, RefreshControl, ActivityIndicator, Platform } from 'react-native';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { Linking } from 'react-native';
 import PostCard from '../components/PostCard';
 import PromotionCard from '../components/PromotionCard';
@@ -8,6 +8,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { NotificationPermissionPrompt } from '../components/NotificationPermissionPrompt';
 import { supabaseClient } from '../lib/supabase';
+import { envConfig } from '../utils/envConfig';
 
 // Componente wrapper para manejar las vistas de promociones
 const PromotionWrapper = ({ promotion, onPress, onLike }: { promotion: any; onPress: () => void; onLike: (promotionId: string) => void }) => {
@@ -48,6 +49,19 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const { t } = useLanguage();
   const { currentUser } = useAuth();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (currentUser || pathname !== '/') {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      router.replace('/auth/login');
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [currentUser, pathname]);
 
   useEffect(() => {
     if (currentUser) {
@@ -73,6 +87,8 @@ export default function Home() {
       const { data: postsData, error } = await supabaseClient
         .from('posts')
         .select('*')
+        .neq('type', 'lost_pet_found')
+        .neq('type', 'lost_pet_disabled')
         .order('created_at', { ascending: false })
         .limit(20);
 
@@ -322,12 +338,12 @@ export default function Home() {
         
         console.log('Has access token:', !!accessToken);
         
-        const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-        const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+        const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+        const supabaseKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
         
-        const headers = {
+        const headers: Record<string, string> = {
           'Content-Type': 'application/json',
-          'apikey': supabaseKey,
+          'apikey': supabaseKey || '',
           'Prefer': 'return=representation'
         };
         
@@ -361,11 +377,13 @@ export default function Home() {
         
         // Verify the update worked
         console.log('Verifying update in database...');
+        const verifyHeaders: Record<string, string> = {
+          'apikey': supabaseKey || '',
+          'Authorization': accessToken ? `Bearer ${accessToken}` : `Bearer ${supabaseKey || ''}`
+        };
+
         const verifyResponse = await fetch(`${supabaseUrl}/rest/v1/promotions?id=eq.${promotion.id}&select=clicks`, {
-          headers: {
-            'apikey': supabaseKey,
-            'Authorization': accessToken ? `Bearer ${accessToken}` : `Bearer ${supabaseKey}`
-          }
+          headers: verifyHeaders
         });
         
         if (verifyResponse.ok) {
@@ -471,7 +489,8 @@ export default function Home() {
       console.log('=== END PROMOTION CLICK DEBUG ===');
     } catch (error) {
       console.error('Error handling promotion press:', error);
-      Alert.alert('Error', `Error al procesar la promoción: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      Alert.alert('Error', `Error al procesar la promoción: ${errorMessage}`);
     }
   };
 
@@ -483,14 +502,6 @@ export default function Home() {
 
   if (!currentUser) {
     // Si no hay usuario, redirigir al login con delay para evitar errores de navegación
-    React.useEffect(() => {
-      const timer = setTimeout(() => {
-        router.replace('/auth/login');
-      }, 100);
-      
-      return () => clearTimeout(timer);
-    }, []);
-    
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingText}>Redirigiendo...</Text>

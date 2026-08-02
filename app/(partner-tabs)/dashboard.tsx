@@ -1,11 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Image, Alert, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Calendar, DollarSign, Users, Package, TrendingUp, Clock, MessageCircle, ChartBar as BarChart3, Settings, Filter } from 'lucide-react-native';
+import { Calendar, DollarSign, Users, Package, TrendingUp, Clock, MessageCircle, ChartBar as BarChart3, Settings, Filter, CreditCard } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { Button } from '../../components/ui/Button';
+import {
+  getPartnerLockedActionLabel,
+  getPartnerPlan,
+  PARTNER_PLAN_ORDER,
+  resolvePartnerPlanTier,
+  resolvePartnerAccountSubscription,
+} from '../../utils/partnerPlans';
 
 type DateFilter = 'today' | 'week' | 'month' | 'all';
 
@@ -38,7 +45,9 @@ export default function PartnerDashboard() {
     averageRating: 0,
   });
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
+  const [partnerRows, setPartnerRows] = useState<any[]>([]);
   const [recentBookings, setRecentBookings] = useState<any[]>([]);
+  const [processingOrdersPreview, setProcessingOrdersPreview] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState<DateFilter>('today');
   const [showFilterModal, setShowFilterModal] = useState(false);
@@ -46,6 +55,7 @@ export default function PartnerDashboard() {
   useEffect(() => {
     if (!currentUser?.id || !businessId) {
       setLoading(false);
+      setPartnerRows([]);
       console.log('Dashboard - Missing currentUser or businessId:', businessId);
       return;
     }
@@ -75,6 +85,14 @@ export default function PartnerDashboard() {
           };
           
           setPartnerProfile(partnerData);
+          const { data: accountPartnerRows, error: accountPartnersError } = await supabaseClient
+            .from('partners')
+            .select('subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
+            .eq('user_id', currentUser.id)
+            .eq('is_verified', true);
+
+          if (accountPartnersError) throw accountPartnersError;
+          setPartnerRows((accountPartnerRows || []) as any[]);
           fetchDashboardData(partnerData.id);
         }
       } catch (error) {
@@ -210,10 +228,12 @@ export default function PartnerDashboard() {
       setRecentBookings(recent);
       
       // Fetch orders data with date filter
+      const breakdownFilter = JSON.stringify({ partners: { [partnerId]: {} } });
       const { data: ordersData, error: ordersError } = await supabaseClient
         .from('orders')
         .select('*')
-        .eq('partner_id', partnerId)
+        .or(`partner_id.eq.${partnerId},partner_breakdown.cs.${breakdownFilter}`)
+        .eq('is_split_master', false)
         .gte('created_at', startDate.toISOString())
         .lte('created_at', endDate.toISOString())
         .order('created_at', { ascending: false });
@@ -222,13 +242,54 @@ export default function PartnerDashboard() {
         console.error('Error fetching orders:', ordersError);
       }
 
-      const orders = ordersData || [];
+      const orders = (ordersData || []).filter(order => {
+        if (order?.is_split_master) return false;
+        if (order?.partner_id === partnerId) return true;
+        if (order?.partner_breakdown?.partners && Object.prototype.hasOwnProperty.call(order.partner_breakdown.partners, partnerId)) return true;
+        if (Array.isArray(order?.items)) {
+          return order.items.some((item: any) => item?.partnerId === partnerId || item?.partner_id === partnerId);
+        }
+        return false;
+      });
       console.log(`Found ${orders.length} orders for partner in date range`);
 
+      const isServiceOrder = (order: any) => order.order_type === 'service_booking';
+
       // Calculate order stats
-      const pendingOrders = orders.filter(order => order.status === 'pending');
-      const completedOrders = orders.filter(order => order.status === 'delivered');
-      const processingOrders = orders.filter(order => ['confirmed', 'processing', 'shipped'].includes(order.status));
+      const pendingOrders = orders.filter(order => {
+        if (isServiceOrder(order)) {
+          return ['pending', 'reserved', 'payment_failed'].includes(order.status);
+        }
+        return ['pending', 'insufficient_stock'].includes(order.status);
+      });
+
+      const completedOrders = orders.filter(order => {
+        if (isServiceOrder(order)) {
+          return ['completed', 'cancelled', 'refunded'].includes(order.status);
+        }
+        return ['delivered', 'cancelled', 'refunded'].includes(order.status);
+      });
+
+      const processingOrders = orders.filter(order => {
+        if (isServiceOrder(order)) {
+          return order.status === 'confirmed';
+        }
+        return ['confirmed', 'processing', 'preparing', 'shipped'].includes(order.status);
+      });
+
+      const processingPreview = processingOrders
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 5)
+        .map(order => ({
+          id: order.id,
+          orderNumber: order.order_number,
+          status: order.status,
+          createdAt: order.created_at,
+          totalAmount: order.total_amount || 0,
+          orderType: order.order_type,
+        }));
+
+      setProcessingOrdersPreview(processingPreview);
 
       const ordersRevenue = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
 
@@ -326,6 +387,14 @@ export default function PartnerDashboard() {
 
   const handleManageServices = () => {
     if (partnerProfile && partnerProfile.id) {
+      if (partnerProfile.businessType === 'shelter') {
+        router.push({
+          pathname: '/partner/manage-adoptions',
+          params: { partnerId: partnerProfile.id }
+        });
+        return;
+      }
+
       router.push({
         pathname: '/partner/configure-activities',
         params: { 
@@ -382,6 +451,34 @@ export default function PartnerDashboard() {
     }
   };
 
+  const handleViewProcessingOrderDetail = (orderId: string) => {
+    if (partnerProfile?.id) {
+      router.push({
+        pathname: '/partner/orders',
+        params: {
+          partnerId: partnerProfile.id,
+          activeTab: 'processing',
+          openOrderId: orderId,
+        }
+      });
+    }
+  };
+
+  const handleOpenOrdersByTab = (tab: 'pending' | 'processing' | 'completed') => {
+    if (!partnerProfile?.id) {
+      Alert.alert('Error', 'No se pudo obtener la información del negocio');
+      return;
+    }
+
+    router.push({
+      pathname: '/partner/orders',
+      params: {
+        partnerId: partnerProfile.id,
+        activeTab: tab,
+      }
+    });
+  };
+
   // Función para verificar si una funcionalidad está habilitada
   const isFeatureEnabled = (featureKey: string): boolean => {
     if (!partnerProfile?.features) return false;
@@ -393,6 +490,10 @@ export default function PartnerDashboard() {
     return partnerProfile?.businessType === 'shop';
   };
 
+  const isShelterBusiness = (): boolean => {
+    return partnerProfile?.businessType === 'shelter';
+  };
+
   // Función para verificar si debe mostrar la gestión de productos
   const shouldShowProducts = (): boolean => {
     return isShopBusiness() || isFeatureEnabled('products');
@@ -400,8 +501,36 @@ export default function PartnerDashboard() {
 
   // Función para verificar si debe mostrar la agenda
   const shouldShowAgenda = (): boolean => {
-    return isFeatureEnabled('agenda') || ['veterinary', 'grooming', 'boarding'].includes(partnerProfile?.businessType);
+    const agendaEnabled = partnerProfile?.features?.agenda !== false;
+    return partnerProfile?.businessType !== 'shop' && agendaEnabled;
   };
+  const manageServicesLabel = isShopBusiness()
+    ? 'Gestionar Productos'
+    : isShelterBusiness()
+      ? 'Gestionar Adopciones'
+      : 'Gestionar Servicios';
+  const accountSubscription = resolvePartnerAccountSubscription(partnerRows);
+  const effectivePartnerTier = accountSubscription?.subscriptionPlanTier || resolvePartnerPlanTier(
+    partnerProfile?.subscription_plan_tier,
+    partnerProfile?.subscription_plan_status,
+    partnerProfile?.subscription_plan_expires_at,
+  );
+  const accountPlanIndex = PARTNER_PLAN_ORDER.indexOf(effectivePartnerTier);
+  const growthPlanIndex = PARTNER_PLAN_ORDER.indexOf('growth');
+  const proPlanIndex = PARTNER_PLAN_ORDER.indexOf('pro');
+  const partnerPlan = getPartnerPlan(effectivePartnerTier);
+  const canViewClients = accountPlanIndex >= growthPlanIndex;
+  const canViewInsights = accountPlanIndex >= growthPlanIndex;
+  const canViewAdoptions = accountPlanIndex >= proPlanIndex && partnerProfile?.businessType === 'shelter';
+
+  const showPlanUpgradeAlert = (module: 'clients' | 'insights' | 'adoptions') => {
+    Alert.alert(
+      'Plan requerido',
+      `${getPartnerLockedActionLabel(module)} para este negocio.`,
+      [{ text: 'Entendido' }]
+    );
+  };
+
   const getBusinessTypeIcon = (type: string) => { 
     switch (type) {
       case 'veterinary': return '🏥';
@@ -461,10 +590,17 @@ export default function PartnerDashboard() {
             </Text>
           </View>
         </View>
-        <View style={styles.statusBadge}>
-          <Text style={styles.statusText}>
-            {partnerProfile.isVerified ? '✅ Verificado' : '⏳ Pendiente'}
-          </Text>
+        <View style={styles.headerBadges}>
+          <View style={styles.statusBadge}>
+            <Text style={styles.statusText}>
+              {partnerProfile.isVerified ? '✅ Verificado' : '⏳ Pendiente'}
+            </Text>
+          </View>
+          <View style={[styles.planBadge, { backgroundColor: partnerPlan.surface, borderColor: partnerPlan.border }]}>
+            <Text style={[styles.planBadgeText, { color: partnerPlan.accent }]}>
+              Plan {partnerPlan.name}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -500,23 +636,72 @@ export default function PartnerDashboard() {
               <Text style={styles.statLabel}>Ingresos</Text>
             </Card>
 
-            <Card style={styles.statCard}>
-              <View style={styles.statHeader}>
-                <Clock size={20} color="#F59E0B" />
-                <Text style={styles.statValue}>{stats.pendingBookings + stats.pendingOrders}</Text>
-              </View>
-              <Text style={styles.statLabel}>Pendientes</Text>
-            </Card>
+            <TouchableOpacity
+              style={styles.statCardTouchable}
+              onPress={() => handleOpenOrdersByTab('pending')}
+            >
+              <Card style={styles.statCard}>
+                <View style={styles.statHeader}>
+                  <Clock size={20} color="#F59E0B" />
+                  <Text style={styles.statValue}>{stats.pendingBookings + stats.pendingOrders}</Text>
+                </View>
+                <Text style={styles.statLabel}>Pendientes</Text>
+              </Card>
+            </TouchableOpacity>
 
-            <Card style={styles.statCard}>
-              <View style={styles.statHeader}>
-                <TrendingUp size={20} color="#8B5CF6" />
-                <Text style={styles.statValue}>{stats.completedBookings + stats.completedOrders}</Text>
-              </View>
-              <Text style={styles.statLabel}>Completados</Text>
-            </Card>
+            <TouchableOpacity
+              style={styles.statCardTouchable}
+              onPress={() => handleOpenOrdersByTab('completed')}
+            >
+              <Card style={styles.statCard}>
+                <View style={styles.statHeader}>
+                  <TrendingUp size={20} color="#8B5CF6" />
+                  <Text style={styles.statValue}>{stats.completedBookings + stats.completedOrders}</Text>
+                </View>
+                <Text style={styles.statLabel}>Completados</Text>
+              </Card>
+            </TouchableOpacity>
           </View>
         </View>
+
+        <Card style={styles.crmCard}>
+          <View style={styles.crmHeader}>
+            <View style={styles.crmHeaderLeft}>
+              <Users size={20} color="#F59E0B" />
+              <View>
+                <Text style={styles.crmTitle}>CRM y retención</Text>
+                <Text style={styles.crmSubtitle}>
+                  Segmenta clientes, reactivá a los que se enfriaron y seguí cada contacto.
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.crmStats}>
+            <View style={styles.crmStat}>
+              <Text style={styles.crmStatValue}>{stats.totalCustomers}</Text>
+              <Text style={styles.crmStatLabel}>Clientes</Text>
+            </View>
+            <View style={styles.crmStat}>
+              <Text style={styles.crmStatValue}>{stats.pendingBookings + stats.pendingOrders}</Text>
+              <Text style={styles.crmStatLabel}>Pendientes</Text>
+            </View>
+            <View style={styles.crmStat}>
+              <Text style={styles.crmStatValue}>{stats.completedBookings + stats.completedOrders}</Text>
+              <Text style={styles.crmStatLabel}>Completados</Text>
+            </View>
+          </View>
+
+          <Text style={styles.crmNote}>
+            Abrí la lista para ver último contacto, datos de contacto y oportunidades de reactivación.
+          </Text>
+
+          {canViewClients ? (
+            <Button title="Abrir CRM" onPress={handleViewClients} size="medium" />
+          ) : (
+            <Text style={styles.crmLockedText}>{getPartnerLockedActionLabel('clients')}</Text>
+          )}
+        </Card>
 
         {/* Quick Actions */ }
         <View style={styles.section}>
@@ -537,51 +722,115 @@ export default function PartnerDashboard() {
               onPress={handleManageServices}
             >
               <Package size={24} color="#10B981" />
-              <Text style={styles.quickActionText}>Gestionar Servicios</Text>
+              <Text style={styles.quickActionText}>{manageServicesLabel}</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.quickAction} 
-              onPress={handleViewClients}
+
+            <TouchableOpacity
+              style={[
+                styles.quickAction,
+                !canViewClients ? styles.quickActionLocked : null,
+              ]}
+              onPress={canViewClients ? handleViewClients : () => showPlanUpgradeAlert('clients')}
             >
-              <Users size={24} color="#F59E0B" />
-              <Text style={styles.quickActionText}>Ver Clientes</Text>
+              <Users size={24} color={canViewClients ? '#F59E0B' : '#A855F7'} />
+              <Text style={styles.quickActionText}>CRM y clientes</Text>
+              {!canViewClients && (
+                <Text style={styles.quickActionSubtext}>
+                  {getPartnerLockedActionLabel('clients')}
+                </Text>
+              )}
+              {canViewClients && (
+                <Text style={styles.quickActionSubtext}>
+                  Seguimiento y reactivación
+                </Text>
+              )}
             </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.quickAction} 
-              onPress={() => router.push({
+
+            <TouchableOpacity
+              style={[
+                styles.quickAction,
+                !canViewInsights ? styles.quickActionLocked : null,
+              ]}
+              onPress={canViewInsights ? () => router.push({
                 pathname: '/partner/business-insights',
                 params: { partnerId: partnerProfile?.id }
-              })}
+              }) : () => showPlanUpgradeAlert('insights')}
             >
-              <BarChart3 size={24} color="#8B5CF6" />
+              <BarChart3 size={24} color={canViewInsights ? '#8B5CF6' : '#A855F7'} />
               <Text style={styles.quickActionText}>Inteligencia de Negocio</Text>
+              {!canViewInsights && (
+                <Text style={styles.quickActionSubtext}>
+                  {getPartnerLockedActionLabel('insights')}
+                </Text>
+              )}
             </TouchableOpacity>
-            
-            {/* Mostrar contactos de adopción solo para refugios */}
-            {partnerProfile?.business_type === 'shelter' && (
-              <TouchableOpacity 
-                style={styles.quickAction}
-                onPress={() => router.push({
-                  pathname: '/(partner-tabs)/chat-contacts',
-                  params: { businessId: partnerProfile.id }
-                })}
-              >
-                <MessageCircle size={24} color="#8B5CF6" />
-                <Text style={styles.quickActionText}>Contactos Adopción</Text>
-              </TouchableOpacity>
-            )}
-            
+
             {shouldShowProducts() && (
-              <TouchableOpacity 
-                style={styles.quickAction}
-                onPress={handleViewOrders}
-              >
-                <Package size={24} color="#8B5CF6" />
+            <TouchableOpacity 
+              style={styles.quickAction}
+              onPress={handleViewOrders}
+            >
+              <Package size={24} color="#8B5CF6" />
                 <Text style={styles.quickActionText}>
                   Ver Pedidos
                 </Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.quickAction,
+                partnerProfile?.mercadopago_config?.is_oauth ? styles.quickActionSuccess : null,
+              ]}
+              onPress={() => router.push('/profile/mercadopago-config')}
+            >
+              <CreditCard
+                size={24}
+                color={partnerProfile?.mercadopago_config?.is_oauth ? '#10B981' : '#F59E0B'}
+              />
+              <Text style={styles.quickActionText}>Mercado Pago</Text>
+              <Text style={styles.quickActionSubtext}>
+                {partnerProfile?.mercadopago_config?.is_oauth
+                  ? 'OAuth activo'
+                  : partnerProfile?.mercadopago_connected
+                    ? 'Conexión pendiente'
+                    : 'Conectar cobros'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.quickAction}
+              onPress={() => router.push({
+                pathname: '/partner/subscription',
+                params: { businessId: partnerProfile.id },
+              })}
+            >
+              <DollarSign size={24} color="#10B981" />
+              <Text style={styles.quickActionText}>Planes</Text>
+              <Text style={styles.quickActionSubtext}>
+                Gestiona tu plan y tu prueba
+              </Text>
+            </TouchableOpacity>
+
+            {/* Mostrar contactos de adopción solo para refugios */}
+            {partnerProfile?.businessType === 'shelter' && (
+              <TouchableOpacity 
+                style={[
+                  styles.quickAction,
+                  !canViewAdoptions ? styles.quickActionLocked : null,
+                ]}
+                onPress={canViewAdoptions ? () => router.push({
+                  pathname: '/(partner-tabs)/chat-contacts',
+                  params: { businessId: partnerProfile.id }
+                }) : () => showPlanUpgradeAlert('adoptions')}
+              >
+                <MessageCircle size={24} color={canViewAdoptions ? '#8B5CF6' : '#A855F7'} />
+                <Text style={styles.quickActionText}>Contactos Adopción</Text>
+                {!canViewAdoptions && (
+                  <Text style={styles.quickActionSubtext}>
+                    {getPartnerLockedActionLabel('adoptions')}
+                  </Text>
+                )}
               </TouchableOpacity>
             )}
           </View>
@@ -608,6 +857,34 @@ export default function PartnerDashboard() {
                   ]}>
                     <Text style={styles.bookingStatusText}>{getStatusText(booking.status)}</Text>
                   </View>
+                </View>
+              ))
+            )}
+          </Card>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Pedidos en Proceso</Text>
+          <Card style={styles.bookingsCard}>
+            {processingOrdersPreview.length === 0 ? (
+              <Text style={styles.emptyText}>No hay pedidos en proceso</Text>
+            ) : (
+              processingOrdersPreview.map((order) => (
+                <View key={order.id} style={styles.processingOrderItem}>
+                  <View style={styles.processingOrderInfo}>
+                    <Text style={styles.processingOrderTitle}>
+                      Pedido {order.orderNumber || `#${order.id.slice(-6)}`}
+                    </Text>
+                    <Text style={styles.processingOrderMeta}>
+                      {new Date(order.createdAt).toLocaleDateString()} · {formatCurrency(order.totalAmount)}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.processingOrderButton}
+                    onPress={() => handleViewProcessingOrderDetail(order.id)}
+                  >
+                    <Text style={styles.processingOrderButtonText}>Ver detalle</Text>
+                  </TouchableOpacity>
                 </View>
               ))
             )}
@@ -788,11 +1065,25 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginTop: 2,
   },
+  headerBadges: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
   statusBadge: {
     backgroundColor: '#F3F4F6',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
+  },
+  planBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  planBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
   },
   statusText: {
     fontSize: 12,
@@ -823,6 +1114,10 @@ const styles = StyleSheet.create({
     minWidth: '45%',
     padding: 16,
   },
+  statCardTouchable: {
+    flex: 1,
+    minWidth: '45%',
+  },
   statHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -839,22 +1134,92 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
   },
-  quickActions: {
+  crmCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 16,
+  },
+  crmHeader: {
+    marginBottom: 12,
+  },
+  crmHeaderLeft: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
+    alignItems: 'center',
     gap: 12,
   },
-  quickAction: {
+  crmTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  crmSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  crmStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 12,
+  },
+  crmStat: {
     flex: 1,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+  },
+  crmStatValue: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+  },
+  crmStatLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  crmNote: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#4B5563',
+    lineHeight: 19,
+    marginBottom: 12,
+  },
+  crmLockedText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  quickActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    gap: 12,
+    paddingBottom: 4,
+  },
+  quickAction: {
+    width: '48%',
     backgroundColor: '#FFFFFF',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    minHeight: 108,
+  },
+  quickActionLocked: {
+    backgroundColor: '#FAF5FF',
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
   },
   quickActionText: {
     fontSize: 12,
@@ -862,6 +1227,20 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginTop: 8,
     textAlign: 'center',
+    lineHeight: 16,
+  },
+  quickActionSubtext: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 4,
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  quickActionSuccess: {
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    backgroundColor: '#ECFDF5',
   },
   disabledQuickAction: {
     opacity: 0.5,
@@ -901,6 +1280,42 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'Inter-Medium',
     color: '#374151',
+  },
+  processingOrderItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    gap: 12,
+  },
+  processingOrderInfo: {
+    flex: 1,
+  },
+  processingOrderTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  processingOrderMeta: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  processingOrderButton: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  processingOrderButtonText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E40AF',
   },
   loadingContainer: {
     flex: 1,

@@ -1,14 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Dimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, TrendingUp, Users, MapPin, Calendar, Target, Award, ChartBar as BarChart3, ChartPie as PieChart, Activity } from 'lucide-react-native';
+import { ArrowLeft, TrendingUp, Users, MapPin, Calendar, Target, Award, DollarSign, ChartBar as BarChart3, ChartPie as PieChart, Activity } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import {
+  canAccessPartnerModule,
+  getPartnerLockedActionLabel,
+  resolvePartnerAccountSubscription,
+  resolvePartnerPlanTier,
+} from '../../utils/partnerPlans';
 
 const { width } = Dimensions.get('window');
 
 interface BusinessInsights {
+  insightMode: 'shop' | 'services';
+  totalOperations: number;
+  totalRevenue: number;
   totalPets: number;
   petsBySpecies: { species: string; count: number; percentage: number }[];
   petsByAge: { ageRange: string; count: number; percentage: number }[];
@@ -23,35 +32,82 @@ interface BusinessInsights {
 
 export default function BusinessInsights() {
   const { partnerId } = useLocalSearchParams<{ partnerId: string }>();
+  const normalizedPartnerId = Array.isArray(partnerId) ? partnerId[0] : partnerId;
   const { currentUser } = useAuth();
   const [insights, setInsights] = useState<BusinessInsights | null>(null);
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [selectedTimeRange, setSelectedTimeRange] = useState<'1m' | '3m' | '6m' | '1y'>('3m');
   const [locationInsights, setLocationInsights] = useState<any>(null);
+  const [accessDenied, setAccessDenied] = useState(false);
+
+  const loadAccountSubscription = async (userId?: string | null) => {
+    if (!userId) {
+      return null;
+    }
+
+    const { data, error } = await supabaseClient
+      .from('partners')
+      .select('subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
+      .eq('user_id', userId)
+      .eq('is_verified', true);
+
+    if (error) {
+      throw error;
+    }
+
+    return resolvePartnerAccountSubscription(data || []);
+  };
 
   useEffect(() => {
-    if (partnerId) {
+    if (normalizedPartnerId && currentUser?.id) {
+      setLoading(true);
+      setAccessDenied(false);
+      setInsights(null);
+      setLocationInsights(null);
+      setPartnerProfile(null);
       fetchPartnerProfile();
       fetchBusinessInsights();
       fetchLocationBasedInsights();
     }
-  }, [partnerId, selectedTimeRange]);
+  }, [normalizedPartnerId, selectedTimeRange, currentUser?.id]);
 
   const fetchPartnerProfile = async () => {
     try {
-      const { data, error } = await supabaseClient
-        .from('partners')
-        .select('*')
-        .eq('id', partnerId)
-        .single();
+      const [{ data, error }, accountSubscription] = await Promise.all([
+        supabaseClient
+          .from('partners')
+          .select('*, subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
+          .eq('id', normalizedPartnerId)
+          .single(),
+        loadAccountSubscription(currentUser?.id),
+      ]);
       
       if (error) throw error;
+
+      const effectiveSubscriptionTier =
+        accountSubscription?.subscriptionPlanTier ||
+        resolvePartnerPlanTier(
+          data.subscription_plan_tier,
+          data.subscription_plan_status,
+          data.subscription_plan_expires_at,
+        );
+      const effectiveSubscriptionStatus =
+        accountSubscription?.subscriptionPlanStatus ||
+        data.subscription_plan_status ||
+        null;
+      const effectiveSubscriptionExpiresAt =
+        accountSubscription?.subscriptionPlanExpiresAt ||
+        data.subscription_plan_expires_at ||
+        null;
       
       setPartnerProfile({
         id: data.id,
         businessName: data.business_name,
         businessType: data.business_type,
+        subscriptionPlanTier: effectiveSubscriptionTier,
+        subscriptionPlanStatus: effectiveSubscriptionStatus,
+        subscriptionPlanExpiresAt: effectiveSubscriptionExpiresAt,
         address: data.address,
         logo: data.logo,
         rating: data.rating || 0,
@@ -80,14 +136,40 @@ export default function BusinessInsights() {
       console.log('Fetching location-based insights for partner:', partnerId);
       
       // 1. Obtener ubicación del negocio
-      const { data: partnerData, error: partnerError } = await supabaseClient
-        .from('partners')
-        .select('latitud, longitud, address, barrio, department_id, country_id')
-        .eq('id', partnerId)
-        .single();
+      const [{ data: partnerData, error: partnerError }, accountSubscription] = await Promise.all([
+        supabaseClient
+          .from('partners')
+          .select('latitud, longitud, address, barrio, department_id, country_id, business_type, subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
+          .eq('id', normalizedPartnerId)
+          .single(),
+        loadAccountSubscription(currentUser?.id),
+      ]);
       
       if (partnerError) {
         console.error('Error fetching partner location:', partnerError);
+        return;
+      }
+
+      const planTier =
+        accountSubscription?.subscriptionPlanTier ||
+        resolvePartnerPlanTier(
+          partnerData?.subscription_plan_tier,
+          partnerData?.subscription_plan_status,
+          partnerData?.subscription_plan_expires_at,
+        );
+      if (!canAccessPartnerModule(
+        planTier,
+        'insights',
+        partnerData?.business_type,
+        accountSubscription?.subscriptionPlanStatus || partnerData?.subscription_plan_status,
+        accountSubscription?.subscriptionPlanExpiresAt || partnerData?.subscription_plan_expires_at,
+      )) {
+        setLocationInsights({
+          nearbyPets: 0,
+          hasCoordinates: false,
+          locked: true,
+          message: getPartnerLockedActionLabel('insights'),
+        });
         return;
       }
       
@@ -146,7 +228,7 @@ export default function BusinessInsights() {
         
         // Verificar si está en el mismo barrio
         if (user.barrio && partnerData.barrio && 
-            user.barrio.toLowerCase() === partnerData.barrio.toLowerCase()) {
+            String(user.barrio).toLowerCase() === String(partnerData.barrio).toLowerCase()) {
           sameNeighborhood += userPetsCount;
         }
         
@@ -313,6 +395,32 @@ export default function BusinessInsights() {
   const fetchBusinessInsights = async () => {
     try {
       setLoading(true);
+
+      const [{ data: partnerTypeData }, accountSubscription] = await Promise.all([
+        supabaseClient
+          .from('partners')
+          .select('business_type, subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
+          .eq('id', normalizedPartnerId)
+          .single(),
+        loadAccountSubscription(currentUser?.id),
+      ]);
+
+      const businessType = partnerTypeData?.business_type || partnerProfile?.businessType;
+      const planTier =
+        accountSubscription?.subscriptionPlanTier ||
+        resolvePartnerPlanTier(
+          partnerTypeData?.subscription_plan_tier,
+          partnerTypeData?.subscription_plan_status,
+          partnerTypeData?.subscription_plan_expires_at,
+        );
+      const subscriptionStatus = accountSubscription?.subscriptionPlanStatus || partnerTypeData?.subscription_plan_status || null;
+      const subscriptionExpiresAt = accountSubscription?.subscriptionPlanExpiresAt || partnerTypeData?.subscription_plan_expires_at || null;
+      if (!canAccessPartnerModule(planTier, 'insights', businessType, subscriptionStatus, subscriptionExpiresAt)) {
+        setAccessDenied(true);
+        setLoading(false);
+        return;
+      }
+      const isShopBusiness = businessType === 'shop';
       
       // 1. Total de mascotas registradas
       const { count: totalPets } = await supabaseClient
@@ -357,14 +465,14 @@ export default function BusinessInsights() {
           let ageInYears = pet.age || 0;
           
           // Convert age to years if using age_display
-          if (pet.age_display) {
-            const { value, unit } = pet.age_display;
+          if (pet.age_display && typeof pet.age_display === 'object') {
+            const { value, unit } = pet.age_display as { value?: number; unit?: string };
             if (unit === 'months') {
-              ageInYears = value / 12;
+              ageInYears = (value || 0) / 12;
             } else if (unit === 'days') {
-              ageInYears = value / 365;
+              ageInYears = (value || 0) / 365;
             } else {
-              ageInYears = value;
+              ageInYears = value || 0;
             }
           }
           
@@ -406,50 +514,125 @@ export default function BusinessInsights() {
         .slice(0, 5)
         .map(([breed, count]: [string, any]) => ({ breed, count }));
 
-      // 5. Demanda de servicios
-      const { data: bookingsData, error: bookingsError } = await supabaseClient
-        .from('bookings')
-        .select('service_name, created_at, time')
-        .eq('partner_id', partnerId)
-        .gte('created_at', getDateRange(selectedTimeRange));
+      // 5 y 6. Demanda + horas pico con datos reales según tipo de negocio
+      let servicesDemandArray: { service: string; count: number; trend: string }[] = [];
+      let peakHours: { hour: string; bookings: number }[] = [];
+      let totalOperations = 0;
+      let totalRevenue = 0;
 
-      if (bookingsError) {
-        console.error('Error fetching bookings data:', bookingsError);
+      if (isShopBusiness) {
+        const breakdownFilter = JSON.stringify({ partners: { [normalizedPartnerId as string]: {} } });
+
+        const { data: ordersData, error: ordersError } = await supabaseClient
+          .from('orders')
+          .select('id, created_at, total_amount, items, partner_id, partner_breakdown')
+          .or(`partner_id.eq.${normalizedPartnerId},partner_breakdown.cs.${breakdownFilter}`)
+          .eq('is_split_master', false)
+          .gte('created_at', getDateRange(selectedTimeRange));
+
+        if (ordersError) {
+          console.error('Error fetching orders data for insights:', ordersError);
+        }
+
+        const isOrderForCurrentPartner = (order: any) => {
+          if (order?.is_split_master) return false;
+          if (order?.partner_id === normalizedPartnerId) return true;
+          if (order?.partner_breakdown?.partners && Object.prototype.hasOwnProperty.call(order.partner_breakdown.partners, normalizedPartnerId as string)) {
+            return true;
+          }
+          if (Array.isArray(order?.items)) {
+            return order.items.some((item: any) => item?.partnerId === normalizedPartnerId || item?.partner_id === normalizedPartnerId);
+          }
+          return false;
+        };
+
+        const partnerOrders = (ordersData || []).filter(isOrderForCurrentPartner);
+        totalOperations = partnerOrders.length;
+
+        const productsMap = partnerOrders.reduce((acc: Record<string, number>, order: any) => {
+          if (typeof order?.total_amount === 'number') {
+            totalRevenue += order.total_amount;
+          }
+
+          if (!Array.isArray(order?.items)) return acc;
+
+          order.items.forEach((item: any) => {
+            const belongsToPartner = item?.partnerId === normalizedPartnerId || item?.partner_id === normalizedPartnerId || order?.partner_id === normalizedPartnerId;
+            if (!belongsToPartner) return;
+
+            const productName = item?.name || 'Producto';
+            const quantity = Number(item?.quantity || 1);
+            acc[productName] = (acc[productName] || 0) + quantity;
+          });
+
+          return acc;
+        }, {});
+
+        servicesDemandArray = Object.entries(productsMap)
+          .sort(([, a], [, b]) => (b as number) - (a as number))
+          .slice(0, 5)
+          .map(([service, count]) => ({
+            service,
+            count: count as number,
+            trend: 'stable'
+          }));
+
+        const hourlySalesMap = partnerOrders.reduce((acc: Record<string, number>, order: any) => {
+          if (!order?.created_at) return acc;
+
+          const orderDate = new Date(order.created_at);
+          const hour = `${orderDate.getHours().toString().padStart(2, '0')}:00`;
+          acc[hour] = (acc[hour] || 0) + 1;
+          return acc;
+        }, {});
+
+        peakHours = Object.entries(hourlySalesMap)
+          .sort(([, a], [, b]) => (b as number) - (a as number))
+          .slice(0, 6)
+          .map(([hour, bookings]) => ({ hour, bookings: bookings as number }));
+      } else {
+        const { data: bookingsData, error: bookingsError } = await supabaseClient
+          .from('bookings')
+          .select('service_name, created_at, time')
+          .eq('partner_id', normalizedPartnerId)
+          .gte('created_at', getDateRange(selectedTimeRange));
+
+        if (bookingsError) {
+          console.error('Error fetching bookings data:', bookingsError);
+        }
+
+        totalOperations = bookingsData?.length || 0;
+
+        const servicesDemandMap = bookingsData?.reduce((acc: any, booking) => {
+          const service = booking.service_name || 'Otros';
+          acc[service] = (acc[service] || 0) + 1;
+          return acc;
+        }, {}) || {};
+
+        servicesDemandArray = Object.entries(servicesDemandMap)
+          .sort(([, a]: [string, any], [, b]: [string, any]) => b - a)
+          .slice(0, 5)
+          .map(([service, count]: [string, any]) => ({
+            service,
+            count,
+            trend: 'stable'
+          }));
+
+        const hourlyBookings: { [key: string]: number } = {};
+
+        bookingsData?.forEach(booking => {
+          if (booking.time) {
+            const hour = booking.time.split(':')[0] + ':00';
+            hourlyBookings[hour] = (hourlyBookings[hour] || 0) + 1;
+          }
+        });
+
+        peakHours = Object.entries(hourlyBookings)
+          .sort(([, a], [, b]) => (b as number) - (a as number))
+          .slice(0, 6)
+          .map(([hour, bookings]) => ({ hour, bookings: bookings as number }));
       }
 
-      // Calculate real services demand
-      const servicesDemandMap = bookingsData?.reduce((acc: any, booking) => {
-        const service = booking.service_name || 'Otros';
-        acc[service] = (acc[service] || 0) + 1;
-        return acc;
-      }, {}) || {};
-
-      const servicesDemandArray = Object.entries(servicesDemandMap)
-        .sort(([,a]: [string, any], [,b]: [string, any]) => b - a)
-        .slice(0, 5)
-        .map(([service, count]: [string, any]) => ({
-          service,
-          count,
-          trend: 'stable' // Real trend calculation would need historical data
-        }));
-
-      // 6. Horas pico - DATOS REALES basados en bookings
-      const hourlyBookings: { [key: string]: number } = {};
-      
-      bookingsData?.forEach(booking => {
-        if (booking.time) {
-          const hour = booking.time.split(':')[0] + ':00';
-          hourlyBookings[hour] = (hourlyBookings[hour] || 0) + 1;
-        }
-      });
-      
-      // Convert to array and get top 6 hours
-      const peakHours = Object.entries(hourlyBookings)
-        .sort(([,a], [,b]) => (b as number) - (a as number))
-        .slice(0, 6)
-        .map(([hour, bookings]) => ({ hour, bookings: bookings as number }));
-      
-      // If no data, show default hours with 0 bookings
       if (peakHours.length === 0) {
         peakHours.push(
           { hour: '09:00', bookings: 0 },
@@ -476,7 +659,7 @@ export default function BusinessInsights() {
       const { count: totalPartners } = await supabaseClient
         .from('partners')
         .select('*', { count: 'exact', head: true })
-        .eq('business_type', partnerProfile?.businessType)
+        .eq('business_type', businessType)
         .eq('is_verified', true);
 
       const competitorRanking = [{
@@ -486,6 +669,9 @@ export default function BusinessInsights() {
       }];
 
       setInsights({
+        insightMode: isShopBusiness ? 'shop' : 'services',
+        totalOperations,
+        totalRevenue,
         totalPets: totalPets || 0,
         petsBySpecies,
         petsByAge,
@@ -525,6 +711,13 @@ export default function BusinessInsights() {
     }
   };
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency: 'ARS',
+    }).format(amount);
+  };
+
   const renderMetricCard = (title: string, value: string | number, subtitle?: string, icon?: any, trend?: 'up' | 'down') => (
     <Card style={styles.metricCard}>
       <View style={styles.metricHeader}>
@@ -556,6 +749,49 @@ export default function BusinessInsights() {
         <View style={styles.loadingContainer}>
           <Activity size={48} color="#2D6A6F" />
           <Text style={styles.loadingText}>Analizando datos del mercado...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const canViewInsights = canAccessPartnerModule(
+    partnerProfile?.subscriptionPlanTier,
+    'insights',
+    partnerProfile?.businessType,
+    partnerProfile?.subscriptionPlanStatus,
+    partnerProfile?.subscriptionPlanExpiresAt,
+  );
+
+  if (accessDenied || (partnerProfile && !canViewInsights)) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color="#111827" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Inteligencia de Negocio</Text>
+          <View style={styles.placeholder} />
+        </View>
+
+        <View style={styles.lockedContainer}>
+          <Card style={styles.lockedCard}>
+            <Text style={styles.lockedPlanBadge}>
+              {getPartnerLockedActionLabel('insights')}
+            </Text>
+            <Text style={styles.lockedTitle}>Módulo disponible en Growth</Text>
+            <Text style={styles.lockedText}>
+              El análisis comercial y la información de rendimiento se habilitan a partir del plan Growth.
+            </Text>
+            <Text style={styles.lockedTextSecondary}>
+              Desde este plan también quedan habilitados los clientes y la inteligencia de negocio para tomar mejores decisiones.
+            </Text>
+            <TouchableOpacity
+              style={styles.lockedButton}
+              onPress={() => router.back()}
+            >
+              <Text style={styles.lockedButtonText}>Volver</Text>
+            </TouchableOpacity>
+          </Card>
         </View>
       </SafeAreaView>
     );
@@ -623,31 +859,37 @@ export default function BusinessInsights() {
             <Card style={styles.locationCard}>
               <Text style={styles.locationTitle}>📍 Tu Ubicación</Text>
               <Text style={styles.locationText}>
-                {locationInsights.partnerLocation.address}
+                {locationInsights?.partnerLocation?.address || 'Dirección no disponible'}
               </Text>
-              {locationInsights.partnerLocation.barrio && (
+              {locationInsights?.partnerLocation?.barrio && (
                 <Text style={styles.locationBarrio}>
                   Barrio: {locationInsights.partnerLocation.barrio}
                 </Text>
               )}
               <Text style={styles.locationCoords}>
-                GPS: {locationInsights.partnerLocation.lat.toFixed(4)}, {locationInsights.partnerLocation.lon.toFixed(4)}
+                GPS: {(locationInsights?.partnerLocation?.lat ?? 0).toFixed(4)}, {(locationInsights?.partnerLocation?.lon ?? 0).toFixed(4)}
               </Text>
             </Card>
           )}
           
           <View style={styles.metricsGrid}>
             {renderMetricCard(
-              'Total Mascotas',
-              insights?.totalPets || 0,
-              'Registradas en la plataforma',
+              insights?.insightMode === 'shop' ? 'Ventas del período' : 'Reservas del período',
+              insights?.totalOperations || 0,
+              insights?.insightMode === 'shop' ? 'Órdenes reales del negocio' : 'Turnos reales del negocio',
               <Users size={24} color="#3B82F6" />
             )}
             {renderMetricCard(
-              'En tu Zona',
-              locationInsights?.nearbyPets || 0,
-              locationInsights?.hasCoordinates ? 'Dentro de 5km de tu negocio' : 'Configure ubicación GPS',
-              <MapPin size={24} color="#10B981" />
+              insights?.insightMode === 'shop' ? 'Ingresos del período' : 'En tu Zona',
+              insights?.insightMode === 'shop'
+                ? formatCurrency(insights?.totalRevenue || 0)
+                : (locationInsights?.nearbyPets || 0),
+              insights?.insightMode === 'shop'
+                ? 'Facturación estimada por pedidos reales'
+                : (locationInsights?.hasCoordinates ? 'Dentro de 5km de tu negocio' : 'Configure ubicación GPS'),
+              insights?.insightMode === 'shop'
+                ? <DollarSign size={24} color="#10B981" />
+                : <MapPin size={24} color="#10B981" />
             )}
             {renderMetricCard(
               'Tu Ranking',
@@ -678,13 +920,13 @@ export default function BusinessInsights() {
               
               <View style={styles.locationMetric}>
                 <Text style={styles.locationMetricTitle}>Dentro de 10km</Text>
-                <Text style={styles.locationMetricValue}>{locationInsights.withinRadius['10km']}</Text>
+                <Text style={styles.locationMetricValue}>{locationInsights?.withinRadius?.['10km'] || 0}</Text>
                 <Text style={styles.locationMetricLabel}>mascotas</Text>
               </View>
               
               <View style={styles.locationMetric}>
                 <Text style={styles.locationMetricTitle}>Dentro de 20km</Text>
-                <Text style={styles.locationMetricValue}>{locationInsights.withinRadius['20km']}</Text>
+                <Text style={styles.locationMetricValue}>{locationInsights?.withinRadius?.['20km'] || 0}</Text>
                 <Text style={styles.locationMetricLabel}>mascotas</Text>
               </View>
             </View>
@@ -739,7 +981,7 @@ export default function BusinessInsights() {
               style={styles.configureLocationButton}
               onPress={() => router.push({
                 pathname: '/partner/configure-business',
-                params: { businessId: partnerId }
+                params: { businessId: normalizedPartnerId }
               })}
             >
               <MapPin size={16} color="#3B82F6" />
@@ -792,9 +1034,16 @@ export default function BusinessInsights() {
 
         {/* Demanda de Servicios */}
         <Card style={styles.chartCard}>
-          <Text style={styles.chartTitle}>📈 Servicios Más Demandados (Datos Reales)</Text>
+          <Text style={styles.chartTitle}>
+            {insights?.insightMode === 'shop'
+              ? '📈 Productos Más Vendidos (Datos Reales)'
+              : '📈 Servicios Más Demandados (Datos Reales)'}
+          </Text>
           <Text style={styles.chartSubtitle}>
-            Basado en reservas de los últimos {selectedTimeRange === '1m' ? '1 mes' : selectedTimeRange === '3m' ? '3 meses' : selectedTimeRange === '6m' ? '6 meses' : '1 año'}
+            {insights?.insightMode === 'shop'
+              ? 'Basado en pedidos reales del negocio en los últimos '
+              : 'Basado en reservas de los últimos '}
+            {selectedTimeRange === '1m' ? '1 mes' : selectedTimeRange === '3m' ? '3 meses' : selectedTimeRange === '6m' ? '6 meses' : '1 año'}
           </Text>
           <View style={styles.servicesList}>
             {insights?.servicesDemand && insights.servicesDemand.length > 0 ? (
@@ -802,7 +1051,9 @@ export default function BusinessInsights() {
                 <View key={index} style={styles.serviceItem}>
                   <View style={styles.serviceInfo}>
                     <Text style={styles.serviceName}>{service.service}</Text>
-                    <Text style={styles.serviceCount}>{service.count} reservas reales</Text>
+                    <Text style={styles.serviceCount}>
+                      {service.count} {insights?.insightMode === 'shop' ? 'unidades vendidas' : 'reservas reales'}
+                    </Text>
                   </View>
                   <View style={[
                     styles.serviceTrend,
@@ -818,7 +1069,9 @@ export default function BusinessInsights() {
             ) : (
               <View style={styles.serviceItem}>
                 <Text style={styles.noDataText}>
-                  No hay datos de reservas para el período seleccionado
+                  {insights?.insightMode === 'shop'
+                    ? 'No hay pedidos para el período seleccionado'
+                    : 'No hay datos de reservas para el período seleccionado'}
                 </Text>
               </View>
             )}
@@ -827,9 +1080,15 @@ export default function BusinessInsights() {
 
         {/* Horas Pico */}
         <Card style={styles.chartCard}>
-          <Text style={styles.chartTitle}>⏰ Horas de Mayor Demanda (Datos Reales)</Text>
+          <Text style={styles.chartTitle}>
+            {insights?.insightMode === 'shop'
+              ? '⏰ Horas con Más Compras (Datos Reales)'
+              : '⏰ Horas de Mayor Demanda (Datos Reales)'}
+          </Text>
           <Text style={styles.chartSubtitle}>
-            Basado en horarios de reservas confirmadas
+            {insights?.insightMode === 'shop'
+              ? 'Basado en hora de creación de pedidos reales'
+              : 'Basado en horarios de reservas confirmadas'}
           </Text>
           <View style={styles.peakHoursChart}>
             {insights?.peakHours.map((hour, index) => {
@@ -854,7 +1113,9 @@ export default function BusinessInsights() {
           </View>
           {insights?.peakHours.every(h => h.bookings === 0) && (
             <Text style={styles.noDataText}>
-              No hay datos de reservas para mostrar horas pico
+              {insights?.insightMode === 'shop'
+                ? 'No hay pedidos para mostrar horas pico de compra'
+                : 'No hay datos de reservas para mostrar horas pico'}
             </Text>
           )}
         </Card>
@@ -945,7 +1206,22 @@ export default function BusinessInsights() {
             <View style={styles.recommendationContent}>
               <Text style={styles.recommendationTitle}>Horarios Óptimos</Text>
               <Text style={styles.recommendationText}>
-                Las horas de 15:00-16:00 tienen mayor demanda. Considera ajustar tu disponibilidad.
+                {(() => {
+                  const realTopHour = insights?.peakHours?.reduce((top, current) => {
+                    if (!top) return current;
+                    return current.bookings > top.bookings ? current : top;
+                  }, null as any);
+
+                  if (!realTopHour || realTopHour.bookings === 0) {
+                    return insights?.insightMode === 'shop'
+                      ? 'Aún no hay compras suficientes para detectar una hora fuerte. Mantén promociones en horarios clave.'
+                      : 'Aún no hay reservas suficientes para detectar una hora fuerte. Mantén agenda flexible mientras crece la demanda.';
+                  }
+
+                  return insights?.insightMode === 'shop'
+                    ? `Tu hora más fuerte es ${realTopHour.hour} con ${realTopHour.bookings} compras. Refuerza logística y stock en ese tramo.`
+                    : `Tu hora más fuerte es ${realTopHour.hour} con ${realTopHour.bookings} reservas. Ajusta disponibilidad para aprovechar ese pico.`;
+                })()}
               </Text>
             </View>
           </View>
@@ -955,9 +1231,15 @@ export default function BusinessInsights() {
               <Target size={20} color="#F59E0B" />
             </View>
             <View style={styles.recommendationContent}>
-              <Text style={styles.recommendationTitle}>Segmentación</Text>
+              <Text style={styles.recommendationTitle}>
+                {insights?.insightMode === 'shop' ? 'Producto Líder' : 'Segmentación'}
+              </Text>
               <Text style={styles.recommendationText}>
-                {locationInsights?.hasCoordinates && locationInsights.petsBySpecies
+                {insights?.insightMode === 'shop'
+                  ? (insights?.servicesDemand?.[0]
+                    ? `${insights.servicesDemand[0].service} es tu producto con mayor salida (${insights.servicesDemand[0].count} unidades). Prioriza reposición y combos de ese ítem.`
+                    : 'Aún no hay suficiente historial de ventas para detectar un producto líder.')
+                  : locationInsights?.hasCoordinates && locationInsights.petsBySpecies
                   ? `En tu zona: ${locationInsights.petsBySpecies.dogs} perros y ${locationInsights.petsBySpecies.cats} gatos. Ajusta tus servicios según la demanda local.`
                   : `${insights?.petsBySpecies[0]?.species || 'Perros'} representan el ${insights?.petsBySpecies[0]?.percentage || 0}% del mercado general.`
                 }
@@ -1562,5 +1844,59 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#FFFFFF',
     marginLeft: 6,
+  },
+  lockedContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 20,
+  },
+  lockedCard: {
+    alignItems: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+  },
+  lockedPlanBadge: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#7C3AED',
+    backgroundColor: '#F5F3FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginBottom: 12,
+  },
+  lockedTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  lockedText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    textAlign: 'center',
+    lineHeight: 21,
+    marginBottom: 8,
+  },
+  lockedTextSecondary: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  lockedButton: {
+    backgroundColor: '#2D6A6F',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  lockedButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
   },
 });

@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Search, Heart, TriangleAlert as AlertTriangle } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { supabaseClient } from '../../../lib/supabase';
+import { envConfig } from '../../../utils/envConfig';
 
 export default function SelectCondition() {
   const { petId, species, breed, ageInMonths, weight, returnPath, currentValue, currentTreatment, currentVeterinarian, currentNotes } = useLocalSearchParams<{
@@ -34,88 +35,79 @@ export default function SelectCondition() {
 
   const fetchConditions = async () => {
     try {
-      const petBreed = breed || '';
-      const petAge = ageInMonths ? parseInt(ageInMonths) : undefined;
-      const petWeight = weight ? parseFloat(weight) : undefined;
+      const petBreed = breed || 'Genérico';
 
-      if (petBreed && petAge) {
-        const cacheKey = `${species}_${petBreed}_${petAge}_${petWeight || 'any'}`;
-        console.log('Checking AI cache for illnesses:', cacheKey);
+      console.log(`Searching cache for ${species} - ${petBreed}`);
 
-        const { data: cachedData, error: cacheError } = await supabaseClient
-          .from('illnesses_ai_cache')
-          .select('*')
-          .eq('species', species)
-          .eq('breed', petBreed)
-          .eq('age_in_months', petAge)
-          .eq('cache_key', cacheKey)
-          .gt('expires_at', new Date().toISOString())
-          .maybeSingle();
+      const { data: cachedData, error: cacheError } = await supabaseClient
+        .from('illnesses_ai_cache')
+        .select('*')
+        .eq('species', species)
+        .eq('breed', petBreed)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-        if (cachedData && cachedData.illnesses) {
-          console.log('Using cached illness data');
-          const illnesses = typeof cachedData.illnesses === 'string'
-            ? JSON.parse(cachedData.illnesses)
-            : cachedData.illnesses;
-          setConditions(illnesses);
-          setFilteredConditions(illnesses);
-          setLoading(false);
-          return;
-        }
-
-        console.log('No cache found, generating with AI...');
-        const supabaseUrl = Deno.env ? Deno.env.get('SUPABASE_URL') : process.env.EXPO_PUBLIC_SUPABASE_URL;
-        const supabaseAnonKey = Deno.env ? Deno.env.get('SUPABASE_ANON_KEY') : process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-
-        const response = await fetch(
-          `${supabaseUrl}/functions/v1/generate-illness-recommendations`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseAnonKey}`,
-            },
-            body: JSON.stringify({
-              species,
-              breed: petBreed,
-              ageInMonths: petAge,
-              weight: petWeight
-            })
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error('Error generating illness recommendations');
-        }
-
-        const { illnesses } = await response.json();
-        console.log(`Generated ${illnesses.length} illness recommendations`);
-
-        await supabaseClient
-          .from('illnesses_ai_cache')
-          .insert({
-            species,
-            breed: petBreed,
-            age_in_months: petAge,
-            weight: petWeight,
-            illnesses: illnesses,
-            cache_key: cacheKey
-          });
-
+      if (cachedData && cachedData.illnesses) {
+        console.log('✓ Using cached illness data for', petBreed);
+        const illnesses = typeof cachedData.illnesses === 'string'
+          ? JSON.parse(cachedData.illnesses)
+          : cachedData.illnesses;
         setConditions(illnesses);
         setFilteredConditions(illnesses);
-      } else {
-        const { data, error } = await supabaseClient
-          .from('medical_conditions')
-          .select('*')
-          .eq('is_active', true)
-          .in('species', [species, 'both'])
-          .order('name', { ascending: true });
-
-        if (error) throw error;
-        setConditions(data || []);
-        setFilteredConditions(data || []);
+        setLoading(false);
+        return;
       }
+
+      console.log('⚠ No cache found, generating with AI...');
+      const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+      const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+
+      const petAge = ageInMonths ? parseInt(ageInMonths) : 24;
+      const petWeight = weight ? parseFloat(weight) : undefined;
+
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/generate-illness-recommendations`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+          },
+          body: JSON.stringify({
+            species,
+            breed: petBreed,
+            ageInMonths: petAge,
+            weight: petWeight
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error('Error generating illness recommendations');
+      }
+
+      const { illnesses } = await response.json();
+      console.log(`✓ Generated ${illnesses.length} illness recommendations via AI`);
+
+      const cacheKey = `${species}_${petBreed}_general`;
+      await supabaseClient
+        .from('illnesses_ai_cache')
+        .insert({
+          species,
+          breed: petBreed,
+          age_in_months: petAge,
+          weight: petWeight,
+          illnesses: illnesses,
+          cache_key: cacheKey
+        });
+
+      console.log('✓ Saved to cache for future use');
+      setConditions(illnesses);
+      setFilteredConditions(illnesses);
     } catch (error) {
       console.error('Error fetching conditions:', error);
     } finally {
@@ -139,7 +131,7 @@ export default function SelectCondition() {
   const handleSelectCondition = (condition: any) => {
     console.log('Navigating back with condition:', condition.name);
     router.replace({
-      pathname: returnPath,
+      pathname: returnPath as any,
       params: {
         selectedCondition: JSON.stringify(condition),
         ...(currentTreatment && { currentTreatment }),

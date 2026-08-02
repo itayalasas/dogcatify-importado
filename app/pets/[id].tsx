@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Modal, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Calendar, Scale, Syringe, Heart, TriangleAlert as AlertTriangle, Pill, Camera, Plus, CreditCard as Edit, Trash2, Play, Image as ImageIcon } from 'lucide-react-native';
-import { Video } from 'expo-av';
+import { ArrowLeft, Calendar, Scale, Syringe, Heart, TriangleAlert as AlertTriangle, Pill, Camera, Plus, CreditCard as Edit, Trash2, Play, Image as ImageIcon, X, MapPin, Phone } from 'lucide-react-native';
+import { Video, ResizeMode } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { extractMedicalRecordsFromImage, ExtractedMedicalRecord } from '../../utils/medicalCardOCR';
+import { envConfig } from '../../utils/envConfig';
+import { resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
 
 export default function PetDetail() {
   const { id, refresh, activeTab: initialTab, permissionLevel } = useLocalSearchParams<{
@@ -40,6 +42,20 @@ export default function PetDetail() {
   const [showScanOptionsModal, setShowScanOptionsModal] = useState(false);
   const [scanRecordType, setScanRecordType] = useState<'vaccine' | 'deworming' | null>(null);
   const [processingImage, setProcessingImage] = useState(false);
+  const [currentAlertIndex, setCurrentAlertIndex] = useState(0);
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertsToShow, setAlertsToShow] = useState<any[]>([]);
+  const [showLostPetModal, setShowLostPetModal] = useState(false);
+  const [lostPetPost, setLostPetPost] = useState<any>(null);
+  const [reportingLostPet, setReportingLostPet] = useState(false);
+  const [lostContactPhone, setLostContactPhone] = useState('');
+  const [lostContactName, setLostContactName] = useState('');
+  const [lostLastSeenLocation, setLostLastSeenLocation] = useState('');
+  const [lostLastSeenDate, setLostLastSeenDate] = useState('');
+  const [lostReward, setLostReward] = useState('');
+  const [lostAdditionalNotes, setLostAdditionalNotes] = useState('');
+  const [matingProfile, setMatingProfile] = useState<any>(null);
+  const [updatingMatingStatus, setUpdatingMatingStatus] = useState(false);
 
   useEffect(() => {
     fetchPetDetails();
@@ -48,6 +64,33 @@ export default function PetDetail() {
     fetchMedicalAlerts();
     fetchBehaviorHistory();
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    fetchActiveLostPetPost();
+  }, [id, currentUser]);
+
+  useEffect(() => {
+    if (!id || !currentUser) return;
+    fetchMatingProfile();
+  }, [id, currentUser]);
+
+  useEffect(() => {
+    if (medicalAlerts.length > 0 && alertsToShow.length === 0) {
+      setAlertsToShow([...medicalAlerts]);
+      setCurrentAlertIndex(0);
+      setTimeout(() => {
+        setShowAlertModal(true);
+      }, 1000);
+    }
+  }, [medicalAlerts]);
+
+  useEffect(() => {
+    if (alertsToShow.length === 0 && showAlertModal) {
+      setShowAlertModal(false);
+      setCurrentAlertIndex(0);
+    }
+  }, [alertsToShow]);
 
   // Add effect to refetch health records when returning from health forms
   useEffect(() => {
@@ -165,6 +208,353 @@ export default function PetDetail() {
       Alert.alert('Error', 'Error al cargar los datos de salud');
     }
   };
+
+  const fetchActiveLostPetPost = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('posts')
+        .select('*')
+        .eq('pet_id', id)
+        .eq('type', 'lost_pet')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching lost pet post:', error);
+        return;
+      }
+
+      setLostPetPost(data || null);
+
+      if (data?.pet?.lostPetAlert) {
+        setLostContactPhone(data.pet.lostPetAlert.contactPhone || '');
+        setLostContactName(data.pet.lostPetAlert.contactName || '');
+        setLostLastSeenLocation(data.pet.lostPetAlert.lastSeenLocation || '');
+        setLostLastSeenDate(data.pet.lostPetAlert.lastSeenDate || '');
+        setLostReward(data.pet.lostPetAlert.reward || '');
+        setLostAdditionalNotes(data.pet.lostPetAlert.additionalNotes || '');
+      }
+    } catch (error) {
+      console.error('Error fetching active lost pet post:', error);
+    }
+  };
+
+  const fetchMatingProfile = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('pet_mating_profiles')
+        .select('*')
+        .eq('pet_id', id)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching mating profile:', error);
+        return;
+      }
+
+      setMatingProfile(data || null);
+    } catch (error) {
+      console.error('Error fetching mating profile:', error);
+    }
+  };
+
+  const handleToggleMatingStatus = async () => {
+    if (!currentUser || !pet) return;
+
+    if (pet.is_neutered) {
+      Alert.alert(
+        'No disponible',
+        'Esta mascota figura como castrada y no puede habilitarse para búsqueda de pareja.'
+      );
+      return;
+    }
+
+    setUpdatingMatingStatus(true);
+    try {
+      const nextActive = !(matingProfile?.is_active || false);
+
+      const { error } = await supabaseClient
+        .from('pet_mating_profiles')
+        .upsert({
+          pet_id: pet.id,
+          owner_id: currentUser.id,
+          is_active: nextActive,
+          bio: matingProfile?.bio || null,
+        }, { onConflict: 'pet_id' });
+
+      if (error) throw error;
+
+      await fetchMatingProfile();
+
+      Alert.alert(
+        nextActive ? 'Modo activado' : 'Modo desactivado',
+        nextActive
+          ? `${pet.name} ahora aparece para buscar pareja.`
+          : `${pet.name} ya no aparecerá en búsqueda de pareja.`
+      );
+    } catch (error) {
+      console.error('Error toggling mating status:', error);
+      Alert.alert('Error', 'No se pudo actualizar el estado de búsqueda de pareja');
+    } finally {
+      setUpdatingMatingStatus(false);
+    }
+  };
+
+  const handleOpenPetMatching = () => {
+    if (!pet?.id) return;
+
+    if (!(matingProfile?.is_active)) {
+      Alert.alert('Activa primero', 'Debes activar "Busca pareja" para usar esta funcionalidad.');
+      return;
+    }
+
+    router.push({
+      pathname: '/pets/mating/[id]',
+      params: { id: pet.id }
+    });
+  };
+
+  const resetLostPetForm = () => {
+    setLostContactPhone('');
+    setLostContactName('');
+    setLostLastSeenLocation('');
+    setLostLastSeenDate('');
+    setLostReward('');
+    setLostAdditionalNotes('');
+  };
+
+  const ensureDailyPostLimit = async () => {
+    if (!currentUser) {
+      return false;
+    }
+
+    const { data: subscriptionData, error: subscriptionError } = await supabaseClient
+      .from('user_subscriptions')
+      .select(`
+        status,
+        subscription_plans (
+          tier,
+          audience_target,
+          limits
+        )
+      `)
+      .eq('user_id', currentUser.id)
+      .in('status', ['active', 'trialing', 'pending', 'paused'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (subscriptionError) {
+      throw subscriptionError;
+    }
+
+    const userPlanLimits = resolveSubscriptionPlanLimits(subscriptionData?.subscription_plans || null);
+    const maxPostsPerDay = userPlanLimits.users.maxPostsPerDay;
+
+    if (maxPostsPerDay === null) {
+      return true;
+    }
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const { count, error: countError } = await supabaseClient
+      .from('posts')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', currentUser.id)
+      .gte('created_at', startOfDay.toISOString())
+      .lt('created_at', endOfDay.toISOString());
+
+    if (countError) {
+      throw countError;
+    }
+
+    if ((count || 0) >= maxPostsPerDay) {
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleReportLostPet = async () => {
+    if (!currentUser || !pet) {
+      Alert.alert('Error', 'No se pudo obtener la información para reportar la mascota');
+      return;
+    }
+
+    if (!lostContactPhone.trim()) {
+      Alert.alert('Campo requerido', 'Ingresa al menos un número de contacto');
+      return;
+    }
+
+    if (!lostLastSeenLocation.trim()) {
+      Alert.alert('Campo requerido', 'Ingresa dónde fue vista por última vez');
+      return;
+    }
+
+    setReportingLostPet(true);
+    try {
+      const { data: userData } = await supabaseClient
+        .from('profiles')
+        .select('display_name, photo_url')
+        .eq('id', currentUser.id)
+        .maybeSingle();
+
+      const alertDetails = {
+        contactPhone: lostContactPhone.trim(),
+        contactName: lostContactName.trim(),
+        lastSeenLocation: lostLastSeenLocation.trim(),
+        lastSeenDate: lostLastSeenDate.trim(),
+        reward: lostReward.trim(),
+        additionalNotes: lostAdditionalNotes.trim(),
+      };
+
+      const alertDescription = [
+        `🚨 ${pet.name} está perdido/a`,
+        `📍 Última ubicación: ${alertDetails.lastSeenLocation}`,
+        alertDetails.lastSeenDate ? `🗓️ Última vez visto/a: ${alertDetails.lastSeenDate}` : null,
+        alertDetails.reward ? `💰 Recompensa: ${alertDetails.reward}` : null,
+        alertDetails.additionalNotes ? `📝 ${alertDetails.additionalNotes}` : null,
+        `📞 Contacto: ${alertDetails.contactPhone}`,
+      ].filter(Boolean).join('\n');
+
+      if (lostPetPost?.id) {
+        const { error: updateError } = await supabaseClient
+          .from('posts')
+          .update({
+            content: alertDescription,
+            image_url: pet.photo_url || null,
+            pet: {
+              name: pet.name,
+              species: pet.species === 'dog' ? 'Perro' : 'Gato',
+              lostPetAlert: alertDetails,
+            },
+            created_at: new Date().toISOString(),
+          })
+          .eq('id', lostPetPost.id);
+
+        if (updateError) throw updateError;
+      } else {
+        const canCreatePost = await ensureDailyPostLimit();
+        if (!canCreatePost) {
+          Alert.alert(
+            'Límite alcanzado',
+            'Tu plan actual ya llego al limite diario de publicaciones. Actualiza tu suscripcion para poder publicar esta alerta.',
+            [
+              { text: 'Ver suscripcion', onPress: () => router.push('/profile/subscription') },
+              { text: 'OK', style: 'cancel' },
+            ]
+          );
+          return;
+        }
+
+        const { error: insertError } = await supabaseClient
+          .from('posts')
+          .insert({
+            user_id: currentUser.id,
+            pet_id: pet.id,
+            content: alertDescription,
+            image_url: pet.photo_url || null,
+            album_images: [],
+            type: 'lost_pet',
+            author: {
+              name: userData?.display_name || currentUser.displayName || 'Usuario',
+              avatar: userData?.photo_url || currentUser.photoURL || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100',
+            },
+            pet: {
+              name: pet.name,
+              species: pet.species === 'dog' ? 'Perro' : 'Gato',
+              lostPetAlert: alertDetails,
+            },
+            likes: [],
+            created_at: new Date().toISOString(),
+          });
+
+        if (insertError) throw insertError;
+      }
+
+      await fetchActiveLostPetPost();
+      setShowLostPetModal(false);
+      Alert.alert('Alerta publicada', 'La publicación de mascota perdida ya está activa en el feed.');
+    } catch (error) {
+      console.error('Error reporting lost pet:', error);
+      Alert.alert('Error', 'No se pudo publicar la alerta de mascota perdida');
+    } finally {
+      setReportingLostPet(false);
+    }
+  };
+
+  const handleMarkPetAsFound = async () => {
+    if (!lostPetPost?.id) return;
+
+    Alert.alert(
+      'Marcar como encontrada',
+      `¿Confirmas que ${pet?.name} ya fue encontrado/a? La alerta se quitará del feed.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Sí, encontrada',
+          onPress: async () => {
+            try {
+              const { error } = await supabaseClient
+                .from('posts')
+                .update({
+                  type: 'lost_pet_found',
+                  content: `✅ ${pet?.name} fue encontrado/a. Gracias por ayudar.`,
+                })
+                .eq('id', lostPetPost.id);
+
+              if (error) throw error;
+
+              setLostPetPost(null);
+              resetLostPetForm();
+              Alert.alert('Excelente noticia', 'La alerta se removió del feed.');
+            } catch (updateError) {
+              console.error('Error marking pet as found:', updateError);
+              Alert.alert('Error', 'No se pudo actualizar el estado de la alerta');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleDisableLostPetAlert = async () => {
+    if (!lostPetPost?.id) return;
+
+    Alert.alert(
+      'Desactivar alerta',
+      'La publicación dejará de mostrarse en el feed, pero no se marcará como encontrada.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Desactivar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabaseClient
+                .from('posts')
+                .update({ type: 'lost_pet_disabled' })
+                .eq('id', lostPetPost.id);
+
+              if (error) throw error;
+
+              setLostPetPost(null);
+              resetLostPetForm();
+              Alert.alert('Alerta desactivada', 'La publicación fue removida del feed.');
+            } catch (disableError) {
+              console.error('Error disabling lost pet alert:', disableError);
+              Alert.alert('Error', 'No se pudo desactivar la alerta');
+            }
+          }
+        }
+      ]
+    );
+  };
   
   const createInitialWeightRecord = async () => {
     if (!pet || !pet.weight || !currentUser || weightRecords.length > 0) {
@@ -249,7 +639,7 @@ export default function PetDetail() {
           if (processedImages.length > 0) {
             processedImages = processedImages.map((img: string) => {
               if (img && img.startsWith('/storage/v1/object/public/')) {
-                const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+                const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL') || '';
                 return `${supabaseUrl}${img}`;
               }
               return img;
@@ -295,10 +685,19 @@ export default function PetDetail() {
           completed_at: new Date().toISOString()
         })
         .eq('id', alertId);
-      
+
       if (error) throw error;
-      
-      // Refresh alerts
+
+      const remainingAlerts = alertsToShow.filter(alert => alert.id !== alertId);
+      setAlertsToShow(remainingAlerts);
+
+      if (remainingAlerts.length > 0) {
+        setCurrentAlertIndex(0);
+      } else {
+        setShowAlertModal(false);
+        setCurrentAlertIndex(0);
+      }
+
       fetchMedicalAlerts();
     } catch (error) {
       console.error('Error completing alert:', error);
@@ -315,10 +714,19 @@ export default function PetDetail() {
           completed_at: new Date().toISOString()
         })
         .eq('id', alertId);
-      
+
       if (error) throw error;
-      
-      // Refresh alerts
+
+      const remainingAlerts = alertsToShow.filter(alert => alert.id !== alertId);
+      setAlertsToShow(remainingAlerts);
+
+      if (remainingAlerts.length > 0) {
+        setCurrentAlertIndex(0);
+      } else {
+        setShowAlertModal(false);
+        setCurrentAlertIndex(0);
+      }
+
       fetchMedicalAlerts();
     } catch (error) {
       console.error('Error dismissing alert:', error);
@@ -359,19 +767,31 @@ export default function PetDetail() {
   };
 
   const handleAddVaccine = () => {
-    router.push(`/pets/health/vaccines/${id}`);
+    router.push({
+      pathname: '/pets/health/vaccines/[id]',
+      params: { id }
+    });
   };
 
   const handleAddIllness = () => {
-    router.push(`/pets/health/illness/${id}`);
+    router.push({
+      pathname: '/pets/health/illness/[id]',
+      params: { id }
+    });
   };
 
   const handleAddAllergy = () => {
-    router.push(`/pets/health/allergies/${id}`);
+    router.push({
+      pathname: '/pets/health/allergies/[id]',
+      params: { id }
+    });
   };
 
   const handleAddDeworming = () => {
-    router.push(`/pets/health/deworming/${id}`);
+    router.push({
+      pathname: '/pets/health/deworming/[id]',
+      params: { id }
+    });
   };
 
   const handleScanMedicalCard = (type: 'vaccine' | 'deworming') => {
@@ -395,7 +815,7 @@ export default function PetDetail() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        await processMedicalCard(result.assets[0].uri, result.assets[0].base64);
+        await processMedicalCard(result.assets[0].uri, result.assets[0].base64 ?? undefined);
       }
     } catch (error) {
       console.error('Error taking photo:', error);
@@ -420,7 +840,7 @@ export default function PetDetail() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        await processMedicalCard(result.assets[0].uri, result.assets[0].base64);
+        await processMedicalCard(result.assets[0].uri, result.assets[0].base64 ?? undefined);
       }
     } catch (error) {
       console.error('Error selecting photo:', error);
@@ -561,41 +981,44 @@ export default function PetDetail() {
   
   const handleAddWeight = () => {
     router.push({
-      pathname: `/pets/health/weight/${id}`,
-      params: { refresh: 'true' }
+      pathname: '/pets/health/weight/[id]',
+      params: { id, refresh: 'true' }
     });
   };
 
   const handleAddPhoto = () => {
-    router.push(`/pets/albums/add/${id}`);
+    router.push({
+      pathname: '/pets/albums/add/[id]',
+      params: { id }
+    });
   };
 
   // Edit handlers
   const handleEditVaccine = (vaccineId: string) => {
     router.push({
-      pathname: `/pets/health/vaccines/${id}`,
-      params: { recordId: vaccineId }
+      pathname: '/pets/health/vaccines/[id]',
+      params: { id, recordId: vaccineId }
     });
   };
 
   const handleEditIllness = (illnessId: string) => {
     router.push({
-      pathname: `/pets/health/illness/${id}`,
-      params: { recordId: illnessId }
+      pathname: '/pets/health/illness/[id]',
+      params: { id, recordId: illnessId }
     });
   };
 
   const handleEditAllergy = (allergyId: string) => {
     router.push({
-      pathname: `/pets/health/allergies/${id}`,
-      params: { recordId: allergyId }
+      pathname: '/pets/health/allergies/[id]',
+      params: { id, recordId: allergyId }
     });
   };
 
   const handleEditDeworming = (dewormingId: string) => {
     router.push({
-      pathname: `/pets/health/deworming/${id}`,
-      params: { recordId: dewormingId }
+      pathname: '/pets/health/deworming/[id]',
+      params: { id, recordId: dewormingId }
     });
   };
 
@@ -738,13 +1161,16 @@ export default function PetDetail() {
 
   const handleBehaviorAssessment = () => {
     router.push({
-      pathname: `/pets/behavior/${id}`,
-      params: { returnTo: 'behavior' }
+      pathname: '/pets/behavior/[id]',
+      params: { id, returnTo: 'behavior' }
     });
   };
 
   const handleViewAppointments = () => {
-    router.push(`/pets/appointments/${id}`);
+    router.push({
+      pathname: '/pets/appointments/[id]',
+      params: { id }
+    });
   };
 
   const handleGenerateMedicalHistory = async () => {
@@ -806,7 +1232,7 @@ export default function PetDetail() {
       }
       
       // Create URL with token parameter
-      const baseUrl = process.env.EXPO_PUBLIC_APP_DOMAIN || process.env.EXPO_PUBLIC_APP_URL || 'https://app-dogcatify.netlify.app';
+      const baseUrl = envConfig.getOrDefault('EXPO_PUBLIC_APP_DOMAIN', 'https://app-dogcatify.netlify.app');
       const shareUrl = `${baseUrl}/medical-history/${pet.id}?token=${tokenResult.token}`;
       const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(shareUrl)}&format=png&margin=20&ecc=M&color=2D6A6F&bgcolor=FFFFFF`;
       const shortUrl = `dogcatify.com/vet/${tokenResult.token.slice(-8)}`;
@@ -833,7 +1259,7 @@ export default function PetDetail() {
   const handleBookAppointment = () => {
     router.push('/(tabs)/services');
   };
-  
+
   const handleUpdatePhoto = async () => {
     try {
       // Request permission
@@ -1290,7 +1716,7 @@ export default function PetDetail() {
         {weightRecords.length > 3 && (
           <TouchableOpacity 
             style={styles.viewAllButton}
-            onPress={() => router.push(`/pets/health/weight/${id}`)}
+            onPress={() => router.push({ pathname: '/pets/health/weight/[id]', params: { id } })}
           >
             <Text style={styles.viewAllText}>
               Ver todos los registros ({weightRecords.length})
@@ -1338,7 +1764,7 @@ export default function PetDetail() {
               <TouchableOpacity
                 key={album.id}
                 style={styles.albumItem}
-                onPress={() => router.push(`/pets/albums/${album.id}`)}
+                onPress={() => router.push({ pathname: '/pets/albums/[id]', params: { id: album.id } })}
               >
                 {cleanUrl ? (
                   <View style={styles.albumCoverContainer}>
@@ -1347,7 +1773,7 @@ export default function PetDetail() {
                         <Video
                           source={{ uri: cleanUrl }}
                           style={styles.albumCover}
-                          resizeMode="cover"
+                          resizeMode={ResizeMode.COVER}
                           shouldPlay={false}
                           isMuted
                         />
@@ -1510,61 +1936,26 @@ export default function PetDetail() {
 
   const renderMedicalAlerts = () => {
     if (medicalAlerts.length === 0) return null;
-    
+
     return (
-      <Card style={styles.alertsCard}>
-        <Text style={styles.alertsTitle}>🚨 Alertas Médicas</Text>
-        
-        {medicalAlerts.map((alert) => (
-          <View 
-            key={alert.id} 
-            style={[
-              styles.alertItem,
-              alert.priority === 'high' && styles.highPriorityAlert,
-              alert.priority === 'urgent' && styles.urgentAlert
-            ]}
-          >
-            <View style={styles.alertHeader}>
-              <View style={styles.alertTitleContainer}>
-                {getAlertIcon(alert.alert_type)}
-                <Text style={styles.alertTitle}>{alert.title}</Text>
-              </View>
-              <View style={styles.alertActions}>
-                <TouchableOpacity 
-                  style={styles.completeButton}
-                  onPress={() => handleCompleteAlert(alert.id)}
-                >
-                  <Text style={styles.completeButtonText}>✓</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.dismissButton}
-                  onPress={() => handleDismissAlert(alert.id)}
-                >
-                  <Text style={styles.dismissButtonText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            
-            <Text style={styles.alertDescription}>{alert.description}</Text>
-            
-            <View style={styles.alertFooter}>
-              <Text style={styles.alertDueDate}>
-                📅 {formatAlertDate(alert.due_date)}
-              </Text>
-              <View style={[
-                styles.priorityBadge,
-                alert.priority === 'high' && styles.highPriorityBadge,
-                alert.priority === 'urgent' && styles.urgentPriorityBadge
-              ]}>
-                <Text style={styles.priorityText}>
-                  {alert.priority === 'urgent' ? 'URGENTE' :
-                   alert.priority === 'high' ? 'ALTA' :
-                   alert.priority === 'medium' ? 'MEDIA' : 'BAJA'}
-                </Text>
-              </View>
-            </View>
+      <Card style={styles.alertsSummaryCard}>
+        <View style={styles.alertsSummaryHeader}>
+          <View style={styles.alertsIconContainer}>
+            <Heart size={24} color="#2D6A6F" />
           </View>
-        ))}
+          <View style={styles.alertsSummaryText}>
+            <Text style={styles.alertsSummaryTitle}>Alertas Médicas</Text>
+            <Text style={styles.alertsSummarySubtitle}>
+              {medicalAlerts.length} {medicalAlerts.length === 1 ? 'alerta pendiente' : 'alertas pendientes'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.viewAlertsButton}
+            onPress={() => setShowAlertModal(true)}
+          >
+            <Text style={styles.viewAlertsButtonText}>Ver</Text>
+          </TouchableOpacity>
+        </View>
       </Card>
     );
   };
@@ -1578,7 +1969,7 @@ export default function PetDetail() {
     // Ensure the image URL is complete
     let breedImageUrl = breedInfoData.image_link;
     if (breedImageUrl && breedImageUrl.startsWith('/storage/v1/object/public/')) {
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+      const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL') || '';
       breedImageUrl = `${supabaseUrl}${breedImageUrl}`;
     }
     
@@ -1747,6 +2138,103 @@ export default function PetDetail() {
         {activeTab === 'basics' && (
           <>
             {renderBasicsTab()}
+
+            {currentUser?.id === pet.owner_id && (
+              <Card style={[styles.lostPetCard, lostPetPost && styles.lostPetCardActive]}>
+                <View style={styles.lostPetHeader}>
+                  <View>
+                    <Text style={styles.lostPetTitle}>🚨 Mascota Perdida</Text>
+                    <Text style={styles.lostPetSubtitle}>
+                      {lostPetPost
+                        ? 'Alerta activa en el feed. Puedes actualizar datos o marcar como encontrada.'
+                        : 'Activa una alerta en el feed para que la comunidad te ayude a encontrarla.'}
+                    </Text>
+                  </View>
+                </View>
+
+                {lostPetPost?.pet?.lostPetAlert?.lastSeenLocation && (
+                  <View style={styles.lostPetInfoRow}>
+                    <MapPin size={14} color="#B91C1C" />
+                    <Text style={styles.lostPetInfoText}>
+                      Última ubicación: {lostPetPost.pet.lostPetAlert.lastSeenLocation}
+                    </Text>
+                  </View>
+                )}
+
+                {lostPetPost?.pet?.lostPetAlert?.contactPhone && (
+                  <View style={styles.lostPetInfoRow}>
+                    <Phone size={14} color="#B91C1C" />
+                    <Text style={styles.lostPetInfoText}>
+                      Contacto: {lostPetPost.pet.lostPetAlert.contactPhone}
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.lostPetActionsRow}>
+                  <Button
+                    title={lostPetPost ? 'Actualizar alerta' : 'Declarar perdida'}
+                    onPress={() => setShowLostPetModal(true)}
+                    size="medium"
+                  />
+                  {lostPetPost && (
+                    <Button
+                      title="Marcar encontrada"
+                      onPress={handleMarkPetAsFound}
+                      variant="outline"
+                      size="medium"
+                    />
+                  )}
+                  {lostPetPost && (
+                    <Button
+                      title="Desactivar alerta"
+                      onPress={handleDisableLostPetAlert}
+                      variant="outline"
+                      size="medium"
+                    />
+                  )}
+                </View>
+              </Card>
+            )}
+
+            {currentUser?.id === pet.owner_id && (
+              <Card style={styles.matchingCard}>
+                <Text style={styles.matchingTitle}>💘 Buscar pareja para {pet.name}</Text>
+                <Text style={styles.matchingSubtitle}>
+                  Activa este modo para mostrar a tu mascota en un flujo tipo Tinder y recibir matches mutuos.
+                </Text>
+
+                <View style={styles.matchingStatusRow}>
+                  <Text style={styles.matchingStatusLabel}>Estado:</Text>
+                  <Text style={[
+                    styles.matchingStatusValue,
+                    matingProfile?.is_active ? styles.matchingStatusActive : styles.matchingStatusInactive
+                  ]}>
+                    {pet.is_neutered
+                      ? 'No disponible (castrada/o)'
+                      : matingProfile?.is_active
+                        ? 'Activo'
+                        : 'Inactivo'}
+                  </Text>
+                </View>
+
+                <View style={styles.matchingActionsRow}>
+                  <Button
+                    title={matingProfile?.is_active ? 'Desactivar búsqueda' : 'Activar búsqueda'}
+                    onPress={handleToggleMatingStatus}
+                    size="medium"
+                    variant={matingProfile?.is_active ? 'outline' : 'primary'}
+                    disabled={updatingMatingStatus || !!pet.is_neutered}
+                  />
+
+                  <Button
+                    title="Explorar candidatos"
+                    onPress={handleOpenPetMatching}
+                    size="medium"
+                    disabled={!matingProfile?.is_active || !!pet.is_neutered}
+                  />
+                </View>
+              </Card>
+            )}
             
             {/* Medical History Actions */}
             <Card style={styles.medicalHistoryCard}>
@@ -1770,6 +2258,192 @@ export default function PetDetail() {
         {activeTab === 'behavior' && renderBehaviorTab()}
         {activeTab === 'appointments' && renderAppointmentsTab()}
       </ScrollView>
+
+      {/* Medical Alerts Modal */}
+      {alertsToShow.length > 0 && showAlertModal && alertsToShow[currentAlertIndex] && (
+        <Modal
+          visible={showAlertModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowAlertModal(false)}
+        >
+          <View style={styles.alertModalOverlay}>
+            <View style={styles.alertModalContent}>
+              <View style={[
+                styles.alertModalHeader,
+                { borderLeftColor: getAlertPriorityColor(alertsToShow[currentAlertIndex]?.priority || 'medium') }
+              ]}>
+                <View style={styles.alertModalIconContainer}>
+                  {getAlertIcon(alertsToShow[currentAlertIndex]?.alert_type || 'vaccine')}
+                </View>
+                <Text style={styles.alertModalTitle}>
+                  {alertsToShow[currentAlertIndex]?.title || 'Sin título'}
+                </Text>
+              </View>
+
+              <Text style={styles.alertModalDescription}>
+                {alertsToShow[currentAlertIndex]?.description || 'Sin descripción'}
+              </Text>
+
+              <View style={styles.alertModalFooter}>
+                <View style={styles.alertModalDateContainer}>
+                  <Calendar size={16} color="#6B7280" />
+                  <Text style={styles.alertModalDate}>
+                    {formatAlertDate(alertsToShow[currentAlertIndex]?.due_date || '')}
+                  </Text>
+                </View>
+
+                <View style={[
+                  styles.alertModalPriorityBadge,
+                  { backgroundColor: getAlertPriorityColor(alertsToShow[currentAlertIndex]?.priority || 'medium') + '20' }
+                ]}>
+                  <Text style={[
+                    styles.alertModalPriorityText,
+                    { color: getAlertPriorityColor(alertsToShow[currentAlertIndex]?.priority || 'medium') }
+                  ]}>
+                    {alertsToShow[currentAlertIndex]?.priority === 'urgent' ? 'URGENTE' :
+                     alertsToShow[currentAlertIndex]?.priority === 'high' ? 'ALTA' :
+                     alertsToShow[currentAlertIndex]?.priority === 'medium' ? 'MEDIA' : 'BAJA'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.alertModalActions}>
+                <TouchableOpacity
+                  style={styles.alertModalDismissButton}
+                  onPress={() => handleDismissAlert(alertsToShow[currentAlertIndex]?.id)}
+                >
+                  <X size={20} color="#6B7280" />
+                  <Text style={styles.alertModalDismissText}>Descartar</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.alertModalCompleteButton}
+                  onPress={() => handleCompleteAlert(alertsToShow[currentAlertIndex]?.id)}
+                >
+                  <Heart size={20} color="#FFFFFF" />
+                  <Text style={styles.alertModalCompleteText}>Completado</Text>
+                </TouchableOpacity>
+              </View>
+
+              {alertsToShow.length > 1 && (
+                <Text style={styles.alertModalCounter}>
+                  Alerta {currentAlertIndex + 1} de {alertsToShow.length}
+                </Text>
+              )}
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Scan Options Modal */}
+      <Modal
+        visible={showLostPetModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowLostPetModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+        >
+          <View style={[styles.modalContent, styles.lostPetModalContent]}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.lostPetModalScrollContent}
+            >
+              <Text style={styles.modalTitle}>🚨 Reportar Mascota Perdida</Text>
+              <Text style={styles.modalSubtitle}>
+                Completa estos datos para generar una publicación de alerta clara y útil en el feed.
+              </Text>
+
+              <View style={styles.lostPetFormContainer}>
+                <Text style={styles.lostPetFieldLabel}>Número de contacto *</Text>
+                <TextInput
+                  style={styles.lostPetInput}
+                  placeholder="Ej: +54 11 1234 5678"
+                  placeholderTextColor="#9CA3AF"
+                  value={lostContactPhone}
+                  onChangeText={setLostContactPhone}
+                  keyboardType="phone-pad"
+                  returnKeyType="next"
+                />
+
+                <Text style={styles.lostPetFieldLabel}>Nombre de contacto</Text>
+                <TextInput
+                  style={styles.lostPetInput}
+                  placeholder="Ej: María Pérez"
+                  placeholderTextColor="#9CA3AF"
+                  value={lostContactName}
+                  onChangeText={setLostContactName}
+                  returnKeyType="next"
+                />
+
+                <Text style={styles.lostPetFieldLabel}>Última ubicación donde fue vista *</Text>
+                <TextInput
+                  style={styles.lostPetInput}
+                  placeholder="Ej: Parque Centenario, CABA"
+                  placeholderTextColor="#9CA3AF"
+                  value={lostLastSeenLocation}
+                  onChangeText={setLostLastSeenLocation}
+                  returnKeyType="next"
+                />
+
+                <Text style={styles.lostPetFieldLabel}>Fecha/hora última vez visto</Text>
+                <TextInput
+                  style={styles.lostPetInput}
+                  placeholder="Fecha/hora última vez visto (ej: 26/02 19:30)"
+                  placeholderTextColor="#9CA3AF"
+                  value={lostLastSeenDate}
+                  onChangeText={setLostLastSeenDate}
+                  returnKeyType="next"
+                />
+
+                <Text style={styles.lostPetFieldLabel}>Recompensa (opcional)</Text>
+                <TextInput
+                  style={styles.lostPetInput}
+                  placeholder="Ej: $50.000"
+                  placeholderTextColor="#9CA3AF"
+                  value={lostReward}
+                  onChangeText={setLostReward}
+                  returnKeyType="next"
+                />
+
+                <Text style={styles.lostPetFieldLabel}>Señas particulares</Text>
+                <TextInput
+                  style={[styles.lostPetInput, styles.lostPetMultilineInput]}
+                  placeholder="Señas particulares, collar, temperamento, etc."
+                  placeholderTextColor="#9CA3AF"
+                  value={lostAdditionalNotes}
+                  onChangeText={setLostAdditionalNotes}
+                  multiline
+                  textAlignVertical="top"
+                />
+              </View>
+
+              {reportingLostPet ? (
+                <ActivityIndicator size="large" color="#B91C1C" />
+              ) : (
+                <View style={styles.lostPetModalActions}>
+                  <Button
+                    title={lostPetPost ? 'Actualizar publicación' : 'Publicar alerta'}
+                    onPress={handleReportLostPet}
+                    size="large"
+                  />
+                  <Button
+                    title="Cancelar"
+                    onPress={() => setShowLostPetModal(false)}
+                    variant="outline"
+                    size="large"
+                  />
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Scan Options Modal */}
       <Modal
@@ -2537,6 +3211,169 @@ const styles = StyleSheet.create({
   highPriorityBadge: {
     backgroundColor: '#EF4444',
   },
+  medicalUrgentPriorityBadge: {
+    backgroundColor: '#DC2626',
+  },
+  medicalPriorityText: {
+    fontSize: 10,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+  },
+  alertsSummaryCard: {
+    marginBottom: 16,
+    backgroundColor: '#F0FDFA',
+    borderWidth: 2,
+    borderColor: '#2D6A6F',
+  },
+  alertsSummaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  alertsIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#CCFBF1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  alertsSummaryText: {
+    flex: 1,
+  },
+  alertsSummaryTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    color: '#0F766E',
+    marginBottom: 2,
+  },
+  alertsSummarySubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#14B8A6',
+  },
+  viewAlertsButton: {
+    backgroundColor: '#2D6A6F',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  viewAlertsButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  alertModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  alertModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  alertModalHeader: {
+    borderLeftWidth: 4,
+    paddingLeft: 12,
+    marginBottom: 16,
+  },
+  alertModalIconContainer: {
+    marginBottom: 8,
+  },
+  alertModalTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    lineHeight: 28,
+  },
+  alertModalDescription: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#4B5563',
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  alertModalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  alertModalDateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  alertModalDate: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
+  },
+  alertModalPriorityBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  alertModalPriorityText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+    letterSpacing: 0.5,
+  },
+  alertModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  alertModalDismissButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  alertModalDismissText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
+  },
+  alertModalCompleteButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2D6A6F',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  alertModalCompleteText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  alertModalCounter: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 16,
+  },
   urgentPriorityBadge: {
     backgroundColor: '#DC2626',
   },
@@ -2563,6 +3400,124 @@ const styles = StyleSheet.create({
     color: '#0369A1',
     marginBottom: 16,
     lineHeight: 20,
+  },
+  lostPetCard: {
+    marginBottom: 16,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  lostPetCardActive: {
+    borderColor: '#DC2626',
+    borderWidth: 2,
+  },
+  lostPetHeader: {
+    marginBottom: 10,
+  },
+  lostPetTitle: {
+    fontSize: 17,
+    fontFamily: 'Inter-SemiBold',
+    color: '#B91C1C',
+    marginBottom: 4,
+  },
+  lostPetSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#7F1D1D',
+    lineHeight: 18,
+  },
+  lostPetInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  lostPetInfoText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#7F1D1D',
+  },
+  lostPetActionsRow: {
+    marginTop: 10,
+    gap: 8,
+  },
+  lostPetFormContainer: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  lostPetFieldLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#374151',
+    marginBottom: -2,
+  },
+  lostPetInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    backgroundColor: '#FFFFFF',
+  },
+  lostPetMultilineInput: {
+    minHeight: 80,
+  },
+  lostPetModalActions: {
+    gap: 10,
+  },
+  matchingCard: {
+    marginBottom: 16,
+    backgroundColor: '#F5F3FF',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  matchingTitle: {
+    fontSize: 17,
+    fontFamily: 'Inter-SemiBold',
+    color: '#5B21B6',
+    marginBottom: 6,
+  },
+  matchingSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6D28D9',
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  matchingStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  matchingStatusLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#4C1D95',
+    marginRight: 6,
+  },
+  matchingStatusValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+  },
+  matchingStatusActive: {
+    color: '#15803D',
+  },
+  matchingStatusInactive: {
+    color: '#B91C1C',
+  },
+  matchingActionsRow: {
+    gap: 8,
+  },
+  lostPetModalContent: {
+    maxHeight: '92%',
+  },
+  lostPetModalScrollContent: {
+    paddingBottom: 20,
+    flexGrow: 1,
   },
   modalOverlay: {
     flex: 1,
@@ -2631,3 +3586,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+
+
+
+
+

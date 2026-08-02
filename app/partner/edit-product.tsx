@@ -35,7 +35,7 @@ export default function EditProduct() {
   useEffect(() => {
     if (!productId) {
       Alert.alert('Error', 'ID de producto no proporcionado');
-      router.push('/(partner-tabs)/products');
+      router.back();
       return;
     }
     
@@ -85,7 +85,7 @@ export default function EditProduct() {
         }
       } else {
         Alert.alert('Error', 'Producto no encontrado');
-        router.push('/(partner-tabs)/products');
+        router.back();
       }
     } catch (error) {
       console.error('Error fetching product details:', error);
@@ -98,7 +98,7 @@ export default function EditProduct() {
   const handleSelectImages = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
         quality: 0.8,
         selectionLimit: 5 - existingImages.length,
@@ -119,7 +119,7 @@ export default function EditProduct() {
   const handleTakePhoto = async () => {
     try {
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
         allowsEditing: true,
         aspect: [4, 3],
@@ -204,7 +204,7 @@ export default function EditProduct() {
       if (error) throw error;
 
       Alert.alert('Éxito', 'Producto actualizado correctamente', [
-        { text: 'OK', onPress: () => router.push('/(partner-tabs)/products') }
+        { text: 'OK', onPress: () => router.back() }
       ]);
     } catch (error) {
       console.error('Error updating product:', error);
@@ -245,7 +245,7 @@ export default function EditProduct() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/(partner-tabs)/products')} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>Editar Producto</Text>

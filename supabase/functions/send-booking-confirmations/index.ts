@@ -79,6 +79,8 @@ Deno.serve(async (req: Request) => {
       .from("orders")
       .select(`
         id,
+        booking_id,
+        customer_id,
         customer_email,
         customer_name,
         service_name,
@@ -211,6 +213,40 @@ Deno.serve(async (req: Request) => {
             .from("booking_confirmation_tokens")
             .update({ email_sent_at: new Date().toISOString() })
             .eq("order_id", order.id);
+
+          const confirmationTitle = "¡Confirma tu reserva!";
+          const confirmationBody = `Tu reserva de ${order.service_name} para ${formattedDate} a las ${order.appointment_time} requiere confirmación.`;
+
+          const { error: pushNotificationError } = await supabase
+            .from("scheduled_notifications")
+            .insert({
+              user_id: order.customer_id,
+              notification_type: "booking_confirmation",
+              reference_id: order.id,
+              reference_type: "booking",
+              title: confirmationTitle,
+              body: confirmationBody,
+              data: {
+                screen: "BookingDetails",
+                type: "booking_confirmation",
+                order_id: order.id,
+                booking_id: order.booking_id || order.id,
+                service_name: order.service_name,
+                partner_name: order.partner_name,
+                pet_name: order.pet_name,
+                date: order.appointment_date,
+                time: order.appointment_time,
+                confirmation_url: confirmationUrl,
+              },
+              scheduled_for: new Date().toISOString(),
+              status: "pending",
+            })
+            .select("id")
+            .single();
+
+          if (pushNotificationError) {
+            console.warn(`Could not queue push confirmation notification for order ${order.id}:`, pushNotificationError);
+          }
 
           console.log(`Confirmation email sent successfully for order ${order.id}`);
           processed++;

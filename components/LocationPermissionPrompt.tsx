@@ -131,9 +131,9 @@ export const LocationPermissionPrompt: React.FC = () => {
       animationType="fade"
       onRequestClose={handleDismiss}
     >
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          <Card style={styles.card}>
+      <View style={styles.overlay} pointerEvents="box-none">
+        <View style={styles.container} pointerEvents="box-none">
+          <Card style={styles.card} pointerEvents="auto">
             <TouchableOpacity
               style={styles.closeButton}
               onPress={handleDismiss}

@@ -1,41 +1,71 @@
-{ 
+{
   "expo": {
     "name": "DogCatiFy",
     "slug": "dogcatify",
-    "version": "15.0.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "dogcatify",
     "userInterfaceStyle": "automatic",
-    "platforms": ["ios", "android", "web"],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "plugins": [
       "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
+          }
+        }
+      ],
       [
         "expo-notifications",
         {
           "icon": "./assets/images/logo-transp.png",
           "color": "#2D6A6F",
           "sounds": [],
-          "android": { "useNextNotificationsApi": true }
+          "android": {
+            "useNextNotificationsApi": true
+          }
         }
       ],
-      "expo-updates"
+      "expo-updates",
+      "expo-secure-store",
+      "expo-web-browser"
     ],
-    "experiments": { "typedRoutes": true },
+    "experiments": {
+      "typedRoutes": true
+    },
     "extra": {
-      "router": { "origin": false },
-      "eas": { "projectId": "0618d9ae-6714-46bb-adce-f4ee57fff324" }
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "0618d9ae-6714-46bb-adce-f4ee57fff324"
+      },
+      "apiGateway": {
+        "url": "https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/get-env",
+        "apiKey": "5ab77aa971422c10964faf2500a6f14ff71524a4e48a72e8f0241cfcec352ef5"
+      }
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.dogcatify.app",
-      "buildNumber": "15",
+      "bundleIdentifier": "com.dogcatify.app2",
+      "buildNumber": "1",
+      "googleServicesFile": "./ios/GoogleService-Info.plist",
       "associatedDomains": [
         "applinks:app-dogcatify.netlify.app"
       ],
@@ -49,9 +79,9 @@
       }
     },
     "android": {
-      "package": "com.dogcatify.app",
-      "versionCode": 15,
-      "googleServicesFile": "./google-services.json",
+      "package": "com.dogcatify.app2",
+      "versionCode": 1,
+      "googleServicesFile": "./android/app/google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#FFFFFF"
@@ -73,12 +103,30 @@
           "action": "VIEW",
           "autoVerify": true,
           "data": [
-            { "scheme": "dogcatify", "host": "*" },
-            { "scheme": "https", "host": "app-dogcatify.netlify.app", "pathPrefix": "/album" },
-            { "scheme": "https", "host": "app-dogcatify.netlify.app", "pathPrefix": "/post" },
-            { "scheme": "https", "host": "app-dogcatify.netlify.app", "pathPrefix": "/share" }
+            {
+              "scheme": "dogcatify",
+              "host": "*"
+            },
+            {
+              "scheme": "https",
+              "host": "app-dogcatify.netlify.app",
+              "pathPrefix": "/album"
+            },
+            {
+              "scheme": "https",
+              "host": "app-dogcatify.netlify.app",
+              "pathPrefix": "/post"
+            },
+            {
+              "scheme": "https",
+              "host": "app-dogcatify.netlify.app",
+              "pathPrefix": "/share"
+            }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -87,11 +135,15 @@
       "bundler": "metro",
       "output": "static",
       "build": {
-        "babel": { "include": ["@expo/vector-icons"] }
+        "babel": {
+          "include": [
+            "@expo/vector-icons"
+          ]
+        }
       }
     },
-    "runtimeVersion": "15.0.0",
-    "owner": "pedro86cu",
+    "runtimeVersion": "1.0.0",
+    "owner": "pedro.ayala",
     "updates": {
       "url": "https://u.expo.dev/0618d9ae-6714-46bb-adce-f4ee57fff324"
     }

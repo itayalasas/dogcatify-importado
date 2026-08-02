@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { ArrowLeft, FileText, CheckCircle, AlertCircle, DollarSign, Scale, Mail, Phone, MessageSquare } from 'lucide-react-native';
+import { setTermsAccepted } from '../../utils/legalAcceptance';
 
 export default function TermsOfService() {
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
@@ -29,6 +30,7 @@ export default function TermsOfService() {
   };
 
   const handleAccept = () => {
+    setTermsAccepted();
     router.back();
   };
 

@@ -6,6 +6,7 @@ import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { canAccessPartnerModule, getPartnerLockedActionLabel } from '../../utils/partnerPlans';
 
 export default function ChatContacts() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
@@ -14,20 +15,33 @@ export default function ChatContacts() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   useEffect(() => {
     if (!currentUser || !businessId) return;
-    
-    fetchPartnerProfile();
-    fetchConversations();
-    
-    // Set up polling for conversation updates every 5 seconds
-    const pollInterval = setInterval(() => {
-      fetchConversations();
-    }, 5000);
+
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+    const loadChatContacts = async () => {
+      const canLoad = await fetchPartnerProfile();
+      if (!canLoad) {
+        return;
+      }
+
+      await fetchConversations();
+
+      // Set up polling for conversation updates every 5 seconds
+      pollInterval = setInterval(() => {
+        fetchConversations();
+      }, 5000);
+    };
+
+    loadChatContacts();
 
     return () => {
-      clearInterval(pollInterval);
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
     };
   }, [currentUser, businessId]);
 
@@ -35,20 +49,40 @@ export default function ChatContacts() {
     try {
       const { data, error } = await supabaseClient
         .from('partners')
-        .select('*')
+        .select('*, subscription_plan_tier, subscription_plan_status, subscription_plan_expires_at')
         .eq('id', businessId)
         .single();
       
       if (error) throw error;
-      
+
+      const planTier = data.subscription_plan_tier || 'starter';
+      const canViewAdoptions = canAccessPartnerModule(
+        planTier,
+        'adoptions',
+        data.business_type,
+        data.subscription_plan_status,
+        data.subscription_plan_expires_at,
+      );
+
       setPartnerProfile({
         id: data.id,
         businessName: data.business_name,
         businessType: data.business_type,
+        subscriptionPlanTier: planTier,
         logo: data.logo,
       });
+
+      if (!canViewAdoptions) {
+        setAccessDenied(true);
+        setLoading(false);
+        return false;
+      }
+
+      return true;
     } catch (error) {
       console.error('Error fetching partner profile:', error);
+      setLoading(false);
+      return false;
     }
   };
 
@@ -205,6 +239,30 @@ export default function ChatContacts() {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Cargando conversaciones...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (accessDenied) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.lockedContainer}>
+          <Card style={styles.lockedCard}>
+            <Text style={styles.lockedTitle}>Módulo bloqueado</Text>
+            <Text style={styles.lockedText}>
+              {getPartnerLockedActionLabel('adoptions')} para este negocio.
+            </Text>
+            <Text style={styles.lockedTextSecondary}>
+              Los contactos de adopción solo están disponibles para refugios con plan Pro.
+            </Text>
+            <TouchableOpacity
+              style={styles.lockedButton}
+              onPress={() => router.back()}
+            >
+              <Text style={styles.lockedButtonText}>Volver</Text>
+            </TouchableOpacity>
+          </Card>
         </View>
       </SafeAreaView>
     );
@@ -486,5 +544,49 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
+  },
+  lockedContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 20,
+  },
+  lockedCard: {
+    alignItems: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 18,
+  },
+  lockedTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  lockedText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
+    color: '#7C3AED',
+    textAlign: 'center',
+    lineHeight: 21,
+    marginBottom: 8,
+  },
+  lockedTextSecondary: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  lockedButton: {
+    backgroundColor: '#2D6A6F',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  lockedButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
   },
 });

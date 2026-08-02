@@ -4,9 +4,11 @@ import { router } from 'expo-router';
 import { Plus, Bell, Check, X, User } from 'lucide-react-native';
 import { PetCard } from '../../components/PetCard';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { getPets, supabaseClient, deletePet } from '../../lib/supabase';
+import { Pet } from '../../types';
 
 interface PetShareInvitation {
   id: string;
@@ -26,6 +28,67 @@ interface PetShareInvitation {
     display_name: string;
   };
 }
+
+const getFirstRecord = <T,>(value: T | T[] | null | undefined): T | null => {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] ?? null : value;
+};
+
+const normalizePetRecord = (pet: any, options: { isShared?: boolean; permissionLevel?: string } = {}) => {
+  if (!pet) return null;
+
+  return {
+    id: pet.id,
+    name: pet.name,
+    species: pet.species,
+    breed: pet.breed,
+    breedInfo: pet.breed_info,
+    age: pet.age,
+    ageDisplay: pet.age_display,
+    gender: pet.gender,
+    weight: pet.weight,
+    weightDisplay: pet.weight_display,
+    isNeutered: pet.is_neutered,
+    hasChip: pet.has_chip,
+    chipNumber: pet.chip_number,
+    photoURL: pet.photo_url,
+    ownerId: pet.owner_id,
+    personality: pet.personality || [],
+    medicalNotes: pet.medical_notes,
+    createdAt: new Date(pet.created_at),
+    photo_url: pet.photo_url,
+    isShared: options.isShared ?? false,
+    ...(options.permissionLevel ? { permissionLevel: options.permissionLevel } : {}),
+  };
+};
+
+const normalizeInvitation = (inv: any): PetShareInvitation | null => {
+  const pet = getFirstRecord(inv?.pets);
+  const owner = getFirstRecord(inv?.profiles);
+
+  if (!pet || !owner) {
+    return null;
+  }
+
+  return {
+    id: inv.id,
+    pet_id: inv.pet_id,
+    owner_id: inv.owner_id,
+    relationship_type: inv.relationship_type,
+    permission_level: inv.permission_level,
+    created_at: inv.created_at,
+    pet: {
+      id: pet.id,
+      name: pet.name,
+      species: pet.species,
+      photo_url: pet.photo_url ?? null,
+    },
+    owner: {
+      id: owner.id,
+      display_name: owner.display_name,
+    },
+  };
+};
 
 export default function Pets() {
   const [pets, setPets] = useState<Pet[]>([]);
@@ -69,16 +132,10 @@ export default function Pets() {
         if (pendingError) {
           console.error('Error fetching pending invitations:', pendingError);
         } else {
-          const formattedInvitations = pendingData?.map(inv => ({
-            id: inv.id,
-            pet_id: inv.pet_id,
-            owner_id: inv.owner_id,
-            relationship_type: inv.relationship_type,
-            permission_level: inv.permission_level,
-            created_at: inv.created_at,
-            pet: inv.pets,
-            owner: inv.profiles
-          })) || [];
+          const formattedInvitations = ((pendingData as any[] | null) || [])
+            .map(normalizeInvitation)
+            .filter(Boolean) as PetShareInvitation[];
+
           setPendingInvitations(formattedInvitations);
         }
 
@@ -115,60 +172,21 @@ export default function Pets() {
           console.error('Error fetching shared pets:', sharedError);
         }
 
-        const sharedPets = sharedPetsData?.map(share => ({
-          ...share.pets,
-          permissionLevel: share.permission_level
-        })).filter(Boolean) || [];
+        const ownPets = ((petsData as any[] | null) || [])
+          .map((pet) => normalizePetRecord(pet, { isShared: false }))
+          .filter(Boolean);
 
-        // Transform data to match the expected format
-        const transformedPets = petsData?.map(pet => ({
-          id: pet.id,
-          name: pet.name,
-          species: pet.species,
-          breed: pet.breed,
-          breedInfo: pet.breed_info,
-          age: pet.age,
-          ageDisplay: pet.age_display,
-          gender: pet.gender,
-          weight: pet.weight,
-          weightDisplay: pet.weight_display,
-          isNeutered: pet.is_neutered,
-          hasChip: pet.has_chip,
-          chipNumber: pet.chip_number,
-          photoURL: pet.photo_url,
-          ownerId: pet.owner_id,
-          personality: pet.personality || [],
-          medicalNotes: pet.medical_notes,
-          createdAt: new Date(pet.created_at),
-          photo_url: pet.photo_url,
-          isShared: false,
-        })) || [];
+        const sharedPets = ((sharedPetsData as any[] | null) || [])
+          .map((share) => {
+            const pet = getFirstRecord(share?.pets);
+            return normalizePetRecord(pet, {
+              isShared: true,
+              permissionLevel: share?.permission_level,
+            });
+          })
+          .filter(Boolean);
 
-        const transformedSharedPets = sharedPets.map(pet => ({
-          id: pet.id,
-          name: pet.name,
-          species: pet.species,
-          breed: pet.breed,
-          breedInfo: pet.breed_info,
-          age: pet.age,
-          ageDisplay: pet.age_display,
-          gender: pet.gender,
-          weight: pet.weight,
-          weightDisplay: pet.weight_display,
-          isNeutered: pet.is_neutered,
-          hasChip: pet.has_chip,
-          chipNumber: pet.chip_number,
-          photoURL: pet.photo_url,
-          ownerId: pet.owner_id,
-          personality: pet.personality || [],
-          medicalNotes: pet.medical_notes,
-          createdAt: new Date(pet.created_at),
-          photo_url: pet.photo_url,
-          isShared: true,
-          permissionLevel: pet.permissionLevel,
-        }));
-
-        setPets([...transformedPets, ...transformedSharedPets]);
+        setPets([...(ownPets as Pet[]), ...(sharedPets as Pet[])]);
         setLoading(false);
       } catch (error) {
         console.error('Error fetching pets:', error);
@@ -262,30 +280,21 @@ export default function Pets() {
           .eq('shared_with_user_id', currentUser.id)
           .eq('status', 'accepted');
 
-        const sharedPets = sharedPetsData?.map(share => ({
-          ...share.pets,
-          permissionLevel: share.permission_level
-        })).filter(Boolean) || [];
-        const transformedPets = petsData?.map(pet => ({
-          id: pet.id, name: pet.name, species: pet.species, breed: pet.breed,
-          breedInfo: pet.breed_info, age: pet.age, ageDisplay: pet.age_display,
-          gender: pet.gender, weight: pet.weight, weightDisplay: pet.weight_display,
-          isNeutered: pet.is_neutered, hasChip: pet.has_chip, chipNumber: pet.chip_number,
-          photoURL: pet.photo_url, ownerId: pet.owner_id, personality: pet.personality || [],
-          medicalNotes: pet.medical_notes, createdAt: new Date(pet.created_at),
-          photo_url: pet.photo_url, isShared: false,
-        })) || [];
-        const transformedSharedPets = sharedPets.map(pet => ({
-          id: pet.id, name: pet.name, species: pet.species, breed: pet.breed,
-          breedInfo: pet.breed_info, age: pet.age, ageDisplay: pet.age_display,
-          gender: pet.gender, weight: pet.weight, weightDisplay: pet.weight_display,
-          isNeutered: pet.is_neutered, hasChip: pet.has_chip, chipNumber: pet.chip_number,
-          photoURL: pet.photo_url, ownerId: pet.owner_id, personality: pet.personality || [],
-          medicalNotes: pet.medical_notes, createdAt: new Date(pet.created_at),
-          photo_url: pet.photo_url, isShared: true,
-          permissionLevel: pet.permissionLevel,
-        }));
-        setPets([...transformedPets, ...transformedSharedPets]);
+        const transformedPets = ((petsData as any[] | null) || [])
+          .map((pet) => normalizePetRecord(pet, { isShared: false }))
+          .filter(Boolean);
+
+        const transformedSharedPets = ((sharedPetsData as any[] | null) || [])
+          .map((share) => {
+            const pet = getFirstRecord(share?.pets);
+            return normalizePetRecord(pet, {
+              isShared: true,
+              permissionLevel: share?.permission_level,
+            });
+          })
+          .filter(Boolean);
+
+        setPets([...(transformedPets as Pet[]), ...(transformedSharedPets as Pet[])]);
       }
     } catch (error) {
       console.error('Error accepting invitation:', error);
@@ -534,8 +543,7 @@ export default function Pets() {
               console.error('Error deleting pet:', error);
               
               // Handle JWT expiration specifically
-              if (error && typeof error === 'object' && 'message' in error && 
-                  error.message.includes('JWT expired')) {
+              if ((error instanceof Error ? error.message : String(error || '')).includes('JWT expired')) {
                 Alert.alert(
                   'Sesión expirada',
                   'Tu sesión ha expirado. Por favor inicia sesión nuevamente.',
@@ -551,7 +559,7 @@ export default function Pets() {
               
               // Show more specific error message for other errors
               let errorMessage = 'No se pudo eliminar la mascota';
-              if (error && typeof error === 'object' && 'message' in error) {
+              if (error instanceof Error) {
                 errorMessage = `Error: ${error.message}`;
               }
               
@@ -584,9 +592,16 @@ export default function Pets() {
     <SafeAreaView style={styles.container}>
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>{t('myPets')}</Text>
-        <TouchableOpacity style={styles.addButton} onPress={handleAddPet}>
-          <Plus size={20} color="#FFFFFF" />
-        </TouchableOpacity>
+        <OneTimeTooltip
+          hintKey="pets_add_button_v3"
+          userId={currentUser?.id}
+          text="Tip: tocá + para agregar tu mascota"
+          placement="bottom"
+        >
+          <TouchableOpacity style={styles.addButton} onPress={handleAddPet}>
+            <Plus size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </OneTimeTooltip>
       </View>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {pendingInvitations.length > 0 && (
@@ -686,7 +701,7 @@ export default function Pets() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAFC',
     paddingTop: 30, // Add padding at the top to show status bar
   },
   headerContainer: {
@@ -706,21 +721,25 @@ const styles = StyleSheet.create({
   },
   addButton: {
     backgroundColor: '#10B981',
-    padding: 8,
     borderRadius: 20,
     width: 36,
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#047857',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 3,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 10,
+    paddingHorizontal: 16,
     paddingBottom: 10,
   },
   petsContainer: {
-    padding: 5,
-    paddingTop: 16,
+    paddingTop: 14,
+    paddingBottom: 22,
     position: 'relative',
     minHeight: 500,
   },

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Switch } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Clock, X } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { formatDateLabel, generateUruguayHolidayClosures, toLocalDateKey, type ScheduleClosureEntry } from '../../utils/scheduleExceptions';
 
 interface ScheduleItem {
   id: string;
@@ -15,6 +16,8 @@ interface ScheduleItem {
   endTime: string;
   maxSlots: number;
   slotDuration: number; // in minutes
+  breakStartTime?: string | null;
+  breakEndTime?: string | null;
   isActive: boolean;
 }
 
@@ -22,8 +25,10 @@ export default function ConfigureSchedulePage() {
   const { partnerId, dayOfWeek } = useLocalSearchParams<{ partnerId: string; dayOfWeek?: string }>();
   const { currentUser } = useAuth();
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
+  const [closures, setClosures] = useState<ScheduleClosureEntry[]>([]);
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [closuresLoading, setClosuresLoading] = useState(false);
   
   // Form state - permitir selección múltiple de días
   const [selectedDays, setSelectedDays] = useState<number[]>(dayOfWeek ? [parseInt(dayOfWeek)] : []);
@@ -31,6 +36,12 @@ export default function ConfigureSchedulePage() {
   const [endTime, setEndTime] = useState('17:00');
   const [maxSlots, setMaxSlots] = useState('8');
   const [slotDuration, setSlotDuration] = useState('60');
+  const [breakEnabled, setBreakEnabled] = useState(false);
+  const [breakStartTime, setBreakStartTime] = useState('12:00');
+  const [breakEndTime, setBreakEndTime] = useState('13:00');
+  const [closureDate, setClosureDate] = useState('');
+  const [closureReason, setClosureReason] = useState('');
+  const [holidayYear, setHolidayYear] = useState(String(new Date().getFullYear()));
 
   const daysOfWeek = [
     { value: 1, label: 'Lunes' },
@@ -41,6 +52,8 @@ export default function ConfigureSchedulePage() {
     { value: 6, label: 'Sábado' },
     { value: 0, label: 'Domingo' },
   ];
+
+  const isWalkingBusiness = partnerProfile?.businessType === 'walking';
 
   useEffect(() => {
     if (!partnerId) return;
@@ -66,7 +79,7 @@ export default function ConfigureSchedulePage() {
           });
         }
         
-        fetchSchedule();
+        await Promise.all([fetchSchedule(), fetchClosures()]);
       } catch (error) {
         console.error('Error fetching partner profile:', error);
       }
@@ -112,8 +125,22 @@ export default function ConfigureSchedulePage() {
         endTime: item.end_time,
         maxSlots: item.max_slots,
         slotDuration: item.slot_duration,
+        breakStartTime: item.break_start_time,
+        breakEndTime: item.break_end_time,
         isActive: item.is_active,
       }));
+
+      const scheduleWithBreak = scheduleData.find(
+        (item) => item.breakStartTime && item.breakEndTime,
+      );
+
+      if (scheduleWithBreak) {
+        setBreakEnabled(true);
+        setBreakStartTime(scheduleWithBreak.breakStartTime || '12:00');
+        setBreakEndTime(scheduleWithBreak.breakEndTime || '13:00');
+      } else {
+        setBreakEnabled(false);
+      }
       
       // Sort by day of week (Sunday last)
       scheduleData.sort((a, b) => {
@@ -125,6 +152,31 @@ export default function ConfigureSchedulePage() {
       setSchedule(scheduleData);
     } catch (error) {
       console.error('Error fetching schedule:', error);
+    }
+  };
+
+  const fetchClosures = async () => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('business_schedule_closures')
+        .select('id, partner_id, closed_date, reason, closure_type, source_year, created_at, updated_at')
+        .eq('partner_id', partnerId)
+        .order('closed_date', { ascending: true });
+
+      if (error) throw error;
+
+      setClosures((data || []).map((item: any) => ({
+        id: item.id,
+        partner_id: item.partner_id,
+        closed_date: item.closed_date,
+        reason: item.reason,
+        closure_type: item.closure_type,
+        source_year: item.source_year,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+      })));
+    } catch (error) {
+      console.error('Error fetching closures:', error);
     }
   };
 
@@ -143,6 +195,33 @@ export default function ConfigureSchedulePage() {
     if (requiresAppointmentFields && (!maxSlots || !slotDuration)) {
       Alert.alert('Error', 'Por favor completa todos los campos');
       return;
+    }
+
+    if (breakEnabled) {
+      if (!breakStartTime || !breakEndTime) {
+        Alert.alert('Error', 'Completa la pausa interna para bloquear ese intervalo');
+        return;
+      }
+
+      const [breakStartHour, breakStartMinute] = breakStartTime.split(':').map(Number);
+      const [breakEndHour, breakEndMinute] = breakEndTime.split(':').map(Number);
+      const [scheduleStartHour, scheduleStartMinute] = startTime.split(':').map(Number);
+      const [scheduleEndHour, scheduleEndMinute] = endTime.split(':').map(Number);
+
+      const breakStartMinutes = (breakStartHour * 60) + breakStartMinute;
+      const breakEndMinutes = (breakEndHour * 60) + breakEndMinute;
+      const scheduleStartMinutes = (scheduleStartHour * 60) + scheduleStartMinute;
+      const scheduleEndMinutes = (scheduleEndHour * 60) + scheduleEndMinute;
+
+      if (breakEndMinutes <= breakStartMinutes) {
+        Alert.alert('Error', 'La pausa debe terminar después de iniciar');
+        return;
+      }
+
+      if (breakStartMinutes < scheduleStartMinutes || breakEndMinutes > scheduleEndMinutes) {
+        Alert.alert('Error', 'La pausa debe estar dentro del horario configurado');
+        return;
+      }
     }
 
     // Verificar si alguno de los días seleccionados ya tiene horario
@@ -196,6 +275,8 @@ export default function ConfigureSchedulePage() {
           day_of_week: day,
           start_time: startTime,
           end_time: endTime,
+          break_start_time: breakEnabled ? breakStartTime : null,
+          break_end_time: breakEnabled ? breakEndTime : null,
           // Para boarding y shop, usar 0 ya que no manejan citas
           max_slots: requiresAppointmentFields ? parseInt(maxSlots) : 0,
           slot_duration: requiresAppointmentFields ? parseInt(slotDuration) : 0,
@@ -278,6 +359,124 @@ export default function ConfigureSchedulePage() {
     );
   };
 
+  const handleAddClosure = async () => {
+    const normalizedDate = toLocalDateKey(closureDate);
+
+    if (!normalizedDate) {
+      Alert.alert('Error', 'Ingresa una fecha válida con formato AAAA-MM-DD');
+      return;
+    }
+
+    setClosuresLoading(true);
+    try {
+      const now = new Date().toISOString();
+      const reason = closureReason.trim() || 'Cierre manual';
+
+      const { error } = await supabaseClient
+        .from('business_schedule_closures')
+        .upsert([
+          {
+            partner_id: partnerId,
+            closed_date: normalizedDate,
+            reason,
+            closure_type: 'manual',
+            source_year: new Date(`${normalizedDate}T12:00:00`).getFullYear(),
+            created_at: now,
+            updated_at: now,
+          },
+        ], {
+          onConflict: 'partner_id,closed_date',
+        });
+
+      if (error) throw error;
+
+      setClosureDate('');
+      setClosureReason('');
+      await fetchClosures();
+      Alert.alert('Éxito', 'El día quedó bloqueado en la agenda');
+    } catch (error) {
+      console.error('Error adding closure:', error);
+      Alert.alert('Error', 'No se pudo bloquear el día');
+    } finally {
+      setClosuresLoading(false);
+    }
+  };
+
+  const handleDeleteClosure = (closureId: string) => {
+    Alert.alert(
+      'Eliminar cierre',
+      '¿Quieres volver a habilitar este día en la agenda?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabaseClient
+                .from('business_schedule_closures')
+                .delete()
+                .eq('id', closureId);
+
+              if (error) throw error;
+
+              await fetchClosures();
+              Alert.alert('Éxito', 'El día volvió a estar disponible');
+            } catch (error) {
+              console.error('Error deleting closure:', error);
+              Alert.alert('Error', 'No se pudo quitar el cierre');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleLoadHolidayClosures = async () => {
+    const year = Math.trunc(Number(holidayYear));
+
+    if (!Number.isFinite(year) || year < 2000 || year > 2100) {
+      Alert.alert('Error', 'Ingresa un año válido');
+      return;
+    }
+
+    const holidaySeeds = generateUruguayHolidayClosures(year);
+    if (holidaySeeds.length === 0) {
+      Alert.alert('Error', 'No se pudieron generar los feriados para ese año');
+      return;
+    }
+
+    setClosuresLoading(true);
+    try {
+      const now = new Date().toISOString();
+      const payload = holidaySeeds.map((seed) => ({
+        partner_id: partnerId,
+        closed_date: seed.closed_date,
+        reason: seed.reason,
+        closure_type: seed.closure_type,
+        source_year: seed.source_year,
+        created_at: now,
+        updated_at: now,
+      }));
+
+      const { error } = await supabaseClient
+        .from('business_schedule_closures')
+        .upsert(payload, {
+          onConflict: 'partner_id,closed_date',
+        });
+
+      if (error) throw error;
+
+      await fetchClosures();
+      Alert.alert('Éxito', `Se cargaron los feriados del ${year}`);
+    } catch (error) {
+      console.error('Error loading holiday closures:', error);
+      Alert.alert('Error', 'No se pudieron cargar los feriados');
+    } finally {
+      setClosuresLoading(false);
+    }
+  };
+
   const getDayName = (dayOfWeek: number) => {
     const day = daysOfWeek.find(d => d.value === dayOfWeek);
     return day ? day.label : 'Desconocido';
@@ -328,7 +527,11 @@ export default function ConfigureSchedulePage() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Card style={styles.infoCard}>
           <Text style={styles.infoTitle}>⏰ Horarios de Trabajo</Text>
-          <Text style={styles.infoDescription}>Define tus horarios de trabajo para que los clientes puedan hacer reservas</Text>
+          <Text style={styles.infoDescription}>
+            {isWalkingBusiness
+              ? 'Define tus horarios de paseo y cuántos turnos puedes aceptar en cada franja.'
+              : 'Define tus horarios de trabajo para que los clientes puedan hacer reservas'}
+          </Text>
         </Card>
 
         <Card style={styles.formCard}>
@@ -389,8 +592,8 @@ export default function ConfigureSchedulePage() {
           {partnerProfile?.businessType !== 'boarding' && partnerProfile?.businessType !== 'shop' && (
             <>
               <Input
-                label="Máximo de citas por día"
-                placeholder="8"
+                label={isWalkingBusiness ? 'Cantidad de turnos por horario' : 'Máximo de citas por horario'}
+                placeholder={isWalkingBusiness ? '3' : '8'}
                 value={maxSlots}
                 onChangeText={setMaxSlots}
                 keyboardType="numeric"
@@ -424,6 +627,43 @@ export default function ConfigureSchedulePage() {
               </Text>
             </TouchableOpacity>
           </View>
+
+          <View style={styles.breakSection}>
+            <View style={styles.breakHeader}>
+              <Text style={styles.sectionTitle}>Pausa interna opcional</Text>
+              <Switch
+                value={breakEnabled}
+                onValueChange={setBreakEnabled}
+                trackColor={{ false: '#D1D5DB', true: '#60A5FA' }}
+                thumbColor={breakEnabled ? '#2563EB' : '#F9FAFB'}
+              />
+            </View>
+            <Text style={styles.breakHelperText}>
+              Este bloque se oculta a los clientes y sirve para almuerzo, descanso o tareas internas.
+            </Text>
+            {breakEnabled && (
+              <View style={styles.timeInputs}>
+                <View style={styles.timeInput}>
+                  <Input
+                    label="Inicio de pausa"
+                    placeholder="12:00"
+                    value={breakStartTime}
+                    onChangeText={setBreakStartTime}
+                    leftIcon={<Clock size={20} color="#6B7280" />}
+                  />
+                </View>
+                <View style={styles.timeInput}>
+                  <Input
+                    label="Fin de pausa"
+                    placeholder="13:00"
+                    value={breakEndTime}
+                    onChangeText={setBreakEndTime}
+                    leftIcon={<Clock size={20} color="#6B7280" />}
+                  />
+                </View>
+              </View>
+            )}
+          </View>
         </Card>
 
         {schedule.length > 0 && (
@@ -438,6 +678,11 @@ export default function ConfigureSchedulePage() {
                       <Text style={styles.timeRange}>
                         {item.startTime} - {item.endTime}
                       </Text>
+                      {item.breakStartTime && item.breakEndTime && (
+                        <Text style={styles.breakSummary}>
+                          Pausa: {item.breakStartTime} - {item.breakEndTime}
+                        </Text>
+                      )}
                     </View>
                     <View style={[
                       styles.scheduleStatus,
@@ -455,7 +700,7 @@ export default function ConfigureSchedulePage() {
                   {partnerProfile?.businessType !== 'boarding' && partnerProfile?.businessType !== 'shop' && (
                     <View style={styles.scheduleDetails}>
                       <Text style={styles.scheduleDetail}>
-                        Máximo {item.maxSlots} citas por día
+                        {isWalkingBusiness ? `Hasta ${item.maxSlots} turnos por horario` : `Máximo ${item.maxSlots} citas por horario`}
                       </Text>
                       <Text style={styles.scheduleDetail}>
                         Duración por cita: {item.slotDuration} minutos
@@ -482,6 +727,79 @@ export default function ConfigureSchedulePage() {
             </View>
           </Card>
         )}
+
+        <Card style={styles.closureCard}>
+          <Text style={styles.sectionTitle}>Cierres y feriados</Text>
+          <Text style={styles.breakHelperText}>
+            Bloquea días completos por feriados, aniversarios, reparaciones o descansos especiales.
+          </Text>
+
+          <Input
+            label="Fecha cerrada"
+            placeholder="2026-07-18"
+            value={closureDate}
+            onChangeText={setClosureDate}
+          />
+
+          <Input
+            label="Motivo"
+            placeholder="Feriado, reparación, aniversario..."
+            value={closureReason}
+            onChangeText={setClosureReason}
+          />
+
+          <Input
+            label="Año para feriados"
+            placeholder="2026"
+            value={holidayYear}
+            onChangeText={setHolidayYear}
+            keyboardType="numeric"
+          />
+
+          <View style={styles.closureButtonsRow}>
+            <Button
+              title={closuresLoading ? 'Guardando...' : 'Agregar cierre'}
+              onPress={handleAddClosure}
+              loading={closuresLoading}
+              disabled={closuresLoading}
+              variant="primary"
+              size="medium"
+            />
+            <Button
+              title={closuresLoading ? 'Cargando...' : `Cargar feriados ${holidayYear || new Date().getFullYear()}`}
+              onPress={handleLoadHolidayClosures}
+              loading={closuresLoading}
+              disabled={closuresLoading}
+              variant="outline"
+              size="medium"
+            />
+          </View>
+
+          {closures.length > 0 ? (
+            <View style={styles.closureList}>
+              {closures.map((closure) => (
+                <View key={closure.id} style={styles.closureItem}>
+                  <View style={styles.closureItemInfo}>
+                    <Text style={styles.closureItemDate}>
+                      {formatDateLabel(closure.closed_date)}
+                    </Text>
+                    <Text style={styles.closureItemReason}>
+                      {closure.reason || (closure.closure_type === 'holiday' ? 'Feriado' : 'Cierre manual')}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.closureDeleteButton}
+                    onPress={() => closure.id && handleDeleteClosure(closure.id)}
+                  >
+                    <X size={16} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.emptyClosuresText}>Todavía no hay días bloqueados.</Text>
+          )}
+        </Card>
       </ScrollView>
     </SafeAreaView>
   );
@@ -630,6 +948,26 @@ const styles = StyleSheet.create({
   timeInput: { 
     flex: 1,
   },
+  breakSection: {
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  breakHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  breakHelperText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 18,
+    marginTop: 8,
+    marginBottom: 12,
+  },
   buttonContainer: {
     flexDirection: 'column',
     gap: 12,
@@ -708,6 +1046,12 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginBottom: 4,
   },
+  breakSummary: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#0F766E',
+    marginTop: 2,
+  },
   scheduleActions: {
     flexDirection: 'column',
     alignItems: 'center',
@@ -726,6 +1070,58 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 44,
+  },
+  closureCard: {
+    marginBottom: 16,
+    padding: 20,
+  },
+  closureButtonsRow: {
+    flexDirection: 'column',
+    gap: 12,
+    marginBottom: 16,
+  },
+  closureList: {
+    gap: 12,
+  },
+  closureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  closureItemInfo: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  closureItemDate: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  closureItemReason: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  closureDeleteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyClosuresText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 8,
   },
   addButtonText: {
     fontSize: 16,

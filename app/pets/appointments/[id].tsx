@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, TextInput, Platform, Keyboard, Pressable, Dimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Calendar, Clock, CircleAlert as AlertCircle, CircleCheck as CheckCircle, Star, MessageSquare, Send } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
@@ -20,6 +20,7 @@ export default function PetAppointments() {
   const [reviewComment, setReviewComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
   const [existingReviews, setExistingReviews] = useState<{[key: string]: any}>({});
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   useEffect(() => {
     if (!id) return;
@@ -27,6 +28,64 @@ export default function PetAppointments() {
     fetchPetDetails();
     fetchAppointments();
   }, [id]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates?.height || 0);
+    });
+
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
+  const getAppointmentDateTime = (appointment: any) => {
+    const baseDate = appointment.date ? new Date(appointment.date) : new Date();
+    const appointmentDateTime = new Date(baseDate);
+
+    if (appointment.time && typeof appointment.time === 'string') {
+      const timeMatch = appointment.time.match(/^(\d{1,2}):(\d{2})/);
+      if (timeMatch) {
+        const hours = parseInt(timeMatch[1], 10);
+        const minutes = parseInt(timeMatch[2], 10);
+        appointmentDateTime.setHours(hours, minutes, 0, 0);
+      }
+    } else {
+      appointmentDateTime.setHours(23, 59, 59, 999);
+    }
+
+    return appointmentDateTime;
+  };
+
+  const isExpiredAppointment = (appointment: any) => {
+    if (!appointment) return false;
+
+    const activeStatuses = ['pending', 'confirmed'];
+    if (!activeStatuses.includes(appointment.status)) {
+      return false;
+    }
+
+    return getAppointmentDateTime(appointment) < new Date();
+  };
+
+  const normalizeAppointmentStatus = (appointment: any) => {
+    if (isExpiredAppointment(appointment)) {
+      return {
+        ...appointment,
+        status: 'completed',
+      };
+    }
+
+    return appointment;
+  };
 
   const fetchPetDetails = async () => {
     try {
@@ -54,11 +113,29 @@ export default function PetAppointments() {
         partnerName: appointment.partner_name,
         totalAmount: appointment.total_amount,
       })) || [];
-      
-      setAppointments(formattedAppointments);
+
+      const expiredAppointments = formattedAppointments.filter(isExpiredAppointment);
+      if (expiredAppointments.length > 0) {
+        const expiredIds = expiredAppointments.map(appointment => appointment.id);
+        const { error: expiredUpdateError } = await supabaseClient
+          .from('bookings')
+          .update({
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+          })
+          .in('id', expiredIds);
+
+        if (expiredUpdateError) {
+          console.error('Error updating expired appointments:', expiredUpdateError);
+        }
+      }
+
+      const normalizedAppointments = formattedAppointments.map(normalizeAppointmentStatus);
+
+      setAppointments(normalizedAppointments);
       
       // Fetch existing reviews for completed appointments
-      await fetchExistingReviews(formattedAppointments);
+      await fetchExistingReviews(normalizedAppointments);
     } catch (error) {
       console.error('Error fetching appointments:', error);
     } finally {
@@ -240,10 +317,12 @@ export default function PetAppointments() {
 
   const filteredAppointments = appointments.filter(appointment => {
     const now = new Date();
+    const appointmentDateTime = getAppointmentDateTime(appointment);
+
     if (activeTab === 'upcoming') {
-      return appointment.date >= now || appointment.status === 'pending' || appointment.status === 'confirmed';
+      return appointmentDateTime >= now && ['pending', 'confirmed'].includes(appointment.status);
     } else {
-      return appointment.date < now || appointment.status === 'completed' || appointment.status === 'cancelled';
+      return appointmentDateTime < now || ['completed', 'cancelled'].includes(appointment.status);
     }
   });
 
@@ -424,8 +503,28 @@ export default function PetAppointments() {
         animationType="slide"
         onRequestClose={() => setShowReviewModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <Pressable
+          style={[
+            styles.modalOverlay,
+            keyboardHeight > 0 ? styles.modalOverlayKeyboardVisible : styles.modalOverlayCentered,
+          ]}
+          onPress={Keyboard.dismiss}
+        >
+            <Pressable
+              style={[
+                styles.modalContent,
+                keyboardHeight > 0 && {
+                  maxHeight: Dimensions.get('window').height - keyboardHeight - 48,
+                },
+              ]}
+              onPress={(event) => event.stopPropagation()}
+            >
+              <ScrollView
+                contentContainerStyle={styles.modalScrollContent}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                showsVerticalScrollIndicator={false}
+              >
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Calificar Servicio</Text>
               <TouchableOpacity onPress={() => setShowReviewModal(false)}>
@@ -459,6 +558,9 @@ export default function PetAppointments() {
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
+                returnKeyType="done"
+                blurOnSubmit
+                onSubmitEditing={Keyboard.dismiss}
               />
             </View>
 
@@ -488,8 +590,9 @@ export default function PetAppointments() {
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
-        </View>
+              </ScrollView>
+            </Pressable>
+          </Pressable>
       </Modal>
     </SafeAreaView>
   );
@@ -720,9 +823,16 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+  },
+  modalOverlayCentered: {
+    justifyContent: 'center',
+  },
+  modalOverlayKeyboardVisible: {
+    justifyContent: 'flex-start',
+    paddingTop: 32,
+    paddingBottom: 12,
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
@@ -730,6 +840,10 @@ const styles = StyleSheet.create({
     padding: 24,
     width: '100%',
     maxWidth: 400,
+    maxHeight: '85%',
+  },
+  modalScrollContent: {
+    paddingBottom: 8,
   },
   modalHeader: {
     flexDirection: 'row',

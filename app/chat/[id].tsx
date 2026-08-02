@@ -38,6 +38,14 @@ interface ConversationDetails {
   partnerName?: string;
 }
 
+type ChatListItem =
+  | Message
+  | {
+      type: 'date';
+      date: string;
+      id: string;
+    };
+
 export default function ChatScreen() {
   const { id: conversationId, petName } = useLocalSearchParams<{ 
     id: string; 
@@ -52,7 +60,7 @@ export default function ChatScreen() {
   const [conversationDetails, setConversationDetails] = useState<ConversationDetails | null>(null);
   const [recipientId, setRecipientId] = useState<string>('');
   const [recipientName, setRecipientName] = useState<string>('');
-  const flatListRef = useRef<FlatList>(null);
+  const flatListRef = useRef<FlatList<ChatListItem>>(null);
 
   // Helper function to format dates like WhatsApp
   const formatDateSeparator = (date: Date): string => {
@@ -99,8 +107,8 @@ export default function ChatScreen() {
   };
 
   // Process messages to add date separators
-  const getMessagesWithSeparators = () => {
-    const messagesWithSeparators: (Message | { type: 'date'; date: string; id: string })[] = [];
+  const getMessagesWithSeparators = (): ChatListItem[] => {
+    const messagesWithSeparators: ChatListItem[] = [];
     
     messages.forEach((message, index) => {
       const previousMessage = index > 0 ? messages[index - 1] : undefined;
@@ -214,7 +222,7 @@ export default function ChatScreen() {
           
           try {
             if (msg.sender_id === currentUser?.id) {
-              senderName = currentUser.displayName || 'Tú';
+              senderName = currentUser?.displayName || 'Tú';
             } else {
               // Get sender name from profiles
               const { data: senderData } = await supabaseClient
@@ -313,13 +321,13 @@ export default function ChatScreen() {
         try {
           await sendNotificationToUser(
             recipientId,
-            `Nuevo mensaje de ${currentUser.displayName || 'Usuario'}`,
+            `Nuevo mensaje de ${currentUser?.displayName || 'Usuario'}`,
             newMessage.trim(),
             {
               type: 'chat_message',
               conversationId: conversationId,
               petName: petName || 'mascota',
-              senderName: currentUser.displayName || 'Usuario'
+              senderName: currentUser?.displayName || 'Usuario'
             }
           );
           console.log('Push notification sent');
@@ -349,9 +357,15 @@ export default function ChatScreen() {
     }, 100);
   };
 
-  const renderMessage = ({ item }: { item: Message }) => {
+  const isDateSeparatorItem = (
+    item: ChatListItem
+  ): item is Extract<ChatListItem, { type: 'date' }> => {
+    return 'type' in item && item.type === 'date';
+  };
+
+  const renderMessage = ({ item }: { item: ChatListItem }) => {
     // Handle date separator
-    if ('type' in item && item.type === 'date') {
+    if (isDateSeparatorItem(item)) {
       return (
         <View style={styles.dateSeparatorContainer}>
           <View style={styles.dateSeparator}>

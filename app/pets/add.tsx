@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { supabaseClient } from '../../lib/supabase';
 import { uploadImage } from '../../utils/imageUpload';
+import { resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
 
 interface BreedInfo {
   name: string;
@@ -209,8 +210,8 @@ export default function AddPet() {
     setLoadingBreedInfo(true);
     try {
       const endpoint = speciesType === 'dog' 
-        ? `https://ffihaeatoundrjzgtpzk.supabase.co/functions/v1/dogs?name=${encodeURIComponent(breedName)}`
-        : `https://ffihaeatoundrjzgtpzk.supabase.co/functions/v1/cats?name=${encodeURIComponent(breedName)}`;
+        ? `https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/dogs?name=${encodeURIComponent(breedName)}`
+        : `https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/cats?name=${encodeURIComponent(breedName)}`;
       
       console.log(`API endpoint: ${endpoint}`);
       
@@ -289,6 +290,50 @@ export default function AddPet() {
     setIsLoading(true);
     
     try {
+      const { data: subscriptionData, error: subscriptionError } = await supabaseClient
+        .from('user_subscriptions')
+        .select(`
+          status,
+          subscription_plans (
+            tier,
+            audience_target,
+            limits
+          )
+        `)
+        .eq('user_id', currentUser.id)
+        .in('status', ['active', 'trialing', 'pending', 'paused'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (subscriptionError) {
+        console.error('Error loading user subscription limits:', subscriptionError);
+      }
+
+      const userPlanLimits = resolveSubscriptionPlanLimits(subscriptionData?.subscription_plans || null);
+      const maxPetsAllowed = userPlanLimits.users.maxPets;
+
+      if (maxPetsAllowed !== null) {
+        const { count: petsCount, error: petsCountError } = await supabaseClient
+          .from('pets')
+          .select('id', { count: 'exact', head: true })
+          .eq('owner_id', currentUser.id);
+
+        if (petsCountError) {
+          console.error('Error counting pets for plan limit:', petsCountError);
+        } else if ((petsCount || 0) >= maxPetsAllowed) {
+          Alert.alert(
+            'Límite alcanzado',
+            `Tu plan actual permite hasta ${maxPetsAllowed} mascota${maxPetsAllowed === 1 ? '' : 's'}. Actualiza tu suscripción para registrar más.`,
+            [
+              { text: 'Ver suscripción', onPress: () => router.push('/profile/subscription') },
+              { text: 'OK', style: 'cancel' },
+            ]
+          );
+          return;
+        }
+      }
+
       // Check if a pet with the same name, species, and breed already exists for this user
       const { data: existingPets, error: checkError } = await supabaseClient
         .from('pets')
@@ -449,8 +494,8 @@ export default function AddPet() {
     } catch (error) {
       console.error('Error in handleSubmit:', error);
       // Check if this is a JWT error
-      if (error && typeof error === 'object' && 'message' in error && 
-          (error.message.includes('JWT') || error.message.includes('expired'))) {
+      const errorMessage = error instanceof Error ? error.message : '';
+      if (errorMessage.includes('JWT') || errorMessage.includes('expired')) {
         Alert.alert(
           'Sesión expirada',
           'Tu sesión ha expirado. Por favor inicia sesión nuevamente.',
@@ -865,7 +910,9 @@ export default function AddPet() {
                 placeholder="Escribe o selecciona un color"
                 onFocus={() => setShowColorSuggestions(true)}
               />
-              <Search size={20} color="#6B7280" style={styles.colorSearchIcon} />
+              <View style={styles.colorSearchIcon}>
+                <Search size={20} color="#6B7280" />
+              </View>
             </View>
             
             {showColorSuggestions && filteredColors.length > 0 && (
@@ -963,7 +1010,7 @@ export default function AddPet() {
               placeholder="Descripción adicional (opcional)"
               multiline
               numberOfLines={4}
-              style={[styles.input, styles.textArea]}
+              style={StyleSheet.flatten([styles.input, styles.textArea])}
             />
           </View>
 
@@ -973,6 +1020,7 @@ export default function AddPet() {
             loading={isLoading}
             disabled={isLoading}
             size="large"
+            style={styles.submitButton}
           />
         </View>
       </ScrollView>
@@ -983,63 +1031,71 @@ export default function AddPet() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
+    backgroundColor: '#F8FAFC',
+    paddingTop: 44,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 18,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#E2E8F0',
   },
   backButton: {
-    padding: 8,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
   },
   headerTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    fontSize: 21,
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
   },
   placeholder: {
-    width: 32,
+    width: 42,
   },
   content: {
     flex: 1,
   },
   form: {
-    padding: 20,
+    paddingHorizontal: 18,
+    paddingTop: 20,
+    paddingBottom: 34,
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: 18,
     position: 'relative',
   },
   inputGroupHalf: {
     flex: 1,
     marginBottom: 16,
-    marginHorizontal: 8,
   },
   label: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
+    fontSize: 14,
+    fontFamily: 'Inter-Bold',
+    color: '#334155',
     marginBottom: 8,
   },
   input: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    borderColor: '#E2E8F0',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 16,
     color: '#111827',
+    minHeight: 54,
   },
   textArea: {
-    height: 100,
+    height: 118,
     textAlignVertical: 'top',
   },
   
@@ -1047,14 +1103,19 @@ const styles = StyleSheet.create({
   modernSelector: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
+    borderColor: '#E2E8F0',
+    borderRadius: 18,
     paddingHorizontal: 16,
     paddingVertical: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    minHeight: 50,
+    minHeight: 56,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 1,
   },
   disabledSelector: {
     backgroundColor: '#F9FAFB',
@@ -1070,7 +1131,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   selectorText: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'Inter-Regular',
     color: '#111827',
     flex: 1,
@@ -1088,14 +1149,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    borderRadius: 12,
-    marginTop: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    borderRadius: 18,
+    marginTop: 8,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowRadius: 18,
     elevation: 8,
     zIndex: 1000,
+    overflow: 'hidden',
   },
   modernDropdownOption: {
     flexDirection: 'row',
@@ -1130,14 +1192,14 @@ const styles = StyleSheet.create({
   colorInput: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
+    borderColor: '#E2E8F0',
+    borderRadius: 18,
     paddingHorizontal: 16,
     paddingVertical: 14,
     paddingRight: 50,
     fontSize: 16,
     color: '#111827',
-    minHeight: 50,
+    minHeight: 56,
   },
   colorSearchIcon: {
     position: 'absolute',
@@ -1152,15 +1214,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    borderRadius: 12,
-    marginTop: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    borderRadius: 18,
+    marginTop: 8,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowRadius: 18,
     elevation: 8,
     zIndex: 1000,
     maxHeight: 200,
+    overflow: 'hidden',
   },
   colorSuggestion: {
     paddingHorizontal: 16,
@@ -1185,12 +1248,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 18,
     paddingVertical: 16,
     paddingHorizontal: 16,
     minHeight: 60,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 1,
   },
   selectedGenderOption: {
     backgroundColor: '#2D6A6F',
@@ -1219,11 +1287,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
+    borderColor: '#E2E8F0',
+    borderRadius: 18,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    minHeight: 50,
+    minHeight: 56,
   },
   modernCheckbox: {
     width: 24,
@@ -1249,27 +1317,37 @@ const styles = StyleSheet.create({
 
   // Image styles
   imageContainer: {
-    alignItems: 'center',
-    marginVertical: 10,
+    alignItems: 'stretch',
+    marginTop: 2,
+    marginBottom: 4,
+    padding: 12,
+    borderRadius: 26,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 4,
   },
   petImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: '100%',
+    height: 230,
+    borderRadius: 20,
     marginBottom: 12,
-    borderWidth: 3,
-    borderColor: '#E5E7EB',
+    borderWidth: 0,
   },
   imagePlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#F3F4F6',
+    width: '100%',
+    height: 230,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
     borderStyle: 'dashed',
   },
   imagePlaceholderText: {
@@ -1277,13 +1355,15 @@ const styles = StyleSheet.create({
   },
   imageButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   imageButton: {
+    flex: 1,
     backgroundColor: '#2D6A6F',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 12,
+    borderRadius: 16,
+    alignItems: 'center',
   },
   imageButtonText: {
     color: '#FFFFFF',
@@ -1293,8 +1373,16 @@ const styles = StyleSheet.create({
 
   // Breed info styles
   breedInfoContainer: {
-    marginBottom: 20,
+    marginBottom: 22,
     padding: 16,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    elevation: 4,
   },
   breedInfoTitle: { 
     fontSize: 18,
@@ -1305,8 +1393,8 @@ const styles = StyleSheet.create({
   },
   breedImage: {
     width: '100%',
-    height: 200,
-    borderRadius: 12,
+    height: 190,
+    borderRadius: 18,
     marginBottom: 16,
   },
   breedStatsGrid: {
@@ -1315,9 +1403,9 @@ const styles = StyleSheet.create({
   breedStat: {
     backgroundColor: '#F8FAFC',
     padding: 12,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#2D6A6F',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   breedStatLabel: {
     fontSize: 14,
@@ -1351,7 +1439,7 @@ const styles = StyleSheet.create({
   // Layout styles
   row: {
     flexDirection: 'row',
-    marginHorizontal: -8,
+    gap: 12,
     marginBottom: 4,
   },
   loadingText: {
@@ -1359,5 +1447,16 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontStyle: 'italic',
     marginTop: 4,
+  },
+  submitButton: {
+    minHeight: 56,
+    borderRadius: 18,
+    marginTop: 4,
+    marginBottom: 10,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    elevation: 5,
   },
 });

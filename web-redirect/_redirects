@@ -5,6 +5,12 @@
 /album/*  /index.html  200
 /post/*   /index.html  200
 /share/*  /index.html  200
+/profile/subscription  /index.html  200
+/profile/subscription/*  /index.html  200
+/subscription/return  /index.html  200
+/subscription/return/*  /index.html  200
+/promotion-approval  /promotion-approval/index.html  200
+/promotion-approval/*  /promotion-approval/index.html  200
 
 # Fallback para cualquier otra ruta
 /*        /index.html  200

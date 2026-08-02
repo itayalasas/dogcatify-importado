@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Modal, ActivityIndicator, Dimensions, StatusBar } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Camera, Trash2, Share, X, CreditCard as Edit, Video as VideoIcon, Play } from 'lucide-react-native';
+import { ArrowLeft, Camera, Trash2, Share, X, CreditCard as Edit, Video as VideoIcon, Play, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
@@ -10,6 +10,109 @@ import * as FileSystem from 'expo-file-system';
 import { supabaseClient } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { detectPetInVideo, validateVideoDuration } from '../../../utils/petDetection';
+import { envConfig } from '../../../utils/envConfig';
+import { resolveSubscriptionPlanLimits } from '../../../utils/subscriptionPlanLimits';
+import { Video, ResizeMode } from 'expo-av';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
+
+const ZoomableImage = ({ uri, onSwipeLeft, onSwipeRight }: { uri: string; onSwipeLeft?: () => void; onSwipeRight?: () => void }) => {
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((e) => {
+      scale.value = savedScale.value * e.scale;
+    })
+    .onEnd(() => {
+      if (scale.value < 1) {
+        scale.value = withSpring(1);
+        savedScale.value = 1;
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      } else if (scale.value > 4) {
+        scale.value = withSpring(4);
+        savedScale.value = 4;
+      } else {
+        savedScale.value = scale.value;
+      }
+    });
+
+  const panGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      if (savedScale.value > 1) {
+        translateX.value = savedTranslateX.value + e.translationX;
+        translateY.value = savedTranslateY.value + e.translationY;
+      } else {
+        translateX.value = e.translationX;
+      }
+    })
+    .onEnd((e) => {
+      if (savedScale.value > 1) {
+        savedTranslateX.value = translateX.value;
+        savedTranslateY.value = translateY.value;
+      } else {
+        if (Math.abs(e.translationX) > 100 && Math.abs(e.velocityX) > 500) {
+          if (e.translationX > 0 && onSwipeRight) {
+            runOnJS(onSwipeRight)();
+          } else if (e.translationX < 0 && onSwipeLeft) {
+            runOnJS(onSwipeLeft)();
+          }
+        }
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      }
+    });
+
+  const doubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => {
+      if (scale.value > 1) {
+        scale.value = withSpring(1);
+        savedScale.value = 1;
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      } else {
+        scale.value = withSpring(2);
+        savedScale.value = 2;
+      }
+    });
+
+  const composedGesture = Gesture.Simultaneous(
+    doubleTapGesture,
+    Gesture.Simultaneous(pinchGesture, panGesture)
+  );
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  return (
+    <GestureDetector gesture={composedGesture}>
+      <Animated.View style={[styles.zoomableContainer]}>
+        <Animated.Image
+          source={{ uri }}
+          style={[styles.fullscreenMedia, animatedStyle]}
+          resizeMode="contain"
+        />
+      </Animated.View>
+    </GestureDetector>
+  );
+};
 
 export default function AlbumDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -28,6 +131,65 @@ export default function AlbumDetail() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [imageToDelete, setImageToDelete] = useState<string | null>(null);
   const [showMediaTypeModal, setShowMediaTypeModal] = useState(false);
+  const [showMediaViewer, setShowMediaViewer] = useState(false);
+  const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
+  const videoRef = useRef<Video>(null);
+
+  const ensureDailyPostLimit = async () => {
+    if (!currentUser) {
+      return false;
+    }
+
+    const { data: subscriptionData, error: subscriptionError } = await supabaseClient
+      .from('user_subscriptions')
+      .select(`
+        status,
+        subscription_plans (
+          tier,
+          audience_target,
+          limits
+        )
+      `)
+      .eq('user_id', currentUser.id)
+      .in('status', ['active', 'trialing', 'pending', 'paused'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (subscriptionError) {
+      throw subscriptionError;
+    }
+
+    const userPlanLimits = resolveSubscriptionPlanLimits(subscriptionData?.subscription_plans || null);
+    const maxPostsPerDay = userPlanLimits.users.maxPostsPerDay;
+
+    if (maxPostsPerDay === null) {
+      return true;
+    }
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const { count, error: countError } = await supabaseClient
+      .from('posts')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', currentUser.id)
+      .gte('created_at', startOfDay.toISOString())
+      .lt('created_at', endOfDay.toISOString());
+
+    if (countError) {
+      throw countError;
+    }
+
+    if ((count || 0) >= maxPostsPerDay) {
+      return false;
+    }
+
+    return true;
+  };
 
   useEffect(() => {
     fetchAlbumDetails();
@@ -54,7 +216,7 @@ export default function AlbumDetail() {
 
             // Process URL if it's a relative path
             if (actualUrl && actualUrl.startsWith('/storage/v1/object/public/')) {
-              const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+              const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL') || '';
               const fullUrl = `${supabaseUrl}${actualUrl}`;
               return isVideo ? `VIDEO:${fullUrl}` : fullUrl;
             }
@@ -264,6 +426,11 @@ export default function AlbumDetail() {
       return;
     }
 
+    if (!currentUser) {
+      Alert.alert('Error', 'Usuario no autenticado');
+      return;
+    }
+
     setUploadingVideo(true);
     try {
       console.log('Starting to upload video...');
@@ -358,6 +525,11 @@ export default function AlbumDetail() {
       return;
     }
 
+    if (!currentUser) {
+      Alert.alert('Error', 'Usuario no autenticado');
+      return;
+    }
+
     setUploadingImages(true);
     try {
       console.log('Starting to upload', selectedImages.length, 'images...');
@@ -431,7 +603,15 @@ export default function AlbumDetail() {
         console.log('Album is shared, creating new post for added photos...');
         
         try {
-          // Get pet data
+          const canCreateFeedPost = await ensureDailyPostLimit();
+          if (!canCreateFeedPost) {
+            Alert.alert(
+              'Límite alcanzado',
+              'Las fotos se guardaron en el álbum, pero no se compartieron en el feed porque ya alcanzaste el limite diario de publicaciones.',
+              [{ text: 'Entendido' }]
+            );
+          } else {
+            // Get pet data
           const { data: petData, error: petError } = await supabaseClient
             .from('pets')
             .select('*')
@@ -484,6 +664,7 @@ export default function AlbumDetail() {
               );
             }
           }
+          }
         } catch (feedError) {
           console.error('Error creating feed post:', feedError);
           Alert.alert('Éxito', successMessage);
@@ -491,17 +672,16 @@ export default function AlbumDetail() {
       } else {
         Alert.alert('Éxito', successMessage);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error adding photos:', error);
       
-      let errorMessage = 'No se pudieron agregar las fotos';
-      if (error.message?.includes('conexión')) {
-        errorMessage = 'Error de conexión. Verifica tu internet e intenta nuevamente.';
-      } else if (error.message?.includes('cancelada')) {
-        errorMessage = 'Subida cancelada.';
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
+      const errorMessage = error instanceof Error
+        ? (error.message.includes('conexión')
+            ? 'Error de conexión. Verifica tu internet e intenta nuevamente.'
+            : error.message.includes('cancelada')
+              ? 'Subida cancelada.'
+              : error.message)
+        : 'No se pudieron agregar las fotos';
       
       Alert.alert('Error', errorMessage);
     } finally {
@@ -529,7 +709,13 @@ export default function AlbumDetail() {
       if (!wasShared && willBeShared) {
         // Album is now being shared - create post in feed
         console.log('Album is now shared, creating feed post...');
-        await createFeedPostFromAlbum();
+        const sharedInFeed = await createFeedPostFromAlbum();
+        if (!sharedInFeed) {
+          Alert.alert(
+            'Límite alcanzado',
+            'El álbum se guardó correctamente, pero no se compartió en el feed porque ya alcanzaste el limite diario de publicaciones.'
+          );
+        }
       } else if (wasShared && !willBeShared) {
         // Album is no longer shared - remove from feed
         console.log('Album is no longer shared, removing from feed...');
@@ -558,6 +744,10 @@ export default function AlbumDetail() {
 
   const createFeedPostFromAlbum = async () => {
     try {
+      if (!currentUser) {
+        return false;
+      }
+
       // Get pet data
       const { data: petData, error: petError } = await supabaseClient
         .from('pets')
@@ -579,6 +769,11 @@ export default function AlbumDetail() {
       
       if (userError) {
         console.error('Error fetching user data:', userError);
+      }
+      
+      const canCreateFeedPost = await ensureDailyPostLimit();
+      if (!canCreateFeedPost) {
+        return false;
       }
       
       // Create post from album
@@ -608,11 +803,14 @@ export default function AlbumDetail() {
       
       if (postError) {
         console.error('Error creating feed post:', postError);
+        return false;
       } else {
         console.log('Feed post created successfully');
+        return true;
       }
     } catch (error) {
       console.error('Error creating feed post from album:', error);
+      return false;
     }
   };
 
@@ -673,8 +871,8 @@ export default function AlbumDetail() {
           text: 'OK', 
           onPress: () => {
             router.push({
-              pathname: `/pets/${album.pet_id}`,
-              params: { refresh: 'true', activeTab: 'albums' }
+              pathname: '/pets/[id]',
+              params: { id: album.pet_id, refresh: 'true', activeTab: 'albums' }
             });
           } 
         }
@@ -861,7 +1059,15 @@ export default function AlbumDetail() {
             const actualUrl = isVideo ? mediaUrl.replace('VIDEO:', '') : mediaUrl;
 
             return (
-              <View key={index} style={styles.photoContainer}>
+              <TouchableOpacity
+                key={index}
+                style={styles.photoContainer}
+                onPress={() => {
+                  setCurrentMediaIndex(index);
+                  setShowMediaViewer(true);
+                }}
+                activeOpacity={0.9}
+              >
                 {isVideo ? (
                   <View style={styles.videoThumbnailContainer}>
                     <View style={styles.videoPlaceholder}>
@@ -877,7 +1083,10 @@ export default function AlbumDetail() {
                 )}
                 <TouchableOpacity
                   style={styles.deletePhotoButton}
-                  onPress={() => confirmDeleteImage(mediaUrl)}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    confirmDeleteImage(mediaUrl);
+                  }}
                 >
                   <Trash2 size={16} color="#FFFFFF" />
                 </TouchableOpacity>
@@ -886,11 +1095,127 @@ export default function AlbumDetail() {
                     <VideoIcon size={12} color="#FFFFFF" />
                   </View>
                 )}
-              </View>
+              </TouchableOpacity>
             );
           })}
         </View>
       </ScrollView>
+
+      {/* Media Viewer Modal */}
+      <Modal
+        visible={showMediaViewer}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowMediaViewer(false);
+          if (videoRef.current) {
+            videoRef.current.pauseAsync();
+          }
+        }}
+      >
+        <StatusBar hidden />
+        <View style={styles.mediaViewerContainer}>
+          {/* Close Button */}
+          <TouchableOpacity
+            style={styles.closeViewerButton}
+            onPress={() => {
+              setShowMediaViewer(false);
+              if (videoRef.current) {
+                videoRef.current.pauseAsync();
+              }
+            }}
+          >
+            <X size={28} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          {/* Media Counter */}
+          <View style={styles.mediaCounter}>
+            <Text style={styles.mediaCounterText}>
+              {currentMediaIndex + 1} / {album?.images?.length || 0}
+            </Text>
+          </View>
+
+          {/* Media Content */}
+          {album?.images && album.images[currentMediaIndex] && (() => {
+            const mediaUrl = album.images[currentMediaIndex];
+            const isVideo = mediaUrl.startsWith('VIDEO:');
+            const actualUrl = isVideo ? mediaUrl.replace('VIDEO:', '') : mediaUrl;
+
+            const handleSwipeLeft = () => {
+              if (currentMediaIndex < album.images.length - 1) {
+                if (videoRef.current) {
+                  videoRef.current.pauseAsync();
+                }
+                setCurrentMediaIndex(currentMediaIndex + 1);
+              }
+            };
+
+            const handleSwipeRight = () => {
+              if (currentMediaIndex > 0) {
+                if (videoRef.current) {
+                  videoRef.current.pauseAsync();
+                }
+                setCurrentMediaIndex(currentMediaIndex - 1);
+              }
+            };
+
+            return (
+              <View style={styles.mediaContent}>
+                {isVideo ? (
+                  <Video
+                    ref={videoRef}
+                    source={{ uri: actualUrl }}
+                    style={styles.fullscreenMedia}
+                    resizeMode={ResizeMode.CONTAIN}
+                    shouldPlay
+                    isLooping
+                    useNativeControls
+                  />
+                ) : (
+                  <ZoomableImage
+                    uri={actualUrl}
+                    onSwipeLeft={handleSwipeLeft}
+                    onSwipeRight={handleSwipeRight}
+                  />
+                )}
+              </View>
+            );
+          })()}
+
+          {/* Navigation Buttons */}
+          {album?.images && album.images.length > 1 && (
+            <>
+              {currentMediaIndex > 0 && (
+                <TouchableOpacity
+                  style={[styles.navButton, styles.navButtonLeft]}
+                  onPress={() => {
+                    if (videoRef.current) {
+                      videoRef.current.pauseAsync();
+                    }
+                    setCurrentMediaIndex(currentMediaIndex - 1);
+                  }}
+                >
+                  <ChevronLeft size={32} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+
+              {currentMediaIndex < album.images.length - 1 && (
+                <TouchableOpacity
+                  style={[styles.navButton, styles.navButtonRight]}
+                  onPress={() => {
+                    if (videoRef.current) {
+                      videoRef.current.pauseAsync();
+                    }
+                    setCurrentMediaIndex(currentMediaIndex + 1);
+                  }}
+                >
+                  <ChevronRight size={32} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </View>
+      </Modal>
 
       {/* Edit Album Modal */}
       <Modal
@@ -1326,5 +1651,75 @@ const styles = StyleSheet.create({
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  mediaViewerContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeViewerButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mediaCounter: {
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  mediaCounterText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  mediaContent: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  zoomableContainer: {
+    flex: 1,
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullscreenMedia: {
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
+  },
+  navButton: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -40,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 40,
+    width: 64,
+    height: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  navButtonLeft: {
+    left: 20,
+  },
+  navButtonRight: {
+    right: 20,
   },
 });

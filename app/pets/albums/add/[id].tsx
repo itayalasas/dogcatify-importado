@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Platform, Share, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Platform, Share, ActivityIndicator, KeyboardAvoidingView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Camera, Upload, X, Share2, Video as VideoIcon, Play } from 'lucide-react-native';
 import { Input } from '../../../../components/ui/Input';
@@ -11,6 +11,8 @@ import { supabaseClient } from '../../../../lib/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { detectPetInImage, validateImagesForPets, detectPetInVideo, validateVideoDuration } from '../../../../utils/petDetection';
 import { uploadImage } from '../../../../utils/imageUpload';
+import { logResourceAction } from '../../../../services/auditService';
+import { resolveSubscriptionPlanLimits } from '../../../../utils/subscriptionPlanLimits';
 
 export default function AddPhoto() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -23,6 +25,58 @@ export default function AddPhoto() {
   const [isShared, setIsShared] = useState(false);
   const [validatingImages, setValidatingImages] = useState(false);
   const [validatingVideo, setValidatingVideo] = useState(false);
+
+  const ensureDailyPostLimit = async () => {
+    if (!currentUser) {
+      return false;
+    }
+
+    const { data: subscriptionData, error: subscriptionError } = await supabaseClient
+      .from('user_subscriptions')
+      .select(`
+        status,
+        subscription_plans (
+          tier,
+          audience_target,
+          limits
+        )
+      `)
+      .eq('user_id', currentUser.id)
+      .in('status', ['active', 'trialing', 'pending', 'paused'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (subscriptionError) {
+      throw subscriptionError;
+    }
+
+    const userPlanLimits = resolveSubscriptionPlanLimits(subscriptionData?.subscription_plans || null);
+    const maxPostsPerDay = userPlanLimits.users.maxPostsPerDay;
+
+    if (maxPostsPerDay === null) {
+      return true;
+    }
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const { count, error: countError } = await supabaseClient
+      .from('posts')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', currentUser.id)
+      .gte('created_at', startOfDay.toISOString())
+      .lt('created_at', endOfDay.toISOString());
+
+    if (countError) {
+      throw countError;
+    }
+
+    return (count || 0) < maxPostsPerDay;
+  };
 
   const handleSelectPhoto = async () => {
     try {
@@ -256,12 +310,14 @@ export default function AddPhoto() {
     } catch (error) {
       console.error('Error uploading image:', error);
 
-      if (error.message?.includes('Network request failed')) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (message.includes('Network request failed')) {
         throw new Error('Error de conexión. Verifica tu conexión a internet e intenta nuevamente.');
-      } else if (error.message?.includes('timeout')) {
+      } else if (message.includes('timeout')) {
         throw new Error('La subida tardó demasiado. Intenta con imágenes más pequeñas.');
       } else {
-        throw new Error(`Error al subir imagen: ${error.message || 'Error desconocido'}`);
+        throw new Error(`Error al subir imagen: ${message || 'Error desconocido'}`);
       }
     }
   };
@@ -304,12 +360,14 @@ export default function AddPhoto() {
     } catch (error) {
       console.error('Error uploading video:', error);
 
-      if (error.message?.includes('Network request failed')) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (message.includes('Network request failed')) {
         throw new Error('Error de conexión. Verifica tu conexión a internet e intenta nuevamente.');
-      } else if (error.message?.includes('timeout')) {
+      } else if (message.includes('timeout')) {
         throw new Error('La subida tardó demasiado. Intenta con un video más pequeño.');
       } else {
-        throw new Error(`Error al subir video: ${error.message || 'Error desconocido'}`);
+        throw new Error(`Error al subir video: ${message || 'Error desconocido'}`);
       }
     }
   };
@@ -327,6 +385,52 @@ export default function AddPhoto() {
 
     setLoading(true);
     try {
+      const { data: subscriptionData, error: subscriptionError } = await supabaseClient
+        .from('user_subscriptions')
+        .select(`
+          status,
+          subscription_plans (
+            tier,
+            audience_target,
+            limits
+          )
+        `)
+        .eq('user_id', currentUser.id)
+        .in('status', ['active', 'trialing', 'pending', 'paused'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (subscriptionError) {
+        throw subscriptionError;
+      }
+
+      const userPlanLimits = resolveSubscriptionPlanLimits(subscriptionData?.subscription_plans || null);
+      const maxAlbumsAllowed = userPlanLimits.users.maxPetAlbums;
+
+      if (maxAlbumsAllowed !== null) {
+        const { count: albumsCount, error: albumsCountError } = await supabaseClient
+          .from('pet_albums')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', currentUser.id);
+
+        if (albumsCountError) {
+          throw albumsCountError;
+        }
+
+        if ((albumsCount || 0) >= maxAlbumsAllowed) {
+          Alert.alert(
+            'Límite alcanzado',
+            `Tu plan actual permite hasta ${maxAlbumsAllowed} álbum${maxAlbumsAllowed === 1 ? '' : 'es'}. Actualiza tu suscripción para crear más.`,
+            [
+              { text: 'Ver suscripción', onPress: () => router.push('/profile/subscription') },
+              { text: 'OK', style: 'cancel' },
+            ]
+          );
+          return;
+        }
+      }
+
       console.log('Starting to save media, images:', selectedImages.length, 'videos:', selectedVideos.length);
 
       const mediaUrls: string[] = [];
@@ -346,11 +450,12 @@ export default function AddPhoto() {
           }
         } catch (uploadError) {
           console.error(`Error uploading image ${i + 1}:`, uploadError);
+          const uploadErrorMessage = uploadError instanceof Error ? uploadError.message : String(uploadError);
 
           const shouldContinue = await new Promise((resolve) => {
             Alert.alert(
               'Error al subir imagen',
-              `No se pudo subir la imagen ${i + 1} de ${selectedImages.length}.\n\nError: ${uploadError.message}\n\n¿Deseas continuar?`,
+              `No se pudo subir la imagen ${i + 1} de ${selectedImages.length}.\n\nError: ${uploadErrorMessage}\n\n¿Deseas continuar?`,
               [
                 {
                   text: 'Cancelar todo',
@@ -386,11 +491,12 @@ export default function AddPhoto() {
           }
         } catch (uploadError) {
           console.error(`Error uploading video ${i + 1}:`, uploadError);
+          const uploadErrorMessage = uploadError instanceof Error ? uploadError.message : String(uploadError);
 
           const shouldContinue = await new Promise((resolve) => {
             Alert.alert(
               'Error al subir video',
-              `No se pudo subir el video ${i + 1} de ${selectedVideos.length}.\n\nError: ${uploadError.message}\n\n¿Deseas continuar?`,
+              `No se pudo subir el video ${i + 1} de ${selectedVideos.length}.\n\nError: ${uploadErrorMessage}\n\n¿Deseas continuar?`,
               [
                 {
                   text: 'Cancelar todo',
@@ -435,7 +541,9 @@ export default function AddPhoto() {
           description: photoDescription.trim() || '',
           images: mediaUrls,
           is_shared: isShared
-        });
+        })
+        .select('id')
+        .single();
 
       console.log('Album save result:', albumResult);
       if (albumResult.error) {
@@ -444,10 +552,37 @@ export default function AddPhoto() {
       }
       
       console.log('Album saved successfully');
+      
+      // Registrar creación de álbum en auditoría
+      if (albumResult.data) {
+        await logResourceAction('ALBUM_CREATE', 'album', albumResult.data.id, {
+          success: true,
+          details: {
+            pet_id: id,
+            album_id: albumResult.data.id,
+            title: photoTitle.trim() || 'Álbum sin título',
+            description: photoDescription.trim() || '',
+            media_count: mediaUrls.length,
+            images_count: selectedImages.length,
+            videos_count: selectedVideos.length,
+            is_shared: isShared,
+            user_id: currentUser.id,
+            user_email: currentUser.email
+          }
+        }).catch(err => console.warn('Error logging ALBUM_CREATE:', err));
+      }
 
       // If user wants to share as post, create a post
       if (isShared) {
         console.log('Creating post for shared album...');
+        const canCreatePost = await ensureDailyPostLimit();
+        if (!canCreatePost) {
+          Alert.alert(
+            'Límite alcanzado',
+            'El álbum se guardó correctamente, pero no se compartió en el feed porque ya alcanzaste el limite diario de publicaciones.',
+            [{ text: 'Entendido' }]
+          );
+        } else {
         const { data: petData, error: petError } = await supabaseClient
           .from('pets')
           .select('*')
@@ -540,6 +675,7 @@ export default function AddPhoto() {
             );
           }
         }
+        }
       } else {
         // Si no se comparte, solo mostrar mensaje de éxito normal
         const mediaTypes = [];
@@ -554,19 +690,20 @@ export default function AddPhoto() {
       }
 
       router.push({
-        pathname: `/pets/${id}`,
-        params: { refresh: 'true', activeTab: 'albums' }
+        pathname: '/pets/[id]',
+        params: { id, refresh: 'true', activeTab: 'albums' }
       });
     } catch (error) {
       console.error('Error saving photos:', error);
       
       let errorMessage = 'No se pudieron guardar las fotos';
-      if (error.message?.includes('conexión')) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('conexión')) {
         errorMessage = 'Error de conexión. Verifica tu internet e intenta nuevamente.';
-      } else if (error.message?.includes('cancelada')) {
+      } else if (message.includes('cancelada')) {
         errorMessage = 'Subida cancelada por el usuario.';
-      } else if (error.message) {
-        errorMessage = error.message;
+      } else if (message) {
+        errorMessage = message;
       }
       
       Alert.alert('Error', errorMessage);
@@ -585,8 +722,18 @@ export default function AddPhoto() {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Card style={styles.formCard}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView 
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.scrollContent}
+        >
+          <Card style={styles.formCard}>
           <Text style={styles.sectionTitle}>📸 Seleccionar Fotos</Text>
 
           <View style={styles.photoActions}>
@@ -710,6 +857,7 @@ export default function AddPhoto() {
           />
         </Card>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -741,8 +889,14 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 40,
   },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
   content: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 40,
   },
   formCard: {
     margin: 20,
@@ -886,3 +1040,5 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
+
+

@@ -5,24 +5,47 @@ import { Card } from './ui/Card';
 import { Product } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
 
+type ProductCardProduct = Product & {
+  stock?: number;
+  images?: string[];
+  hasDiscount?: boolean;
+  originalPrice?: number;
+  discountedPrice?: number;
+  activePromotion?: {
+    discount_percentage?: number;
+  };
+};
+
 interface ProductCardProps {
-  product: Product;
+  product: ProductCardProduct;
   onPress: () => void;
   onAddToCart: () => void;
   currentCartQuantity?: number;
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, onAddToCart, currentCartQuantity = 0 }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({
+  product,
+  onPress,
+  onAddToCart,
+  currentCartQuantity = 0,
+  isFavorite = false,
+  onToggleFavorite,
+}) => {
   const { t } = useLanguage();
 
-  const availableStock = product.stock - currentCartQuantity;
-  const canAddMore = availableStock > 0;
-
-  const [isFavorite, setIsFavorite] = React.useState(false);
+  const availableStock = typeof product.stock === 'number'
+    ? product.stock - currentCartQuantity
+    : 0;
+  const canAddMore = typeof product.stock === 'number'
+    ? availableStock > 0
+    : product.inStock;
+  const discountPercentage = product.activePromotion?.discount_percentage ?? 0;
 
   const handleToggleFavorite = (e: any) => {
     e.stopPropagation();
-    setIsFavorite(!isFavorite);
+    onToggleFavorite?.();
   };
 
   const formatPrice = (price: number) => {
@@ -40,8 +63,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, onAd
         <View style={styles.imageContainer}>
           <Image 
             source={{ 
-              uri: product.images && product.images.length > 0 
-                ? product.images[0] 
+              uri: product.images && product.images.length > 0
+                ? product.images[0]
                 : product.imageURL || 'https://images.pexels.com/photos/1459244/pexels-photo-1459244.jpeg?auto=compress&cs=tinysrgb&w=400'
             }} 
             style={styles.productImage} 
@@ -61,22 +84,26 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, onAd
         <View style={styles.content}>
           <Text style={styles.productName} numberOfLines={2}>{product.name}</Text>
 
-          {/* Mostrar descuento si existe */}
-          {product.hasDiscount && product.originalPrice && product.discountedPrice ? (
-            <View style={styles.priceSection}>
-              <View style={styles.priceRow}>
-                <Text style={styles.discountedPrice}>{formatPrice(product.discountedPrice)}</Text>
-                {product.activePromotion?.discount_percentage > 0 && (
-                  <View style={styles.discountBadge}>
-                    <Text style={styles.discountBadgeText}>-{product.activePromotion.discount_percentage}%</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.originalPrice}>{formatPrice(product.originalPrice)}</Text>
-            </View>
-          ) : (
-            <Text style={styles.productPrice}>{formatPrice(product.price)}</Text>
-          )}
+          <View style={styles.priceSection}>
+            {product.hasDiscount && product.originalPrice && product.discountedPrice ? (
+              <>
+                <View style={styles.priceRow}>
+                  <Text style={styles.discountedPrice}>{formatPrice(product.discountedPrice)}</Text>
+                  {discountPercentage > 0 && (
+                    <View style={styles.discountBadge}>
+                      <Text style={styles.discountBadgeText}>-{discountPercentage}%</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.originalPrice}>{formatPrice(product.originalPrice)}</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.productPrice}>{formatPrice(product.price)}</Text>
+                <Text style={styles.originalPricePlaceholder}> </Text>
+              </>
+            )}
+          </View>
           
           {product.rating && (
             <View style={styles.rating}>
@@ -144,6 +171,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 12,
+    flex: 1,
   },
   productName: {
     fontSize: 16,
@@ -156,16 +184,19 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Inter-Bold',
     color: '#10B981',
-    marginBottom: 8,
+    marginBottom: 2,
   },
   priceSection: {
+    minHeight: 54,
     marginBottom: 8,
+    justifyContent: 'flex-start',
   },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginBottom: 2,
+    flexWrap: 'wrap',
   },
   discountedPrice: {
     fontSize: 18,
@@ -177,6 +208,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#9CA3AF',
     textDecorationLine: 'line-through',
+  },
+  originalPricePlaceholder: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: 'transparent',
   },
   discountBadge: {
     backgroundColor: '#FEE2E2',
@@ -224,6 +260,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
+    marginTop: 'auto',
   },
   addToCartText: {
     color: '#FFFFFF',
@@ -241,6 +278,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    marginTop: 'auto',
   },
   outOfStockText: {
     color: '#9CA3AF',

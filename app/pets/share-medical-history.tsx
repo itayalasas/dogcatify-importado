@@ -71,7 +71,8 @@ export default function ShareMedicalHistory() {
       await Share.share(shareContent);
     } catch (error) {
       console.error('Error sharing:', error);
-      if (!error.message?.includes('cancelled')) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes('cancelled')) {
         Alert.alert('Error', 'No se pudo compartir el enlace');
       }
     }

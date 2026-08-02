@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
 import { Package, CheckCircle, Truck, Home, Clock, XCircle, AlertCircle, RefreshCw } from 'lucide-react-native';
+import { type OrderFulfillmentMode } from '../utils/orderFulfillment';
 
 interface TrackingStep {
   id: string;
@@ -14,6 +15,7 @@ interface TrackingStep {
 interface OrderTrackingProps {
   orderStatus: string;
   orderType?: 'product_purchase' | 'service_booking';
+  fulfillmentMode?: OrderFulfillmentMode;
   orderDate?: Date;
   cancelledDate?: Date;
   paymentLinkExpiresAt?: Date;
@@ -24,6 +26,7 @@ interface OrderTrackingProps {
 export const OrderTracking: React.FC<OrderTrackingProps> = ({
   orderStatus,
   orderType = 'product_purchase',
+  fulfillmentMode = 'shipping',
   orderDate,
   cancelledDate,
   paymentLinkExpiresAt,
@@ -31,6 +34,7 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
   onRetryPayment
 }) => {
   const isPaymentFailed = orderStatus === 'payment_failed';
+  const isInsufficientStock = orderStatus === 'insufficient_stock';
   const isPaymentPending = orderStatus === 'pending';
   const isPaymentLinkExpired = paymentLinkExpiresAt ? new Date(paymentLinkExpiresAt) < new Date() : true;
 
@@ -69,6 +73,25 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
   const getTrackingSteps = (): TrackingStep[] => {
     const isCancelled = orderStatus === 'cancelled';
     const isServiceBooking = orderType === 'service_booking';
+    const isPickupOrder = fulfillmentMode === 'pickup';
+
+    if (isInsufficientStock) {
+      return [
+        {
+          id: 'insufficient_stock',
+          label: 'Sin stock',
+          description: 'No hay stock suficiente para completar este pedido. Te contactaremos pronto.',
+          icon: AlertCircle,
+          status: 'failed',
+          date: orderDate?.toLocaleDateString('es-ES', {
+            day: '2-digit',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        }
+      ];
+    }
 
     // Para servicios (reservas), solo mostrar estados simples
     if (isServiceBooking) {
@@ -112,7 +135,7 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
         label: 'Pedido confirmado',
         description: 'El vendedor confirmó tu pedido',
         icon: CheckCircle,
-        status: orderStatus === 'pending' || isPaymentFailed ? 'pending' :
+        status: ['pending', 'reserved'].includes(orderStatus) || isPaymentFailed ? 'pending' :
                 isCancelled ? 'cancelled' :
                 orderStatus === 'confirmed' ? 'active' :
                 'completed'
@@ -145,7 +168,82 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
       return serviceSteps;
     }
 
-    // Para productos, mostrar seguimiento completo
+    // Para productos, mostrar seguimiento según el tipo de entrega
+    if (isPickupOrder) {
+      const pickupSteps: TrackingStep[] = [
+        {
+          id: 'pending',
+          label: 'Pedido recibido',
+          description: 'Tu pedido ha sido registrado',
+          icon: Clock,
+          status: 'completed',
+          date: orderDate?.toLocaleDateString('es-ES', {
+            day: '2-digit',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        },
+        {
+          id: 'confirmed',
+          label: 'Pedido confirmado',
+          description: 'La tienda confirmó tu pedido',
+          icon: CheckCircle,
+          status: orderStatus === 'pending' ? 'pending' :
+                  isCancelled ? 'cancelled' :
+                  'completed'
+        },
+        {
+          id: 'processing',
+          label: 'En preparación',
+          description: 'Estamos preparando tu pedido',
+          icon: Package,
+          status: ['pending', 'reserved', 'confirmed'].includes(orderStatus) ? 'pending' :
+                  ['processing', 'preparing'].includes(orderStatus) ? 'active' :
+                  isCancelled ? 'cancelled' :
+                  'completed'
+        },
+        {
+          id: 'ready_for_delivery',
+          label: 'Listo para retirar',
+          description: 'Tu pedido está listo para pasar a buscar',
+          icon: Package,
+          status: ['pending', 'reserved', 'confirmed', 'processing', 'preparing'].includes(orderStatus) ? 'pending' :
+                  ['ready_for_delivery', 'shipped'].includes(orderStatus) ? 'active' :
+                  isCancelled ? 'cancelled' :
+                  'completed'
+        },
+        {
+          id: 'delivered',
+          label: 'Retirado',
+          description: 'Confirmaste que retiraste el pedido en tienda',
+          icon: Home,
+          status: orderStatus === 'delivered' || orderStatus === 'completed' ? 'completed' :
+                  isCancelled ? 'cancelled' :
+                  'pending'
+        }
+      ];
+
+      if (isCancelled) {
+        pickupSteps.push({
+          id: 'cancelled',
+          label: 'Pedido cancelado',
+          description: 'El pedido fue cancelado',
+          icon: XCircle,
+          status: 'cancelled',
+          date: cancelledDate?.toLocaleDateString('es-ES', {
+            day: '2-digit',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        });
+      }
+
+      return pickupSteps;
+    }
+
+    // Para productos con envío, mostrar seguimiento completo
     const productSteps: TrackingStep[] = [
       {
         id: 'pending',
@@ -174,8 +272,18 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
         label: 'En preparación',
         description: 'Estamos preparando tu pedido',
         icon: Package,
-        status: ['pending', 'confirmed'].includes(orderStatus) ? 'pending' :
-                orderStatus === 'processing' ? 'active' :
+        status: ['pending', 'reserved', 'confirmed'].includes(orderStatus) ? 'pending' :
+          ['processing', 'preparing'].includes(orderStatus) ? 'active' :
+                isCancelled ? 'cancelled' :
+                'completed'
+      },
+      {
+        id: 'ready_for_delivery',
+        label: 'Listo para entrega',
+        description: 'Tu pedido está listo y esperando repartidor',
+        icon: CheckCircle,
+        status: ['pending', 'reserved', 'confirmed', 'processing', 'preparing'].includes(orderStatus) ? 'pending' :
+                orderStatus === 'ready_for_delivery' ? 'active' :
                 isCancelled ? 'cancelled' :
                 'completed'
       },
@@ -184,7 +292,7 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
         label: 'En camino',
         description: 'Tu pedido está en camino',
         icon: Truck,
-        status: ['pending', 'confirmed', 'processing'].includes(orderStatus) ? 'pending' :
+        status: ['pending', 'reserved', 'confirmed', 'processing', 'preparing', 'ready_for_delivery'].includes(orderStatus) ? 'pending' :
                 orderStatus === 'shipped' ? 'active' :
                 isCancelled ? 'cancelled' :
                 'completed'

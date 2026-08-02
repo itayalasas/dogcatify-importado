@@ -75,6 +75,40 @@ export default function PartnerBookings() {
     };
   }, [currentUser, businessId]);
 
+  const getBookingDateTime = (booking: any) => {
+    const baseDate = booking.date ? new Date(booking.date) : new Date();
+    const bookingDateTime = new Date(baseDate);
+
+    if (booking.time && typeof booking.time === 'string') {
+      const timeMatch = booking.time.match(/^(\d{1,2}):(\d{2})/);
+      if (timeMatch) {
+        bookingDateTime.setHours(parseInt(timeMatch[1], 10), parseInt(timeMatch[2], 10), 0, 0);
+      }
+    } else {
+      bookingDateTime.setHours(23, 59, 59, 999);
+    }
+
+    return bookingDateTime;
+  };
+
+  const isExpiredBooking = (booking: any) => {
+    if (!booking) return false;
+    if (!['pending', 'confirmed'].includes(booking.status)) return false;
+
+    return getBookingDateTime(booking) < new Date();
+  };
+
+  const normalizeBookingStatus = (booking: any) => {
+    if (isExpiredBooking(booking)) {
+      return {
+        ...booking,
+        status: 'completed',
+      };
+    }
+
+    return booking;
+  };
+
   const fetchBookings = (partnerId: string) => {
     const fetchBookingsData = async () => {
       try {
@@ -97,8 +131,27 @@ export default function PartnerBookings() {
           petName: booking.pet_name,
           customerPhone: booking.customer_phone
         }));
-        
-        setBookings(bookingsData);
+
+        const expiredBookings = bookingsData.filter(isExpiredBooking);
+        if (expiredBookings.length > 0) {
+          const expiredIds = expiredBookings.map((booking) => booking.id);
+          const { error: expiredUpdateError } = await supabaseClient
+            .from('bookings')
+            .update({
+              status: 'completed',
+              completed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .in('id', expiredIds);
+
+          if (expiredUpdateError) {
+            console.error('Error updating expired partner bookings:', expiredUpdateError);
+          }
+        }
+
+        const normalizedBookings = bookingsData.map(normalizeBookingStatus);
+
+        setBookings(normalizedBookings);
         setLoading(false);
       } catch (error) {
         console.error('Error fetching bookings:', error);
@@ -138,6 +191,7 @@ export default function PartnerBookings() {
         .from('bookings')
         .update({
           status: newStatus,
+          completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
           updated_at: new Date().toISOString()
         })
         .eq('id', bookingId);
@@ -642,6 +696,9 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
     marginRight: 8,
+  },
+  placeholder: {
+    width: 32,
   },
   headerLeft: {
     flexDirection: 'row',

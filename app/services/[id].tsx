@@ -6,9 +6,11 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingScreen } from '../../components/ui/LoadingScreen';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 import { getActivePromotionForItem, incrementPromotionClicks } from '@/utils/promotions';
+import { hasSeenHint } from '../../utils/oneTimeHints';
 
 const { width } = Dimensions.get('window');
 
@@ -42,6 +44,21 @@ export default function ServiceDetail() {
   const [categoryAvailability, setCategoryAvailability] = useState<{ [key: string]: number }>({});
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [canShowReserveHint, setCanShowReserveHint] = useState(false);
+
+  const handleBackPress = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    if (partnerId || service?.partnerId) {
+      router.replace(`/services/partner/${partnerId || service.partnerId}`);
+      return;
+    }
+
+    router.replace('/(tabs)/services');
+  };
 
   // Función para calcular disponibilidad por categoría
   const calculateCategoryAvailability = async (serviceId: string, categories: any[]) => {
@@ -89,6 +106,19 @@ export default function ServiceDetail() {
       loadActivePromotion();
     }
   }, [id, discount]);
+
+  useEffect(() => {
+    const checkHintFlow = async () => {
+      if (boardingCategories.length > 0) {
+        const seenCategoryHint = await hasSeenHint('service_detail_category', currentUser?.id);
+        setCanShowReserveHint(seenCategoryHint);
+      } else {
+        setCanShowReserveHint(true);
+      }
+    };
+
+    checkHintFlow();
+  }, [boardingCategories.length, currentUser?.id, id]);
 
   const loadActivePromotion = async () => {
     try {
@@ -311,24 +341,44 @@ export default function ServiceDetail() {
   const fetchUserPets = async () => {
     setLoadingPets(true);
     try {
-      const { data: petsData, error } = await supabaseClient
+      // Fetch owned pets
+      const { data: ownedPets, error: ownedError } = await supabaseClient
         .from('pets')
         .select('*')
         .eq('owner_id', currentUser!.id);
 
-      if (error) {
-        console.error('Error fetching pets:', error);
-        setLoadingPets(false);
-        return;
+      if (ownedError) {
+        console.error('Error fetching owned pets:', ownedError);
       }
 
+      // Fetch shared pets (accepted shares)
+      const { data: sharedPetsData, error: sharedError } = await supabaseClient
+        .from('pet_shares')
+        .select(`
+          pet_id,
+          permission_level,
+          pets (*)
+        `)
+        .eq('shared_with_user_id', currentUser!.id)
+        .eq('status', 'accepted');
+
+      if (sharedError) {
+        console.error('Error fetching shared pets:', sharedError);
+      }
+
+      // Combine owned and shared pets
+      const sharedPets = sharedPetsData?.map(share => share.pets).filter(Boolean) || [];
+      const allPets = [...(ownedPets || []), ...sharedPets];
+
       // Filter by pet type on the client side if it's a boarding service
-      let filteredPets = petsData || [];
+      let filteredPets = allPets;
       if (service?.petType && service.petType !== 'both') {
         filteredPets = filteredPets.filter(pet => pet.species === service.petType);
       }
 
-      console.log('Fetched pets:', petsData?.length || 0);
+      console.log('Fetched owned pets:', ownedPets?.length || 0);
+      console.log('Fetched shared pets:', sharedPets.length);
+      console.log('Total pets:', allPets.length);
       console.log('Service pet type:', service?.petType);
       console.log('Filtered pets:', filteredPets.length);
 
@@ -409,6 +459,11 @@ export default function ServiceDetail() {
           partnerId: service.partnerId,
           petId: petId
         };
+
+        // Propagar descuento activo para mantener el precio promocional en booking
+        if (appliedDiscount > 0) {
+          params.discount = String(appliedDiscount);
+        }
 
         // Add boarding category if selected
         if (selectedCategory) {
@@ -492,7 +547,7 @@ export default function ServiceDetail() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.replace(`/services/partner/${partnerId || service.partnerId}`)}
+          onPress={handleBackPress}
           style={styles.backButton}
         >
           <ArrowLeft size={24} color="#111827" />
@@ -561,9 +616,15 @@ export default function ServiceDetail() {
 
           {/* For boarding services, show categories */}
           {boardingCategories.length > 0 ? (
-            <View style={styles.categoriesContainer}>
-              <Text style={styles.categoriesTitle}>Selecciona el tipo de hospedaje:</Text>
-              {boardingCategories.map((category) => {
+            <OneTimeTooltip
+              hintKey="service_detail_category"
+              userId={currentUser?.id}
+              text="Tip: elegí el tipo de hospedaje primero"
+              onHidden={() => setCanShowReserveHint(true)}
+            >
+              <View style={styles.categoriesContainer}>
+                <Text style={styles.categoriesTitle}>Selecciona el tipo de hospedaje:</Text>
+                {boardingCategories.map((category) => {
                 const isAvailable = categoryAvailability[category.id] === undefined || categoryAvailability[category.id] > 0;
                 return (
                   <TouchableOpacity
@@ -633,8 +694,9 @@ export default function ServiceDetail() {
                   </View>
                 </TouchableOpacity>
                 );
-              })}
-            </View>
+                })}
+              </View>
+            </OneTimeTooltip>
           ) : (
             <>
               {/* Price with Discount - for non-boarding services */}
@@ -699,15 +761,22 @@ export default function ServiceDetail() {
         </Card>
         
         <View style={styles.bookingButtonContainer}>
-          <Button
-            title={
-              boardingCategories.length > 0 && selectedCategory
-                ? `Reservar ${boardingCategories.find(c => c.id === selectedCategory)?.name}`
-                : `Reservar por ${formatPrice(appliedDiscount > 0 ? service.price * (1 - appliedDiscount / 100) : service.price)}`
-            }
-            onPress={handleBookService}
-            variant="primary"
-          />
+          <OneTimeTooltip
+            hintKey="service_detail_book"
+            userId={currentUser?.id}
+            text="Tip: confirmá aquí tu reserva"
+            enabled={canShowReserveHint}
+          >
+            <Button
+              title={
+                boardingCategories.length > 0 && selectedCategory
+                  ? `Reservar ${boardingCategories.find(c => c.id === selectedCategory)?.name}`
+                  : `Reservar por ${formatPrice(appliedDiscount > 0 ? service.price * (1 - appliedDiscount / 100) : service.price)}`
+              }
+              onPress={handleBookService}
+              variant="primary"
+            />
+          </OneTimeTooltip>
         </View>
       </ScrollView>
 

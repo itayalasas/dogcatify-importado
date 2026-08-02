@@ -246,18 +246,23 @@ export default function ConfigureActivities() {
   const handleToggleActivity = async (activityId: string, isActive: boolean) => {
     try {
       const tableName = businessType === 'shop' ? 'partner_products' : 'partner_services';
+      const updatePayload: Record<string, any> = {
+        is_active: !isActive,
+      };
+
+      if (tableName === 'partner_products') {
+        updatePayload.updated_at = new Date().toISOString();
+      }
+
       const { error } = await supabaseClient
         .from(tableName)
-        .update({
-          is_active: !isActive,
-          updated_at: new Date().toISOString()
-        })
+        .update(updatePayload)
         .eq('id', activityId);
 
       if (error) throw error;
     } catch (error) {
       console.error('Error toggling activity:', error);
-      Alert.alert('Error', `No se pudo actualizar ${businessType === 'shop' ? 'el producto' : 'la actividad'}`);
+      Alert.alert('Error', `No se pudo actualizar ${businessType === 'shop' ? 'el producto' : isShelterBusiness ? 'la mascota' : 'el servicio'}`);
     }
   };
 
@@ -284,8 +289,8 @@ export default function ConfigureActivities() {
   const handleDeleteActivity = (activityId: string) => {
     const isProduct = businessType === 'shop';
     Alert.alert(
-      `Eliminar ${isProduct ? 'Producto' : 'Actividad'}`,
-      `¿Estás seguro de que quieres eliminar ${isProduct ? 'este producto' : 'esta actividad'}?`,
+      `Eliminar ${entityLabelCapitalized}`,
+      `¿Estás seguro de que quieres eliminar ${isProduct ? 'este producto' : isShelterBusiness ? 'esta mascota' : 'este servicio'}?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -301,10 +306,10 @@ export default function ConfigureActivities() {
 
               if (error) throw error;
 
-              Alert.alert('Éxito', `${isProduct ? 'Producto' : 'Actividad'} eliminado correctamente`);
+              Alert.alert('Éxito', `${entityLabelCapitalized} eliminado correctamente`);
             } catch (error) {
               console.error('Error deleting activity:', error);
-              Alert.alert('Error', `No se pudo eliminar ${isProduct ? 'el producto' : 'la actividad'}`);
+              Alert.alert('Error', `No se pudo eliminar ${isProduct ? 'el producto' : isShelterBusiness ? 'la mascota' : 'el servicio'}`);
             }
           }
         }
@@ -314,12 +319,92 @@ export default function ConfigureActivities() {
 
   const handleUseSuggestion = (suggestion: any) => {
     setActivityName(suggestion.name);
-    setActivityDescription(`Servicio de ${suggestion.name.toLowerCase()}`);
+    const suggestionPrefix = businessType === 'shop'
+      ? 'Producto'
+      : businessType === 'shelter'
+        ? 'Mascota en adopción'
+        : 'Servicio';
+    setActivityDescription(`${suggestionPrefix} de ${suggestion.name.toLowerCase()}`);
     setActivityDuration(suggestion.duration.toString());
     setActivityPrice(suggestion.price.toString());
   };
 
   const config = getBusinessTypeConfig(businessType || '');
+  const isShopBusiness = businessType === 'shop';
+  const isShelterBusiness = businessType === 'shelter';
+  const isServiceBusiness = !isShopBusiness && !isShelterBusiness;
+  const screenTitle = isShopBusiness
+    ? 'Configurar Productos'
+    : isShelterBusiness
+      ? 'Configurar Adopciones'
+      : businessType === 'veterinary'
+        ? 'Configurar Servicios Veterinarios'
+        : businessType === 'grooming'
+          ? 'Configurar Servicios de Peluquería'
+          : businessType === 'walking'
+            ? 'Configurar Servicios de Paseo'
+            : businessType === 'boarding'
+              ? 'Configurar Servicios de Pensión'
+              : 'Configurar Servicios';
+  const infoTitle = isShopBusiness
+    ? 'Productos de la Tienda'
+    : isShelterBusiness
+      ? 'Mascotas en Adopción'
+      : config.title;
+  const infoDescription = isShopBusiness
+    ? 'Administra los productos de tu tienda para que los clientes puedan comprar'
+    : isShelterBusiness
+      ? 'Publica las mascotas disponibles para adopción y administra sus fichas'
+      : businessType === 'boarding'
+        ? 'Gestiona reservas, estadías y cupos de hospedaje'
+        : isServiceBusiness
+          ? 'Define los servicios que ofreces para que los clientes puedan hacer reservas'
+          : 'Define las actividades que ofreces para que los clientes puedan hacer reservas';
+  const emptyTitle = isShopBusiness
+    ? 'No hay productos configurados'
+    : isShelterBusiness
+      ? 'No hay mascotas en adopción'
+      : 'No hay servicios configurados';
+  const emptySubtitle = isShopBusiness
+    ? 'Agrega tu primer producto para comenzar a vender'
+    : isShelterBusiness
+      ? 'Agrega tu primera mascota para comenzar a recibir consultas'
+      : 'Agrega tu primer servicio para comenzar a recibir reservas';
+  const addButtonTitle = isShopBusiness
+    ? 'Agregar Producto'
+    : isShelterBusiness
+      ? 'Agregar Mascota'
+      : 'Agregar Servicio';
+  const nameLabel = isShopBusiness
+    ? 'Nombre del producto *'
+    : isShelterBusiness
+      ? 'Nombre de la mascota *'
+      : 'Nombre del servicio *';
+  const namePlaceholder = isShopBusiness
+    ? 'Ej: Alimento premium para perros'
+    : isShelterBusiness
+      ? 'Ej: Luna'
+      : 'Ej: Consulta general, Baño completo...';
+  const descriptionLabel = isShopBusiness
+    ? 'Descripción del producto *'
+    : isShelterBusiness
+      ? 'Descripción de la mascota *'
+      : 'Descripción del servicio *';
+  const descriptionPlaceholder = isShopBusiness
+    ? 'Describe características, presentaciones y beneficios...'
+    : isShelterBusiness
+      ? 'Describe su personalidad, cuidados y requisitos...'
+      : 'Describe brevemente el servicio...';
+  const entityLabel = isShopBusiness
+    ? 'producto'
+    : isShelterBusiness
+      ? 'mascota'
+      : 'servicio';
+  const entityLabelCapitalized = isShopBusiness
+    ? 'Producto'
+    : isShelterBusiness
+      ? 'Mascota'
+      : 'Servicio';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -343,7 +428,7 @@ export default function ConfigureActivities() {
               </View>
             )}
             <View>
-              <Text style={styles.title}>Configurar Actividades</Text>
+              <Text style={styles.title}>{screenTitle}</Text>
               <Text style={styles.businessName}>{partnerProfile?.businessName}</Text>
             </View>
           </View>
@@ -355,26 +440,17 @@ export default function ConfigureActivities() {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Card style={styles.infoCard}>
-          <Text style={styles.infoTitle}>{config.title}</Text>
-          <Text style={styles.infoDescription}>
-            {businessType === 'shelter' 
-              ? 'Publica mascotas disponibles para adopción y encuentra hogares responsables'
-              : businessType === 'shop'
-              ? 'Administra los productos de tu tienda para que los clientes puedan comprar'
-              : 'Define las actividades que ofreces para que los clientes puedan hacer reservas'
-            }
-          </Text>
+          <Text style={styles.infoTitle}>{infoTitle}</Text>
+          <Text style={styles.infoDescription}>{infoDescription}</Text>
         </Card>
 
         {activities.length === 0 ? (
           <Card style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No hay actividades configuradas</Text>
-            <Text style={styles.emptySubtitle}>
-              Agrega tu primera actividad para comenzar a recibir reservas
-            </Text>
+            <Text style={styles.emptyTitle}>{emptyTitle}</Text>
+            <Text style={styles.emptySubtitle}>{emptySubtitle}</Text>
             <Button
-              title="Agregar Actividad"
-             onPress={handleAddActivity}
+              title={addButtonTitle}
+              onPress={handleAddActivity}
               size="medium"
             />
           </Card>
@@ -495,7 +571,7 @@ export default function ConfigureActivities() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Agregar Nueva Actividad</Text>
+              <Text style={styles.modalTitle}>{addButtonTitle}</Text>
               <TouchableOpacity onPress={() => setShowAddModal(false)}>
                 <X size={24} color="#6B7280" />
               </TouchableOpacity>
@@ -523,15 +599,15 @@ export default function ConfigureActivities() {
               )}
 
               <Input
-                label="Nombre de la actividad *"
-                placeholder="Ej: Consulta general, Baño completo..."
+                label={nameLabel}
+                placeholder={namePlaceholder}
                 value={activityName}
                 onChangeText={setActivityName}
               />
 
               <Input
-                label="Descripción"
-                placeholder="Describe brevemente la actividad..."
+                label={descriptionLabel}
+                placeholder={descriptionPlaceholder}
                 value={activityDescription}
                 onChangeText={setActivityDescription}
                 multiline
@@ -565,7 +641,7 @@ export default function ConfigureActivities() {
                 size="medium"
               />
               <Button
-                title="Agregar"
+                title={addButtonTitle}
                 onPress={handleAddActivity}
                 loading={loading}
                 size="medium"

@@ -78,7 +78,7 @@ export default function AdminRequests() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (currentUser?.email?.toLowerCase() === 'admin@dogcatify.com') {
+    if (currentUser?.isAdmin === true) {
       logDebug('User is admin, fetching requests data...');
       fetchRequests();
     } else {
@@ -167,7 +167,7 @@ export default function AdminRequests() {
         setLoading(false);
       }, 100);
     } catch (error) {
-      const errorMessage = `Error al cargar solicitudes: ${error.message || 'Error desconocido'}`;
+      const errorMessage = `Error al cargar solicitudes: ${error instanceof Error ? error.message : 'Error desconocido'}`;
       setError(errorMessage);
       logDebug('Error in fetchRequests:', error);
     } finally {
@@ -202,6 +202,7 @@ export default function AdminRequests() {
         .from('partners')
         .update({
           is_verified: true,
+          approval_status: 'approved',
           updated_at: new Date().toISOString(),
         })
         .eq('id', requestId);
@@ -245,7 +246,7 @@ export default function AdminRequests() {
             const emailUsername = partnerData.email.split('@')[0];
             partnerName = emailUsername
               .split(/[._-]/)
-              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+              .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
               .join(' ');
           }
 
@@ -322,6 +323,7 @@ export default function AdminRequests() {
                 .from('partners')
                 .update({
                   is_verified: false,
+                  approval_status: 'rejected',
                   updated_at: new Date().toISOString(),
                 })
                 .eq('id', requestId);
@@ -460,7 +462,7 @@ export default function AdminRequests() {
     </Card>
   );
 
-  const isAdmin = currentUser?.email?.toLowerCase() === 'admin@dogcatify.com';
+  const isAdmin = currentUser?.isAdmin === true;
   if (!isAdmin) {
     return (
       <SafeAreaView style={styles.container}>

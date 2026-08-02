@@ -328,7 +328,12 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           throw error;
         }
       } catch (updateError) {
-        if (updateError.code !== '42703' && updateError.code !== 'PGRST204') {
+        const errorCode =
+          typeof updateError === 'object' && updateError !== null && 'code' in updateError
+            ? String((updateError as { code?: string }).code || '')
+            : '';
+
+        if (errorCode !== '42703' && errorCode !== 'PGRST204') {
           throw updateError;
         }
       }
