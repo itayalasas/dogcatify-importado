@@ -1,15 +1,7 @@
 import { supabaseClient } from '../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
-import Constants from 'expo-constants';
+import { getAppConfig } from './appConfig';
 import { envConfig } from './envConfig';
-
-// Get Supabase configuration from envConfig
-const SUPABASE_URL = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
-const SUPABASE_ANON_KEY = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
-
-// Email API Configuration (using Supabase edge function)
-const EMAIL_API_URL = `https://hpvzjuionqvgxlvhyqgz.supabase.co/functions/v1/send-email`;
-const EMAIL_API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwdnpqdWlvbnF2Z3hsdmh5cWd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxMTcyOTMsImV4cCI6MjA3OTY5MzI5M30.IJq_nhk4S7hFwZskDTIut7Qfe8k4a5DHChEOP3-Zg9k';
 
 export interface EmailConfirmationToken {
   id: string;
@@ -26,6 +18,102 @@ type ProfileRoleFlags = {
   isOwner: boolean;
   isPartner: boolean;
   isAdmin: boolean;
+};
+
+type ConfirmEmailApiResult = {
+  success: boolean;
+  userId?: string;
+  email?: string;
+  error?: string;
+  confirmedAt?: string;
+  alreadyConfirmed?: boolean;
+  tokenUpdateWarning?: boolean;
+};
+
+const trimTrailingSlash = (value: string) => String(value || '').trim().replace(/\/+$/, '');
+
+const ensureRuntimeEnvConfig = async (forceRefresh = false): Promise<void> => {
+  if (forceRefresh) {
+    await envConfig.reload();
+    return;
+  }
+
+  if (!envConfig.isInitialized()) {
+    await envConfig.initialize();
+  }
+};
+
+const readEnvValue = (key: string): string => {
+  return String(envConfig.get(key) || '').trim();
+};
+
+const getSupabaseBaseUrl = (): string => {
+  return trimTrailingSlash(readEnvValue('EXPO_PUBLIC_SUPABASE_URL'));
+};
+
+const sameSupabaseHost = (candidateUrl: string, baseUrl: string): boolean => {
+  try {
+    return new URL(candidateUrl).host === new URL(baseUrl).host;
+  } catch {
+    return false;
+  }
+};
+
+const isSupabaseFunctionsUrl = (candidateUrl: string): boolean => {
+  try {
+    const parsed = new URL(candidateUrl);
+    return parsed.host.endsWith('.supabase.co') && parsed.pathname.includes('/functions/v1/');
+  } catch {
+    return false;
+  }
+};
+
+const matchesSupabaseFunctionPath = (candidateUrl: string, functionName: 'send-email' | 'confirm-email'): boolean => {
+  try {
+    const parsed = new URL(candidateUrl);
+    return parsed.pathname.replace(/\/+$/, '') === `/functions/v1/${functionName}`;
+  } catch {
+    return false;
+  }
+};
+
+const resolveSupabaseFunctionUrl = (
+  functionName: 'send-email' | 'confirm-email',
+  envKey: 'EXPO_PUBLIC_EMAIL_API_URL' | 'EXPO_PUBLIC_CONFIRM_EMAIL_API_URL',
+): string => {
+  const baseUrl = getSupabaseBaseUrl();
+  const configuredUrl = trimTrailingSlash(readEnvValue(envKey));
+
+  if (configuredUrl) {
+    if (
+      isSupabaseFunctionsUrl(configuredUrl) &&
+      (
+        (baseUrl && !sameSupabaseHost(configuredUrl, baseUrl)) ||
+        !matchesSupabaseFunctionPath(configuredUrl, functionName)
+      )
+    ) {
+      console.warn(
+        `[emailConfirmation] ${envKey} does not point to the current ${functionName} endpoint. Using current project fallback instead:`,
+        configuredUrl,
+      );
+      return baseUrl ? `${baseUrl}/functions/v1/${functionName}` : configuredUrl;
+    }
+
+    return configuredUrl;
+  }
+
+  if (baseUrl) {
+    return `${baseUrl}/functions/v1/${functionName}`;
+  }
+
+  return configuredUrl;
+};
+
+const getEmailApiKey = (): string => {
+  return (
+    readEnvValue('EXPO_PUBLIC_EMAIL_API_KEY') ||
+    readEnvValue('EXPO_PUBLIC_SUPABASE_ANON_KEY')
+  );
 };
 
 const parseMetadataBoolean = (value: any): boolean | undefined => {
@@ -121,6 +209,105 @@ const getServiceClient = () => {
   });
 };
 
+const parseJsonSafely = (value: string): any | null => {
+  if (!value.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    console.warn('Could not parse JSON response from confirm-email edge function:', error);
+    return null;
+  }
+};
+
+const extractTokenFromConfirmationUrl = (confirmationUrl: string): string | null => {
+  try {
+    const url = new URL(confirmationUrl);
+    return url.searchParams.get('token_hash') || url.searchParams.get('token');
+  } catch (error) {
+    console.warn('Could not extract token from confirmation URL:', error);
+    return null;
+  }
+};
+
+const confirmEmailViaEdgeFunction = async (
+  token: string,
+  type: 'signup' | 'password_reset',
+): Promise<ConfirmEmailApiResult | null> => {
+  try {
+    await ensureRuntimeEnvConfig(true);
+
+    const confirmEmailApiUrl = resolveSupabaseFunctionUrl('confirm-email', 'EXPO_PUBLIC_CONFIRM_EMAIL_API_URL');
+
+    if (!confirmEmailApiUrl) {
+      console.warn('confirm-email URL could not be resolved');
+      return null;
+    }
+
+    console.log('[emailConfirmation] confirm-email resolved target:', {
+      confirmEmailApiUrl,
+      source: envConfig.get('EXPO_PUBLIC_CONFIRM_EMAIL_API_URL') ? 'envConfig' : 'fallback-current-project',
+    });
+
+    const response = await fetch(confirmEmailApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        token,
+        type,
+      }),
+    });
+
+    const responseText = await response.text();
+    const parsedBody = parseJsonSafely(responseText);
+
+    console.log('[emailConfirmation] confirm-email edge response:', {
+      url: confirmEmailApiUrl,
+      status: response.status,
+      ok: response.ok,
+      hasParsedBody: !!parsedBody,
+      parsedError: parsedBody?.error || null,
+    });
+
+    if (!response.ok && response.status === 404 && parsedBody?.error === 'TOKEN_NOT_FOUND') {
+      console.warn('[emailConfirmation] confirm-email returned TOKEN_NOT_FOUND, trying local confirmation fallback');
+      return null;
+    }
+
+    if (parsedBody && (typeof parsedBody.success === 'boolean' || parsedBody.error)) {
+      return parsedBody as ConfirmEmailApiResult;
+    }
+
+    if (!response.ok && response.status === 404) {
+      return null;
+    }
+
+    if (response.ok) {
+      return {
+        success: true,
+        userId: parsedBody?.userId,
+        email: parsedBody?.email,
+        confirmedAt: parsedBody?.confirmedAt,
+      };
+    }
+
+    return {
+      success: false,
+      error: parsedBody?.error || 'CONFIRMATION_FAILED',
+      userId: parsedBody?.userId,
+      email: parsedBody?.email,
+      confirmedAt: parsedBody?.confirmedAt,
+    };
+  } catch (error) {
+    console.warn('confirm-email edge function unavailable, falling back to local confirmation flow:', error);
+    return null;
+  }
+};
+
 /**
  * Generate a secure token for email confirmation
  */
@@ -139,6 +326,8 @@ export const createEmailConfirmationToken = async (
   type: 'signup' | 'password_reset' = 'signup'
 ): Promise<string> => {
   try {
+    await ensureRuntimeEnvConfig(true);
+
     const token = await generateConfirmationToken();
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 24); // Token expires in 24 hours
@@ -169,12 +358,20 @@ export const createEmailConfirmationToken = async (
 /**
  * Verify email confirmation token
  */
-export const confirmEmailCustom = async (
+export const confirmEmailCustomLegacy = async (
   token: string,
   type: 'signup' | 'password_reset' = 'signup'
-): Promise<{ success: boolean; userId?: string; email?: string; error?: string }> => {
+): Promise<ConfirmEmailApiResult> => {
   try {
+    await ensureRuntimeEnvConfig(true);
+
     console.log('Verifying token:', token, 'type:', type);
+
+    const edgeResult = await confirmEmailViaEdgeFunction(token, type);
+    if (edgeResult) {
+      console.log('confirm-email edge function result:', edgeResult);
+      return edgeResult;
+    }
 
     // Find the token in database using service client to bypass RLS
     const serviceClient = getServiceClient();
@@ -196,26 +393,21 @@ export const confirmEmailCustom = async (
       return { success: false, error: 'TOKEN_NOT_FOUND' };
     }
 
-    // Check if token was already confirmed
-    if (anyTokenData.is_confirmed) {
-      console.log('Token already used:', {
+    const tokenAlreadyUsed = Boolean(anyTokenData.is_confirmed);
+
+    if (tokenAlreadyUsed) {
+      console.log('Token already used, continuing with idempotent confirmation flow:', {
         userId: anyTokenData.user_id,
         email: anyTokenData.email,
-        confirmedAt: anyTokenData.confirmed_at
+        confirmedAt: anyTokenData.confirmed_at,
       });
-      return { 
-        success: false, 
-        error: 'TOKEN_ALREADY_USED',
-        userId: anyTokenData.user_id,
-        email: anyTokenData.email
-      };
     }
 
-    // Check if token has expired
+    // Check if token has expired. Already-confirmed tokens are allowed to pass.
     const now = new Date();
     const expiresAt = new Date(anyTokenData.expires_at);
     
-    if (now > expiresAt) {
+    if (!tokenAlreadyUsed && now > expiresAt) {
       return { 
         success: false, 
         error: 'TOKEN_EXPIRED',
@@ -235,7 +427,7 @@ export const confirmEmailCustom = async (
 
     if (updateError) {
       console.error('Error updating token:', updateError);
-      return { success: false, error: 'UPDATE_ERROR' };
+      console.warn('Token confirmation row could not be updated, but the auth/profile flow can continue.');
     }
 
     // CRITICAL: Update user in auth.users to mark email as confirmed
@@ -302,7 +494,113 @@ export const confirmEmailCustom = async (
     return {
       success: true,
       userId: anyTokenData.user_id,
-      email: anyTokenData.email
+      email: anyTokenData.email,
+      alreadyConfirmed: tokenAlreadyUsed,
+    };
+  } catch (error) {
+    console.error('Error verifying email confirmation token:', error);
+    return { success: false, error: 'INTERNAL_ERROR' };
+  }
+};
+
+export const confirmEmailCustom = async (
+  token: string,
+  type: 'signup' | 'password_reset' = 'signup'
+): Promise<ConfirmEmailApiResult> => {
+  try {
+    await ensureRuntimeEnvConfig(true);
+
+    console.log('Verifying token:', token, 'type:', type);
+
+    const edgeResult = await confirmEmailViaEdgeFunction(token, type);
+    if (edgeResult) {
+      console.log('confirm-email edge function result:', edgeResult);
+      return edgeResult;
+    }
+
+    const serviceClient = getServiceClient();
+    const { data: confirmationRows, error: confirmationError } = await serviceClient.rpc(
+      'confirm_email_signup_atomically',
+      {
+        p_token_hash: token,
+        p_type: type,
+      },
+    ) as { data: any[] | null; error: any };
+
+    if (confirmationError || !confirmationRows?.length) {
+      const rawMessage = String(
+        confirmationError?.message ||
+          confirmationError?.details ||
+          confirmationError?.hint ||
+          'CONFIRMATION_TRANSACTION_FAILED',
+      ).toUpperCase();
+
+      if (rawMessage.includes('TOKEN_NOT_FOUND')) {
+        return { success: false, error: 'TOKEN_NOT_FOUND' };
+      }
+
+      if (rawMessage.includes('TOKEN_EXPIRED')) {
+        return { success: false, error: 'TOKEN_EXPIRED' };
+      }
+
+      if (rawMessage.includes('TOKEN_REQUIRED')) {
+        return { success: false, error: 'TOKEN_REQUIRED' };
+      }
+
+      if (rawMessage.includes('PROFILE_NOT_FOUND')) {
+        return { success: false, error: 'PROFILE_NOT_FOUND' };
+      }
+
+      console.error('Error confirming email atomically:', {
+        error: confirmationError,
+        message: rawMessage,
+      });
+
+      return { success: false, error: 'CONFIRMATION_TRANSACTION_FAILED' };
+    }
+
+    const confirmation = confirmationRows[0];
+
+    let authMetadata: Record<string, any> = {};
+    try {
+      const { data: authUserData } = await serviceClient.auth.admin.getUserById(confirmation.user_id);
+      authMetadata = authUserData?.user?.user_metadata || {};
+    } catch (error) {
+      console.warn('Could not read auth metadata for confirmation:', error);
+    }
+
+    const { error: authUpdateError } = await serviceClient.auth.admin.updateUserById(
+      confirmation.user_id,
+      {
+        email_confirm: true,
+        user_metadata: {
+          ...authMetadata,
+          email_confirmed: true,
+          email_confirmed_at: confirmation.confirmed_at,
+        },
+      },
+    );
+
+    if (authUpdateError) {
+      console.error('Error updating user in auth.users:', authUpdateError);
+      return {
+        success: false,
+        error: 'AUTH_UPDATE_ERROR',
+        userId: confirmation.user_id,
+        email: confirmation.email,
+        alreadyConfirmed: confirmation.already_confirmed,
+        confirmedAt: confirmation.confirmed_at,
+      };
+    }
+
+    console.log('Email confirmation successful for user:', confirmation.user_id);
+
+    return {
+      success: true,
+      userId: confirmation.user_id,
+      email: confirmation.email,
+      alreadyConfirmed: confirmation.already_confirmed,
+      confirmedAt: confirmation.confirmed_at,
     };
   } catch (error) {
     console.error('Error verifying email confirmation token:', error);
@@ -409,11 +707,42 @@ export const generateConfirmationUrl = (token: string, type: 'signup' | 'passwor
 const sendEmailViaSupabase = async (
   templateName: string,
   recipientEmail: string,
-  data: Record<string, any>
+  data: Record<string, any>,
+  extraPayload: Record<string, any> = {},
 ): Promise<{ success: boolean; error?: string; log_id?: string }> => {
+  await ensureRuntimeEnvConfig();
+
+  const appConfig = await getAppConfig(true).catch((error) => {
+    console.warn('[emailConfirmation] Could not load app config for email dispatch, using env fallback:', error);
+    return null;
+  });
+
+  const configEmailApiUrl = trimTrailingSlash(String(appConfig?.email_api_url || ''));
+  const configEmailApiKey = String(appConfig?.email_api_key || '').trim();
+  const fallbackEmailApiUrl = resolveSupabaseFunctionUrl('send-email', 'EXPO_PUBLIC_EMAIL_API_URL');
+  const fallbackEmailApiKey = getEmailApiKey();
+  const emailApiUrl = configEmailApiUrl || fallbackEmailApiUrl;
+  const emailApiKey = configEmailApiKey || fallbackEmailApiKey;
+
+  if (!emailApiUrl) {
+    return { success: false, error: 'EMAIL_API_URL not configured' };
+  }
+
+  console.log('[emailConfirmation] Resolved email API target:', {
+    emailApiUrl,
+    source: configEmailApiUrl ? 'app_config' : 'env_or_fallback',
+    fallbackUrl: fallbackEmailApiUrl || null,
+  });
+
   console.log(`📧 === SENDING ${templateName.toUpperCase()} EMAIL ===`);
   console.log('📧 Recipient:', recipientEmail);
   console.log('📧 Data:', JSON.stringify(data, null, 2));
+  console.log('[emailConfirmation] Email dispatch configuration:', {
+    emailApiUrl,
+    configSource: configEmailApiUrl ? 'app_config' : 'env_or_fallback',
+    hasEmailApiKey: !!emailApiKey,
+    emailApiKeySource: configEmailApiKey ? 'app_config' : 'env_or_fallback',
+  });
 
   try {
     /*if (!EMAIL_API_URL || !EMAIL_API_KEY) {
@@ -425,17 +754,18 @@ const sendEmailViaSupabase = async (
       template_name: templateName,
       recipient_email: recipientEmail,
       data: data,
+      ...extraPayload,
     };
 
-    console.log('📧 Calling Supabase function:', EMAIL_API_URL);
+    console.log('📧 Calling Supabase function:', emailApiUrl);
     console.log('📧 Payload:', JSON.stringify(emailPayload, null, 2));
 
-    const response = await fetch(EMAIL_API_URL, {
+    const response = await fetch(emailApiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${EMAIL_API_KEY}`,
-        'apikey': EMAIL_API_KEY,
+        'Authorization': `Bearer ${emailApiKey}`,
+        'apikey': emailApiKey,
       },
       body: JSON.stringify(emailPayload),
     });
@@ -443,7 +773,7 @@ const sendEmailViaSupabase = async (
     console.log('📧 Response status:', response.status);
 
     const responseText = await response.text();
-    console.log('📧 Response body:', responseText);
+    console.log('📧 Response body preview:', responseText.slice(0, 1000));
 
     if (!response.ok) {
       console.error('❌ Email API error:', response.status, responseText);
@@ -473,10 +803,17 @@ export const sendConfirmationEmailAPI = async (
   name: string,
   confirmationUrl: string
 ): Promise<{ success: boolean; error?: string; log_id?: string }> => {
+  const confirmationToken = extractTokenFromConfirmationUrl(confirmationUrl);
+
   return sendEmailViaSupabase('confirmation', email, {
     client_name: name,
     confirmation_url: confirmationUrl,
-  });
+    token: confirmationToken,
+    token_hash: confirmationToken,
+  }, confirmationToken ? {
+    token: confirmationToken,
+    token_hash: confirmationToken,
+  } : {});
 };
 
 /**
@@ -497,6 +834,8 @@ export const sendWelcomeEmailAPI = async (
  */
 export const resendConfirmationEmail = async (email: string): Promise<{ success: boolean; error?: string }> => {
   try {
+    await ensureRuntimeEnvConfig();
+
     console.log('Resending confirmation email for:', email);
     const serviceClient = getServiceClient();
 

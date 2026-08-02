@@ -14,6 +14,7 @@ import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { Platform, Alert, View, Text, ActivityIndicator, TouchableOpacity, Animated, Image, Dimensions } from 'react-native';
 import { supabaseClient, initializeSupabase, setupAuthListeners } from '@/lib/supabase';
 import { envConfig } from '@/utils/envConfig';
+import { clearConfigCache } from '@/utils/appConfig';
 import { SafeAppWrapper } from '../components/SafeAppWrapper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { FloatingVoiceBot } from '../components/FloatingVoiceBot';
@@ -156,7 +157,9 @@ function RootLayout() {
 
         // 1. Inicializar configuración de entorno
         console.log('[App] 📦 Loading environment configuration...');
-        await envConfig.initialize();
+        // En cada arranque forzamos refresco para no reutilizar credenciales viejas de AsyncStorage.
+        await envConfig.initialize(true);
+        clearConfigCache();
 
         if (!mounted) return;
 
@@ -569,6 +572,7 @@ function RootLayout() {
     try {
       console.log('[App] 🔄 Retrying configuration...');
       await envConfig.reload();
+      clearConfigCache();
       setConfigReady(true);
       console.log('[App] ✅ Configuration retry successful');
     } catch (error: any) {

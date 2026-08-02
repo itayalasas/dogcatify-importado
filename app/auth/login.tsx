@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Modal, Platform, Animated, Alert, KeyboardAvoidingView } from 'react-native';
-import { Link, router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Mail, Lock, Eye, EyeOff, Fingerprint, CircleAlert as AlertCircle, X, CircleCheck as CheckCircle } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -299,6 +299,20 @@ export default function Login() {
     clearAuthError();
   };
 
+  const handleGoToRegister = () => {
+    dismissError();
+    setShowEmailConfirmationModal(false);
+    setPendingEmail('');
+    router.push('/auth/register');
+  };
+
+  const handleGoToBecomePartner = () => {
+    dismissError();
+    setShowEmailConfirmationModal(false);
+    setPendingEmail('');
+    router.push('/auth/become-partner');
+  };
+
   return (
     <>
       <KeyboardAvoidingView
@@ -400,15 +414,15 @@ export default function Login() {
         </View>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              ¿No tienes una cuenta?{' '}
-              <Link href="/auth/register" style={styles.link}>
-                Registrate
-              </Link>
-            </Text>
+            <View style={styles.footerRow}>
+              <Text style={styles.footerText}>¿No tienes una cuenta?</Text>
+              <TouchableOpacity onPress={handleGoToRegister} activeOpacity={0.8} style={styles.footerLinkButton}>
+                <Text style={styles.link}>Registrate</Text>
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity
               style={styles.partnerButton}
-              onPress={() => router.push('/auth/become-partner')}
+              onPress={handleGoToBecomePartner}
             >
               <Text style={styles.partnerText}>
                 ¿Sos aliado? <Text style={styles.partnerLink}>{t('becomePartner')}</Text>
@@ -629,10 +643,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 16,
   },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
   footerText: {
     fontSize: 16,
     color: '#6B7280',
     fontFamily: 'Inter-Regular',
+  },
+  footerLinkButton: {
+    marginLeft: 4,
   },
   link: {
     color: '#3B82F6',

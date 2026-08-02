@@ -5,6 +5,7 @@ import { CircleCheck as CheckCircle, CircleX as XCircle, Mail } from 'lucide-rea
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { confirmEmailCustom } from '../../utils/emailConfirmation';
+import { envConfig } from '../../utils/envConfig';
 import { supabaseClient } from '../../lib/supabase';
 
 export default function EmailConfirmationScreen() {
@@ -16,6 +17,15 @@ export default function EmailConfirmationScreen() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [resendingEmail, setResendingEmail] = useState(false);
   const [hasAttempted, setHasAttempted] = useState(false);
+
+  const ensureRuntimeConfigLoaded = async () => {
+    console.log('[EmailConfirmationScreen] Reloading runtime env config before confirmation flow...');
+    try {
+      await envConfig.reload();
+    } catch (error) {
+      console.warn('[EmailConfirmationScreen] Could not preload runtime env config:', error);
+    }
+  };
 
   useEffect(() => {
     // Prevenir múltiples intentos de confirmación
@@ -40,6 +50,8 @@ export default function EmailConfirmationScreen() {
       try {
         console.log('Attempting to confirm email with token:', token_hash);
 
+        await ensureRuntimeConfigLoaded();
+
         // Add a small delay to ensure database is ready
         await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -56,8 +68,8 @@ export default function EmailConfirmationScreen() {
           // El perfil ya fue creado durante el registro, solo confirmar el email
           console.log('✅ Email confirmed, profile was created during registration');
 
-          // Enviar email de bienvenida después de confirmar exitosamente
-          if (result.email) {
+          // Enviar email de bienvenida solo en la primera confirmación exitosa
+          if (result.email && !result.alreadyConfirmed) {
             console.log('Sending welcome email to:', result.email);
             try {
               const { sendWelcomeEmailAPI } = await import('../../utils/emailConfirmation');
@@ -127,6 +139,18 @@ export default function EmailConfirmationScreen() {
             errorMessage = 'EXPIRED';
           } else if (result.error === 'TOKEN_NOT_FOUND') {
             errorMessage = 'NOT_FOUND';
+          } else if (
+            result.error === 'PROFILE_UPDATE_ERROR' ||
+            result.error === 'TOKEN_UPDATE_ERROR' ||
+            result.error === 'AUTH_UPDATE_ERROR' ||
+            result.error === 'PROFILE_NOT_FOUND' ||
+            result.error === 'CONFIRMATION_TRANSACTION_FAILED' ||
+            result.error === 'CONFIRMATION_FAILED' ||
+            result.error === 'INTERNAL_SERVER_ERROR' ||
+            result.error === 'INTERNAL_ERROR' ||
+            result.error === 'MISSING_ENVIRONMENT'
+          ) {
+            errorMessage = 'CONFIRMATION_FAILED';
           }
 
           setError(errorMessage);
@@ -154,6 +178,8 @@ export default function EmailConfirmationScreen() {
     setResendingEmail(true);
     try {
       console.log('Resending confirmation email to:', userEmail);
+
+      await ensureRuntimeConfigLoaded();
       
       // First check if user is already confirmed
       const { data: existingProfile, error: profileError } = await supabaseClient
@@ -208,38 +234,54 @@ export default function EmailConfirmationScreen() {
 
   if (error) {
     // Determinar el contenido basado en el tipo de error
-    let title, message, showResendButton, buttonText;
+    let title = 'Error de Confirmación';
+    let message = 'El enlace de confirmación no es válido o ha ocurrido un error.';
+    let showResendButton = false;
+    let buttonText = '';
+    let showLoginButton = true;
     
     if (error === 'ALREADY_USED') {
       title = 'Enlace Ya Utilizado';
       message = 'Este enlace de confirmación ya fue utilizado anteriormente. Si aún no puedes iniciar sesión, puedes solicitar un nuevo enlace.';
       showResendButton = true;
+      showLoginButton = true;
       buttonText = resendingEmail ? 'Enviando...' : 'Enviar Nuevo Enlace';
     } else if (error === 'ALREADY_CONFIRMED') {
       title = '✅ Email Ya Confirmado';
       message = 'Tu correo electrónico ya está confirmado. Puedes iniciar sesión normalmente en la aplicación.';
       showResendButton = false;
+      showLoginButton = true;
       buttonText = '';
     } else if (error === 'EXPIRED') {
       title = 'Enlace Expirado';
       message = 'Este enlace de confirmación ha expirado. Los enlaces son válidos por 24 horas por seguridad.';
       showResendButton = true;
+      showLoginButton = true;
       buttonText = resendingEmail ? 'Enviando...' : 'Enviar Nuevo Enlace';
     } else if (error === 'EMAIL_SENT') {
       title = '¡Nuevo Enlace Enviado!';
       message = `Se ha enviado un nuevo enlace de confirmación a tu correo electrónico. Por favor revisa tu bandeja de entrada y haz clic en el nuevo enlace.`;
       showResendButton = false;
+      showLoginButton = true;
+      buttonText = '';
+    } else if (error === 'CONFIRMATION_FAILED') {
+      title = 'No pudimos confirmar tu correo';
+      message = 'El enlace se detecto correctamente, pero no pudimos completar la validacion en este momento. Puedes intentarlo otra vez o pedir un nuevo enlace.';
+      showResendButton = true;
+      showLoginButton = true;
+      buttonText = resendingEmail ? 'Enviando...' : 'Enviar Nuevo Enlace';
+    } else if (error === 'NOT_FOUND') {
+      title = 'Enlace no válido';
+      message = 'Ese enlace de confirmación ya no existe o fue reemplazado por uno nuevo. Vuelve a iniciar sesión y solicita un nuevo correo de confirmación.';
+      showResendButton = false;
+      showLoginButton = true;
       buttonText = '';
     } else if (error === 'RESEND_ERROR') {
       title = 'Error al Reenviar';
       message = 'No se pudo reenviar el correo de confirmación. Por favor intenta nuevamente más tarde.';
       showResendButton = true;
+      showLoginButton = true;
       buttonText = resendingEmail ? 'Enviando...' : 'Intentar Nuevamente';
-    } else {
-      title = 'Error de Confirmación';
-      message = 'El enlace de confirmación no es válido o ha ocurrido un error.';
-      showResendButton = false;
-      buttonText = '';
     }
     
     return (
@@ -278,6 +320,14 @@ export default function EmailConfirmationScreen() {
                 loading={resendingEmail}
                 disabled={resendingEmail}
                 size="large"
+              />
+            )}
+            {showLoginButton && (
+              <Button
+                title="Ir a Iniciar Sesión"
+                onPress={handleGoToLogin}
+                size="large"
+                variant="outline"
               />
             )}
           </View>

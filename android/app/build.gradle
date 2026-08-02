@@ -47,7 +47,8 @@ android {
     ndkVersion rootProject.ext.ndkVersion
 
     buildToolsVersion rootProject.ext.buildToolsVersion
-    compileSdk rootProject.ext.compileSdkVersion
+    // Align with Expo SDK 54 and Google Play target API requirements.
+    compileSdk 36
 
     // 🔹 Nombre de paquete NUEVO
     namespace 'com.dogcatify.app2'
@@ -55,7 +56,7 @@ android {
     defaultConfig {
         applicationId 'com.dogcatify.app2'
         minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
+        targetSdkVersion 36
 
         // 🔢 VERSIONADO DINÁMICO (para CI / pipelines)
         // 1️⃣ Busca en propiedades de Gradle: -PVERSION_CODE, -PVERSION_NAME

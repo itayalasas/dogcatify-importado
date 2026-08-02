@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -16,18 +16,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import {
   createEmailConfirmationToken,
   generateConfirmationUrl,
   sendConfirmationEmailAPI,
 } from '../../utils/emailConfirmation';
+import { getFriendlyAuthErrorMessage } from '../../utils/authErrorMessages';
 import { validatePassword, PASSWORD_MIN_LENGTH_EXCLUSIVE } from '../../utils/passwordValidation';
 
 const AUTO_BIOMETRIC_SUPPRESS_KEY = '@dogcatify_skip_auto_biometric_once';
 
 export default function BecomePartner() {
   const { t } = useLanguage();
+  const { currentUser } = useAuth();
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -39,6 +42,17 @@ export default function BecomePartner() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
+  const hasCurrentSession = Boolean(currentUser?.id);
+
+  useEffect(() => {
+    if (currentUser?.displayName && !fullName) {
+      setFullName(currentUser.displayName);
+    }
+
+    if (currentUser?.email && !email) {
+      setEmail(currentUser.email);
+    }
+  }, [currentUser?.displayName, currentUser?.email]);
 
   const passwordValidation = validatePassword(password);
   const isPasswordValid = passwordValidation.isValid;
@@ -73,6 +87,11 @@ export default function BecomePartner() {
   };
 
   const handleRegister = async () => {
+    if (hasCurrentSession) {
+      router.replace('/partner-register');
+      return;
+    }
+
     if (!fullName || !email || !password || !confirmPassword) {
       Alert.alert('Error', 'Completa todos los campos');
       return;
@@ -141,14 +160,24 @@ export default function BecomePartner() {
         console.warn('Partner confirmation email could not be sent:', emailResult.error);
       }
 
+      const confirmationTitle = emailResult.success
+        ? 'Registro de aliado exitoso'
+        : 'Cuenta de aliado creada';
+      const confirmationMessage = emailResult.success
+        ? `Tu cuenta de aliado fue creada correctamente.\n\nTe enviamos un correo de confirmacion a:\n${trimmedEmail}\n\nCuando confirmes el correo, podras iniciar sesion y registrar tu negocio.`
+        : `Tu cuenta de aliado fue creada correctamente, pero no pudimos enviar el correo de confirmacion automaticamente.\n\nRevisa el correo registrado o intenta reenviarlo desde la pantalla de inicio de sesion.\n\nCorreo:\n${trimmedEmail}`;
+
       Alert.alert(
-        'Registro de aliado exitoso',
-        `Tu cuenta de aliado fue creada correctamente.\n\nTe enviamos un correo de confirmacion a:\n${trimmedEmail}\n\nCuando confirmes el correo, podras iniciar sesion y registrar tu negocio.`,
+        confirmationTitle,
+        confirmationMessage,
         [{ text: 'ENTENDIDO', onPress: () => router.replace('/auth/login') }]
       );
     } catch (error: any) {
       console.error('Partner registration error:', error);
-      Alert.alert('Error', error.message || 'Error al crear la cuenta');
+      Alert.alert(
+        'No pudimos crear la cuenta',
+        getFriendlyAuthErrorMessage(error, 'partner')
+      );
     } finally {
       setLoading(false);
     }
@@ -182,83 +211,103 @@ export default function BecomePartner() {
             <View style={styles.heroIcon}>
               <Briefcase size={34} color="#2D6A6F" />
             </View>
-            <Text style={styles.title}>{t('becomePartner')}</Text>
-            <Text style={styles.subtitle}>{t('partnerRegisterSubtitle')}</Text>
+            <Text style={styles.title}>
+              {hasCurrentSession ? 'Completar alta de aliado' : t('becomePartner')}
+            </Text>
+            <Text style={styles.subtitle}>
+              {hasCurrentSession
+                ? 'Usaremos tu sesión actual para registrar tu negocio sin crear otra cuenta.'
+                : t('partnerRegisterSubtitle')}
+            </Text>
           </View>
 
-          <Input
-            label="Nombre completo"
-            placeholder="Tu nombre completo"
-            value={fullName}
-            onChangeText={setFullName}
-            leftIcon={<User size={20} color="#6B7280" />}
-          />
-
-          <Input
-            label="Correo electrónico"
-            placeholder="tu@email.com"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            leftIcon={<Mail size={20} color="#6B7280" />}
-          />
-
-          <Input
-            label="Contraseña"
-            placeholder={`Mínimo ${PASSWORD_MIN_LENGTH_EXCLUSIVE + 1} caracteres`}
-            value={password}
-            onChangeText={handlePasswordChange}
-            secureTextEntry={!showPassword}
-            leftIcon={<Lock size={20} color="#6B7280" />}
-            showPasswordToggle={true}
-            isPasswordVisible={showPassword}
-            onTogglePasswordVisibility={() => setShowPassword(!showPassword)}
-            error={passwordError}
-          />
-
-          <Input
-            label="Confirmar contraseña"
-            placeholder="Repite tu contraseña"
-            value={confirmPassword}
-            onChangeText={handleConfirmPasswordChange}
-            secureTextEntry={!showConfirmPassword}
-            leftIcon={<Lock size={20} color="#6B7280" />}
-            showPasswordToggle={true}
-            isPasswordVisible={showConfirmPassword}
-            onTogglePasswordVisibility={() => setShowConfirmPassword(!showConfirmPassword)}
-            error={confirmPasswordError}
-          />
-
-          <TouchableOpacity
-            style={styles.termsRow}
-            onPress={() => setAcceptTerms(!acceptTerms)}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.checkbox, acceptTerms && styles.checkboxChecked]}>
-              {acceptTerms && <Text style={styles.checkmark}>✓</Text>}
+          {hasCurrentSession ? (
+            <View style={styles.sessionCard}>
+              <Text style={styles.sessionTitle}>Sesión activa detectada</Text>
+              <Text style={styles.sessionText}>
+                Estás conectado como {currentUser?.email || 'tu cuenta actual'}.
+                Vamos a usar esa misma cuenta para completar el alta de tu negocio como aliado.
+              </Text>
             </View>
-            <Text style={styles.termsText}>
-              Acepto los términos y condiciones y la política de privacidad
-            </Text>
-          </TouchableOpacity>
+          ) : (
+            <>
+              <Input
+                label="Nombre completo"
+                placeholder="Tu nombre completo"
+                value={fullName}
+                onChangeText={setFullName}
+                leftIcon={<User size={20} color="#6B7280" />}
+              />
+
+              <Input
+                label="Correo electrónico"
+                placeholder="tu@email.com"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                leftIcon={<Mail size={20} color="#6B7280" />}
+              />
+
+              <Input
+                label="Contraseña"
+                placeholder={`Mínimo ${PASSWORD_MIN_LENGTH_EXCLUSIVE + 1} caracteres`}
+                value={password}
+                onChangeText={handlePasswordChange}
+                secureTextEntry={!showPassword}
+                leftIcon={<Lock size={20} color="#6B7280" />}
+                showPasswordToggle={true}
+                isPasswordVisible={showPassword}
+                onTogglePasswordVisibility={() => setShowPassword(!showPassword)}
+                error={passwordError}
+              />
+
+              <Input
+                label="Confirmar contraseña"
+                placeholder="Repite tu contraseña"
+                value={confirmPassword}
+                onChangeText={handleConfirmPasswordChange}
+                secureTextEntry={!showConfirmPassword}
+                leftIcon={<Lock size={20} color="#6B7280" />}
+                showPasswordToggle={true}
+                isPasswordVisible={showConfirmPassword}
+                onTogglePasswordVisibility={() => setShowConfirmPassword(!showConfirmPassword)}
+                error={confirmPasswordError}
+              />
+
+              <TouchableOpacity
+                style={styles.termsRow}
+                onPress={() => setAcceptTerms(!acceptTerms)}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.checkbox, acceptTerms && styles.checkboxChecked]}>
+                  {acceptTerms && <Text style={styles.checkmark}>✓</Text>}
+                </View>
+                <Text style={styles.termsText}>
+                  Acepto los términos y condiciones y la política de privacidad
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
 
           <Button
-            title="Crear cuenta de aliado"
+            title={hasCurrentSession ? 'Ir al registro de negocio' : 'Crear cuenta de aliado'}
             onPress={handleRegister}
             loading={loading}
             disabled={loading}
             size="large"
           />
 
-          <TouchableOpacity
-            style={styles.loginButton}
-            onPress={() => router.replace('/auth/login')}
-          >
-            <Text style={styles.loginText}>
-              ¿Ya tienes una cuenta? <Text style={styles.loginLink}>Inicia sesión</Text>
-            </Text>
-          </TouchableOpacity>
+          {!hasCurrentSession && (
+            <TouchableOpacity
+              style={styles.loginButton}
+              onPress={() => router.replace('/auth/login')}
+            >
+              <Text style={styles.loginText}>
+                ¿Ya tienes una cuenta? <Text style={styles.loginLink}>Inicia sesión</Text>
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -300,6 +349,26 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 400,
     alignSelf: 'center',
+  },
+  sessionCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 20,
+  },
+  sessionTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 6,
+  },
+  sessionText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#4B5563',
+    fontFamily: 'Inter-Regular',
   },
   heroCard: {
     backgroundColor: '#F0FDFA',
