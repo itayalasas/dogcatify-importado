@@ -68,6 +68,15 @@ Deno.serve(async (req: Request) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const emailApiUrl = Deno.env.get("EMAIL_API_URL")?.trim();
+    const emailApiKey = Deno.env.get("EMAIL_API_KEY")?.trim();
+
+    if (!emailApiUrl || !emailApiKey) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Email service is not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     if (!supabaseUrl || !supabaseServiceKey) {
       throw new Error("Missing Supabase environment variables");
@@ -127,14 +136,12 @@ Deno.serve(async (req: Request) => {
           .single();
 
         if (serviceError || !serviceData) {
-          console.log(`Order ${order.id} - could not fetch service data, skipping`);
           continue;
         }
 
         const confirmationHours = serviceData.confirmation_hours;
 
         if (!confirmationHours) {
-          console.log(`Order ${order.id} has no confirmation_hours, skipping`);
           continue;
         }
 
@@ -151,7 +158,6 @@ Deno.serve(async (req: Request) => {
             .single();
 
           if (existingToken) {
-            console.log(`Order ${order.id} already has a token, skipping`);
             continue;
           }
 
@@ -168,7 +174,6 @@ Deno.serve(async (req: Request) => {
             });
 
           if (tokenError) {
-            console.error(`Error creating token for order ${order.id}:`, tokenError);
             errors++;
             continue;
           }
@@ -176,13 +181,12 @@ Deno.serve(async (req: Request) => {
           const formattedDate = new Date(order.appointment_date).toLocaleDateString('es-UY');
           const confirmationUrl = `https://app-dogcatify.netlify.app/booking/confirm?token=${tokenHash}`;
 
-          const emailResponse = await fetch(
-            "https://drhbcmithlrldtjlhnee.supabase.co/functions/v1/pending-communication",
+          const emailResponse = await fetch(\n            emailApiUrl,
             {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                "x-api-key": "sk_bcaca188c1b16345e4d10adf403eb4e9e98d3fa9ff04ba053d7416fe302b7dee",
+                "x-api-key": emailApiKey,
               },
               body: JSON.stringify({
                 template_name: "confirmar_cita",
@@ -204,7 +208,6 @@ Deno.serve(async (req: Request) => {
 
           if (!emailResponse.ok) {
             const errorText = await emailResponse.text();
-            console.error(`Error sending email for order ${order.id}:`, errorText);
             errors++;
             continue;
           }
@@ -245,14 +248,11 @@ Deno.serve(async (req: Request) => {
             .single();
 
           if (pushNotificationError) {
-            console.warn(`Could not queue push confirmation notification for order ${order.id}:`, pushNotificationError);
           }
 
-          console.log(`Confirmation email sent successfully for order ${order.id}`);
           processed++;
         }
       } catch (error) {
-        console.error(`Error processing order ${order.id}:`, error);
         errors++;
       }
     }
@@ -272,7 +272,6 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error) {
-    console.error("Error in send-booking-confirmations:", error);
     return new Response(
       JSON.stringify({
         success: false,

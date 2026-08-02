@@ -12,7 +12,7 @@ variables:
 
   # Versión de Node
   - name: NODE_VERSION
-    value: '18.x'
+    value: '22.x'
 
   # 🔢 versionCode incremental (2, 3, 4, ...)
   # Como ya usaste el 1 en Google Play, arrancamos en 2
@@ -32,8 +32,12 @@ steps:
 
   # 2. Instalar dependencias del proyecto
   - script: |
-      npm install
-    displayName: 'Instalar dependencias (npm install)'
+      npm ci
+    displayName: 'Instalar dependencias (npm ci)'
+
+  - script: |
+      npm run check
+    displayName: 'Typecheck, política de consola y pruebas'
 
   # 3. Actualizar versionCode/version en app.json ANTES del prebuild
   - script: |

@@ -10,7 +10,6 @@ export const generateQRCode = async (url: string, size: number = 200): Promise<s
     
     return qrApiUrl;
   } catch (error) {
-    console.error('Error generating QR code:', error);
     throw error;
   }
 };
@@ -29,7 +28,6 @@ export const generateVeterinaryQRCode = async (
     
     return qrApiUrl;
   } catch (error) {
-    console.error('Error generating veterinary QR code:', error);
     throw error;
   }
 };
@@ -72,7 +70,6 @@ export const generateSharingPackage = async (
       shortUrl
     };
   } catch (error) {
-    console.error('Error generating sharing package:', error);
     throw error;
   }
 };

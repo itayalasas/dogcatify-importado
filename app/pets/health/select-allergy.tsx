@@ -41,7 +41,6 @@ export default function SelectAllergy() {
     try {
       const petBreed = breed || 'Genérico';
 
-      console.log(`Searching cache for ${species} - ${petBreed}`);
 
       const { data: cachedData, error: cacheError } = await supabaseClient
         .from('allergies_ai_cache')
@@ -54,7 +53,6 @@ export default function SelectAllergy() {
         .maybeSingle();
 
       if (cachedData && cachedData.allergies) {
-        console.log('✓ Using cached allergy data for', petBreed);
         const cachedAllergies = typeof cachedData.allergies === 'string'
           ? JSON.parse(cachedData.allergies)
           : cachedData.allergies;
@@ -64,7 +62,6 @@ export default function SelectAllergy() {
         return;
       }
 
-      console.log('⚠ No cache found, generating with AI...');
       const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
       const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 
@@ -93,7 +90,6 @@ export default function SelectAllergy() {
       }
 
       const { allergies: aiAllergies } = await response.json();
-      console.log(`✓ Generated ${aiAllergies.length} allergy recommendations via AI`);
 
       const cacheKey = `${species}_${petBreed}_general`;
       await supabaseClient
@@ -107,11 +103,9 @@ export default function SelectAllergy() {
           cache_key: cacheKey
         });
 
-      console.log('✓ Saved to cache for future use');
       setAllergies(aiAllergies);
       setFilteredAllergies(aiAllergies);
     } catch (error) {
-      console.error('Error fetching allergies:', error);
     } finally {
       setLoading(false);
     }
@@ -131,7 +125,6 @@ export default function SelectAllergy() {
   };
 
   const handleSelectAllergy = (allergy: any) => {
-    console.log('Navigating back with allergy:', allergy.name);
     router.replace({
       pathname: returnPath as any,
       params: {

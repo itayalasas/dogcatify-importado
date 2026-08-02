@@ -64,7 +64,6 @@ export default function AddService() {
         .single();
 
       if (error) {
-        console.error('Error fetching partner profile:', error);
         return;
       }
 
@@ -77,7 +76,6 @@ export default function AddService() {
         });
       }
     } catch (error) {
-      console.error('Error fetching partner profile:', error);
     }
   };
 
@@ -206,7 +204,6 @@ export default function AddService() {
         setImages(prev => [...prev, ...result.assets].slice(0, 5));
       }
     } catch (error) {
-      console.error('Error selecting images:', error);
       Alert.alert('Error', 'No se pudieron seleccionar las imágenes');
     }
   };
@@ -238,7 +235,6 @@ export default function AddService() {
         setImages(prev => [...prev, ...result.assets]);
       }
     } catch (error) {
-      console.error('Error taking photo:', error);
       Alert.alert('Error', 'No se pudo tomar la foto');
     }
   };
@@ -317,10 +313,8 @@ export default function AddService() {
       let imageUrls: string[] = [];
 
       if (images.length > 0) {
-        console.log(`Subiendo ${images.length} imágenes...`);
 
         for (let i = 0; i < images.length; i++) {
-          console.log(`Subiendo imagen ${i + 1} de ${images.length}...`);
           const path = `partners/${partnerId}/${businessType === 'shop' ? 'products' : 'services'}/${Date.now()}-${i}.jpg`;
           const imageUrl = await uploadImage(images[i].uri, path);
           imageUrls.push(imageUrl);
@@ -430,7 +424,6 @@ export default function AddService() {
         }]
       );
     } catch (error) {
-      console.error('Error adding service:', error);
 
       let errorMessage = 'Error desconocido';
       if (error instanceof Error) {

@@ -66,7 +66,6 @@ export default function ResetPasswordScreen() {
       setResetToken(token as string);
 
       try {
-        console.log('Validating password reset token:', token);
         
         // Verify the password reset token
         const { data: tokenData, error } = await supabaseClient
@@ -78,7 +77,6 @@ export default function ResetPasswordScreen() {
           .single();
 
         if (error || !tokenData) {
-          console.error('Token validation error:', error);
           setError('Token no válido o ya utilizado');
           setLoading(false);
           return;
@@ -95,13 +93,11 @@ export default function ResetPasswordScreen() {
         }
 
         // Token is valid
-        console.log('Password reset token is valid for user:', tokenData.email);
         setValidToken(true);
         setUserId(tokenData.user_id);
         setUserEmail(tokenData.email);
         setError(null);
       } catch (error) {
-        console.error('Error validating reset token:', error);
         setError('Error al validar el token de recuperación');
       } finally {
         setLoading(false);
@@ -112,7 +108,6 @@ export default function ResetPasswordScreen() {
   }, [params, passwordUpdated]);
 
   const handlePasswordReset = async () => {
-    console.log('handlePasswordReset called');
     
     if (!newPassword || !confirmPassword) {
       Alert.alert('Error', 'Por favor completa ambos campos de contraseña');
@@ -135,20 +130,16 @@ export default function ResetPasswordScreen() {
     }
 
     if (!userId || !resetToken) {
-      console.log('Missing userId or token:', { userId, token: resetToken });
       Alert.alert('Error', 'Información de reset inválida');
       return;
     }
 
     setUpdatingPassword(true);
-    console.log('Starting password reset process...');
     
     try {
-      console.log('Calling reset-password function...');
       
       // Call our Edge Function to reset password securely
       const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
-      console.log('Supabase URL:', supabaseUrl);
 
       if (!supabaseUrl) {
         throw new Error('Supabase URL not configured');
@@ -167,18 +158,14 @@ export default function ResetPasswordScreen() {
         }),
       });
 
-      console.log('Response status:', response.status);
       
       const result = await response.json();
-      console.log('Reset password function result:', result);
 
       if (!response.ok || !result.success) {
-        console.error('Reset password failed:', result);
         throw new Error(result.error || 'Error al actualizar contraseña');
       }
 
       setPasswordUpdated(true);
-      console.log('Password updated successfully');
       
       // Don't show alert immediately, let the UI update first
       setTimeout(() => {
@@ -190,7 +177,6 @@ export default function ResetPasswordScreen() {
       }, 500);
       
     } catch (error: any) {
-      console.error('Error updating password:', error);
       Alert.alert('Error', error.message || 'No se pudo actualizar la contraseña');
     } finally {
       setUpdatingPassword(false);

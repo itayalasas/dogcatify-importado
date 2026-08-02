@@ -79,18 +79,12 @@ export const createMedicalHistoryToken = async (
       .single();
 
     if (tokenError) {
-      console.error('Error creating medical history token:', tokenError);
       if (tokenError?.message?.includes('JWT') || tokenError?.message?.includes('expired')) {
         return { success: false, error: 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.' };
       }
       return { success: false, error: 'Failed to create access token' };
     }
 
-    console.log('Medical history token created:', {
-      petId,
-      token: token.substring(0, 8) + '...',
-      expiresAt: expiresAt.toISOString()
-    });
 
     return {
       success: true,
@@ -98,7 +92,6 @@ export const createMedicalHistoryToken = async (
       expiresAt: expiresAt
     };
   } catch (error) {
-    console.error('Error in createMedicalHistoryToken:', error);
     
     // Check if this is a session error
     const message = error instanceof Error ? error.message : String(error);
@@ -126,7 +119,6 @@ export const verifyMedicalHistoryToken = async (
   accessCount?: number;
 }> => {
   try {
-    console.log('Verifying medical history token:', token.substring(0, 8) + '...');
     
     // Find token in database
     const { data: tokenData, error: tokenError } = await supabaseClient
@@ -135,14 +127,7 @@ export const verifyMedicalHistoryToken = async (
       .eq('token', token)
       .single();
 
-    console.log('Token lookup result:', { 
-      found: !!tokenData, 
-      error: tokenError?.message,
-      petId: tokenData?.pet_id,
-      expiresAt: tokenData?.expires_at
-    });
     if (tokenError || !tokenData) {
-      console.log('Token not found:', token.substring(0, 8) + '...');
       return { success: false, error: 'Invalid token' };
     }
 
@@ -150,18 +135,8 @@ export const verifyMedicalHistoryToken = async (
     const now = new Date();
     const expiresAt = new Date(tokenData.expires_at);
     
-    console.log('Token expiration check:', {
-      now: now.toISOString(),
-      expiresAt: expiresAt.toISOString(),
-      isExpired: now > expiresAt
-    });
     
     if (now > expiresAt) {
-      console.log('Token expired:', {
-        token: token.substring(0, 8) + '...',
-        expiresAt: expiresAt.toISOString(),
-        now: now.toISOString()
-      });
       return { 
         success: false, 
         isExpired: true, 
@@ -171,7 +146,6 @@ export const verifyMedicalHistoryToken = async (
 
     // Update access tracking
     try {
-      console.log('Updating access tracking...');
       await supabaseClient
         .from('medical_history_tokens')
         .update({
@@ -179,17 +153,10 @@ export const verifyMedicalHistoryToken = async (
           access_count: (tokenData.access_count || 0) + 1
         })
         .eq('id', tokenData.id);
-      console.log('Access tracking updated');
     } catch (updateError) {
-      console.warn('Could not update access tracking:', updateError);
       // Don't fail the verification if tracking update fails
     }
 
-    console.log('Token verified successfully:', {
-      petId: tokenData.pet_id,
-      accessCount: (tokenData.access_count || 0) + 1,
-      expiresAt: expiresAt.toISOString()
-    });
 
     return {
       success: true,
@@ -198,7 +165,6 @@ export const verifyMedicalHistoryToken = async (
       accessCount: (tokenData.access_count || 0) + 1
     };
   } catch (error) {
-    console.error('Error verifying medical history token:', error);
     return { success: false, error: 'Error verifying token' };
   }
 };
@@ -244,7 +210,6 @@ export const generateSecureMedicalHistoryUrl = async (
       return { success: false, error: 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.' };
     }
     
-    console.error('Error generating secure medical history URL:', error);
     return { success: false, error: 'Failed to generate secure URL' };
   }
 };
@@ -261,16 +226,13 @@ export const cleanupExpiredTokens = async (): Promise<{ success: boolean; delete
       .select('id');
 
     if (error) {
-      console.error('Error cleaning up expired tokens:', error);
       return { success: false, error: 'Failed to cleanup expired tokens' };
     }
 
     const deletedCount = data?.length || 0;
-    console.log(`Cleaned up ${deletedCount} expired medical history tokens`);
 
     return { success: true, deletedCount };
   } catch (error) {
-    console.error('Error in cleanupExpiredTokens:', error);
     return { success: false, error: 'Internal error during cleanup' };
   }
 };
@@ -292,13 +254,11 @@ export const getActiveMedicalHistoryTokens = async (
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching active tokens:', error);
       return { success: false, error: 'Failed to fetch tokens' };
     }
 
     return { success: true, tokens: tokens || [] };
   } catch (error) {
-    console.error('Error in getActiveMedicalHistoryTokens:', error);
     return { success: false, error: 'Internal error fetching tokens' };
   }
 };
@@ -319,13 +279,11 @@ export const revokeMedicalHistoryToken = async (
       .eq('created_by', userId);
 
     if (error) {
-      console.error('Error revoking token:', error);
       return { success: false, error: 'Failed to revoke token' };
     }
 
     return { success: true };
   } catch (error) {
-    console.error('Error in revokeMedicalHistoryToken:', error);
     return { success: false, error: 'Internal error revoking token' };
   }
 };

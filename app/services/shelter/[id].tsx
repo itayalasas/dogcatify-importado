@@ -52,7 +52,6 @@ export default function ShelterAdoptions() {
         });
       }
     } catch (error) {
-      console.error('Error fetching shelter data:', error);
     }
   };
 
@@ -69,7 +68,6 @@ export default function ShelterAdoptions() {
       
       setAdoptionPets(data || []);
     } catch (error) {
-      console.error('Error fetching adoption pets:', error);
     } finally {
       setLoading(false);
     }
@@ -91,7 +89,6 @@ export default function ShelterAdoptions() {
         Alert.alert('Error', 'No se puede abrir la aplicación de llamadas');
       }
     } catch (error) {
-      console.error('Error opening phone app:', error);
       Alert.alert('Error', 'No se pudo realizar la llamada');
     }
   };
@@ -147,7 +144,6 @@ export default function ShelterAdoptions() {
       // Navigate to chat
       router.push(`/chat/${conversationId}?petName=${pet.name}`);
     } catch (error) {
-      console.error('Error starting adoption chat:', error);
       Alert.alert('Error', 'No se pudo iniciar la conversación');
     }
   };

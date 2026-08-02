@@ -16,7 +16,6 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 export default function AdminPromotions() {
-  console.log('🚀 [AdminPromotions] Component loaded!');
 
   const { currentUser } = useAuth();
   const [promotions, setPromotions] = useState<any[]>([]);
@@ -78,22 +77,16 @@ export default function AdminPromotions() {
   const [invoicePartnerSearchQuery, setInvoicePartnerSearchQuery] = useState('');
 
   useEffect(() => {
-    console.log('📋 [AdminPromotions useEffect] Running...');
     if (!currentUser) {
-      console.log('⚠️ [AdminPromotions] No user logged in');
       return;
     }
 
-    console.log('✅ [AdminPromotions] Current user email:', currentUser.email);
     const isAdmin = currentUser?.isAdmin === true;
-    console.log('🔐 [AdminPromotions] Is admin:', isAdmin);
 
     if (!isAdmin) {
-      console.log('❌ [AdminPromotions] User is not admin, skipping fetch');
       return;
     }
 
-    console.log('📡 [AdminPromotions] Starting data fetch...');
     fetchPromotions();
     fetchPartners();
     fetchProducts();
@@ -115,7 +108,6 @@ export default function AdminPromotions() {
   }, [searchQuery, promotions]);
 
   const fetchPromotions = async () => {
-    console.log('📥 [fetchPromotions] Starting...');
     try {
       const { data, error } = await supabaseClient
         .from('promotions')
@@ -125,7 +117,6 @@ export default function AdminPromotions() {
         `)
         .order('created_at', { ascending: false });
 
-      console.log('📊 [fetchPromotions] Response:', { data, error });
 
       if (error) throw error;
 
@@ -163,12 +154,9 @@ export default function AdminPromotions() {
         } : null,
       })) || [];
 
-      console.log('✅ [fetchPromotions] Promotions data prepared:', promotionsData.length, 'items');
       setPromotions(promotionsData);
       setFilteredPromotions(promotionsData);
-      console.log('✅ [fetchPromotions] State updated successfully');
     } catch (error) {
-      console.error('❌ [fetchPromotions] Error:', error);
     }
   };
 
@@ -184,7 +172,6 @@ export default function AdminPromotions() {
       if (error) throw error;
       setPartners(data || []);
     } catch (error) {
-      console.error('Error fetching partners:', error);
     }
   };
 
@@ -200,7 +187,6 @@ export default function AdminPromotions() {
       const visibleProducts = (data || []).filter((item: any) => item?.is_active !== false);
       setProducts(visibleProducts);
     } catch (error) {
-      console.error('Error fetching products:', error);
     }
   };
 
@@ -216,7 +202,6 @@ export default function AdminPromotions() {
       const visibleServices = (data || []).filter((item: any) => item?.is_active !== false);
       setServices(visibleServices);
     } catch (error) {
-      console.error('Error fetching services:', error);
     }
   };
 
@@ -239,7 +224,6 @@ export default function AdminPromotions() {
         setPromoImage(result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Error selecting image:', error);
       Alert.alert('Error', 'No se pudo seleccionar la imagen');
     }
   };
@@ -263,21 +247,15 @@ export default function AdminPromotions() {
         setPromoImage(result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Error taking photo:', error);
       Alert.alert('Error', 'No se pudo tomar la foto');
     }
   };
 
   const uploadImage = async (imageUri: string): Promise<string> => {
-    console.log('=== IMAGE UPLOAD DEBUG START ===');
-    console.log('Image URI to upload:', imageUri);
 
-    console.log('Step 1: Fetching image from URI...');
     const response = await fetch(imageUri);
     const filename = `promotions/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-    console.log('Generated filename:', filename);
 
-    console.log('Step 4: Uploading to Supabase Storage...');
 
       // Create FormData for React Native
       const formData = new FormData();
@@ -287,7 +265,6 @@ export default function AdminPromotions() {
         name: filename,
       } as any);
 
-      console.log('FormData created for upload');
 
       const { data, error } = await supabaseClient.storage
         .from('dogcatify')
@@ -295,17 +272,14 @@ export default function AdminPromotions() {
           upsert: false,
         });
     if (error) {
-      console.error('Supabase storage upload error:', error);
       throw error;
     }
 
-    console.log('Upload successful, getting public URL...');
 
     const { data: { publicUrl } } = supabaseClient.storage
       .from('dogcatify')
       .getPublicUrl(filename);
 
-    console.log('Generated public URL:', publicUrl);
 
     if (!publicUrl) {
       throw new Error('No se pudo generar la URL pública de la imagen');
@@ -315,17 +289,9 @@ export default function AdminPromotions() {
   };
 
   const handleCreatePromotion = async () => {
-    console.log('=== CREATING PROMOTION DEBUG START ===');
-    console.log('Form validation check...');
-    console.log('promoTitle:', promoTitle);
-    console.log('promoDescription:', promoDescription);
-    console.log('promoStartDate:', promoStartDate);
-    console.log('promoEndDate:', promoEndDate);
-    console.log('promoImage:', promoImage ? 'Image selected' : 'No image');
 
     if (!promoTitle || !promoDescription || !promoStartDate || !promoEndDate || !promoImage) {
       Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
-      console.log('❌ Validation failed - missing required fields');
       return;
     }
 
@@ -334,28 +300,20 @@ export default function AdminPromotions() {
       return;
     }
 
-    console.log('✅ Validation passed, starting creation process...');
 
     setLoading(true);
     try {
-      console.log('Creating promotion with image:', promoImage ? 'Yes' : 'No');
 
-      console.log('Step 1: Uploading image...');
       let imageUrl = null;
       if (promoImage) {
-        console.log('Uploading promotion image...');
-        console.log('Image URI:', promoImage);
         try {
           imageUrl = await uploadImage(promoImage);
-          console.log('✅ Image uploaded successfully, URL:', imageUrl);
         } catch (uploadError) {
-          console.error('❌ Image upload failed:', uploadError);
           Alert.alert('Error', 'No se pudo subir la imagen');
           return;
         }
       }
 
-      console.log('Step 2: Preparing promotion data...');
       // Determine CTA URL based on link type
       let ctaUrl = null;
       if (promoLinkType === 'external') {
@@ -368,9 +326,7 @@ export default function AdminPromotions() {
         } else if (promoInternalId) {
           ctaUrl = `dogcatify://${promoInternalType}s/${promoInternalId}`;
         }
-        console.log('Image uploaded successfully, URL:', imageUrl);
       } else {
-        console.log('No image to upload');
       }
 
       const basePromotionData: any = {
@@ -405,25 +361,12 @@ export default function AdminPromotions() {
         ...approvalAndBillingData,
       };
 
-      console.log('Promotion data prepared:', promotionData);
-      console.log('Date validation:');
-      console.log('Start date valid:', !isNaN(new Date(promotionData.start_date).getTime()));
-      console.log('End date valid:', !isNaN(new Date(promotionData.end_date).getTime()));
-      console.log('Start date:', promotionData.start_date);
-      console.log('End date:', promotionData.end_date);
 
-      console.log('Final promotion data to insert:', {
-        ...promotionData,
-        image_url: imageUrl ? 'URL_PROVIDED' : 'NULL'
-      });
       if (selectedPartnerId) {
         promotionData.partner_id = selectedPartnerId;
-        console.log('Partner ID added:', selectedPartnerId);
       }
 
       const isEditMode = Boolean(editingPromotionId);
-      console.log(`Step 3: ${isEditMode ? 'Updating' : 'Inserting'} in database...`);
-      console.log(`Using Supabase client to ${isEditMode ? 'update' : 'insert'} promotion...`);
 
       let createdPromotion: any = null;
       let error: any = null;
@@ -455,7 +398,6 @@ export default function AdminPromotions() {
         String(error?.message || '').toLowerCase().includes('column');
 
       if (error && isMissingColumnError) {
-        console.warn('⚠️ Missing column in promotions schema. Retrying insert with base fields only...');
 
         const fallbackInsertData: any = {
           ...basePromotionData,
@@ -489,9 +431,6 @@ export default function AdminPromotions() {
       }
 
       if (error) {
-        console.error('Database insert error:', error);
-        console.error('❌ Database insertion error:', error);
-        console.error('Database error details:', JSON.stringify(error, null, 2));
         Alert.alert('Error', isEditMode ? 'No se pudo editar la promoción' : 'No se pudo crear la promoción');
         return;
       }
@@ -558,7 +497,6 @@ export default function AdminPromotions() {
               }
             }
           } catch (parseApprovalError) {
-            console.error('❌ [Promotion Approval] Could not parse error body:', parseApprovalError);
           }
 
           Alert.alert(
@@ -568,26 +506,16 @@ export default function AdminPromotions() {
         }
       }
 
-      console.log('Promotion created successfully in database');
 
-      console.log('✅ Promotion inserted successfully into database');
-      console.log('Step 4: Cleaning up form...');
       resetForm();
       setShowPromotionModal(false);
-      console.log('Step 5: Refreshing promotions list...');
       fetchPromotions();
       Alert.alert('Éxito', selectedPartnerId
         ? (isEditMode ? 'Promoción editada correctamente' : 'Promoción creada y solicitud de aprobación enviada al partner')
         : (isEditMode ? 'Promoción editada correctamente' : 'Promoción creada correctamente'));
-      console.log('✅ Promotion creation completed successfully');
     } catch (error) {
-      console.error('ERROR in handleCreatePromotion:', error);
-      console.error('Error type:', typeof error);
-      console.error('Error message:', getErrorMessage(error));
-      console.error('Error stack:', error instanceof Error ? error.stack : undefined);
       Alert.alert('Error', 'Ocurrió un error inesperado');
     } finally {
-      console.log('Finally: Cleaning up loading state');
       setLoading(false);
     }
   };
@@ -603,7 +531,6 @@ export default function AdminPromotions() {
 
       fetchPromotions();
     } catch (error) {
-      console.error('Error toggling promotion:', error);
       Alert.alert('Error', 'No se pudo actualizar la promoción');
     }
   };
@@ -677,13 +604,6 @@ export default function AdminPromotions() {
       const clicksTotal = invoiceType !== 'views' ? selectedPromotionForInvoice.clicks * parseFloat(pricePerClick || '0') : 0;
       const total = viewsTotal + clicksTotal;
 
-      console.log('📧 [Invoice] Calling Edge Function...');
-      console.log('📧 [Invoice] Data:', {
-        promotionId: selectedPromotionForInvoice.id,
-        invoiceType,
-        email: invoiceEmail,
-        total,
-      });
 
       const { data: responseData, error: invokeError } = await supabaseClient.functions.invoke(
         'generate-promotion-invoice',
@@ -734,16 +654,13 @@ export default function AdminPromotions() {
               detailedMessage = errorBody;
             }
 
-            console.error('❌ [Invoice] Edge Function error body:', errorBody);
           }
         } catch (parseError) {
-          console.error('❌ [Invoice] Could not parse Edge Function error body:', parseError);
         }
 
         throw new Error(detailedMessage);
       }
 
-      console.log('📧 [Invoice] Response data:', responseData);
 
       if (!responseData?.success) {
         throw new Error(responseData?.error || 'Error al generar la factura');
@@ -775,7 +692,6 @@ export default function AdminPromotions() {
       setInvoicePartnerSearchQuery('');
       setInvoiceType('both');
     } catch (error: any) {
-      console.error('❌ [Invoice] Error generating invoice:', error);
       Alert.alert(
         'Error',
         error.message || 'No se pudo generar la factura. Por favor intenta de nuevo.'
@@ -891,7 +807,6 @@ export default function AdminPromotions() {
               fetchPromotions();
               Alert.alert('Éxito', 'Promoción eliminada correctamente');
             } catch (error) {
-              console.error('Error deleting promotion:', error);
               Alert.alert('Error', 'No se pudo eliminar la promoción');
             }
           },
@@ -947,7 +862,6 @@ export default function AdminPromotions() {
       Alert.alert('Éxito', 'Se reenvió la solicitud de aprobación al partner');
       fetchPromotions();
     } catch (error: any) {
-      console.error('Error resending approval:', error);
       Alert.alert('Error', error?.message || 'No se pudo reenviar aprobación');
     } finally {
       setResendingApprovalPromotionId(null);

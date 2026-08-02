@@ -40,7 +40,6 @@ export default function AddAllergy() {
       try {
         setDiagnosisDate(new Date(params.currentDiagnosisDate));
       } catch (error) {
-        console.error('Error parsing diagnosis date:', error);
       }
     }
 
@@ -64,9 +63,7 @@ export default function AddAllergy() {
           setSeverity(allergy.severity);
         }
 
-        console.log('Selected allergy:', allergy.name);
       } catch (error) {
-        console.error('Error parsing selected allergy:', error);
       }
     } else {
       // Restore complete allergy object when coming back from veterinarian selection
@@ -74,9 +71,7 @@ export default function AddAllergy() {
         try {
           const allergy = JSON.parse(params.selectedAllergyData);
           setSelectedAllergy(allergy);
-          console.log('Restored complete allergy object:', allergy.name);
         } catch (error) {
-          console.error('Error parsing selected allergy data:', error);
         }
       }
 
@@ -92,9 +87,7 @@ export default function AddAllergy() {
         const vet = JSON.parse(params.selectedVeterinarian as string);
         setTreatment(vet.name);
         setSelectedVeterinarian(vet);
-        console.log('Selected veterinarian:', vet.name);
       } catch (error) {
-        console.error('Error parsing selected veterinarian:', error);
       }
     }
 
@@ -146,7 +139,6 @@ export default function AddAllergy() {
       if (error) throw error;
       setPet(data);
     } catch (error) {
-      console.error('Error fetching pet data:', error);
     }
   };
 
@@ -289,7 +281,6 @@ export default function AddAllergy() {
         setNotes(data.notes || '');
       }
     } catch (error) {
-      console.error('Error fetching allergy details:', error);
       Alert.alert('Error', 'No se pudo cargar la información de la alergia');
     }
   };
@@ -352,7 +343,6 @@ export default function AddAllergy() {
         }) }
       ]);
     } catch (error) {
-      console.error('Error saving allergy:', error);
       Alert.alert('Error', 'No se pudo registrar la alergia');
     } finally {
       setLoading(false);

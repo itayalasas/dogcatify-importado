@@ -26,7 +26,6 @@ async function verifyWebhookSignature(rawBody: string, signature: string, secret
 
     return signature === expectedSignature;
   } catch (error) {
-    console.error("Error verificando firma:", error);
     return false;
   }
 }
@@ -53,12 +52,8 @@ Deno.serve(async (req: Request) => {
     const signature = req.headers.get("x-dogcatify-signature");
     const eventType = req.headers.get("x-dogcatify-event");
 
-    console.log("\n📥 Webhook recibido:");
-    console.log(`  Evento: ${eventType}`);
-    console.log(`  Firma: ${signature?.substring(0, 16)}...`);
 
     if (!signature) {
-      console.error("❌ Sin firma de seguridad");
       return new Response(
         JSON.stringify({ error: "Sin firma de seguridad" }),
         {
@@ -73,19 +68,16 @@ Deno.serve(async (req: Request) => {
 
     // Obtener el secret key
     const webhookSecretEnv = Deno.env.get("WEBHOOK_SECRET");
-    const defaultSecret = "default_webhook_secret_key_2024";
-    const correctSecret = "Kzdr7C4eF9IS4EIgmH8LARdwWrvH4jCBMDOTM1SHofZNdDUHpiFEYH3WhRWx";
 
-    const webhookSecret = webhookSecretEnv || correctSecret;
+    const webhookSecret = webhookSecretEnv;
 
-    console.log("🔍 DEBUG INFO:");
-    console.log(`  WEBHOOK_SECRET env var exists: ${webhookSecretEnv ? 'YES' : 'NO'}`);
-    console.log(`  Using secret: ${webhookSecret === defaultSecret ? 'DEFAULT' : webhookSecret === correctSecret ? 'CORRECT' : 'ENV VAR'}`);
-    console.log(`  Body length: ${rawBody.length}`);
-    console.log(`  Body first 500 chars: ${rawBody.substring(0, 500)}`);
-    console.log(`  Secret length: ${webhookSecret.length}`);
-    console.log(`  Secret preview: ${webhookSecret.substring(0, 15)}...`);
-    console.log(`  Signature received: ${signature}`);
+    if (!webhookSecret) {
+      return new Response(
+        JSON.stringify({ error: 'Server configuration error' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
 
     // Generar firma esperada para debug
     const encoder = new TextEncoder();
@@ -101,14 +93,11 @@ Deno.serve(async (req: Request) => {
     const signatureBuffer = await crypto.subtle.sign("HMAC", key, messageData);
     const hashArray = Array.from(new Uint8Array(signatureBuffer));
     const expectedSignature = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    console.log(`  Signature expected: ${expectedSignature}`);
-    console.log(`  Signatures match: ${signature === expectedSignature}`);
 
     // Verificar firma con el body RAW
     const isValid = await verifyWebhookSignature(rawBody, signature, webhookSecret);
 
     if (!isValid) {
-      console.error("❌ Firma inválida");
       return new Response(
         JSON.stringify({ error: "Invalid signature" }),
         {
@@ -118,45 +107,29 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log("✅ Firma verificada correctamente");
 
     // Parsear el payload
     const payload = JSON.parse(rawBody);
     const { event, order_id, data, timestamp } = payload;
 
-    console.log(`\n⏱️  Timestamp del evento: ${timestamp}`);
-    console.log(`📦 Orden ID: ${order_id}`);
-    console.log(`🔔 Evento: ${event}`);
 
     // Procesar según el tipo de evento
     switch (event) {
       case "order.created":
-        console.log("\n🆕 NUEVA ORDEN CREADA");
-        console.log(`  Cliente: ${data.customer_name} (${data.customer_email})`);
-        console.log(`  Total: $${data.total_amount}`);
-        console.log(`  Items:`, data.items?.length || 0);
         break;
 
       case "order.updated":
-        console.log("\n🔄 ORDEN ACTUALIZADA");
-        console.log(`  Nuevo status: ${data.status}`);
         break;
 
       case "order.cancelled":
-        console.log("\n❌ ORDEN CANCELADA");
-        console.log(`  Total cancelado: $${data.total_amount}`);
         break;
 
       case "order.completed":
-        console.log("\n✅ ORDEN COMPLETADA");
-        console.log(`  Total: $${data.total_amount}`);
         break;
 
       default:
-        console.warn(`⚠️  Evento desconocido: ${event}`);
     }
 
-    console.log("✅ Webhook procesado exitosamente");
 
     // Responder rápidamente
     return new Response(
@@ -168,7 +141,6 @@ Deno.serve(async (req: Request) => {
     );
 
   } catch (error: any) {
-    console.error("❌ Error procesando webhook:", error);
     return new Response(
       JSON.stringify({
         error: "Error interno",

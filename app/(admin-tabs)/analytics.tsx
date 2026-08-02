@@ -580,7 +580,6 @@ export default function AdminAnalytics() {
         partnerProAccounts,
       });
     } catch (fetchError: any) {
-      console.error('Error fetching admin analytics:', fetchError);
       setError(fetchError?.message || 'No se pudieron cargar las analíticas');
     } finally {
       setLoading(false);

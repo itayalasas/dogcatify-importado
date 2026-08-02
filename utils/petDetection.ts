@@ -14,7 +14,6 @@ export const detectPetInImage = async (imageUri: string): Promise<boolean> => {
 
     return hasPet;
   } catch (error) {
-    console.error('Error detecting pet in image:', error);
     // If detection fails, allow the image (don't block user)
     return true;
   }
@@ -29,7 +28,6 @@ export const detectPetInVideo = async (videoUri: string): Promise<boolean> => {
     // 2. Run pet detection on each frame
     // 3. Return true if pet is detected in majority of frames
 
-    console.log('Analyzing video for pet detection:', videoUri);
 
     // Simulate video analysis with a longer delay
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -40,7 +38,6 @@ export const detectPetInVideo = async (videoUri: string): Promise<boolean> => {
 
     return hasPet;
   } catch (error) {
-    console.error('Error detecting pet in video:', error);
     // If detection fails, allow the video (don't block user)
     return true;
   }
@@ -90,7 +87,6 @@ export const detectPetWithCloudAI = async (imageUri: string): Promise<boolean> =
     // For demo, return true
     return true;
   } catch (error) {
-    console.error('Error with cloud AI detection:', error);
     return true;
   }
 };
@@ -123,7 +119,6 @@ export const validateVideoDuration = async (videoUri: string): Promise<{
   try {
     // In React Native, we would use expo-av to get video duration
     // For now, simulate duration check
-    console.log('Checking video duration:', videoUri);
 
     // Simulate getting video duration
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -134,7 +129,6 @@ export const validateVideoDuration = async (videoUri: string): Promise<{
 
     return { isValid, duration };
   } catch (error) {
-    console.error('Error validating video duration:', error);
     // If check fails, reject the video to be safe
     return { isValid: false, duration: 0 };
   }

@@ -139,7 +139,6 @@ export default function AddPlace() {
         [{ text: 'OK', onPress: () => router.push('/(tabs)/places') }]
       );
     } catch (error) {
-      console.error('Error saving place:', error);
       Alert.alert('Error', 'No se pudo guardar el lugar. Intenta nuevamente.');
     } finally {
       setLoading(false);

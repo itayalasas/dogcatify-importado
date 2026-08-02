@@ -908,7 +908,6 @@ Onboarding completado: ${profile?.onboarding_completed ? 'Sí' : 'No'}
     );
 
   } catch (error) {
-    console.error('Error in dotty-assistant:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       {

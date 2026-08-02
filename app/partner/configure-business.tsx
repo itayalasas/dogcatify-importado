@@ -59,7 +59,6 @@ export default function ConfigureBusiness() {
         });
       }
     } catch (error) {
-      console.error('Error fetching business:', error);
       Alert.alert('Error', 'No se pudo cargar la información del negocio');
     } finally {
       setLoading(false);

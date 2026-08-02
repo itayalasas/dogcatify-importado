@@ -111,7 +111,6 @@ export default function AdoptionChat() {
       };
       
     } catch (error) {
-      console.error('Error initializing chat:', error);
       Alert.alert('Error', 'No se pudo inicializar el chat');
     }
   };
@@ -143,7 +142,6 @@ export default function AdoptionChat() {
       
       setMessages(messagesData);
     } catch (error) {
-      console.error('Error fetching messages:', error);
     }
   };
 
@@ -213,18 +211,14 @@ export default function AdoptionChat() {
             });
 
             if (!response.ok) {
-              console.error('Error sending FCM notification:', await response.text());
             } else {
-              console.log('✅ Notification sent via FCM v1');
             }
           }
         }
       } catch (notificationError) {
-        console.error('Error sending notification:', notificationError);
       }
 
     } catch (error) {
-      console.error('Error sending message:', error);
       Alert.alert('Error', 'No se pudo enviar el mensaje');
     } finally {
       setLoading(false);
@@ -248,7 +242,6 @@ export default function AdoptionChat() {
         Alert.alert('Contacto', 'No hay número de teléfono disponible');
       }
     } catch (error) {
-      console.error('Error contacting shelter:', error);
     }
   };
 

@@ -117,11 +117,6 @@ Deno.serve(async (req: Request) => {
       try {
         body = JSON.parse(rawBody) as EmailRequest;
       } catch (error) {
-        console.error("[send-email] Failed to parse request JSON", {
-          requestId,
-          error: error instanceof Error ? error.message : String(error),
-          bodyPreview: rawBody.slice(0, 1000),
-        });
         return new Response(
           JSON.stringify({
             error: "Invalid JSON payload",
@@ -146,34 +141,14 @@ Deno.serve(async (req: Request) => {
       userAgent: req.headers.get("user-agent"),
     };
 
-    console.log("[send-email] request received", {
-      requestId,
-      method: req.method,
-      url: req.url,
-      headers: incomingHeaders,
-      bodySummary: buildBodySummary(body),
-    });
 
     const emailApiUrl = Deno.env.get("EMAIL_API_URL")?.trim() || "";
     const emailApiKey = Deno.env.get("EMAIL_API_KEY")?.trim() || "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() || "";
     const targetInfo = emailApiUrl ? describeEmailTarget(emailApiUrl) : null;
 
-    console.log("[send-email] environment check", {
-      requestId,
-      emailApiUrl: emailApiUrl || null,
-      emailApiHost: targetInfo?.host || null,
-      emailApiPath: targetInfo?.pathname || null,
-      hasEmailApiKey: !!emailApiKey,
-      emailApiKeyLength: emailApiKey.length,
-      hasSupabaseServiceKey: !!supabaseServiceKey,
-    });
 
     if (!emailApiUrl) {
-      console.error("[send-email] EMAIL_API_URL not configured in environment", {
-        requestId,
-      });
-      console.error("[send-email] available env vars", Object.keys(Deno.env.toObject()));
       return new Response(
         JSON.stringify({
           error: "Email API not configured",
@@ -192,10 +167,6 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!emailApiKey) {
-      console.error("[send-email] EMAIL_API_KEY not configured in environment", {
-        requestId,
-      });
-      console.error("[send-email] available env vars", Object.keys(Deno.env.toObject()));
       return new Response(
         JSON.stringify({
           error: "Email API not configured",
@@ -214,11 +185,6 @@ Deno.serve(async (req: Request) => {
     }
 
     if (targetInfo?.pointsToConfirmEmail) {
-      console.error("[send-email] Misconfigured EMAIL_API_URL: it points to confirm-email", {
-        requestId,
-        emailApiUrl,
-        bodySummary: buildBodySummary(body),
-      });
 
       return new Response(
         JSON.stringify({
@@ -238,12 +204,6 @@ Deno.serve(async (req: Request) => {
     }
 
     if (targetInfo?.pointsToSelfSendEmail) {
-      console.warn("[send-email] EMAIL_API_URL points to a send-email endpoint", {
-        requestId,
-        emailApiUrl,
-        targetHost: targetInfo.host,
-        targetPath: targetInfo.pathname,
-      });
     }
 
     if (body.template_name && body.recipient_email) {
@@ -277,20 +237,6 @@ Deno.serve(async (req: Request) => {
         requestHeaders.apikey = supabaseServiceKey;
       }
 
-      console.log("[send-email] outbound request", {
-        requestId,
-        target: targetInfo,
-        isSupabaseFunctionTarget,
-        hasXApiKeyHeader: !!requestHeaders["x-api-key"],
-        hasApikeyHeader: !!requestHeaders.apikey,
-        payloadSummary: {
-          template_name: payload.template_name,
-          recipient_email: payload.recipient_email,
-          payloadKeys: Object.keys(payload),
-          dataKeys: safeObjectKeys(payload.data),
-          payloadSize: JSON.stringify(payload).length,
-        },
-      });
 
       const response = await fetch(emailApiUrl, {
         method: "POST",
@@ -301,23 +247,8 @@ Deno.serve(async (req: Request) => {
       const responseText = await response.text();
       const responseBody = parseJsonSafely(responseText);
 
-      console.log("[send-email] external API response", {
-        requestId,
-        status: response.status,
-        ok: response.ok,
-        durationMs: Date.now() - startedAt,
-        responseContentType: response.headers.get("content-type"),
-        bodyPreview: responseText.slice(0, 1200),
-      });
 
       if (!response.ok) {
-        console.error("[send-email] email API error response", {
-          requestId,
-          status: response.status,
-          emailApiUrl,
-          target: targetInfo,
-          bodyPreview: responseText.slice(0, 1200),
-        });
 
         return new Response(
           JSON.stringify({
@@ -337,11 +268,6 @@ Deno.serve(async (req: Request) => {
       }
 
       const result = responseBody ?? { raw: responseText };
-      console.log("[send-email] email forwarded successfully", {
-        requestId,
-        durationMs: Date.now() - startedAt,
-        resultKeys: result && typeof result === "object" ? Object.keys(result as Record<string, unknown>) : [],
-      });
 
       return new Response(
         JSON.stringify(result),
@@ -355,11 +281,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log("[send-email] legacy email request rejected", {
-      requestId,
-      bodySummary: buildBodySummary(body),
-    });
-    console.warn("[send-email] legacy HTML email format is not supported anymore");
 
     return new Response(
       JSON.stringify({
@@ -380,11 +301,6 @@ Deno.serve(async (req: Request) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
 
-    console.error("[send-email] Error processing email request", {
-      requestId,
-      error: errorMessage,
-    });
-    console.error("[send-email] Error stack", errorStack);
 
     return new Response(
       JSON.stringify({

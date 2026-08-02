@@ -52,14 +52,11 @@ const getNativeFcmToken = async (): Promise<string | null> => {
     const apnsToken = devicePushToken?.data || null;
 
     if (apnsToken) {
-      console.log('Apple APNs token obtained for Firebase:', apnsToken.substring(0, 30) + '...');
     }
   } catch (apnsError) {
-    console.warn('Could not obtain APNs token before requesting Firebase token:', apnsError);
   }
 
   if (!FCMTokenModule?.getFCMToken) {
-    console.warn('FCMTokenModule is not available on iOS.');
     return null;
   }
 
@@ -260,7 +257,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         .maybeSingle();
 
       if (existingChatError) {
-        console.warn('Error looking up pet match chat:', existingChatError);
       }
 
       if (existingChat?.id) {
@@ -274,7 +270,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         .maybeSingle();
 
       if (matchError) {
-        console.warn('Error looking up pet match for notification:', matchError);
         return null;
       }
 
@@ -297,13 +292,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         .single();
 
       if (upsertError) {
-        console.warn('Error creating pet match chat from notification:', upsertError);
         return null;
       }
 
       return upsertedChat?.id || null;
     } catch (error) {
-      console.warn('Unexpected error resolving pet match chat:', error);
       return null;
     }
   };
@@ -317,13 +310,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         .maybeSingle();
 
       if (orderError) {
-        console.warn('Error resolving booking order from notification:', orderError);
         return null;
       }
 
       return orderData?.id || null;
     } catch (error) {
-      console.warn('Unexpected error resolving booking order:', error);
       return null;
     }
   };
@@ -537,7 +528,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     if (!navigateFromNotification(payload)) {
-      console.log('Notification tap ignored: unsupported data payload', payload);
     }
   };
 
@@ -545,30 +535,18 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   useEffect(() => {
     if (isExpoGo || Platform.OS === 'web' || !Notifications) {
       if (isExpoGo) {
-        console.log('⚠️ Running in Expo Go - Notifications require native build');
-        console.log('💡 Run: eas build --platform android --profile preview');
-        console.log('');
-        console.log('📱 PARA PROBAR NOTIFICACIONES:');
-        console.log('   1. Crear development build: eas build --profile development --platform android');
-        console.log('   2. Instalar la APK en tu dispositivo');
-        console.log('   3. Los FCM tokens se generarán automáticamente al iniciar sesión');
-        console.log('');
       } else if (Platform.OS === 'web') {
-        console.log('⚠️ Running on web - Notifications not available');
       } else {
-        console.log('⚠️ Notifications module not loaded');
       }
       return;
     }
 
     if (currentUser) {
-      console.log('✅ Usuario logueado, validando y registrando tokens FCM...');
       // Ejecutar validación y actualización de tokens de forma asíncrona
       (async () => {
         try {
           await validateAndUpdateTokens();
         } catch (error) {
-          console.error('Error al validar tokens:', error);
         }
       })();
     }
@@ -587,7 +565,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setNotificationsEnabled(true);
       }
     } catch (error) {
-      console.log('Error checking notification status:', error);
     }
   };
 
@@ -610,7 +587,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       return;
     }
 
-    console.log('Notification tap ignored: unsupported data payload', pendingNotificationData);
     setPendingNotificationData(null);
   }, [pendingNotificationData, authInitialized, currentUser?.id]);
 
@@ -621,12 +597,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     // Set up notification listeners
     const notificationListener = Notifications.addNotificationReceivedListener((notification: any) => {
-      console.log('Notification received:', notification);
       setNotification(notification);
     });
 
     const responseListener = Notifications.addNotificationResponseReceivedListener((response: any) => {
-      console.log('Notification response:', response);
       const content = response?.notification?.request?.content || {};
       queueNotificationNavigation({
         data: content?.data,
@@ -648,7 +622,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           }
         })
         .catch((error: any) => {
-          console.warn('Error reading last notification response:', error);
         });
     }
 
@@ -660,103 +633,69 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const registerForPushNotifications = async (): Promise<string | null> => {
     try {
-      console.log('=== PUSH NOTIFICATION REGISTRATION ===');
 
       // Check environment
       if (isExpoGo) {
-        console.log('❌ Running in Expo Go - notifications not supported');
         throw new Error('Las notificaciones no están disponibles en Expo Go. Necesitas una build de desarrollo o producción.');
       }
 
       if (Platform.OS === 'web') {
-        console.log('❌ Web platform - notifications not supported');
         throw new Error('Las notificaciones push no están disponibles en la web.');
       }
 
       if (!Notifications || !Device) {
-        console.log('❌ Notification modules not available');
         throw new Error('Los módulos de notificación no están disponibles.');
       }
 
       // Check if device supports push notifications
       if (!Device.isDevice) {
-        console.log('❌ Must use physical device for Push Notifications');
         throw new Error('Las notificaciones solo funcionan en dispositivos físicos, no en simuladores.');
       }
 
-      console.log('Device check passed, requesting permissions...');
 
       // Get current permission status
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      console.log('Current permission status:', existingStatus);
       
       let finalStatus = existingStatus;
       
       // Request permissions if not already granted
       if (existingStatus !== 'granted') {
-        console.log('Requesting notification permissions...');
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
-        console.log('Permission request result:', status);
       }
       
       if (finalStatus !== 'granted') {
-        console.log('❌ Push notification permissions not granted. Final status:', finalStatus);
-        console.log('Permission details:', {
-          existingStatus,
-          finalStatus,
-          canAskAgain: finalStatus === 'denied' ? 'No' : 'Sí'
-        });
         return null;
       }
 
-      console.log('Permissions granted, getting push token...');
 
       // Get the push token
       try {
         // Use the exact project ID
         const projectId = '0618d9ae-6714-46bb-adce-f4ee57fff324';
         
-        console.log('📋 Using project ID:', projectId);
-        console.log('📋 Constants project ID:', Constants.expoConfig?.extra?.eas?.projectId);
-        console.log('📋 Project IDs match:', projectId === Constants.expoConfig?.extra?.eas?.projectId);
         
-        console.log('Requesting Expo push token...');
         
         // Try with explicit project ID first
         let tokenData;
         try {
-          console.log('Attempting with explicit project ID...');
           tokenData = await Notifications.getExpoPushTokenAsync({
             projectId: projectId,
           });
-          console.log('✅ Token obtained with explicit project ID');
         } catch (explicitError) {
           const explicitMessage = explicitError instanceof Error ? explicitError.message : String(explicitError);
-          console.log('❌ Failed with explicit project ID:', explicitMessage);
-          console.log('Attempting without project ID...');
           
           try {
             tokenData = await Notifications.getExpoPushTokenAsync();
-            console.log('✅ Token obtained without project ID');
           } catch (fallbackError) {
             const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
-            console.log('❌ Failed without project ID:', fallbackMessage);
             throw fallbackError;
           }
         }
 
-        console.log('=== TOKEN GENERATION RESULT ===');
-        console.log('Success:', !!tokenData.data);
-        console.log('Token type:', typeof tokenData.data);
-        console.log('Token length:', tokenData.data ? tokenData.data.length : 0);
-        console.log('Token preview:', tokenData.data ? tokenData.data.substring(0, 50) + '...' : 'NULL');
-        console.log('Token starts with ExponentPushToken:', tokenData.data ? tokenData.data.startsWith('ExponentPushToken[') : false);
-        console.log('Token ends with ]:', tokenData.data ? tokenData.data.endsWith(']') : false);
 
         // Configure Android notification channel
         if (Platform.OS === 'android') {
-          console.log('Setting up Android notification channel...');
           try {
             await Notifications.setNotificationChannelAsync('default', {
               name: 'DogCatiFy Notifications',
@@ -770,9 +709,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               bypassDnd: false,
               description: 'Notificaciones generales de DogCatiFy',
             });
-            console.log('✅ Android notification channel configured with custom icon');
           } catch (channelError) {
-            console.error('❌ Error setting up notification channel:', channelError);
             // Don't fail registration if channel setup fails
           }
 
@@ -786,9 +723,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               lightColor: '#2D6A6F',
               description: 'Notificaciones de mensajes de chat y adopción',
             });
-            console.log('✅ Chat notification channel configured');
           } catch (chatChannelError) {
-            console.error('❌ Error setting up chat channel:', chatChannelError);
           }
 
           try {
@@ -800,9 +735,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               lightColor: '#2D6A6F',
               description: 'Notificaciones de reservas y confirmaciones',
             });
-            console.log('✅ Bookings notification channel configured');
           } catch (bookingsChannelError) {
-            console.error('❌ Error setting up bookings channel:', bookingsChannelError);
           }
         }
 
@@ -810,38 +743,29 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         // IMPORTANTE: se guarda en fcm_token para priorizar envío v1
         let fcmToken: string | null = null;
         try {
-          console.log('🔑 Getting Firebase Cloud Messaging token...');
           fcmToken = await getNativeFcmToken();
 
           const tokenType = 'FCM';
-          console.log(`✅ ${tokenType} token obtained:`, fcmToken ? fcmToken.substring(0, 30) + '...' : 'null');
 
           if (!fcmToken) {
-            console.error('❌ CRÍTICO: No se pudo obtener un FCM token');
             throw new Error('No se pudo obtener el token FCM. Las notificaciones podrían no funcionar.');
           }
         } catch (fcmError: any) {
-          console.error('❌ Error obteniendo token FCM:', fcmError);
           throw new Error('Error al obtener token FCM: ' + fcmError.message);
         }
 
         // Store tokens in user profile if user is logged in
         if (currentUser) {
-          console.log('💾 Storing push tokens in user profile...');
 
           // iOS y Android necesitan un FCM token real para usar el sender v1.
           if (!fcmToken) {
-            console.error('❌ CRÍTICO: No se puede registrar notificaciones sin FCM token');
             throw new Error('No se pudo obtener el token FCM requerido para notificaciones.');
           }
 
           const fcmTokenToStore = fcmToken;
 
-          console.log('- Expo Push Token (legacy):', tokenData.data ? tokenData.data.substring(0, 30) + '...' : 'null');
           if (fcmTokenToStore) {
-            console.log('- FCM Token (PRIORITARIO):', fcmToken.substring(0, 30) + '...');
           } else if (fcmToken && Platform.OS === 'ios') {
-            console.log('- APNs Token detectado en iOS:', fcmToken.substring(0, 30) + '...');
           }
 
           const { error: updateError } = await supabaseClient
@@ -858,28 +782,21 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             .eq('id', currentUser.id);
 
           if (updateError) {
-            console.error('❌ Error updating push tokens:', updateError);
             throw new Error('No se pudo guardar el token de notificación.');
           }
 
-          console.log('✅ Push tokens saved successfully');
           if (fcmTokenToStore) {
-            console.log('✅ FCM v1 API ready on', Platform.OS);
           } else {
-            console.warn('⚠️ Sin FCM token - usando Expo legacy API (descontinuada)');
           }
         }
 
         setExpoPushToken(tokenData.data);
         setNotificationsEnabled(true);
-        console.log('✅ Push notification registration completed!');
         return tokenData.data;
       } catch (tokenError: any) {
-        console.error('❌ Error getting push token:', tokenError);
         throw tokenError;
       }
     } catch (error: any) {
-      console.error('❌ Error in registerForPushNotifications:', error);
       throw error;
     }
   };
@@ -899,27 +816,20 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         .single();
 
       if (!profile?.fcm_token && !profile?.push_token) {
-        console.log('❌ User does not have FCM token');
         return;
       }
 
       const preferences = profile.notification_preferences || {};
       if (preferences.push === false) {
-        console.log('❌ User has disabled push notifications');
         return;
       }
 
-      console.log('🚀 Sending push notification via FCM v1 Edge Function...');
-      console.log('Target user ID:', userId);
-      console.log('Title:', title);
-      console.log('Body:', body);
 
       // Call FCM v1 Edge Function
       const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
       const anonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 
       if (!supabaseUrl || !anonKey) {
-        console.error('❌ Missing Supabase configuration');
         return;
       }
 
@@ -940,18 +850,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ FCM v1 Edge Function error:', response.status, errorText);
         throw new Error(`FCM v1 Edge Function error: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
-      console.log('✅ Push notification sent via FCM v1:', result);
 
       if (!result.success) {
-        console.warn('⚠️ FCM v1 Edge Function returned success=false:', result.error);
       }
     } catch (error) {
-      console.error('❌ Error sending push notification via FCM v1:', error);
       // Don't throw error to avoid breaking the chat flow
     }
   };
@@ -963,7 +869,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     data?: any
   ): Promise<void> => {
     try {
-      console.log('🚀 Sending notification to admin via Edge Function...');
 
       const { data: adminProfile, error: adminError } = await supabaseClient
         .from('profiles')
@@ -973,13 +878,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         .maybeSingle();
 
       if (adminError || !adminProfile?.id) {
-        console.error('❌ Admin profile not found for push notification:', adminError);
         return;
       }
 
       await sendNotificationToUser(adminProfile.id, title, body, data);
     } catch (error) {
-      console.error('❌ Error sending notification to admin:', error);
     }
   };
 
@@ -1002,9 +905,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       setExpoPushToken(null);
       setNotificationsEnabled(false);
-      console.log('✅ Notifications disabled successfully');
     } catch (error) {
-      console.error('Error disabling notifications:', error);
       throw error;
     }
   };
@@ -1015,12 +916,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     if (!currentUser) {
-      console.log('No current user, skipping token validation');
       return;
     }
 
     try {
-      console.log('=== VALIDANDO TOKENS AL INICIAR SESIÓN ===');
 
       const { data: profile, error: profileError } = await supabaseClient
         .from('profiles')
@@ -1029,34 +928,27 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         .single();
 
       if (profileError) {
-        console.warn('Error obteniendo perfil:', profileError);
         return;
       }
 
       const storedPushToken = profile?.push_token;
       const storedFcmToken = profile?.fcm_token;
 
-      console.log('Tokens almacenados:');
-      console.log('- Expo Token:', storedPushToken ? storedPushToken.substring(0, 30) + '...' : 'null');
-      console.log('- FCM Token:', storedFcmToken ? storedFcmToken.substring(0, 30) + '...' : 'null');
 
       let needsUpdate = false;
       let currentExpoToken: string | null = null;
       let currentFcmToken: string | null = null;
 
       if (!Device.isDevice) {
-        console.log('⚠️ Ejecutando en simulador, tokens no disponibles');
         return;
       }
 
       const { status } = await Notifications.getPermissionsAsync();
 
       if (status !== 'granted') {
-        console.log('⚠️ Permisos de notificación no otorgados');
 
         // Si el usuario tiene tokens almacenados, los limpiamos porque los permisos fueron revocados
         if (storedPushToken || storedFcmToken) {
-          console.log('Limpiando tokens almacenados (permisos revocados)');
           await supabaseClient
             .from('profiles')
             .update({
@@ -1071,13 +963,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         } else {
           // Si el usuario NO tiene tokens almacenados, significa que nunca se registraron notificaciones
           // Intentamos registrarlas automáticamente (esto pedirá permisos)
-          console.log('📱 Usuario sin tokens. Intentando registro automático de notificaciones...');
           try {
             await registerForPushNotifications();
-            console.log('✅ Registro automático de notificaciones completado');
             return; // Salir porque registerForPushNotifications ya actualiza la DB
           } catch (registerError) {
-            console.log('⚠️ Usuario rechazó permisos o error en registro:', registerError);
             // No es crítico, el usuario puede activar notificaciones después desde configuración
           }
         }
@@ -1095,52 +984,42 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
 
         currentExpoToken = tokenData.data;
-        console.log('✅ Expo token actual:', currentExpoToken ? currentExpoToken.substring(0, 30) + '...' : 'null');
 
         if (currentExpoToken !== storedPushToken) {
-          console.log('🔄 Expo token cambió, necesita actualización');
           needsUpdate = true;
         }
       } catch (tokenError) {
-        console.warn('⚠️ No se pudo obtener Expo token:', tokenError);
       }
 
       try {
         currentFcmToken = await getNativeFcmToken();
 
         const tokenType = 'FCM';
-        console.log(`✅ ${tokenType} token actual:`, currentFcmToken ? currentFcmToken.substring(0, 30) + '...' : 'null');
 
         if (currentFcmToken !== storedFcmToken) {
-          console.log('🔄 Token nativo cambió, necesita actualización');
           needsUpdate = true;
         }
       } catch (fcmError) {
-        console.warn('⚠️ No se pudo obtener token nativo del dispositivo:', fcmError);
       }
 
       // IMPORTANTE: Si el usuario no tiene tokens, intentamos obtenerlos
       if (!storedPushToken && !storedFcmToken && (currentExpoToken || currentFcmToken)) {
-        console.log('📝 Usuario no tiene tokens registrados, actualizando...');
         needsUpdate = true;
       }
 
       // Si el usuario NO tiene tokens almacenados y NO pudimos obtener tokens actuales,
       // intentamos registrar las notificaciones por primera vez
       if (!storedPushToken && !storedFcmToken && !currentExpoToken && !currentFcmToken) {
-        console.log('⚠️ Usuario sin tokens. Intentando registro completo de notificaciones...');
         try {
           // Intentar registro completo (esto pedirá permisos si no están otorgados)
           await registerForPushNotifications();
           return; // Salir porque registerForPushNotifications ya actualiza la DB
         } catch (registerError) {
-          console.error('❌ No se pudo registrar notificaciones:', registerError);
           return;
         }
       }
 
       if (needsUpdate) {
-        console.log('💾 Actualizando tokens en base de datos...');
 
         const { error: updateError } = await supabaseClient
           .from('profiles')
@@ -1156,25 +1035,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           .eq('id', currentUser.id);
 
         if (updateError) {
-          console.error('❌ Error actualizando tokens:', updateError);
         } else {
-          console.log('✅ Tokens actualizados exitosamente');
           setExpoPushToken(currentExpoToken);
           setNotificationsEnabled(true);
 
           if (currentFcmToken) {
-            console.log('✅ FCM v1 API listo para Android');
           }
         }
       } else {
-        console.log('✅ Tokens válidos, no se requiere actualización');
         setExpoPushToken(storedPushToken);
         setNotificationsEnabled(true);
       }
 
-      console.log('=== VALIDACIÓN DE TOKENS COMPLETADA ===');
     } catch (error) {
-      console.error('❌ Error en validación de tokens:', error);
     }
   };
 

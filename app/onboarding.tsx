@@ -239,7 +239,6 @@ export default function OnboardingScreen() {
         nextRoute = await resolvePostLoginRoute(currentUser.id, undefined, currentUser);
       }
     } catch (error) {
-      console.warn('Error finishing onboarding:', error);
     }
 
     router.replace(nextRoute as any);

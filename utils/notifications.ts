@@ -26,7 +26,6 @@ export const NotificationService = {
     html?: string,
     attachment?: any
   ): Promise<{ success: boolean; messageId?: string; error?: string }> => {
-    console.warn('DEPRECATED: sendEmail() is deprecated. Use the new email API functions instead.');
     return {
       success: false,
       error: 'This function is deprecated. Use the new email API.'
@@ -37,7 +36,6 @@ export const NotificationService = {
    * DEPRECATED: Use sendWelcomeEmailAPI from emailConfirmation.ts instead
    */
   sendWelcomeEmail: async (email: string, name: string, activationLink?: string): Promise<void> => {
-    console.warn('DEPRECATED: sendWelcomeEmail() is deprecated. Use sendWelcomeEmailAPI() instead.');
   },
 
   /**
@@ -48,7 +46,6 @@ export const NotificationService = {
     name: string,
     confirmationUrl: string
   ): Promise<void> => {
-    console.warn('DEPRECATED: sendCustomConfirmationEmail() is deprecated. Use sendConfirmationEmailAPI() instead.');
   },
 
   /**
@@ -303,11 +300,9 @@ export const NotificationService = {
     data?: any
   ) => {
     try {
-      console.log('✅ User has push token, preparing notification...');
 
       // Validate token format
       if (!pushToken.startsWith('ExponentPushToken[')) {
-        console.error('❌ Invalid push token format:', pushToken);
         return;
       }
 
@@ -328,12 +323,6 @@ export const NotificationService = {
         collapseKey: data?.type || 'general'
       };
       
-      console.log('📤 Sending push notification with payload:', {
-        to: pushToken.substring(0, 20) + '...',
-        title,
-        body,
-        data
-      });
 
       const response = await fetch('https://exp.host/--/api/v2/push/send', {
         method: 'POST',
@@ -348,22 +337,18 @@ export const NotificationService = {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ Push notification HTTP error:', response.status, errorText);
         throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
 
       const result = await response.json();
-      console.log('✅ Push notification sent successfully:', result);
 
       // Check for errors in the result
       if (result.data && Array.isArray(result.data)) {
         const firstResult = result.data[0];
         if (firstResult && firstResult.status === 'error') {
-          console.error('❌ Push notification error in result:', firstResult);
           
           // Handle specific error cases
           if (firstResult.details?.error === 'DeviceNotRegistered') {
-            console.log('Device not registered, token may be invalid');
             // Could remove token from database here
             return;
           }
@@ -374,7 +359,6 @@ export const NotificationService = {
 
       return result;
     } catch (error: any) {
-      console.error('❌ Error sending push notification:', error);
       throw error;
     }
   }

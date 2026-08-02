@@ -130,7 +130,6 @@ export default function Pets() {
           .order('created_at', { ascending: false });
 
         if (pendingError) {
-          console.error('Error fetching pending invitations:', pendingError);
         } else {
           const formattedInvitations = ((pendingData as any[] | null) || [])
             .map(normalizeInvitation)
@@ -169,7 +168,6 @@ export default function Pets() {
           .eq('status', 'accepted');
 
         if (sharedError) {
-          console.error('Error fetching shared pets:', sharedError);
         }
 
         const ownPets = ((petsData as any[] | null) || [])
@@ -189,7 +187,6 @@ export default function Pets() {
         setPets([...(ownPets as Pet[]), ...(sharedPets as Pet[])]);
         setLoading(false);
       } catch (error) {
-        console.error('Error fetching pets:', error);
         setLoading(false);
       }
     };
@@ -254,7 +251,6 @@ export default function Pets() {
         .eq('id', invitationId);
 
       if (error) {
-        console.error('Error accepting invitation:', error);
         Alert.alert('Error', 'No se pudo aceptar la invitación');
         return;
       }
@@ -297,7 +293,6 @@ export default function Pets() {
         setPets([...(transformedPets as Pet[]), ...(transformedSharedPets as Pet[])]);
       }
     } catch (error) {
-      console.error('Error accepting invitation:', error);
       Alert.alert('Error', 'Ocurrió un error al aceptar la invitación');
     }
   };
@@ -319,7 +314,6 @@ export default function Pets() {
                 .eq('id', invitationId);
 
               if (error) {
-                console.error('Error rejecting invitation:', error);
                 Alert.alert('Error', 'No se pudo rechazar la invitación');
                 return;
               }
@@ -327,7 +321,6 @@ export default function Pets() {
               setPendingInvitations(prev => prev.filter(inv => inv.id !== invitationId));
               Alert.alert('Rechazada', 'Invitación rechazada');
             } catch (error) {
-              console.error('Error rejecting invitation:', error);
               Alert.alert('Error', 'Ocurrió un error al rechazar la invitación');
             }
           }
@@ -357,7 +350,6 @@ export default function Pets() {
         return;
       }
     } catch (error) {
-      console.error('Error checking session:', error);
       Alert.alert('Error', 'No se pudo verificar la sesión');
       return;
     }
@@ -380,17 +372,14 @@ export default function Pets() {
                 return;
               }
 
-              console.log('Starting pet deletion process for:', petToDelete.name);
               
               // Step 1: Check if pet has any posts
-              console.log('Step 1: Checking for posts...');
               const { data: petPosts, error: getPostsError } = await supabaseClient
                 .from('posts')
                 .select('id', { count: 'exact' })
                 .eq('pet_id', petId);
               
               if (getPostsError) {
-                console.error('Error getting posts:', getPostsError);
                 if (getPostsError.message?.includes('JWT expired')) {
                   Alert.alert('Sesión expirada', 'Por favor inicia sesión nuevamente.');
                   router.replace('/auth/login');
@@ -398,11 +387,9 @@ export default function Pets() {
                 }
               }
               
-              console.log(`Found ${petPosts?.length || 0} posts for this pet`);
               
               // Step 2: Only delete comments if there are posts
               if (petPosts && petPosts.length > 0) {
-                console.log(`Step 2: Deleting comments for ${petPosts.length} posts...`);
                 
                 for (const post of petPosts) {
                   const { data: allComments, error: getCommentsError } = await supabaseClient
@@ -411,7 +398,6 @@ export default function Pets() {
                     .eq('post_id', post.id);
                   
                   if (getCommentsError) {
-                    console.error(`Error getting comments for post ${post.id}:`, getCommentsError);
                     if (getCommentsError.message?.includes('JWT expired')) {
                       Alert.alert('Sesión expirada', 'Por favor inicia sesión nuevamente.');
                       router.replace('/auth/login');
@@ -421,7 +407,6 @@ export default function Pets() {
                   }
                   
                   if (allComments && allComments.length > 0) {
-                    console.log(`Deleting ${allComments.length} comments for post ${post.id}`);
                     for (const comment of allComments) {
                       const { error: deleteCommentError } = await supabaseClient
                         .from('comments')
@@ -429,101 +414,75 @@ export default function Pets() {
                         .eq('id', comment.id);
                       
                       if (deleteCommentError) {
-                        console.error(`Error deleting comment ${comment.id}:`, deleteCommentError);
                         // Continue even if individual comment deletion fails
                       }
                     }
                   }
                 }
-                console.log('Comments deleted successfully');
               } else {
-                console.log('No posts found, skipping comment deletion');
               }
 
               // Step 3: Only delete posts if there are any
               if (petPosts && petPosts.length > 0) {
-                console.log('Step 3: Deleting posts...');
                 const { error: postsError } = await supabaseClient
                   .from('posts')
                   .delete()
                   .eq('pet_id', petId);
                 
                 if (postsError) {
-                  console.error('Error deleting posts:', postsError);
                   if (postsError.message?.includes('JWT expired')) {
                     Alert.alert('Sesión expirada', 'Por favor inicia sesión nuevamente.');
                     router.replace('/auth/login');
                     return;
                   }
                   // Don't throw error, just log it and continue
-                  console.log('Continuing despite posts deletion error...');
                 } else {
-                  console.log('Posts deleted successfully');
                 }
               } else {
-                console.log('No posts to delete');
               }
 
-              console.log('Step 4: Deleting bookings...');
               const { error: bookingsError } = await supabaseClient
                 .from('bookings')
                 .delete()
                 .eq('pet_id', petId);
               
               if (bookingsError) {
-                console.error('Error deleting bookings:', bookingsError);
-                console.log('Continuing despite bookings deletion error...');
               } else {
-                console.log('Bookings deleted successfully');
               }
 
-              console.log('Step 5: Deleting health records...');
               const { error: healthError } = await supabaseClient
                 .from('pet_health')
                 .delete()
                 .eq('pet_id', petId);
               
               if (healthError) {
-                console.error('Error deleting health records:', healthError);
-                console.log('Continuing despite health records deletion error...');
               } else {
-                console.log('Health records deleted successfully');
               }
 
-              console.log('Step 6: Deleting albums...');
               const { error: albumsError } = await supabaseClient
                 .from('pet_albums')
                 .delete()
                 .eq('pet_id', petId);
               
               if (albumsError) {
-                console.error('Error deleting albums:', albumsError);
-                console.log('Continuing despite albums deletion error...');
               } else {
-                console.log('Albums deleted successfully');
               }
 
-              console.log('Step 7: Deleting behavior records...');
               const { error: behaviorError } = await supabaseClient
                 .from('pet_behavior')
                 .delete()
                 .eq('pet_id', petId);
               
               if (behaviorError) {
-                console.error('Error deleting behavior records:', behaviorError);
-                console.log('Continuing despite behavior records deletion error...');
               } else {
-                console.log('Behavior records deleted successfully');
               }
               
-              console.log('Step 8: Now deleting the pet...');
               const { error: petError } = await supabaseClient
                 .from('pets')
                 .delete()
                 .eq('id', petId);
               
               if (petError) {
-                console.error('Error deleting pet:', petError);
                 if (petError.message?.includes('JWT expired')) {
                   Alert.alert('Sesión expirada', 'Por favor inicia sesión nuevamente.');
                   router.replace('/auth/login');
@@ -533,14 +492,12 @@ export default function Pets() {
                 return;
               }
               
-              console.log('Pet deleted successfully');
               
               // Update local state to remove the deleted pet
               setPets(prevPets => prevPets.filter(pet => pet.id !== petId));
               
               Alert.alert('Éxito', `${petToDelete.name} ha sido eliminado correctamente`);
             } catch (error) {
-              console.error('Error deleting pet:', error);
               
               // Handle JWT expiration specifically
               if ((error instanceof Error ? error.message : String(error || '')).includes('JWT expired')) {

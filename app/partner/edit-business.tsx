@@ -125,7 +125,6 @@ export default function EditBusiness() {
         }
       }
     } catch (error) {
-      console.error('Error loading business data:', error);
       Alert.alert('Error', 'No se pudo cargar la información del negocio');
     } finally {
       setLoading(false);
@@ -142,7 +141,6 @@ export default function EditBusiness() {
       if (error) throw error;
       setCountries(data || []);
     } catch (error) {
-      console.error('Error loading countries:', error);
     }
   };
 
@@ -158,7 +156,6 @@ export default function EditBusiness() {
       setDepartments(data || []);
       setFilteredDepartments(data || []);
     } catch (error) {
-      console.error('Error loading departments:', error);
     }
   };
 
@@ -236,7 +233,6 @@ export default function EditBusiness() {
       setGeocodingResults(results.slice(0, 5));
       setShowGeocodingResults(true);
     } catch (error) {
-      console.error('Error en geocodificación:', error);
       Alert.alert('Error', 'No se pudo obtener la ubicación.');
     } finally {
       setIsGeocoding(false);
@@ -316,7 +312,6 @@ export default function EditBusiness() {
       const filename = `partners/${businessId}/logo/${Date.now()}.jpg`;
       return await uploadImageUtil(imageAsset.uri, filename);
     } catch (error) {
-      console.error('Error uploading image:', error);
       throw error;
     }
   };
@@ -370,7 +365,6 @@ export default function EditBusiness() {
         { text: 'OK', onPress: () => router.back() }
       ]);
     } catch (error) {
-      console.error('Error updating business:', error);
       Alert.alert('Error', 'No se pudo actualizar la información del negocio');
     } finally {
       setSaveLoading(false);

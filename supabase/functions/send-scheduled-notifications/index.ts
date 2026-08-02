@@ -32,7 +32,6 @@ Deno.serve(async (req: Request) => {
         !supabaseServiceKey ? 'SUPABASE_SERVICE_ROLE_KEY' : null,
       ].filter(Boolean);
 
-      console.error('Missing required environment variables:', missing.join(', '));
       return new Response(
         JSON.stringify({
           error: 'Missing required environment variables',
@@ -58,7 +57,6 @@ Deno.serve(async (req: Request) => {
       .limit(50); // Procesar máximo 50 por ejecución
 
     if (fetchError) {
-      console.error('Error fetching notifications:', fetchError);
       return new Response(
         JSON.stringify({ error: 'Error fetching notifications', details: fetchError }),
         {
@@ -78,7 +76,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log(`Processing ${pendingNotifications.length} notifications...`);
 
     const results = [];
 
@@ -92,7 +89,6 @@ Deno.serve(async (req: Request) => {
           .single();
 
         if (profileError || (!profile?.fcm_token && !profile?.push_token)) {
-          console.log(`No push tokens for user ${notification.user_id}`);
 
           // Marcar como fallida
           await supabase
@@ -119,7 +115,6 @@ Deno.serve(async (req: Request) => {
         // PRIORIDAD 1: FCM v1 (API actual y recomendada)
         if (profile.fcm_token) {
           try {
-            console.log(`Attempting FCM v1 for notification ${notification.id}...`);
 
             // Convertir todos los valores de data a strings (requerido por FCM v1)
             const notificationData = notification.data || {};
@@ -153,7 +148,6 @@ Deno.serve(async (req: Request) => {
 
             if (fcmResponse.ok) {
               const fcmResult = await fcmResponse.json();
-              console.log('FCM v1 success:', fcmResult.messageId);
               notificationSent = true;
               sendMethod = 'fcm-v1';
               ticket = { status: 'ok', id: fcmResult.messageId };
@@ -186,22 +180,14 @@ Deno.serve(async (req: Request) => {
                 };
               }
 
-              console.warn('FCM v1 failed, will try fallback:', {
-                status: fcmResponse.status,
-                errorData,
-              });
             }
           } catch (fcmError) {
-            console.warn('FCM v1 error, will try fallback:', fcmError.message);
           }
         }
 
         // PRIORIDAD 2: Fallback a Expo Push Service (API legacy/descontinuada)
         // Solo si FCM v1 falló y el usuario tiene push_token legacy
         if (!notificationSent && profile.push_token) {
-          console.warn(`⚠️ Usando Expo legacy API (descontinuada) para notificación ${notification.id}`);
-          console.warn('⚠️ Usuario debería actualizar app para obtener fcm_token');
-          console.log(`Attempting Expo Push Service for notification ${notification.id}...`);
 
           const message = {
             to: profile.push_token,
@@ -231,7 +217,6 @@ Deno.serve(async (req: Request) => {
 
           if (!pushResponse.ok) {
             const errorText = await pushResponse.text();
-            console.error('Expo Push HTTP error:', pushResponse.status, errorText);
             ticket = {
               status: 'error',
               message: `HTTP ${pushResponse.status}: ${errorText}`,
@@ -239,7 +224,6 @@ Deno.serve(async (req: Request) => {
             };
           } else {
             const pushResult = await pushResponse.json();
-            console.log('Expo Push result:', JSON.stringify(pushResult));
 
             ticket = pushResult.data?.[0] || pushResult;
 
@@ -248,14 +232,12 @@ Deno.serve(async (req: Request) => {
               sendMethod = 'expo-legacy';
             } else {
               // Log del error específico de Expo
-              console.error('Expo Push error:', JSON.stringify(ticket));
             }
           }
         }
 
         // Evaluar resultado final
         if (ticket.status === 'ok' && notificationSent) {
-          console.log(`✅ Notification ${notification.id} sent via ${sendMethod}`);
           // Marcar como enviada exitosamente
           await supabase
             .from('scheduled_notifications')
@@ -279,7 +261,6 @@ Deno.serve(async (req: Request) => {
             || JSON.stringify(ticket.details || {})
             || 'Unknown error - check logs';
 
-          console.error(`❌ Failed to send notification ${notification.id}:`, errorMessage);
 
           const retryCount = (notification.retry_count || 0) + 1;
           const maxRetries = 3;
@@ -322,7 +303,6 @@ Deno.serve(async (req: Request) => {
           }
         }
       } catch (error) {
-        console.error(`Error processing notification ${notification.id}:`, error);
         
         // Incrementar retry count
         const retryCount = (notification.retry_count || 0) + 1;
@@ -355,7 +335,6 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error) {
-    console.error('Function error:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       {

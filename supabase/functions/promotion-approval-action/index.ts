@@ -317,7 +317,6 @@ Deno.serve(async (req: Request) => {
       extra,
     );
   } catch (error: any) {
-    console.error("Error in promotion-approval-action:", error);
     return responseHtmlOrRedirect(
       500,
       "Error",

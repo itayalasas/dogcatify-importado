@@ -53,7 +53,6 @@ export const resolvePreferredActiveRole = async (
       return storedRole;
     }
   } catch (error) {
-    console.warn('Error resolving preferred active role:', error);
   }
 
   if (availableRoles.length === 1) {
@@ -68,7 +67,6 @@ export const getStoredActiveRole = async (userId: string): Promise<AppRole | nul
     const storedRole = await AsyncStorage.getItem(getActiveRoleCacheKey(userId));
     return isAppRole(storedRole) ? storedRole : null;
   } catch (error) {
-    console.warn('Error reading stored active role:', error);
     return null;
   }
 };
@@ -77,7 +75,6 @@ export const setStoredActiveRole = async (userId: string, role: AppRole): Promis
   try {
     await AsyncStorage.setItem(getActiveRoleCacheKey(userId), role);
   } catch (error) {
-    console.warn('Error saving active role:', error);
   }
 };
 
@@ -85,7 +82,6 @@ export const clearStoredActiveRole = async (userId: string): Promise<void> => {
   try {
     await AsyncStorage.removeItem(getActiveRoleCacheKey(userId));
   } catch (error) {
-    console.warn('Error clearing stored active role:', error);
   }
 };
 
@@ -94,7 +90,6 @@ export const getStoredActivePartnerBusinessId = async (userId: string): Promise<
     const storedBusinessId = await AsyncStorage.getItem(getActivePartnerBusinessCacheKey(userId));
     return storedBusinessId?.trim() ? storedBusinessId : null;
   } catch (error) {
-    console.warn('Error reading stored active partner business:', error);
     return null;
   }
 };
@@ -103,7 +98,6 @@ export const setStoredActivePartnerBusinessId = async (userId: string, businessI
   try {
     await AsyncStorage.setItem(getActivePartnerBusinessCacheKey(userId), businessId);
   } catch (error) {
-    console.warn('Error saving active partner business:', error);
   }
 };
 
@@ -111,7 +105,6 @@ export const clearStoredActivePartnerBusinessId = async (userId: string): Promis
   try {
     await AsyncStorage.removeItem(getActivePartnerBusinessCacheKey(userId));
   } catch (error) {
-    console.warn('Error clearing stored active partner business:', error);
   }
 };
 
@@ -131,7 +124,6 @@ export const shouldShowOnboarding = async (userId: string): Promise<boolean> => 
       .maybeSingle();
 
     if (error) {
-      console.warn('Could not validate onboarding status from DB:', error.message);
       return false;
     }
 
@@ -142,7 +134,6 @@ export const shouldShowOnboarding = async (userId: string): Promise<boolean> => 
 
     return true;
   } catch (error) {
-    console.warn('Error deciding onboarding visibility:', error);
     return false;
   }
 };
@@ -159,7 +150,6 @@ export const completeOnboarding = async (userId: string): Promise<void> => {
       })
       .eq('id', userId);
   } catch (error) {
-    console.warn('Error updating onboarding completion in DB:', error);
   } finally {
     await AsyncStorage.setItem(cacheKey, 'true');
   }
@@ -204,7 +194,6 @@ export const resolvePostLoginRoute = async (
         .maybeSingle();
 
       if (error) {
-        console.warn('Error resolving post login route by profile:', error);
         return null;
       }
 
@@ -216,7 +205,6 @@ export const resolvePostLoginRoute = async (
           }
         : null;
     } catch (error) {
-      console.warn('Error resolving post login route by profile:', error);
       return null;
     }
   })());

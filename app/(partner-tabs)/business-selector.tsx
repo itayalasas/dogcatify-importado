@@ -132,7 +132,6 @@ export default function BusinessSelector() {
         
         setBusinesses(businessData);
       } catch (error) {
-        console.error('Error fetching businesses:', error);
         Alert.alert('Error', 'No se pudieron cargar los negocios');
       } finally {
         setLoading(false);
@@ -311,7 +310,6 @@ export default function BusinessSelector() {
                 'El negocio ha sido eliminado correctamente'
               );
             } catch (error) {
-              console.error('Error deleting business:', error);
               Alert.alert('Error', 'No se pudo eliminar el negocio');
             }
           }
@@ -373,7 +371,6 @@ export default function BusinessSelector() {
         ]
       );
     } catch (error) {
-      console.error('Error in handleToggleFeature:', error);
       Alert.alert('Error', 'No se pudo actualizar la funcionalidad');
     }
   };
@@ -433,7 +430,6 @@ export default function BusinessSelector() {
       );
 
     } catch (error) {
-      console.error('Error updating feature:', error);
       const errorMessage = String(error instanceof Error ? error.message : error || '');
       if (errorMessage.includes('PLAN_REQUIRED:adoptions')) {
         Alert.alert(

@@ -141,7 +141,6 @@ export default function AddPet() {
         setPetImage(result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Error selecting photo:', error);
       Alert.alert('Error', 'No se pudo seleccionar la foto');
     }
   };
@@ -166,7 +165,6 @@ export default function AddPet() {
         setPetImage(result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Error taking photo:', error);
       Alert.alert('Error', 'No se pudo tomar la foto');
     }
   };
@@ -178,7 +176,6 @@ export default function AddPet() {
       const filename = `pets/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
       return await uploadImage(petImage, filename);
     } catch (error) {
-      console.error('Error uploading pet image:', error);
       return null;
     }
   };
@@ -206,14 +203,12 @@ export default function AddPet() {
   const fetchBreedInfo = async (breedName: string, speciesType: PetSpecies) => {
     if (!breedName) return;
     
-    console.log(`Fetching breed info for ${breedName} (${speciesType})`);
     setLoadingBreedInfo(true);
     try {
       const endpoint = speciesType === 'dog' 
         ? `https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/dogs?name=${encodeURIComponent(breedName)}`
         : `https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/cats?name=${encodeURIComponent(breedName)}`;
       
-      console.log(`API endpoint: ${endpoint}`);
       
       const response = await fetch(endpoint, {
         headers: {
@@ -221,25 +216,18 @@ export default function AddPet() {
         }
       });
       
-      console.log(`API response status: ${response.status}`);
       
       if (response.ok) {
         const data = await response.json();
-        console.log(`Received data:`, data);
         
         if (data && data.length > 0) {
-          console.log(`Setting breed info for ${data[0].name}`);
           setBreedInfo(data[0]);
-          console.log('Breed info set successfully');
         } else {
-          console.log(`No breed info found for ${breedName}`);
           setBreedInfo(null);
         }
       } else {
-        console.error('API response not OK:', await response.text());
       }
     } catch (error) {
-      console.error('Error fetching breed info:', error);
       setBreedInfo(null); 
     } finally {
       setLoadingBreedInfo(false);
@@ -286,7 +274,6 @@ export default function AddPet() {
       return;
     }
 
-    console.log('Validating for duplicate pets...');
     setIsLoading(true);
     
     try {
@@ -307,7 +294,6 @@ export default function AddPet() {
         .maybeSingle();
 
       if (subscriptionError) {
-        console.error('Error loading user subscription limits:', subscriptionError);
       }
 
       const userPlanLimits = resolveSubscriptionPlanLimits(subscriptionData?.subscription_plans || null);
@@ -320,7 +306,6 @@ export default function AddPet() {
           .eq('owner_id', currentUser.id);
 
         if (petsCountError) {
-          console.error('Error counting pets for plan limit:', petsCountError);
         } else if ((petsCount || 0) >= maxPetsAllowed) {
           Alert.alert(
             'Límite alcanzado',
@@ -344,13 +329,11 @@ export default function AddPet() {
         .eq('breed', breed.trim());
       
       if (checkError) {
-        console.error('Error checking for duplicate pets:', checkError);
         Alert.alert('Error', 'No se pudo verificar si la mascota ya existe');
         return;
       }
       
       if (existingPets && existingPets.length > 0) {
-        console.log('Duplicate pet found:', existingPets[0]);
         Alert.alert(
           'Mascota ya registrada',
           `Ya tienes una mascota registrada con el nombre "${name.trim()}", especie "${species === 'dog' ? 'Perro' : 'Gato'}" y raza "${breed.trim()}". Por favor verifica la información o usa un nombre diferente.`,
@@ -359,7 +342,6 @@ export default function AddPet() {
         return;
       }
       
-      console.log('No duplicate found, proceeding with pet creation...');
       
       // Upload image if selected
       let photoURL = null;
@@ -396,7 +378,6 @@ export default function AddPet() {
         personality: [],
       };
 
-      console.log('Pet data:', petData);
       
       // Insert pet and get the created pet ID
       const { data: createdPet, error } = await supabaseClient
@@ -406,11 +387,9 @@ export default function AddPet() {
         .single();
       
       if (!error && createdPet) {
-        console.log('Pet created successfully');
         
         // Create initial weight record only once
         try {
-          console.log('Creating initial weight record...');
           
           // Verify no existing weight records first
           const { data: existingWeightRecords, error: checkError } = await supabaseClient
@@ -420,7 +399,6 @@ export default function AddPet() {
             .eq('type', 'weight');
           
           if (checkError) {
-            console.error('Error checking existing weight records:', checkError);
             // Check if this is a JWT error
             if (checkError.message?.includes('JWT') || checkError.message?.includes('expired')) {
               Alert.alert(
@@ -431,7 +409,6 @@ export default function AddPet() {
               return;
             }
           } else if (existingWeightRecords && existingWeightRecords.length > 0) {
-            console.log('Weight records already exist for this pet, skipping creation');
           } else {
             // No existing records, create initial one
             const initialWeightData = {
@@ -454,7 +431,6 @@ export default function AddPet() {
               .insert(initialWeightData);
             
             if (weightError) {
-              console.error('Error creating initial weight record:', weightError);
               // Check if this is a JWT error
               if (weightError.message?.includes('JWT') || weightError.message?.includes('expired')) {
                 Alert.alert(
@@ -465,11 +441,9 @@ export default function AddPet() {
                 return;
               }
             } else {
-              console.log('Initial weight record created successfully');
             }
           }
         } catch (weightError) {
-          console.error('Error in initial weight record creation:', weightError);
           // Don't fail pet creation if weight record fails
         }
         
@@ -479,7 +453,6 @@ export default function AddPet() {
           [{ text: 'OK', onPress: () => router.push('/(tabs)/pets') }]
         );
       } else {
-        console.log('Error creating pet:', error);
         // Check if this is a JWT error
         if (error && (error.message?.includes('JWT') || error.message?.includes('expired'))) {
           Alert.alert(
@@ -492,7 +465,6 @@ export default function AddPet() {
         Alert.alert('Error', error.message || 'Error al agregar la mascota');
       }
     } catch (error) {
-      console.error('Error in handleSubmit:', error);
       // Check if this is a JWT error
       const errorMessage = error instanceof Error ? error.message : '';
       if (errorMessage.includes('JWT') || errorMessage.includes('expired')) {

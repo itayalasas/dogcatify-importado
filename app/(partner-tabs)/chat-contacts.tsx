@@ -80,7 +80,6 @@ export default function ChatContacts() {
 
       return true;
     } catch (error) {
-      console.error('Error fetching partner profile:', error);
       setLoading(false);
       return false;
     }
@@ -144,9 +143,7 @@ export default function ChatContacts() {
       );
 
       setConversations(processedConversations);
-      console.log('Conversations loaded:', processedConversations.length);
     } catch (error) {
-      console.error('Error fetching conversations:', error);
     } finally {
       setLoading(false);
     }

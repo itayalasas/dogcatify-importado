@@ -274,7 +274,6 @@ serve(async (req: Request) => {
 
     return jsonResponse({ error: "Invalid action" }, 400);
   } catch (error) {
-    console.error("Mercado Pago OAuth function error:", error);
     return jsonResponse(
       {
         success: false,

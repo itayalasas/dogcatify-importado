@@ -77,7 +77,6 @@ export default function ManageAdoptions() {
 
         setAdoptionPets((petsData || []) as AdoptionPet[]);
       } catch (error) {
-        console.error('Error loading adoption management:', error);
         Alert.alert('Error', 'No se pudo cargar la gestión de adopciones');
       } finally {
         setLoading(false);

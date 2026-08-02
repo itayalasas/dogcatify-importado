@@ -25,7 +25,6 @@ const PromotionWrapper = ({ promotion, onPress, onLike }: { promotion: any; onPr
 
         if (error) throw error;
       } catch (error) {
-        console.error('Error incrementing promotion views:', error);
       }
     };
 
@@ -76,7 +75,6 @@ export default function Home() {
         fetchPromotions()
       ]);
     } catch (error) {
-      console.error('Error fetching feed data:', error);
     } finally {
       setLoading(false);
     }
@@ -111,7 +109,6 @@ export default function Home() {
 
       setPosts(processedPosts);
     } catch (error) {
-      console.error('Error fetching posts:', error);
     }
   };
 
@@ -144,7 +141,6 @@ export default function Home() {
 
       setPromotions(processedPromotions);
     } catch (error) {
-      console.error('Error fetching promotions:', error);
     }
   };
 
@@ -261,7 +257,6 @@ export default function Home() {
         )
       );
     } catch (error) {
-      console.error('Error updating like:', error);
     }
   };
 
@@ -303,30 +298,21 @@ export default function Home() {
         )
       );
     } catch (error) {
-      console.error('Error updating promotion like:', error);
     }
   };
 
   const handleComment = (postId: string, post?: any) => {
     // Navigate to comments screen or open comments modal
-    console.log('Open comments for post:', postId);
   };
 
   const handleShare = (postId: string) => {
     // Handle share functionality
-    console.log('Share post:', postId);
   };
 
   const handlePromotionPress = async (promotion: any) => {
     try {
-      console.log('=== PROMOTION CLICK DEBUG ===');
-      console.log('Promotion ID:', promotion.id);
-      console.log('Current clicks:', promotion.clicks);
-      console.log('CTA URL:', promotion.ctaUrl);
-      console.log('Current user ID:', currentUser?.id);
       
       // Increment clicks
-      console.log('Attempting to increment clicks...');
       
       const newClicksCount = (promotion.clicks || 0) + 1;
       
@@ -336,7 +322,6 @@ export default function Home() {
         const token = await supabaseClient.auth.getSession();
         const accessToken = token.data?.session?.access_token;
         
-        console.log('Has access token:', !!accessToken);
         
         const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
         const supabaseKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
@@ -352,7 +337,6 @@ export default function Home() {
           headers['Authorization'] = `Bearer ${accessToken}`;
         }
         
-        console.log('Making API call with headers:', Object.keys(headers));
         
         const response = await fetch(`${supabaseUrl}/rest/v1/promotions?id=eq.${promotion.id}`, {
           method: 'PATCH',
@@ -362,21 +346,16 @@ export default function Home() {
           })
         });
         
-        console.log('API response status:', response.status);
         
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('API error response:', errorText);
           throw new Error(`API Error: ${response.status} - ${errorText}`);
         }
         
         const responseData = await response.json();
-        console.log('API response data:', responseData);
         
-        console.log('Clicks incremented successfully. New count:', newClicksCount);
         
         // Verify the update worked
-        console.log('Verifying update in database...');
         const verifyHeaders: Record<string, string> = {
           'apikey': supabaseKey || '',
           'Authorization': accessToken ? `Bearer ${accessToken}` : `Bearer ${supabaseKey || ''}`
@@ -388,17 +367,13 @@ export default function Home() {
         
         if (verifyResponse.ok) {
           const verifyData = await verifyResponse.json();
-          console.log('Database verification - clicks value:', verifyData[0]?.clicks);
           
           if (verifyData[0]?.clicks === newClicksCount) {
-            console.log('✅ Update verified successfully in database');
           } else {
-            console.log('❌ Update not reflected in database');
           }
         }
         
       } catch (error) {
-        console.error('Error incrementing clicks:', error);
         // Don't throw error, continue with navigation
       }
       
@@ -420,11 +395,9 @@ export default function Home() {
         )
       );
       
-      console.log('Local state updated. New clicks:', newClicksCount);
 
       // Handle promotion CTA URL
       if (promotion.ctaUrl) {
-        console.log('Opening promotion URL:', promotion.ctaUrl);
         
         if (promotion.ctaUrl.startsWith('dogcatify://')) {
           // Handle internal app links
@@ -432,63 +405,48 @@ export default function Home() {
           const type = urlParts[0]; // 'services', 'products', 'partners'
           const id = urlParts[1];
           
-          console.log('Internal link - Type:', type, 'ID:', id);
           
           switch (type) {
             case 'services':
-              console.log('Navigating to service:', id);
               router.push(`/services/${id}`);
               break;
             case 'products':
-              console.log('Navigating to product:', id);
               router.push(`/products/${id}`);
               break;
             case 'partners':
-              console.log('Navigating to partner:', id);
               router.push(`/services/partner/${id}`);
               break;
             default:
-              console.warn('Unknown internal link type:', type);
           }
         } else if (promotion.ctaUrl.startsWith('http')) {
           // Handle external links
-          console.log('External link detected:', promotion.ctaUrl);
           try {
             if (Platform.OS === 'web') {
-              console.log('Opening in web browser');
               window.open(promotion.ctaUrl, '_blank');
             } else {
-              console.log('Opening with Linking API');
               const { Linking } = require('react-native');
               const supported = await Linking.canOpenURL(promotion.ctaUrl);
               if (supported) {
                 await Linking.openURL(promotion.ctaUrl);
               } else {
-                console.error('URL not supported:', promotion.ctaUrl);
                 Alert.alert('Error', 'No se puede abrir este enlace');
               }
             }
           } catch (error) {
-            console.error('Error opening external link:', error);
             Alert.alert('Error', 'No se pudo abrir el enlace');
           }
         } else {
-          console.warn('Invalid URL format:', promotion.ctaUrl);
           Alert.alert('Error', 'Formato de enlace inválido');
         }
       } else if (promotion.partnerId) {
         // Fallback: Navigate to partner profile if no CTA URL
-        console.log('No CTA URL, navigating to partner:', promotion.partnerId);
         router.push(`/services/partner/${promotion.partnerId}`);
       } else {
         // No action defined
-        console.log('No action defined for promotion');
         Alert.alert('Información', 'Esta promoción no tiene enlace configurado');
       }
       
-      console.log('=== END PROMOTION CLICK DEBUG ===');
     } catch (error) {
-      console.error('Error handling promotion press:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       Alert.alert('Error', `Error al procesar la promoción: ${errorMessage}`);
     }

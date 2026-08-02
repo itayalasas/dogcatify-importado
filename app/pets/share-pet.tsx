@@ -151,7 +151,6 @@ export default function SharePetScreen() {
       setUserSuggestions(availableUsers);
       setShowSuggestions(true);
     } catch (error) {
-      console.error('Error searching users:', error);
       setUserSuggestions([]);
     } finally {
       setSearchingUsers(false);
@@ -181,7 +180,6 @@ export default function SharePetScreen() {
       if (error) throw error;
       if (data) setPetName(data.name);
     } catch (error) {
-      console.error('Error loading pet:', error);
     }
   };
 
@@ -204,7 +202,6 @@ export default function SharePetScreen() {
       if (error) throw error;
       setShares(data || []);
     } catch (error) {
-      console.error('Error loading shares:', error);
     } finally {
       setLoadingShares(false);
     }
@@ -229,7 +226,6 @@ export default function SharePetScreen() {
         .maybeSingle();
 
       if (checkError) {
-        console.error('Error checking existing share:', checkError);
         throw checkError;
       }
 
@@ -285,7 +281,6 @@ export default function SharePetScreen() {
         ]
       );
     } catch (error) {
-      console.error('Error sharing pet:', error);
       Alert.alert('Error', 'No se pudo compartir la mascota');
     } finally {
       setLoading(false);
@@ -311,7 +306,6 @@ export default function SharePetScreen() {
               if (error) throw error;
               loadShares();
             } catch (error) {
-              console.error('Error revoking share:', error);
               Alert.alert('Error', 'No se pudo revocar el acceso');
             }
           },

@@ -38,7 +38,6 @@ export const extractMedicalRecordsFromImage = async (
   base64Data?: string
 ): Promise<ExtractedMedicalRecords> => {
   try {
-    console.log(`Processing ${recordType} card image:`, imageUri);
 
     if (!imageUri && !base64Data) {
       throw new Error('No se proporcionó una imagen válida');
@@ -49,11 +48,9 @@ export const extractMedicalRecordsFromImage = async (
 
     if (base64Data) {
       // Use the provided base64 data directly
-      console.log('Using provided base64 data, length:', base64Data.length);
       base64Image = base64Data;
     } else {
       // Fallback to FileSystem if no base64 provided
-      console.log('Reading image as base64 using FileSystem...');
 
       // Validate FileSystem module
       if (!FileSystem || !FileSystem.EncodingType) {
@@ -64,9 +61,7 @@ export const extractMedicalRecordsFromImage = async (
         base64Image = await FileSystem.readAsStringAsync(imageUri, {
           encoding: FileSystem.EncodingType.Base64,
         });
-        console.log('Image converted to base64, length:', base64Image?.length || 0);
       } catch (readError: any) {
-        console.error('Error reading image file:', readError);
         throw new Error(`No se pudo leer la imagen: ${readError.message || 'Error desconocido'}`);
       }
     }
@@ -86,7 +81,6 @@ export const extractMedicalRecordsFromImage = async (
     // Call our Edge Function
     const functionUrl = `${supabaseUrl}/functions/v1/extract-medical-card-info`;
 
-    console.log('Calling Edge Function:', functionUrl);
 
     const response = await fetch(functionUrl, {
       method: 'POST',
@@ -110,18 +104,15 @@ export const extractMedicalRecordsFromImage = async (
         throw new Error(result.message || 'La especie detectada no coincide con tu mascota');
       }
 
-      console.error('Edge Function error:', result);
       throw new Error(result.message || result.error || `Edge Function error: ${response.statusText}`);
     }
 
-    console.log(`Extracted ${result.totalFound} records:`, result.records);
 
     return {
       records: result.records as ExtractedMedicalRecord[],
       totalFound: result.totalFound || result.records.length
     };
   } catch (error) {
-    console.error('Error extracting medical record from image:', error);
     throw error;
   }
 };

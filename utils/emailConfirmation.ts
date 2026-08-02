@@ -92,10 +92,6 @@ const resolveSupabaseFunctionUrl = (
         !matchesSupabaseFunctionPath(configuredUrl, functionName)
       )
     ) {
-      console.warn(
-        `[emailConfirmation] ${envKey} does not point to the current ${functionName} endpoint. Using current project fallback instead:`,
-        configuredUrl,
-      );
       return baseUrl ? `${baseUrl}/functions/v1/${functionName}` : configuredUrl;
     }
 
@@ -179,7 +175,6 @@ const getRoleFlagsFromAuthUser = async (
       }
     }
   } catch (error) {
-    console.warn('Error resolving role flags from auth user, falling back to defaults:', error);
   }
 
   return {
@@ -197,7 +192,6 @@ const getServiceClient = () => {
   const supabaseServiceKey = envConfig.get('EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY');
   
   if (!supabaseServiceKey) {
-    console.warn('Service role key not available, using regular client');
     return supabaseClient;
   }
   
@@ -217,7 +211,6 @@ const parseJsonSafely = (value: string): any | null => {
   try {
     return JSON.parse(value);
   } catch (error) {
-    console.warn('Could not parse JSON response from confirm-email edge function:', error);
     return null;
   }
 };
@@ -227,7 +220,6 @@ const extractTokenFromConfirmationUrl = (confirmationUrl: string): string | null
     const url = new URL(confirmationUrl);
     return url.searchParams.get('token_hash') || url.searchParams.get('token');
   } catch (error) {
-    console.warn('Could not extract token from confirmation URL:', error);
     return null;
   }
 };
@@ -242,14 +234,9 @@ const confirmEmailViaEdgeFunction = async (
     const confirmEmailApiUrl = resolveSupabaseFunctionUrl('confirm-email', 'EXPO_PUBLIC_CONFIRM_EMAIL_API_URL');
 
     if (!confirmEmailApiUrl) {
-      console.warn('confirm-email URL could not be resolved');
       return null;
     }
 
-    console.log('[emailConfirmation] confirm-email resolved target:', {
-      confirmEmailApiUrl,
-      source: envConfig.get('EXPO_PUBLIC_CONFIRM_EMAIL_API_URL') ? 'envConfig' : 'fallback-current-project',
-    });
 
     const response = await fetch(confirmEmailApiUrl, {
       method: 'POST',
@@ -265,16 +252,8 @@ const confirmEmailViaEdgeFunction = async (
     const responseText = await response.text();
     const parsedBody = parseJsonSafely(responseText);
 
-    console.log('[emailConfirmation] confirm-email edge response:', {
-      url: confirmEmailApiUrl,
-      status: response.status,
-      ok: response.ok,
-      hasParsedBody: !!parsedBody,
-      parsedError: parsedBody?.error || null,
-    });
 
     if (!response.ok && response.status === 404 && parsedBody?.error === 'TOKEN_NOT_FOUND') {
-      console.warn('[emailConfirmation] confirm-email returned TOKEN_NOT_FOUND, trying local confirmation fallback');
       return null;
     }
 
@@ -303,7 +282,6 @@ const confirmEmailViaEdgeFunction = async (
       confirmedAt: parsedBody?.confirmedAt,
     };
   } catch (error) {
-    console.warn('confirm-email edge function unavailable, falling back to local confirmation flow:', error);
     return null;
   }
 };
@@ -350,7 +328,6 @@ export const createEmailConfirmationToken = async (
 
     return token;
   } catch (error) {
-    console.error('Error creating email confirmation token:', error);
     throw error;
   }
 };
@@ -365,11 +342,9 @@ export const confirmEmailCustomLegacy = async (
   try {
     await ensureRuntimeEnvConfig(true);
 
-    console.log('Verifying token:', token, 'type:', type);
 
     const edgeResult = await confirmEmailViaEdgeFunction(token, type);
     if (edgeResult) {
-      console.log('confirm-email edge function result:', edgeResult);
       return edgeResult;
     }
 
@@ -385,7 +360,6 @@ export const confirmEmailCustomLegacy = async (
       .single();
 
     if (anyTokenError) {
-      console.error('Token not found at all:', anyTokenError);
       return { success: false, error: 'TOKEN_NOT_FOUND' };
     }
 
@@ -396,11 +370,6 @@ export const confirmEmailCustomLegacy = async (
     const tokenAlreadyUsed = Boolean(anyTokenData.is_confirmed);
 
     if (tokenAlreadyUsed) {
-      console.log('Token already used, continuing with idempotent confirmation flow:', {
-        userId: anyTokenData.user_id,
-        email: anyTokenData.email,
-        confirmedAt: anyTokenData.confirmed_at,
-      });
     }
 
     // Check if token has expired. Already-confirmed tokens are allowed to pass.
@@ -426,12 +395,9 @@ export const confirmEmailCustomLegacy = async (
       .eq('id', anyTokenData.id);
 
     if (updateError) {
-      console.error('Error updating token:', updateError);
-      console.warn('Token confirmation row could not be updated, but the auth/profile flow can continue.');
     }
 
     // CRITICAL: Update user in auth.users to mark email as confirmed
-    console.log('Updating user in auth.users to mark email as confirmed...');
     const { data: authUserData } = await serviceClient.auth.admin.getUserById(anyTokenData.user_id);
     const existingAuthMetadata = authUserData?.user?.user_metadata || {};
     const { error: authUpdateError } = await serviceClient.auth.admin.updateUserById(
@@ -447,11 +413,8 @@ export const confirmEmailCustomLegacy = async (
     );
 
     if (authUpdateError) {
-      console.error('Error updating user in auth.users:', authUpdateError);
       // Don't fail the confirmation if auth update fails, but log it
-      console.warn('Email confirmed in our system but not in auth.users');
     } else {
-      console.log('✅ User email confirmed in auth.users successfully');
     }
     // Update user profile to mark email as confirmed
     const { data: existingProfile } = await serviceClient
@@ -485,11 +448,9 @@ export const confirmEmailCustomLegacy = async (
       .eq('id', anyTokenData.user_id);
 
     if (profileError) {
-      console.error('Error updating profile:', profileError);
       // Don't fail the confirmation if profile update fails
     }
 
-    console.log('Email confirmation successful for user:', anyTokenData.user_id);
 
     return {
       success: true,
@@ -498,7 +459,6 @@ export const confirmEmailCustomLegacy = async (
       alreadyConfirmed: tokenAlreadyUsed,
     };
   } catch (error) {
-    console.error('Error verifying email confirmation token:', error);
     return { success: false, error: 'INTERNAL_ERROR' };
   }
 };
@@ -510,11 +470,9 @@ export const confirmEmailCustom = async (
   try {
     await ensureRuntimeEnvConfig(true);
 
-    console.log('Verifying token:', token, 'type:', type);
 
     const edgeResult = await confirmEmailViaEdgeFunction(token, type);
     if (edgeResult) {
-      console.log('confirm-email edge function result:', edgeResult);
       return edgeResult;
     }
 
@@ -551,10 +509,6 @@ export const confirmEmailCustom = async (
         return { success: false, error: 'PROFILE_NOT_FOUND' };
       }
 
-      console.error('Error confirming email atomically:', {
-        error: confirmationError,
-        message: rawMessage,
-      });
 
       return { success: false, error: 'CONFIRMATION_TRANSACTION_FAILED' };
     }
@@ -566,7 +520,6 @@ export const confirmEmailCustom = async (
       const { data: authUserData } = await serviceClient.auth.admin.getUserById(confirmation.user_id);
       authMetadata = authUserData?.user?.user_metadata || {};
     } catch (error) {
-      console.warn('Could not read auth metadata for confirmation:', error);
     }
 
     const { error: authUpdateError } = await serviceClient.auth.admin.updateUserById(
@@ -582,7 +535,6 @@ export const confirmEmailCustom = async (
     );
 
     if (authUpdateError) {
-      console.error('Error updating user in auth.users:', authUpdateError);
       return {
         success: false,
         error: 'AUTH_UPDATE_ERROR',
@@ -593,7 +545,6 @@ export const confirmEmailCustom = async (
       };
     }
 
-    console.log('Email confirmation successful for user:', confirmation.user_id);
 
     return {
       success: true,
@@ -603,7 +554,6 @@ export const confirmEmailCustom = async (
       confirmedAt: confirmation.confirmed_at,
     };
   } catch (error) {
-    console.error('Error verifying email confirmation token:', error);
     return { success: false, error: 'INTERNAL_ERROR' };
   }
 };
@@ -620,13 +570,11 @@ export const isEmailConfirmed = async (userId: string): Promise<boolean> => {
       .single();
 
     if (error) {
-      console.error('Error checking email confirmation:', error);
       return false;
     }
 
     return data?.email_confirmed || false;
   } catch (error) {
-    console.error('Error checking email confirmation:', error);
     return false;
   }
 };
@@ -641,7 +589,6 @@ export const completeUserRegistration = async (
   displayName: string
 ): Promise<{ success: boolean; error?: string }> => {
   try {
-    console.log('Completing user registration for:', userId);
     
     // Use service client to create profile
     const serviceClient = getServiceClient();
@@ -666,18 +613,15 @@ export const completeUserRegistration = async (
       });
 
     if (profileError) {
-      console.error('Error creating user profile:', profileError);
       return { success: false, error: 'Error creating user profile' };
     }
 
-    console.log('User profile created successfully');
     
     // Here you can add other initial records if needed
     // For example: default settings, welcome notifications, etc.
     
     return { success: true };
   } catch (error) {
-    console.error('Error completing user registration:', error);
     return { success: false, error: 'Internal error completing registration' };
   }
 };
@@ -687,16 +631,12 @@ export const completeUserRegistration = async (
 export const generateConfirmationUrl = (token: string, type: 'signup' | 'password_reset' = 'signup'): string => {
   const baseUrl = envConfig.getOrDefault('EXPO_PUBLIC_APP_DOMAIN', 'https://app.dogcatify.com');
 
-  console.log('🔗 Generating confirmation URL with base:', baseUrl);
-  console.log('🔗 Token type:', type);
 
   if (type === 'password_reset') {
     const resetUrl = `${baseUrl}/auth/reset-password?token=${token}`;
-    console.log('🔗 Password reset URL:', resetUrl);
     return resetUrl;
   } else {
     const confirmUrl = `${baseUrl}/auth/confirm?token_hash=${token}&type=signup`;
-    console.log('🔗 Email confirmation URL:', confirmUrl);
     return confirmUrl;
   }
 };
@@ -713,7 +653,6 @@ const sendEmailViaSupabase = async (
   await ensureRuntimeEnvConfig();
 
   const appConfig = await getAppConfig(true).catch((error) => {
-    console.warn('[emailConfirmation] Could not load app config for email dispatch, using env fallback:', error);
     return null;
   });
 
@@ -728,28 +667,9 @@ const sendEmailViaSupabase = async (
     return { success: false, error: 'EMAIL_API_URL not configured' };
   }
 
-  console.log('[emailConfirmation] Resolved email API target:', {
-    emailApiUrl,
-    source: configEmailApiUrl ? 'app_config' : 'env_or_fallback',
-    fallbackUrl: fallbackEmailApiUrl || null,
-  });
 
-  console.log(`📧 === SENDING ${templateName.toUpperCase()} EMAIL ===`);
-  console.log('📧 Recipient:', recipientEmail);
-  console.log('📧 Data:', JSON.stringify(data, null, 2));
-  console.log('[emailConfirmation] Email dispatch configuration:', {
-    emailApiUrl,
-    configSource: configEmailApiUrl ? 'app_config' : 'env_or_fallback',
-    hasEmailApiKey: !!emailApiKey,
-    emailApiKeySource: configEmailApiKey ? 'app_config' : 'env_or_fallback',
-  });
 
   try {
-    /*if (!EMAIL_API_URL || !EMAIL_API_KEY) {
-      console.error('❌ Email API configuration missing!');
-      return { success: false, error: 'Email API configuration missing' };
-    }*/
-
     const emailPayload = {
       template_name: templateName,
       recipient_email: recipientEmail,
@@ -757,8 +677,6 @@ const sendEmailViaSupabase = async (
       ...extraPayload,
     };
 
-    console.log('📧 Calling Supabase function:', emailApiUrl);
-    console.log('📧 Payload:', JSON.stringify(emailPayload, null, 2));
 
     const response = await fetch(emailApiUrl, {
       method: 'POST',
@@ -770,27 +688,20 @@ const sendEmailViaSupabase = async (
       body: JSON.stringify(emailPayload),
     });
 
-    console.log('📧 Response status:', response.status);
 
     const responseText = await response.text();
-    console.log('📧 Response body preview:', responseText.slice(0, 1000));
 
     if (!response.ok) {
-      console.error('❌ Email API error:', response.status, responseText);
       return { success: false, error: `API error: ${response.status} - ${responseText}` };
     }
 
     try {
       const result = JSON.parse(responseText);
-      console.log('✅ Email sent successfully!');
       return { success: true, log_id: result.log_id };
     } catch (parseError) {
-      console.warn('⚠️ Could not parse response as JSON, but request succeeded');
       return { success: true };
     }
   } catch (error: any) {
-    console.error('❌ Error sending email:', error);
-    console.error('❌ Error stack:', error.stack);
     return { success: false, error: error.message || 'Unknown error' };
   }
 };
@@ -836,7 +747,6 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
   try {
     await ensureRuntimeEnvConfig();
 
-    console.log('Resending confirmation email for:', email);
     const serviceClient = getServiceClient();
 
     // First try to find user in profiles table
@@ -852,33 +762,27 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
     if (profileData) {
       userId = profileData.id;
       displayName = profileData.display_name || 'Usuario';
-      console.log('Found user in profiles:', userId);
     } else {
       // If not found in profiles, try to find in auth.users using service client
-      console.log('User not found in profiles, checking auth.users...');
       const serviceClient = getServiceClient();
 
       const { data: authUser, error: authError } = await serviceClient.auth.admin.listUsers();
 
       if (authError) {
-        console.error('Error listing users from auth:', authError);
         return { success: false, error: 'Error buscando usuario' };
       }
 
       const foundUser = authUser.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
 
       if (!foundUser) {
-        console.error('User not found in auth.users either');
         return { success: false, error: 'No existe una cuenta con este correo electrónico' };
       }
 
       userId = foundUser.id;
       displayName = (foundUser.user_metadata?.full_name as string) || 'Usuario';
-      console.log('Found user in auth.users:', userId);
       const roleFlags = resolveProfileRoleFlagsFromMetadata(foundUser.user_metadata, null);
 
       // Create the missing profile
-      console.log('Creating missing profile for user...');
       const { error: createProfileError } = await serviceClient
         .from('profiles')
         .insert({
@@ -896,10 +800,8 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
         .single();
 
       if (createProfileError) {
-        console.error('Error creating profile:', createProfileError);
         // Continue anyway, we can still send the email
       } else {
-        console.log('Profile created successfully');
       }
     }
 
@@ -930,13 +832,10 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
         .eq('id', userId);
 
       if (roleSyncError) {
-        console.warn('Could not sync profile role flags during resend:', roleSyncError);
       }
     } catch (syncError) {
-      console.warn('Could not sync profile role flags during resend:', syncError);
     }
 
-    console.log('Resending confirmation email for user:', userId);
 
     // Invalidate any existing signup tokens for this user
     const { error: invalidateError } = await serviceClient
@@ -950,14 +849,12 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
       .eq('is_confirmed', false);
 
     if (invalidateError) {
-      console.warn('Could not invalidate existing tokens:', invalidateError);
     }
 
     // Create new confirmation token
     const token = await createEmailConfirmationToken(userId, email, 'signup');
     const confirmationUrl = generateConfirmationUrl(token, 'signup');
 
-    console.log('New confirmation URL generated:', confirmationUrl);
 
     // Send confirmation email using new API
     const result = await sendConfirmationEmailAPI(
@@ -970,10 +867,8 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
       return { success: false, error: result.error || 'Error sending email' };
     }
 
-    console.log('Confirmation email resent successfully');
     return { success: true };
   } catch (error) {
-    console.error('Error resending confirmation email:', error);
     return { success: false, error: 'Error al reenviar email de confirmación' };
   }
 };

@@ -198,7 +198,6 @@ export default function PartnerSubscriptionScreen() {
 
       setSubscriptions((subscriptionsData || []) as PartnerSubscriptionRow[]);
     } catch (error) {
-      console.error('Error loading partner subscription data:', error);
       Alert.alert('Error', 'No se pudieron cargar los planes del aliado.');
     } finally {
       setLoading(false);
@@ -317,7 +316,6 @@ export default function PartnerSubscriptionScreen() {
 
       await loadData();
     } catch (error) {
-      console.error('Error creating partner subscription:', error);
       Alert.alert(
         'Error',
         error instanceof Error ? error.message : 'No se pudo iniciar la suscripción del aliado.'
@@ -357,7 +355,6 @@ export default function PartnerSubscriptionScreen() {
               Alert.alert('Plan cancelado', 'La suscripción quedó cancelada correctamente.');
               await loadData();
             } catch (error) {
-              console.error('Error cancelling partner subscription:', error);
               Alert.alert('Error', 'No se pudo cancelar la suscripción.');
             } finally {
               setCancelling(false);
@@ -378,7 +375,6 @@ export default function PartnerSubscriptionScreen() {
       }
       await Linking.openURL(currentSubscription.payment_url);
     } catch (error) {
-      console.error('Error opening payment URL:', error);
       Alert.alert('Error', 'No se pudo abrir Mercado Pago.');
     }
   };

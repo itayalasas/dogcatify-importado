@@ -28,14 +28,12 @@ serve(async (req: Request) => {
       });
     }
 
-    console.log('Medical history request:', { petId, hasToken: !!token });
 
     // Initialize Supabase client with service role for unrestricted access
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error('Missing Supabase environment variables');
       return new Response('Server configuration error', {
         status: 500,
         headers: { 'Content-Type': 'text/plain', ...corsHeaders },
@@ -53,7 +51,6 @@ serve(async (req: Request) => {
 
     // If token is provided, verify it first
     if (token) {
-      console.log('Verifying access token...');
       
       const { data: tokenData, error: tokenError } = await supabase
         .from('medical_history_tokens')
@@ -61,15 +58,8 @@ serve(async (req: Request) => {
         .eq('token', token)
         .single();
 
-      console.log('Token verification result:', { 
-        found: !!tokenData, 
-        error: tokenError?.message,
-        petId: tokenData?.pet_id,
-        expiresAt: tokenData?.expires_at
-      });
 
       if (tokenError || !tokenData) {
-        console.error('Invalid token:', tokenError);
         return new Response(`
           <!DOCTYPE html>
           <html>
@@ -91,7 +81,6 @@ serve(async (req: Request) => {
       const expiresAt = new Date(tokenData.expires_at);
       
       if (now > expiresAt) {
-        console.log('Token expired');
         return new Response(`
           <!DOCTYPE html>
           <html>
@@ -139,17 +128,11 @@ serve(async (req: Request) => {
           })
           .eq('id', tokenData.id);
         
-        console.log('Token access tracked:', {
-          accessCount: (tokenData.access_count || 0) + 1,
-          petId: tokenData.pet_id
-        });
       } catch (trackingError) {
-        console.warn('Could not update access tracking:', trackingError);
       }
 
       // Verify token matches the requested pet
       if (tokenData.pet_id !== petId) {
-        console.error('Token pet ID mismatch');
         return new Response(`
           <!DOCTYPE html>
           <html>
@@ -166,28 +149,18 @@ serve(async (req: Request) => {
         });
       }
       
-      console.log('Token verified successfully for pet:', tokenData.pet_id);
     }
 
-    console.log('Fetching medical history for pet:', petId);
 
     // Fetch pet data
-    console.log('Fetching pet data with service role...');
     const { data: petData, error: petError } = await supabase
       .from('pets')
       .select('*')
       .eq('id', petId)
       .single();
 
-    console.log('Pet data result:', { 
-      found: !!petData, 
-      error: petError?.message,
-      petName: petData?.name,
-      ownerId: petData?.owner_id
-    });
 
     if (petError || !petData) {
-      console.error('Pet not found:', petError);
       return new Response('Pet not found', {
         status: 404,
         headers: { 'Content-Type': 'text/plain', ...corsHeaders },
@@ -195,22 +168,14 @@ serve(async (req: Request) => {
     }
 
     // Fetch owner data
-    console.log('Fetching owner data for owner_id:', petData.owner_id);
     const { data: ownerData, error: ownerError } = await supabase
       .from('profiles')
       .select('display_name, email, phone')
       .eq('id', petData.owner_id)
       .single();
 
-    console.log('Owner data result:', { 
-      found: !!ownerData, 
-      error: ownerError?.message,
-      ownerName: ownerData?.display_name,
-      ownerEmail: ownerData?.email
-    });
 
     if (ownerError || !ownerData) {
-      console.error('Owner not found:', ownerError);
       return new Response('Owner not found', {
         status: 404,
         headers: { 'Content-Type': 'text/plain', ...corsHeaders },
@@ -218,38 +183,19 @@ serve(async (req: Request) => {
     }
 
     // Fetch medical records
-    console.log('Fetching medical records for pet_id:', petId);
     const { data: medicalRecords, error: recordsError } = await supabase
       .from('pet_health')
       .select('*')
       .eq('pet_id', petId)
       .order('created_at', { ascending: false });
 
-    console.log('Medical records result:', { 
-      count: medicalRecords?.length || 0, 
-      error: recordsError?.message,
-      recordTypes: medicalRecords?.map(r => r.type) || [],
-      sampleRecord: medicalRecords?.[0] || null
-    });
 
     if (recordsError) {
-      console.error('Error fetching medical records:', recordsError);
     } else {
-      console.log('Medical records fetched successfully:', {
-        totalRecords: medicalRecords?.length || 0,
-        recordsByType: {
-          vaccines: medicalRecords?.filter(r => r.type === 'vaccine').length || 0,
-          illnesses: medicalRecords?.filter(r => r.type === 'illness').length || 0,
-          allergies: medicalRecords?.filter(r => r.type === 'allergy').length || 0,
-          dewormings: medicalRecords?.filter(r => r.type === 'deworming').length || 0,
-          weight: medicalRecords?.filter(r => r.type === 'weight').length || 0
-        }
-      });
     }
 
     const records = medicalRecords || [];
 
-    console.log('Generating HTML for pet:', petData.name);
 
     // Helper functions
     const formatAge = (pet: any): string => {
@@ -325,19 +271,6 @@ serve(async (req: Request) => {
     const dewormings = records.filter(r => r.type === 'deworming');
     const weightRecords = records.filter(r => r.type === 'weight');
 
-    console.log('Records grouped by type:', {
-      vaccines: vaccines.length,
-      illnesses: illnesses.length,
-      allergies: allergies.length,
-      dewormings: dewormings.length,
-      weightRecords: weightRecords.length,
-      totalRecords: records.length,
-      sampleVaccine: vaccines[0] || null,
-      sampleIllness: illnesses[0] || null,
-      sampleAllergy: allergies[0] || null,
-      sampleDeworming: dewormings[0] || null,
-      sampleWeight: weightRecords[0] || null
-    });
 
 
     // Generate HTML content
@@ -913,7 +846,6 @@ serve(async (req: Request) => {
 </html>
     `;
 
-    console.log('HTML content generated successfully, length:', htmlContent.length);
 
     return new Response(htmlContent, {
       status: 200,
@@ -925,7 +857,6 @@ serve(async (req: Request) => {
     });
 
   } catch (error) {
-    console.error('Error in medical-history function:', error);
     return new Response(
       `Error generating medical history: ${error.message}`,
       {

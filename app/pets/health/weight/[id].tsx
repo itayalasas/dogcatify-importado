@@ -68,7 +68,6 @@ export default function PetWeight() {
   // Separate effect to create initial weight record after pet data is loaded
   useEffect(() => {
     if (pet && currentUser && weightRecords.length === 0 && pet.weight) {
-      console.log('Pet loaded and no weight records found, creating initial record...');
       createInitialWeightRecord();
     }
   }, [pet, weightRecords, currentUser]);
@@ -96,12 +95,6 @@ export default function PetWeight() {
 
   const createInitialWeightRecord = async () => {
     if (!pet || !pet.weight || !currentUser || weightRecords.length > 0) {
-      console.log('Cannot create initial weight record - missing data or records already exist', {
-        hasPet: !!pet,
-        hasWeight: !!pet?.weight,
-        hasUser: !!currentUser,
-        existingRecords: weightRecords.length
-      });
       return;
     }
     
@@ -114,21 +107,17 @@ export default function PetWeight() {
         .eq('type', 'weight');
       
       if (checkError) {
-        console.error('Error checking existing weight records:', checkError);
         return;
       }
       
       if (existingRecords && existingRecords.length > 0) {
-        console.log('Weight records already exist in database, skipping creation');
         return;
       }
     } catch (error) {
-      console.error('Error in duplicate check:', error);
       return;
     }
     
     try {
-      console.log('Creating initial weight record for pet:', pet.name, 'Weight:', pet.weight);
       
       // Crear un registro de peso inicial con la fecha de creación de la mascota
       const initialDate = pet.created_at ? new Date(pet.created_at) : new Date();
@@ -148,15 +137,12 @@ export default function PetWeight() {
         created_at: new Date().toISOString()
       };
       
-      console.log('Initial weight data to insert:', initialWeightData);
       
       const { error } = await supabaseClient.from('pet_health').insert(initialWeightData);
       
       if (error) {
-        console.error('Error creating initial weight record:', error);
         return;
       } else {
-        console.log('Initial weight record created successfully');
       }
       
       // Refrescar los registros después de crear el inicial
@@ -165,7 +151,6 @@ export default function PetWeight() {
       }, 500);
       
     } catch (error) {
-      console.error('Error creating initial weight record:', error);
     }
   };
 
@@ -192,14 +177,11 @@ export default function PetWeight() {
         setWeightUnit(data.weightDisplay.unit);
       }
     } catch (error) {
-      console.error('Error fetching pet details:', error);
     }
   };
 
   const fetchWeightRecords = async () => {
     try {
-      console.log('=== FETCH WEIGHT RECORDS DEBUG ===');
-      console.log('Fetching weight records for pet:', id);
       
       const { data, error } = await supabaseClient
         .from('pet_health')
@@ -208,15 +190,11 @@ export default function PetWeight() {
         .eq('type', 'weight')
         .order('created_at', { ascending: true });
       
-      console.log('Query result:', data);
-      console.log('Query error:', error);
       
       if (error) {
-        console.error('❌ Error fetching weight records:', error);
         throw error;
       }
       
-      console.log('✅ Weight records fetched:', data?.length || 0);
       
       const formattedRecords = data.map(record => ({
         id: record.id,
@@ -229,11 +207,8 @@ export default function PetWeight() {
         created_at: record.created_at
       }));
       
-      console.log('Formatted weight records:', formattedRecords);
       setWeightRecords(formattedRecords);
-      console.log('=== END FETCH WEIGHT RECORDS DEBUG ===');
     } catch (error) {
-      console.error('Error fetching weight records:', error);
     }
   };
 
@@ -373,7 +348,6 @@ export default function PetWeight() {
       ]);
       
     } catch (error) {
-      console.error('Error saving weight:', error);
       Alert.alert('Error', 'No se pudo registrar el peso');
     } finally {
       setLoading(false);
@@ -545,7 +519,6 @@ export default function PetWeight() {
       await AsyncStorage.setItem(`weight_ai_tips_${id}`, JSON.stringify(tips));
       setAiTips(data.tips || []);
     } catch (error: any) {
-      console.error('Error generating weight advice:', error);
       setAiError('No se pudieron generar los consejos. Intenta de nuevo.');
     } finally {
       setLoadingAI(false);

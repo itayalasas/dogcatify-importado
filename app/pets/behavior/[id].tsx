@@ -203,7 +203,6 @@ export default function PetBehaviorAssessment() {
 
       setTraits(initialTraits);
     } catch (error) {
-      console.error('Error fetching pet data:', error);
       Alert.alert('Error', 'No se pudo cargar la información de la mascota');
     } finally {
       setLoading(false);
@@ -260,7 +259,6 @@ export default function PetBehaviorAssessment() {
       setAiRecommendations(data.recommendations);
       setUseAI(true);
     } catch (error) {
-      console.error('Error generating AI recommendations:', error);
       Alert.alert(
         'Error',
         'No se pudieron generar recomendaciones con IA. Usando recomendaciones predeterminadas.'
@@ -448,7 +446,6 @@ export default function PetBehaviorAssessment() {
         params: { id: pet.id, refresh: 'true', activeTab: 'behavior' }
       });
     } catch (error) {
-      console.error('Error saving assessment:', error);
       Alert.alert('Error', 'No se pudo guardar la evaluación');
     } finally {
       setSaving(false);

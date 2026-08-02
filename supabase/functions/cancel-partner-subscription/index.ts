@@ -252,9 +252,6 @@ Deno.serve(async (req: Request) => {
         mpStatus = String(mpResponse?.status || mpStatus);
       }
     } catch (mpError) {
-      console.warn("Could not cancel Mercado Pago subscription, continuing with local cancellation:", {
-        message: mpError instanceof Error ? mpError.message : String(mpError),
-      });
     }
 
     const now = new Date().toISOString();

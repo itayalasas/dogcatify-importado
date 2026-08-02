@@ -65,7 +65,14 @@ export function timeToMinutes(time: string | null | undefined): number {
   const hours = Number(rawHours);
   const minutes = Number(rawMinutes);
 
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+  if (
+    !Number.isInteger(hours)
+    || !Number.isInteger(minutes)
+    || hours < 0
+    || hours > 23
+    || minutes < 0
+    || minutes > 59
+  ) {
     return -1;
   }
 

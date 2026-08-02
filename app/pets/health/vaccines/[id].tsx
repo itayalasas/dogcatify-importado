@@ -44,7 +44,6 @@ export default function AddVaccine() {
       try {
         setVaccineDate(new Date(params.currentApplicationDate));
       } catch (error) {
-        console.error('Error parsing application date:', error);
       }
     }
     
@@ -54,9 +53,7 @@ export default function AddVaccine() {
         const vaccine = JSON.parse(params.selectedVaccine as string);
         setVaccineName(vaccine.name);
         setSelectedVaccine(vaccine);
-        console.log('Selected vaccine:', vaccine.name);
       } catch (error) {
-        console.error('Error parsing selected vaccine:', error);
       }
     }
     
@@ -66,9 +63,7 @@ export default function AddVaccine() {
         const vet = JSON.parse(params.selectedVeterinarian as string);
         setVeterinarian(vet.name);
         setSelectedVeterinarian(vet);
-        console.log('Selected veterinarian:', vet.name);
       } catch (error) {
-        console.error('Error parsing selected veterinarian:', error);
       }
     }
     
@@ -85,7 +80,6 @@ export default function AddVaccine() {
       try {
         setNextDueDate(new Date(params.currentNextDueDate));
       } catch (error) {
-        console.error('Error parsing next due date:', error);
       }
     }
   }, [params.selectedVaccine, params.selectedVeterinarian, params.currentVeterinarian, params.currentNotes, params.currentNextDueDate, params.currentApplicationDate]);
@@ -188,7 +182,6 @@ export default function AddVaccine() {
       if (error) throw error;
       setPet(data);
     } catch (error) {
-      console.error('Error fetching pet data:', error);
     }
   };
 
@@ -270,7 +263,6 @@ export default function AddVaccine() {
         setNotes(data.notes || '');
       }
     } catch (error) {
-      console.error('Error fetching vaccine details:', error);
       Alert.alert('Error', 'No se pudo cargar la información de la vacuna');
     }
   };
@@ -355,7 +347,6 @@ export default function AddVaccine() {
         }) }
       ]);
     } catch (error) {
-      console.error('Error saving vaccine:', error);
       Alert.alert('Error', 'No se pudo registrar la vacuna');
     } finally {
       setLoading(false);
@@ -388,7 +379,6 @@ export default function AddVaccine() {
         await processVaccinationCard(result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Error selecting photo:', error);
       Alert.alert('Error', 'No se pudo seleccionar la foto');
     }
   };
@@ -411,7 +401,6 @@ export default function AddVaccine() {
         await processVaccinationCard(result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Error taking photo:', error);
       Alert.alert('Error', 'No se pudo tomar la foto');
     }
   };
@@ -432,7 +421,6 @@ export default function AddVaccine() {
         );
         extractedRecords = result.records;
       } catch (apiError) {
-        console.log('API not available, using simulation:', apiError);
         const simulatedData = await simulateOCRExtraction('vaccine');
         extractedRecords = [simulatedData];
       }
@@ -456,7 +444,6 @@ export default function AddVaccine() {
         handleMultipleRecords(extractedRecords);
       }
     } catch (error) {
-      console.error('Error processing vaccination card:', error);
       Alert.alert(
         'Error',
         'No se pudo procesar la imagen del carnet. Por favor ingresa los datos manualmente.'
@@ -476,10 +463,8 @@ export default function AddVaccine() {
         const parsedDate = parseOCRDate(record.applicationDate);
         if (parsedDate) {
           setVaccineDate(parsedDate);
-          console.log('Parsed application date:', formatDate(parsedDate), 'from', record.applicationDate);
         }
       } catch (dateError) {
-        console.error('Error parsing application date:', dateError);
       }
     }
 
@@ -488,10 +473,8 @@ export default function AddVaccine() {
         const parsedDate = parseOCRDate(record.nextDueDate);
         if (parsedDate) {
           setNextDueDate(parsedDate);
-          console.log('Parsed next due date:', formatDate(parsedDate), 'from', record.nextDueDate);
         }
       } catch (dateError) {
-        console.error('Error parsing next due date:', dateError);
       }
     }
 
@@ -525,7 +508,6 @@ export default function AddVaccine() {
 
       // Validate date components
       if (day < 1 || day > 31 || month < 1 || month > 12 || year < 1900 || year > 2100) {
-        console.error('Invalid date components:', { day, month, year });
         return null;
       }
 
@@ -534,13 +516,11 @@ export default function AddVaccine() {
       
       // Verify the date is valid (handles cases like Feb 30)
       if (date.getDate() !== day || date.getMonth() !== month - 1 || date.getFullYear() !== year) {
-        console.error('Date validation failed:', { input: dateStr, parsed: date });
         return null;
       }
 
       return date;
     } catch (error) {
-      console.error('Error parsing OCR date:', dateStr, error);
       return null;
     }
   };
@@ -612,7 +592,6 @@ export default function AddVaccine() {
         ]
       );
     } catch (error) {
-      console.error('Error saving multiple vaccines:', error);
       Alert.alert('Error', 'No se pudieron guardar todas las vacunas');
     } finally {
       setLoading(false);

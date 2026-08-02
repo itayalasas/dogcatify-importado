@@ -19,25 +19,21 @@ export default function EmailConfirmationScreen() {
   const [hasAttempted, setHasAttempted] = useState(false);
 
   const ensureRuntimeConfigLoaded = async () => {
-    console.log('[EmailConfirmationScreen] Reloading runtime env config before confirmation flow...');
     try {
       await envConfig.reload();
     } catch (error) {
-      console.warn('[EmailConfirmationScreen] Could not preload runtime env config:', error);
     }
   };
 
   useEffect(() => {
     // Prevenir múltiples intentos de confirmación
     if (hasAttempted) {
-      console.log('Confirmation already attempted, skipping...');
       return;
     }
 
     const confirmEmail = async () => {
       const { token_hash, type } = params;
 
-      console.log('Email confirmation page loaded with params:', { token_hash, type });
 
       if (!token_hash) {
         setError('Token de confirmación no encontrado');
@@ -48,7 +44,6 @@ export default function EmailConfirmationScreen() {
       setHasAttempted(true);
 
       try {
-        console.log('Attempting to confirm email with token:', token_hash);
 
         await ensureRuntimeConfigLoaded();
 
@@ -60,17 +55,13 @@ export default function EmailConfirmationScreen() {
           (type as 'signup' | 'password_reset') || 'signup'
         );
 
-        console.log('Email confirmation result:', result);
 
         if (result.success) {
-          console.log('✅ Email confirmed successfully for user:', result.userId);
 
           // El perfil ya fue creado durante el registro, solo confirmar el email
-          console.log('✅ Email confirmed, profile was created during registration');
 
           // Enviar email de bienvenida solo en la primera confirmación exitosa
           if (result.email && !result.alreadyConfirmed) {
-            console.log('Sending welcome email to:', result.email);
             try {
               const { sendWelcomeEmailAPI } = await import('../../utils/emailConfirmation');
 
@@ -86,9 +77,7 @@ export default function EmailConfirmationScreen() {
 
               // Enviar email de bienvenida
               await sendWelcomeEmailAPI(result.email, userName);
-              console.log('✅ Welcome email sent successfully');
             } catch (emailError) {
-              console.error('Error sending welcome email:', emailError);
               // No falla la confirmación si el email no se envía
             }
           }
@@ -103,11 +92,9 @@ export default function EmailConfirmationScreen() {
             router.replace('/web-info');
           }, 1500);
         } else {
-          console.error('❌ Email confirmation failed:', result.error);
 
           // Si el token ya fue usado, verificar si el email ya está confirmado
           if (result.error === 'TOKEN_ALREADY_USED' && result.email) {
-            console.log('Token already used, checking if email is already confirmed...');
 
             try {
               // Verificar si el email ya está confirmado en la base de datos
@@ -118,7 +105,6 @@ export default function EmailConfirmationScreen() {
                 .single();
 
               if (profileData?.email_confirmed) {
-                console.log('Email is already confirmed, redirecting to web-info...');
                 // El email ya está confirmado, redirigir directamente
                 setLoading(false);
                 setTimeout(() => {
@@ -127,7 +113,6 @@ export default function EmailConfirmationScreen() {
                 return;
               }
             } catch (checkError) {
-              console.error('Error checking email confirmation status:', checkError);
             }
           }
 
@@ -159,7 +144,6 @@ export default function EmailConfirmationScreen() {
           setLoading(false);
         }
       } catch (error) {
-        console.error('❌ Error in email confirmation:', error);
         setError('Error interno del servidor');
         setConfirmed(false);
         setLoading(false);
@@ -171,13 +155,11 @@ export default function EmailConfirmationScreen() {
 
   const handleResendEmail = async () => {
     if (!userEmail) {
-      console.error('No email available for resend');
       return;
     }
 
     setResendingEmail(true);
     try {
-      console.log('Resending confirmation email to:', userEmail);
 
       await ensureRuntimeConfigLoaded();
       
@@ -189,7 +171,6 @@ export default function EmailConfirmationScreen() {
         .single();
       
       if (!profileError && existingProfile?.email_confirmed) {
-        console.log('User is already confirmed, showing appropriate message');
         setError('ALREADY_CONFIRMED');
         setResendingEmail(false);
         return;
@@ -199,14 +180,11 @@ export default function EmailConfirmationScreen() {
       const result = await resendConfirmationEmail(userEmail);
       
       if (result.success) {
-        console.log('✅ Email resent successfully');
         setError('EMAIL_SENT');
       } else {
-        console.error('❌ Failed to resend email:', result.error);
         setError('RESEND_ERROR');
       }
     } catch (error) {
-      console.error('❌ Error resending email:', error);
       setError('RESEND_ERROR');
     } finally {
       setResendingEmail(false);

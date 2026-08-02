@@ -173,7 +173,6 @@ export default function Profile() {
         .maybeSingle();
 
       if (subscriptionError) {
-        console.error('Error fetching Dotty subscription limits:', subscriptionError);
       }
 
       const userPlanLimits = resolveSubscriptionPlanLimits(subscriptionData?.subscription_plans || null);
@@ -201,7 +200,6 @@ export default function Profile() {
         setIsDottyEnabled(shouldEnableDotty);
       }
     } catch (error) {
-      console.error('Error fetching Dotty status:', error);
     }
   };
 
@@ -214,16 +212,12 @@ export default function Profile() {
 
       if (error) throw error;
 
-      console.log('Subscription settings data:', data);
 
       if (data) {
         setSubscriptionsEnabled(data.enabled);
-        console.log('Subscriptions enabled:', data.enabled);
       } else {
-        console.log('No subscription settings found');
       }
     } catch (error) {
-      console.error('Error checking subscription settings:', error);
     }
   };
 
@@ -270,7 +264,6 @@ export default function Profile() {
         .single();
 
       if (profileError) {
-        console.error('Error fetching Dotty profile flag:', profileError);
       }
 
       if (profileData) {
@@ -288,7 +281,6 @@ export default function Profile() {
         setIsDottyEnabled(shouldEnableDotty);
       }
     } catch (error) {
-      console.error('Error fetching user subscription:', error);
     }
   };
 
@@ -296,7 +288,6 @@ export default function Profile() {
   useEffect(() => {
     if (!currentUser) return;
     
-    console.log('Setting up real-time subscriptions for user:', currentUser.id);
     
     // Subscribe to changes in the current user's profile
     const subscription = supabaseClient
@@ -309,8 +300,6 @@ export default function Profile() {
           filter: `id=eq.${currentUser.id}`
         }, 
         (payload) => {
-          console.log('=== REAL-TIME: Current user profile updated ===');
-          console.log('Updated fields:', payload.new);
           fetchUserStats();
         }
       )
@@ -331,8 +320,6 @@ export default function Profile() {
           
           // If someone started or stopped following current user, update stats
           if (wasFollowing !== isNowFollowing) {
-            console.log('=== REAL-TIME: Follower status changed ===');
-            console.log('User', payload.new?.display_name, isNowFollowing ? 'started following' : 'stopped following', 'current user');
             fetchUserStats();
           }
         }
@@ -350,17 +337,14 @@ export default function Profile() {
       )
       .subscribe();
     
-    console.log('Real-time subscription established');
     
     return () => {
-      console.log('Cleaning up real-time subscription');
       subscription.unsubscribe();
     };
   }, [currentUser]);
   
   const fetchUserStats = async () => {
     try {
-      console.log('Fetching user stats for:', currentUser!.id);
       
       // Fetch pets count
       const { count: petsCount } = await supabaseClient
@@ -375,24 +359,17 @@ export default function Profile() {
         .eq('user_id', currentUser!.id);
 
       // Fetch followers count - buscar usuarios que tienen a este usuario en su array 'following'
-      console.log('=== FETCHING FOLLOWERS ===');
-      console.log('Looking for users who have', currentUser!.id, 'in their following array');
       const { data: followersData, error: followersError } = await supabaseClient
         .from('profiles')
         .select('id, display_name')
         .contains('following', [currentUser!.id]);
       
       if (followersError) {
-        console.error('Error fetching followers:', followersError);
       }
       
       const followersCount = followersData?.length || 0;
-      console.log('Followers found:', followersData?.map(f => ({ id: f.id, name: f.display_name })) || []);
-      console.log('Total followers count:', followersCount);
       
       // Fetch following count - obtener el array 'following' del usuario actual
-      console.log('=== FETCHING FOLLOWING ===');
-      console.log('Getting following array for user:', currentUser!.id);
       const { data: profileData, error: profileError } = await supabaseClient
         .from('profiles')
         .select('following, followers')
@@ -400,7 +377,6 @@ export default function Profile() {
         .single();
       
       if (profileError) {
-        console.error('Error fetching profile data:', profileError);
       }
       
       const followingArray = profileData?.following || [];
@@ -413,25 +389,11 @@ export default function Profile() {
       const followingCount = validFollowing.length;
       const localFollowersCount = validFollowers.length;
       
-      console.log('Following array from profile:', validFollowing);
-      console.log('Followers array from profile:', validFollowers);
-      console.log('Following count:', followingCount);
-      console.log('Local followers count:', localFollowersCount);
       
       // Use the higher count between database query and local array
       // This handles cases where the arrays might be out of sync
       const finalFollowersCount = Math.max(followersCount, localFollowersCount);
       
-      console.log('Updated stats:', {
-        petsCount: petsCount || 0,
-        postsCount: postsCount || 0,
-        followersCount: finalFollowersCount,
-        followingCount,
-        followersFromQuery: followersData?.map(f => f.display_name) || [],
-        followersFromProfile: validFollowers,
-        followingArray: validFollowing,
-        finalFollowersCount
-      });
       
       setUserStats({
         petsCount: petsCount || 0,
@@ -440,7 +402,6 @@ export default function Profile() {
         followingCount
       });
     } catch (error) {
-      console.error('Error fetching user stats:', error);
       // Set default stats on error
       setUserStats({
         petsCount: 0,
@@ -462,7 +423,6 @@ export default function Profile() {
     const userId = currentUser.id;
 
     try {
-      console.log('Fetching partner profile for user:', userId);
 
       const { data, error } = await supabaseClient
         .from('partners')
@@ -471,10 +431,8 @@ export default function Profile() {
         .eq('is_verified', true)
         .order('created_at', { ascending: false });
       
-      console.log('Partner query result:', { data, error });
 
       if (data && data.length > 0 && !error) {
-        console.log('Partner profile found:', data[0]);
         const accountPlan = resolvePartnerAccountPlan(data as any[]);
         const primaryPartner = data[0];
 
@@ -491,11 +449,9 @@ export default function Profile() {
           isActive: primaryPartner.is_active
         });
       } else {
-        console.log('No partner profile found or error:', error);
         setPartnerProfile(null);
       }
     } catch (error) {
-      console.error('Error fetching partner profile:', error);
       setPartnerProfile(null);
     }
   };
@@ -525,7 +481,6 @@ export default function Profile() {
 
       setDeliveryProfile(data || null);
     } catch (error) {
-      console.error('Error fetching delivery profile:', error);
       setDeliveryProfile(null);
     }
   };
@@ -572,7 +527,6 @@ export default function Profile() {
         'Tu cuenta ahora también puede entrar como dueño. Ya puedes usar "Cambiar rol" desde tu perfil para alternar entre aliado y dueño.'
       );
     } catch (error) {
-      console.error('Error enabling owner role:', error);
       Alert.alert(
         'No pudimos activar el perfil de dueño',
         'Inténtalo nuevamente en unos segundos.'
@@ -643,7 +597,6 @@ export default function Profile() {
         );
       }
     } catch (error) {
-      console.error('Error toggling biometric:', error);
     }
   };
 
@@ -674,7 +627,6 @@ export default function Profile() {
               style: 'destructive',
               onPress: async () => {
                 try {
-                  console.log('[Profile] Updating dotty_enabled to false for user:', userId);
                   const { data, error } = await supabaseClient
                     .from('profiles')
                     .update({ dotty_enabled: false })
@@ -682,15 +634,12 @@ export default function Profile() {
                     .select();
 
                   if (error) {
-                    console.error('[Profile] Error updating dotty_enabled:', error);
                     Alert.alert('Error', 'No se pudo ocultar el asistente');
                     return;
                   }
 
-                  console.log('[Profile] Successfully updated dotty_enabled to false:', data);
                   setIsDottyEnabled(false);
                 } catch (error) {
-                  console.error('[Profile] Exception updating dotty_enabled:', error);
                   Alert.alert('Error', 'No se pudo ocultar el asistente');
                 }
               }
@@ -707,7 +656,6 @@ export default function Profile() {
               text: 'Mostrar',
               onPress: async () => {
                 try {
-                  console.log('[Profile] Updating dotty_enabled to true for user:', userId);
                   const { data, error } = await supabaseClient
                     .from('profiles')
                     .update({ dotty_enabled: true })
@@ -715,15 +663,12 @@ export default function Profile() {
                     .select();
 
                   if (error) {
-                    console.error('[Profile] Error updating dotty_enabled:', error);
                     Alert.alert('Error', 'No se pudo mostrar el asistente');
                     return;
                   }
 
-                  console.log('[Profile] Successfully updated dotty_enabled to true:', data);
                   setIsDottyEnabled(true);
                 } catch (error) {
-                  console.error('[Profile] Exception updating dotty_enabled:', error);
                   Alert.alert('Error', 'No se pudo mostrar el asistente');
                 }
               }
@@ -732,7 +677,6 @@ export default function Profile() {
         );
       }
     } catch (error) {
-      console.error('Error toggling Dotty:', error);
     }
   };
 
@@ -760,7 +704,6 @@ export default function Profile() {
         );
       }
     } catch (error) {
-      console.error('Error in handleToggleNotifications:', error);
       Alert.alert('Error', 'Hubo un problema con la configuración de notificaciones');
     }
   };
@@ -770,7 +713,6 @@ export default function Profile() {
       setIsLoggingOut(true);
       await logout();
     } catch (error: any) {
-      console.error('Error logging out:', error);
       setIsLoggingOut(false);
       Alert.alert('Error', error?.message || 'No se pudo cerrar sesión. Intenta nuevamente.');
     }

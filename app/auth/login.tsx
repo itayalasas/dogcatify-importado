@@ -257,7 +257,6 @@ export default function Login() {
         handleLogin(credentials.email, credentials.password);
       }
     } catch (error) {
-      console.log('Biometric authentication cancelled or failed');
     }
   };
 

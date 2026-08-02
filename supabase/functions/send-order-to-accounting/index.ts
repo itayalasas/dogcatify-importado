@@ -15,7 +15,6 @@ async function hasSuccessfulAccountingDispatch(supabase: any, orderId: string): 
     .eq("success", true);
 
   if (error) {
-    console.error("❌ Error checking previous accounting dispatch:", error);
     return false;
   }
 
@@ -31,7 +30,6 @@ async function sendToAccounting(
   empresaId: string,
   maxRetries: number = 3
 ): Promise<{ success: boolean; response?: any; error?: string }> {
-  console.log(`📨 Enviando orden ${orderId} al sistema contable`);
 
   try {
     // Obtener datos del cliente
@@ -42,7 +40,6 @@ async function sendToAccounting(
       .maybeSingle();
 
     if (customerError || !customerData) {
-      console.error("❌ Error al obtener datos del cliente:", customerError);
       return { success: false, error: "Error al obtener datos del cliente" };
     }
 
@@ -73,7 +70,6 @@ async function sendToAccounting(
         .in("id", partnerIds);
 
       if (partnersError) {
-        console.error("❌ Error al obtener datos de partners:", partnersError);
         return { success: false, error: "Error al obtener datos de partners" };
       }
 
@@ -84,7 +80,6 @@ async function sendToAccounting(
         const partnerInfo = partnersMap.get(partnerId);
 
         if (!partnerInfo) {
-          console.warn(`⚠️ No se encontró información del partner ${partnerId}`);
           continue;
         }
 
@@ -188,11 +183,6 @@ async function sendToAccounting(
     // Verificación: totalFromItems debe ser igual a totalBase + totalTax
     const calculatedTotal = totalBase + totalTax;
     if (Math.abs(totalFromItems - calculatedTotal) > 0.01) {
-      console.log('⚠️  WARNING: Total mismatch!', {
-        totalFromItems,
-        calculatedTotal: totalBase + totalTax,
-        difference: totalFromItems - calculatedTotal
-      });
     }
 
     // Construir el payload
@@ -224,11 +214,9 @@ async function sendToAccounting(
     };
 
     const payloadString = JSON.stringify(payload);
-    console.log("📦 Payload generado para contabilidad, longitud:", payloadString.length);
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`🚀 Intento ${attempt}/${maxRetries} - Enviando a ${accountingUrl}`);
 
         const response = await fetch(accountingUrl, {
           method: "POST",
@@ -239,11 +227,9 @@ async function sendToAccounting(
           body: payloadString,
         });
 
-        console.log(`📥 Respuesta recibida: Status ${response.status}`);
         const responseBody = await response.text();
         const success = response.ok;
 
-        console.log("💾 Guardando log en accounting_webhook_logs...");
         const logData = {
           order_id: orderId,
           payload: payload,
@@ -259,25 +245,19 @@ async function sendToAccounting(
           .insert(logData);
 
         if (insertError) {
-          console.error("❌ ERROR al insertar en accounting_webhook_logs:", insertError);
         } else {
-          console.log("✅ Log guardado exitosamente");
         }
 
         if (success) {
-          console.log(`✅ Webhook enviado exitosamente al sistema contable`);
           return { success: true, response: responseBody };
         } else {
-          console.error(`⚠️ Webhook falló con status ${response.status}: ${responseBody.substring(0, 100)}`);
 
           if (attempt < maxRetries) {
             const delay = Math.pow(2, attempt) * 1000;
-            console.log(`⏳ Reintentando en ${delay}ms...`);
             await new Promise(resolve => setTimeout(resolve, delay));
           }
         }
       } catch (attemptError: any) {
-        console.error(`❌ Error en intento ${attempt}:`, attemptError.message);
 
         try {
           await supabase.from("accounting_webhook_logs").insert({
@@ -290,22 +270,18 @@ async function sendToAccounting(
             accounting_url: accountingUrl,
           });
         } catch (logError: any) {
-          console.error("❌ ERROR al guardar log de error:", logError);
         }
 
         if (attempt < maxRetries) {
           const delay = Math.pow(2, attempt) * 1000;
-          console.log(`⏳ Reintentando en ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
     }
 
-    console.error(`❌ Falló después de ${maxRetries} intentos`);
     return { success: false, error: `Failed after ${maxRetries} attempts` };
 
   } catch (outerError: any) {
-    console.error("❌ ERROR CRÍTICO en sendToAccounting:", outerError);
     return { success: false, error: outerError.message };
   }
 }
@@ -349,7 +325,6 @@ Deno.serve(async (req: Request) => {
     const empresaId = Deno.env.get("ACCOUNTING_EMPRESA_ID");
 
     if (!accountingWebhookUrl || !accountingApiKey || !empresaId) {
-      console.error("❌ Variables de entorno de contabilidad no configuradas");
       return new Response(
         JSON.stringify({
           error: "Configuración incompleta",
@@ -362,7 +337,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log(`🔍 Buscando orden pagada: ${order_id}`);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -394,7 +368,6 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (orderError) {
-      console.error("❌ Error al obtener orden:", orderError);
       return new Response(
         JSON.stringify({
           error: "Error al obtener orden",
@@ -408,7 +381,6 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!order) {
-      console.error("❌ Orden no encontrada:", order_id);
       return new Response(
         JSON.stringify({
           error: "Orden no encontrada",
@@ -423,7 +395,6 @@ Deno.serve(async (req: Request) => {
 
     // Solo enviar órdenes pagadas
     if (order.payment_status !== 'paid' && order.payment_status !== 'approved') {
-      console.log(`⚠️ Orden no pagada, no se envía a contabilidad: ${order_id} (status: ${order.payment_status})`);
       return new Response(
         JSON.stringify({
           success: false,
@@ -440,7 +411,6 @@ Deno.serve(async (req: Request) => {
 
     // No enviar órdenes gratuitas
     if (order.payment_method === 'free' || order.total_amount === 0) {
-      console.log(`⚠️ Orden gratuita, no se envía a contabilidad: ${order_id}`);
       return new Response(
         JSON.stringify({
           success: false,
@@ -454,7 +424,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log(`✅ Orden pagada encontrada: ${order.id}`);
 
     const alreadySentToAccounting = await hasSuccessfulAccountingDispatch(supabase, order_id);
     if (alreadySentToAccounting) {
@@ -507,7 +476,6 @@ Deno.serve(async (req: Request) => {
       );
     }
   } catch (error: any) {
-    console.error("Error in send-order-to-accounting:", error);
     return new Response(
       JSON.stringify({
         error: "Error interno del servidor",

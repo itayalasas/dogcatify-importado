@@ -45,7 +45,6 @@ export default function TabLayout() {
           router.replace('/onboarding');
         }
       } catch (error) {
-        console.warn('Error checking onboarding before tabs route:', error);
         if (mounted) {
           setOnboardingChecked(true);
           setOnboardingRequired(false);

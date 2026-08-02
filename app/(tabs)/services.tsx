@@ -120,7 +120,6 @@ export default function Services() {
 
   const fetchPartners = async () => {
     try {
-      console.log('🔄 Fetching partners...');
       setLoading(true);
 
       // Optimized: Fetch partners and their first service in parallel
@@ -142,7 +141,6 @@ export default function Services() {
       const servicesData = servicesResult.data;
 
       if (partnersData && servicesData && !partnersResult.error && !servicesResult.error) {
-        console.log(`📊 Found ${partnersData.length} verified partners and ${servicesData.length} services`);
 
         // Create a map of partner_id to first service for quick lookup
         const partnerServicesMap = new Map();
@@ -212,7 +210,6 @@ export default function Services() {
           }
         }
 
-        console.log(`✅ Processed ${allPartnersWithServices.length} partners with services`);
 
         // Obtener IDs de servicios (excluir adopciones)
         const serviceIds = allPartnersWithServices
@@ -244,7 +241,6 @@ export default function Services() {
         });
 
         if (promotionsMap.size > 0) {
-          console.log(`✨ Applied ${promotionsMap.size} active promotions to services`);
         }
 
         setPartners(servicesWithPromotions);
@@ -255,7 +251,6 @@ export default function Services() {
         setHasMoreData(false);
       }
     } catch (err) {
-      console.error("Error fetching partners:", err);
       setError("Error al cargar los servicios");
     } finally {
       setLoading(false);
@@ -265,7 +260,6 @@ export default function Services() {
   const loadMorePartners = () => {
     if (loadingMore || !hasMoreData) return;
     
-    console.log(`🔄 Loading more partners - Page ${currentPage + 1}...`);
     setLoadingMore(true);
     
     const startIndex = currentPage * ITEMS_PER_PAGE;
@@ -283,7 +277,6 @@ export default function Services() {
       setCurrentPage(prev => prev + 1);
       setHasMoreData(endIndex < partners.length);
       setLoadingMore(false);
-      console.log(`✅ Loaded ${newPartners.length} more partners. Total displayed: ${displayedPartners.length + newPartners.length}`);
     }, 300); // Small delay to prevent overwhelming
   };
 
@@ -298,14 +291,12 @@ export default function Services() {
 
   const handlePartnerPress = async (partnerId: string) => {
     if (!partnerId || typeof partnerId !== 'string') {
-      console.error('Invalid partner ID for navigation:', partnerId);
       Alert.alert('Error', 'ID de partner inválido');
       return;
     }
 
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(partnerId)) {
-      console.error('Partner ID is not a valid UUID for navigation:', partnerId);
       Alert.alert('Error', 'ID de partner no válido');
       return;
     }
@@ -314,10 +305,8 @@ export default function Services() {
     const partnerService = displayedPartners.find(p => p.partnerId === partnerId);
     if (partnerService?.activePromotion) {
       await incrementPromotionClicks(partnerService.activePromotion.id);
-      console.log(`📊 Incremented promotion click for service: ${partnerService.name}`);
     }
 
-    console.log('Navigating to partner with valid UUID:', partnerId);
     router.push(`/services/partner/${partnerId}`);
   };
 

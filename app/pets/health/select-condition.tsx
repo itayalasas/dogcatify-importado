@@ -37,7 +37,6 @@ export default function SelectCondition() {
     try {
       const petBreed = breed || 'Genérico';
 
-      console.log(`Searching cache for ${species} - ${petBreed}`);
 
       const { data: cachedData, error: cacheError } = await supabaseClient
         .from('illnesses_ai_cache')
@@ -50,7 +49,6 @@ export default function SelectCondition() {
         .maybeSingle();
 
       if (cachedData && cachedData.illnesses) {
-        console.log('✓ Using cached illness data for', petBreed);
         const illnesses = typeof cachedData.illnesses === 'string'
           ? JSON.parse(cachedData.illnesses)
           : cachedData.illnesses;
@@ -60,7 +58,6 @@ export default function SelectCondition() {
         return;
       }
 
-      console.log('⚠ No cache found, generating with AI...');
       const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
       const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 
@@ -86,12 +83,10 @@ export default function SelectCondition() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Error response:', errorText);
         throw new Error('Error generating illness recommendations');
       }
 
       const { illnesses } = await response.json();
-      console.log(`✓ Generated ${illnesses.length} illness recommendations via AI`);
 
       const cacheKey = `${species}_${petBreed}_general`;
       await supabaseClient
@@ -105,11 +100,9 @@ export default function SelectCondition() {
           cache_key: cacheKey
         });
 
-      console.log('✓ Saved to cache for future use');
       setConditions(illnesses);
       setFilteredConditions(illnesses);
     } catch (error) {
-      console.error('Error fetching conditions:', error);
     } finally {
       setLoading(false);
     }
@@ -129,7 +122,6 @@ export default function SelectCondition() {
   };
 
   const handleSelectCondition = (condition: any) => {
-    console.log('Navigating back with condition:', condition.name);
     router.replace({
       pathname: returnPath as any,
       params: {

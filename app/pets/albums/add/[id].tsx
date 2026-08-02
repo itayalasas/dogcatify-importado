@@ -137,7 +137,6 @@ export default function AddPhoto() {
             setSelectedImages(prev => [...prev, ...result.assets]);
           }
         } catch (error) {
-          console.error('Error validating images:', error);
           // If validation fails, allow all images
           setSelectedImages(prev => [...prev, ...result.assets]);
         } finally {
@@ -145,7 +144,6 @@ export default function AddPhoto() {
         }
       }
     } catch (error) {
-      console.error('Error selecting photos:', error);
       Alert.alert('Error', 'No se pudieron seleccionar las fotos');
     }
   };
@@ -198,7 +196,6 @@ export default function AddPhoto() {
             setSelectedImages(prev => [...prev, ...result.assets]);
           }
         } catch (error) {
-          console.error('Error validating image:', error);
           // If validation fails, allow the image
           setSelectedImages(prev => [...prev, ...result.assets]);
         } finally {
@@ -206,7 +203,6 @@ export default function AddPhoto() {
         }
       }
     } catch (error) {
-      console.error('Error taking photo:', error);
       Alert.alert('Error', 'No se pudo tomar la foto');
     }
   };
@@ -272,13 +268,11 @@ export default function AddPhoto() {
             setValidatingVideo(false);
           }
         } catch (error) {
-          console.error('Error validating video:', error);
           setSelectedVideos(prev => [...prev, video]);
           setValidatingVideo(false);
         }
       }
     } catch (error) {
-      console.error('Error selecting video:', error);
       Alert.alert('Error', 'No se pudo seleccionar el video');
       setValidatingVideo(false);
     }
@@ -296,19 +290,15 @@ export default function AddPhoto() {
 
   const uploadImageToStorage = async (imageAsset: ImagePicker.ImagePickerAsset): Promise<string> => {
     try {
-      console.log('Starting upload for image:', imageAsset.uri);
 
       const timestamp = Date.now();
       const randomId = Math.random().toString(36).substring(7);
       const filename = `pets/albums/${id}/${timestamp}-${randomId}.jpg`;
 
-      console.log('Upload filename:', filename);
 
       const publicUrl = await uploadImage(imageAsset.uri, filename);
-      console.log('Public URL generated:', publicUrl);
       return publicUrl;
     } catch (error) {
-      console.error('Error uploading image:', error);
 
       const message = error instanceof Error ? error.message : String(error);
 
@@ -324,13 +314,11 @@ export default function AddPhoto() {
 
   const uploadVideoToStorage = async (videoAsset: ImagePicker.ImagePickerAsset): Promise<string> => {
     try {
-      console.log('Starting upload for video:', videoAsset.uri);
 
       const timestamp = Date.now();
       const randomId = Math.random().toString(36).substring(7);
       const filename = `pets/albums/${id}/${timestamp}-${randomId}.mp4`;
 
-      console.log('Upload video filename:', filename);
 
       const formData = new FormData();
       formData.append('file', {
@@ -355,10 +343,8 @@ export default function AddPhoto() {
         .from('dogcatify')
         .getPublicUrl(filename);
 
-      console.log('Video public URL generated:', publicUrl);
       return publicUrl;
     } catch (error) {
-      console.error('Error uploading video:', error);
 
       const message = error instanceof Error ? error.message : String(error);
 
@@ -431,25 +417,20 @@ export default function AddPhoto() {
         }
       }
 
-      console.log('Starting to save media, images:', selectedImages.length, 'videos:', selectedVideos.length);
 
       const mediaUrls: string[] = [];
 
-      console.log('Starting sequential uploads...');
 
       // Upload images first
       for (let i = 0; i < selectedImages.length; i++) {
         try {
-          console.log(`Uploading image ${i + 1} of ${selectedImages.length}...`);
           const imageUrl = await uploadImageToStorage(selectedImages[i]);
           mediaUrls.push(imageUrl);
-          console.log(`Image ${i + 1} uploaded successfully:`, imageUrl);
 
           if (i < selectedImages.length - 1) {
             await new Promise(resolve => setTimeout(resolve, 500));
           }
         } catch (uploadError) {
-          console.error(`Error uploading image ${i + 1}:`, uploadError);
           const uploadErrorMessage = uploadError instanceof Error ? uploadError.message : String(uploadError);
 
           const shouldContinue = await new Promise((resolve) => {
@@ -481,16 +462,13 @@ export default function AddPhoto() {
       // Upload videos
       for (let i = 0; i < selectedVideos.length; i++) {
         try {
-          console.log(`Uploading video ${i + 1} of ${selectedVideos.length}...`);
           const videoUrl = await uploadVideoToStorage(selectedVideos[i]);
           mediaUrls.push(`VIDEO:${videoUrl}`);
-          console.log(`Video ${i + 1} uploaded successfully:`, videoUrl);
 
           if (i < selectedVideos.length - 1) {
             await new Promise(resolve => setTimeout(resolve, 800));
           }
         } catch (uploadError) {
-          console.error(`Error uploading video ${i + 1}:`, uploadError);
           const uploadErrorMessage = uploadError instanceof Error ? uploadError.message : String(uploadError);
 
           const shouldContinue = await new Promise((resolve) => {
@@ -523,14 +501,12 @@ export default function AddPhoto() {
         throw new Error('No se pudo subir ningún archivo. Verifica tu conexión e intenta nuevamente.');
       }
 
-      console.log(`Successfully uploaded ${mediaUrls.length} media files`);
 
       const totalMedia = selectedImages.length + selectedVideos.length;
       const successMessage = mediaUrls.length === totalMedia
         ? `Se guardaron exitosamente ${mediaUrls.length} archivo(s) en el álbum`
         : `Se guardaron ${mediaUrls.length} de ${totalMedia} archivo(s). Algunos no se pudieron subir.`;
 
-      console.log('Saving album to database...');
       // Save album to database
       const albumResult = await supabaseClient
         .from('pet_albums')
@@ -545,13 +521,10 @@ export default function AddPhoto() {
         .select('id')
         .single();
 
-      console.log('Album save result:', albumResult);
       if (albumResult.error) {
-        console.error('Album save error:', albumResult.error);
         throw albumResult.error;
       }
       
-      console.log('Album saved successfully');
       
       // Registrar creación de álbum en auditoría
       if (albumResult.data) {
@@ -569,12 +542,11 @@ export default function AddPhoto() {
             user_id: currentUser.id,
             user_email: currentUser.email
           }
-        }).catch(err => console.warn('Error logging ALBUM_CREATE:', err));
+        }).catch(err => undefined);
       }
 
       // If user wants to share as post, create a post
       if (isShared) {
-        console.log('Creating post for shared album...');
         const canCreatePost = await ensureDailyPostLimit();
         if (!canCreatePost) {
           Alert.alert(
@@ -590,7 +562,6 @@ export default function AddPhoto() {
           .single();
           
         if (petData && !petError) {
-          console.log('Pet data found, creating post...');
           
           // Get current user data for author info
           const { data: userData, error: userError } = await supabaseClient
@@ -600,7 +571,6 @@ export default function AddPhoto() {
             .single();
           
           if (userError) {
-            console.error('Error fetching user data:', userError);
           }
           
           // Get the album ID from the insert result
@@ -641,14 +611,12 @@ export default function AddPhoto() {
             created_at: new Date().toISOString()
           };
           
-          console.log('Creating post with data:', postData);
           
           const postResult = await supabaseClient
             .from('posts')
             .insert(postData);
             
           if (postResult.error) {
-            console.error('Error creating post:', postResult.error);
 
             const mediaTypes = [];
             if (selectedImages.length > 0) mediaTypes.push('fotos');
@@ -661,7 +629,6 @@ export default function AddPhoto() {
               [{ text: 'Entendido' }]
             );
           } else {
-            console.log('Post created successfully');
 
             const mediaTypes = [];
             if (selectedImages.length > 0) mediaTypes.push(`${selectedImages.length} foto(s)`);
@@ -694,7 +661,6 @@ export default function AddPhoto() {
         params: { id, refresh: 'true', activeTab: 'albums' }
       });
     } catch (error) {
-      console.error('Error saving photos:', error);
       
       let errorMessage = 'No se pudieron guardar las fotos';
       const message = error instanceof Error ? error.message : String(error);

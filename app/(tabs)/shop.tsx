@@ -66,13 +66,11 @@ export default function Shop() {
         .single();
 
       if (error) {
-        console.error('Error loading favorite products:', error);
         return;
       }
 
       setFavoriteProductIds(data?.favorite_products || []);
     } catch (error) {
-      console.error('Error loading favorite products:', error);
     }
   };
 
@@ -113,11 +111,9 @@ export default function Shop() {
         setProducts(processedProducts);
 
         if (promotionsMap.size > 0) {
-          console.log(`✨ Applied ${promotionsMap.size} active promotions to products`);
         }
       }
     } catch (error) {
-      console.error('Error fetching products:', error);
     } finally {
       setLoading(false);
     }
@@ -129,7 +125,6 @@ export default function Shop() {
     // Si tiene promoción activa, incrementar clicks para facturación
     if (product?.activePromotion) {
       await incrementPromotionClicks(product.activePromotion.id);
-      console.log(`📊 Incremented promotion click for product: ${product.name}`);
     }
 
     router.push({
@@ -170,7 +165,6 @@ export default function Shop() {
     // Si tiene promoción activa, incrementar clicks para facturación
     if (product.activePromotion) {
       incrementPromotionClicks(product.activePromotion.id);
-      console.log(`📊 Incremented promotion click for cart addition: ${product.name}`);
     }
 
     // Usar precio con descuento si existe
@@ -217,7 +211,6 @@ export default function Shop() {
         throw error;
       }
     } catch (error) {
-      console.error('Error updating favorite products:', error);
       setFavoriteProductIds(previousFavorites);
       Alert.alert('Error', 'No se pudo actualizar tus favoritos');
     }

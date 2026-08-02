@@ -39,7 +39,6 @@ export async function getActivePromotionForItem(
       .limit(1);
 
     if (error) {
-      console.error('Error fetching promotion:', error);
       return null;
     }
 
@@ -59,7 +58,6 @@ export async function getActivePromotionForItem(
       end_date: promo.end_date,
     };
   } catch (error) {
-    console.error('Error in getActivePromotionForItem:', error);
     return null;
   }
 }
@@ -92,7 +90,6 @@ export async function getActivePromotionsForItems(
       .gte('end_date', now);
 
     if (error || !data) {
-      console.error('Error fetching promotions:', error);
       return promotionsMap;
     }
 
@@ -130,10 +127,8 @@ export async function getActivePromotionsForItems(
       }
     });
 
-    console.log(`Found ${promotionsMap.size} active promotions for ${itemIds.length} items`);
     return promotionsMap;
   } catch (error) {
-    console.error('Error in getActivePromotionsForItems:', error);
     return promotionsMap;
   }
 }
@@ -182,7 +177,6 @@ export async function incrementPromotionClicks(promotionId: string): Promise<voi
       .single();
 
     if (fetchError || !promo) {
-      console.error('Error fetching promotion clicks:', fetchError);
       return;
     }
 
@@ -193,11 +187,8 @@ export async function incrementPromotionClicks(promotionId: string): Promise<voi
       .eq('id', promotionId);
 
     if (updateError) {
-      console.error('Error updating promotion clicks:', updateError);
     } else {
-      console.log(`Incremented clicks for promotion ${promotionId}`);
     }
   } catch (error) {
-    console.error('Error in incrementPromotionClicks:', error);
   }
 }

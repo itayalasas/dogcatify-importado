@@ -47,10 +47,6 @@ const resolveDefaultEmailApiUrl = (): string => {
         !matchesSupabaseFunctionPath(explicitEmailUrl, 'send-email')
       )
     ) {
-      console.warn(
-        '[appConfig] Ignoring EXPO_PUBLIC_EMAIL_API_URL because it does not point to the current project send-email function. Using current project fallback instead:',
-        explicitEmailUrl,
-      );
       return fallbackEmailUrl;
     }
 
@@ -101,10 +97,6 @@ const normalizeEmailApiConfig = (emailApiUrl: string, emailApiKey: string) => {
       !matchesSupabaseFunctionPath(normalizedUrl, 'send-email')
     )
   ) {
-    console.warn(
-      '[appConfig] Ignoring app_config.email_api_url because it does not point to the current project send-email function. Falling back to current project settings.',
-      normalizedUrl,
-    );
     return {
       email_api_url: fallbackConfig.email_api_url,
       email_api_key: fallbackConfig.email_api_key,
@@ -130,14 +122,12 @@ export async function getAppConfig(forceRefresh = false): Promise<Record<string,
       .select('key, value');
 
     if (error) {
-      console.warn('Could not fetch app config from database, using fallback:', error);
       cachedConfig = fallbackConfig;
       lastFetchTime = now;
       return cachedConfig;
     }
 
     if (!data || data.length === 0) {
-      console.warn('No config found in database, using fallback');
       cachedConfig = fallbackConfig;
       lastFetchTime = now;
       return cachedConfig;
@@ -162,7 +152,6 @@ export async function getAppConfig(forceRefresh = false): Promise<Record<string,
 
     return cachedConfig;
   } catch (err) {
-    console.error('Error fetching app config:', err);
     return fallbackConfig;
   }
 }

@@ -554,13 +554,6 @@ const calculateIVA = (cartItems: any[], partner: any): IVACalculation => {
   // tratamos SIEMPRE los precios de carrito como IVA incluido.
   const ivaIncluded = true;
 
-  console.log('ðŸ” calculateIVA - Partner IVA Config:', {
-    partner_id: partner.id,
-    partner_business_name: partner.business_name,
-    iva_rate: ivaRate,
-    iva_included_in_price_raw: partner.iva_included_in_price,
-    ivaIncluded_computed: ivaIncluded
-  });
 
   // Calculate items subtotal (sum of all items)
   const itemsTotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -602,12 +595,6 @@ export const createMultiPartnerOrder = async (
 ): Promise<{ orders: any[], paymentPreferences: any[], isTestMode: boolean }> => {
   try {
     logger.info('Creating single-store order with partner OAuth fees');
-    console.log('Cart items received:', cartItems.map(item => ({
-      id: item.id,
-      name: item.name,
-      partnerId: item.partnerId,
-      partnerName: item.partnerName
-    })));
 
     const uniquePartnerIds = [...new Set(cartItems.map((item) => String(item.partnerId || '').trim()).filter(Boolean))];
     if (uniquePartnerIds.length > 1) {
@@ -629,26 +616,11 @@ export const createMultiPartnerOrder = async (
     // Calculate totals for the unified order (including shipping)
     const totalAmount = ivaCalculation.totalAmount + totalShippingCost;
 
-    console.log('ðŸ” DEBUG IVA Calculation:', {
-      cartItems: cartItems.map(i => ({ name: i.name, price: i.price, quantity: i.quantity, total: i.price * i.quantity })),
-      ivaIncluded: ivaCalculation.ivaIncluded,
-      ivaRate: ivaCalculation.ivaRate,
-      calculatedSubtotal: ivaCalculation.subtotal,
-      calculatedIvaAmount: ivaCalculation.ivaAmount,
-      calculatedTotalAmount: ivaCalculation.totalAmount,
-      shippingCost: totalShippingCost,
-      FINAL_totalAmount: totalAmount
-    });
 
     // Calculate commission using partner's configured percentage
     const commissionAmount = totalAmount * ((primaryPartnerConfig.commission_percentage || 5.0) / 100);
     const partnerAmount = totalAmount - commissionAmount;
 
-    console.log('Commission calculation:', {
-      commission_percentage: primaryPartnerConfig.commission_percentage || 5.0,
-      commission_amount: commissionAmount,
-      partner_amount: partnerAmount
-    });
 
     // Add IVA info to each item
     const itemsWithIVA = cartItems.map(item => {
@@ -685,13 +657,6 @@ export const createMultiPartnerOrder = async (
     const totalPartners = 1;
     const isSplitMasterOrder = false;
     // Prepare order data
-    console.log('ðŸ” DEBUG Order Data BEFORE saving:', {
-      subtotal: ivaCalculation.subtotal,
-      iva_amount: ivaCalculation.ivaAmount,
-      shipping_cost: totalShippingCost,
-      total_amount: totalAmount,
-      verification: `${ivaCalculation.subtotal} + ${ivaCalculation.ivaAmount} + ${totalShippingCost} = ${ivaCalculation.subtotal + ivaCalculation.ivaAmount + totalShippingCost}`
-    });
 
     const orderData = {
       partner_id: primaryPartnerId,
@@ -757,11 +722,9 @@ export const createMultiPartnerOrder = async (
       .single();
 
     if (insertError || !insertedOrder) {
-      console.error('Error creating unified order:', insertError);
       throw insertError || new Error('Failed to create order');
     }
 
-    console.log('Unified order created successfully with ID:', insertedOrder.id);
 
     // Use the real order ID from database
     const orderIdForPayment = insertedOrder.id;
@@ -793,7 +756,6 @@ export const createMultiPartnerOrder = async (
         shippingAddress
       );
     } catch (preferenceError) {
-      console.error('Error creating payment preference for unified order, rolling back order:', preferenceError);
 
       const { error: rollbackError } = await supabaseClient
         .from('orders')
@@ -801,7 +763,6 @@ export const createMultiPartnerOrder = async (
         .eq('id', orderIdForPayment);
 
       if (rollbackError) {
-        console.error('Error rolling back unified order after preference failure:', rollbackError);
       }
 
       throw preferenceError;
@@ -827,24 +788,16 @@ export const createMultiPartnerOrder = async (
       .eq('id', orderIdForPayment);
 
     if (updateOrderError) {
-      console.error('Error updating order with payment preference data:', updateOrderError);
       throw updateOrderError;
     }
 
-    console.log('Unified payment preference created:', preference.id);
 
     const orders = [unifiedOrder];
     const paymentPreferences = [preference];
 
-    console.log('Multi-partner order completed:', {
-      isTestMode,
-      ordersCount: orders.length,
-      preferencesCount: paymentPreferences.length
-    });
 
     return { orders, paymentPreferences, isTestMode };
   } catch (error) {
-    console.error('Error creating unified order:', error);
     throw error;
   }
 };
@@ -867,12 +820,6 @@ export const createUnifiedPaymentPreference = async (
       throw new Error(`Partner "${partnerConfig.business_name}" no tiene access_token configurado`);
     }
     
-    console.log('Creating unified payment preference for order:', orderId);
-    console.log('Partner config:', {
-      business_name: partnerConfig.business_name,
-      commission_percentage: partnerConfig.commission_percentage || 5.0,
-      has_access_token: !!partnerConfig.access_token
-    });
     
     // Calculate commission using partner's configured percentage
     const commissionAmount = totalAmount * ((partnerConfig.commission_percentage || 5.0) / 100);
@@ -923,14 +870,6 @@ export const createUnifiedPaymentPreference = async (
       };
     }
 
-    console.log('Products payer data prepared:', {
-      hasName: !!payerData.name,
-      hasEmail: !!payerData.email,
-      hasPhone: !!payerData.phone.number,
-      hasAddress: !!payerData.address,
-      phoneNumber: payerData.phone.number,
-      streetName: streetName || 'N/A'
-    });
 
     const shippingItems = shippingCost > 0
       ? [{
@@ -975,24 +914,12 @@ export const createUnifiedPaymentPreference = async (
 
     if (!isTestMode && partnerConfig.is_oauth && partnerConfig.user_id && !isNaN(parseInt(String(partnerConfig.user_id), 10))) {
       preferenceData.marketplace_fee = commissionAmount;
-      console.log('Using OAuth marketplace fee for product checkout (PRODUCTION)');
     } else {
       if (isTestMode) {
-        console.log('Test mode: skipping marketplace_fee to avoid mixed credentials');
       } else {
-        console.log('Manual configuration: no marketplace split');
       }
     }
 
-    console.log('Final unified preference data:', {
-      items_count: preferenceData.items.length,
-      total_amount: totalAmount,
-      marketplace_fee: preferenceData.marketplace_fee || 'SKIPPED',
-      commission_percentage: partnerConfig.commission_percentage || 5.0,
-      partner_receives: totalAmount - commissionAmount,
-      external_reference: preferenceData.external_reference,
-      isTestMode
-    });
 
     // Use partner's token to create preference (partner receives payment minus marketplace fee)
     const response = await fetch(`${MP_BASE_URL}/checkout/preferences`, {
@@ -1012,19 +939,9 @@ export const createUnifiedPaymentPreference = async (
 
     const preference = await response.json();
 
-    console.log('Split payment preference created successfully:', {
-      id: preference.id,
-      marketplace_fee: commissionAmount,
-      partner_receives: totalAmount - commissionAmount,
-      commission_percentage: partnerConfig.commission_percentage || 5.0,
-      isTestMode,
-      hasInitPoint: !!preference.init_point,
-      hasSandboxInitPoint: !!preference.sandbox_init_point
-    });
 
     return preference;
   } catch (error) {
-    console.error('Error creating split payment preference:', error);
     throw error;
   }
 };
@@ -1049,22 +966,16 @@ export const createServiceBookingOrder = async (bookingData: {
   originalPrice?: number;
 }): Promise<{ success: boolean; paymentUrl?: string; orderId?: string; error?: string }> => {
   try {
-    console.log('Creating service booking order...');
-    console.log('Booking data:', bookingData);
 
     // PASO 1: VALIDAR MERCADO PAGO ANTES DE CREAR NADA
-    console.log('âš ï¸ STEP 1: Validating Mercado Pago configuration...');
     let partnerConfig;
     try {
       partnerConfig = await getPartnerMercadoPagoConfig(bookingData.partnerId);
-      console.log('âœ… Partner MP config loaded for:', partnerConfig.business_name);
     } catch (mpError) {
-      console.error('âŒ MP Configuration Error:', mpError);
       throw new Error(`ConfiguraciÃ³n de pago invÃ¡lida: ${getErrorMessage(mpError)}`);
     }
 
     // PASO 2: VALIDAR ACCESS TOKEN
-    console.log('âš ï¸ STEP 2: Validating access token...');
     if (!partnerConfig.access_token || partnerConfig.access_token.length < 20) {
       throw new Error('Token de acceso de Mercado Pago invÃ¡lido o no configurado');
     }
@@ -1080,17 +991,13 @@ export const createServiceBookingOrder = async (bookingData: {
 
       if (!testResponse.ok) {
         const errorData = await testResponse.json();
-        console.error('âŒ Token validation failed:', errorData);
         throw new Error(`Token de Mercado Pago invÃ¡lido o vencido (${errorData.message || testResponse.status})`);
       }
-      console.log('âœ… Access token is valid');
     } catch (tokenError) {
-      console.error('âŒ Token validation error:', tokenError);
       throw new Error('Token de Mercado Pago invÃ¡lido o vencido. Por favor, reconfigura la conexiÃ³n con Mercado Pago.');
     }
 
     // PASO 3: OBTENER DATOS DEL CLIENTE
-    console.log('âš ï¸ STEP 3: Loading customer profile...');
     const { data: customerProfile, error: profileError } = await supabaseClient
       .from('profiles')
       .select('display_name, email, phone, calle, numero, address_locality, barrio, codigo_postal')
@@ -1098,7 +1005,6 @@ export const createServiceBookingOrder = async (bookingData: {
       .single();
 
     if (profileError) {
-      console.warn('Could not load customer profile, using provided data:', profileError);
     }
 
     // Merge customer data
@@ -1114,15 +1020,8 @@ export const createServiceBookingOrder = async (bookingData: {
       zipCode: customerProfile?.codigo_postal
     };
 
-    console.log('Complete customer info prepared:', {
-      hasName: !!completeCustomerInfo.displayName,
-      hasEmail: !!completeCustomerInfo.email,
-      hasPhone: !!completeCustomerInfo.phone,
-      hasAddress: !!(completeCustomerInfo.street && completeCustomerInfo.number)
-    });
 
     // PASO 4: OBTENER DETALLES DEL SERVICIO (IVA, moneda)
-    console.log('âš ï¸ STEP 4: Loading service details...');
     const { data: serviceData, error: serviceError } = await supabaseClient
       .from('partner_services')
       .select('iva_rate, currency, currency_code_dgi')
@@ -1133,20 +1032,11 @@ export const createServiceBookingOrder = async (bookingData: {
     let ivaRate = 0;
     if (serviceData?.iva_rate != null) {
       ivaRate = serviceData.iva_rate;
-      console.log(`âœ… Using service iva_rate: ${ivaRate}%`);
     } else if (partnerConfig.iva_rate != null) {
       ivaRate = partnerConfig.iva_rate;
-      console.log(`âœ… Using partner iva_rate: ${ivaRate}%`);
     } else {
-      console.log(`âš ï¸ No IVA rate configured, using default: ${ivaRate}%`);
     }
 
-    console.log('IVA configuration debug:', {
-      service_iva_rate: serviceData?.iva_rate,
-      partner_iva_rate: partnerConfig.iva_rate,
-      final_iva_rate: ivaRate,
-      partner_iva_included: partnerConfig.iva_included_in_price
-    });
 
     // Get IVA included flag: partner config (default true)
     const ivaIncluded = partnerConfig.iva_included_in_price !== false;
@@ -1165,28 +1055,14 @@ export const createServiceBookingOrder = async (bookingData: {
       ivaAmount = ivaRate > 0 ? subtotal * (ivaRate / 100) : 0;
     }
 
-    console.log('IVA calculation:', {
-      total: bookingData.totalAmount,
-      iva_rate: ivaRate,
-      iva_included: ivaIncluded,
-      subtotal: subtotal.toFixed(2),
-      iva_amount: ivaAmount.toFixed(2)
-    });
 
     // Calculate commission
     const commissionAmount = bookingData.totalAmount * ((partnerConfig.commission_percentage || 5.0) / 100);
     const partnerAmount = bookingData.totalAmount - commissionAmount;
 
-    console.log('Commission calculation:', {
-      total: bookingData.totalAmount,
-      commission_rate: partnerConfig.commission_percentage || 5.0,
-      commission_amount: commissionAmount,
-      partner_amount: partnerAmount
-    });
 
     // PASO 5: CREAR BOOKING EN LA BASE DE DATOS
     // Solo llegamos aquÃ­ si MP estÃ¡ configurado correctamente
-    console.log('âš ï¸ STEP 5: Creating booking record...');
     const bookingRecord = {
       service_id: bookingData.serviceId,
       partner_id: bookingData.partnerId,
@@ -1207,7 +1083,6 @@ export const createServiceBookingOrder = async (bookingData: {
       created_at: new Date().toISOString()
     };
     
-    console.log('Inserting booking record...');
     const { data: insertedBooking, error: bookingError } = await supabaseClient
       .from('bookings')
       .insert([bookingRecord])
@@ -1215,18 +1090,14 @@ export const createServiceBookingOrder = async (bookingData: {
       .single();
     
     if (bookingError) {
-      console.error('Error creating booking:', bookingError);
       throw new Error('No se pudo crear la reserva en la base de datos');
     }
     
-    console.log('Booking created with ID:', insertedBooking.id);
     
     // Create appointment_date at midnight UTC for consistent querying
     const appointmentDate = new Date(bookingData.date);
     appointmentDate.setUTCHours(0, 0, 0, 0);
 
-    console.log('ðŸ“… Appointment date (UTC midnight):', appointmentDate.toISOString());
-    console.log('â° Appointment time:', bookingData.time);
 
     // Create order record for payment tracking
     const orderData = {
@@ -1279,7 +1150,6 @@ export const createServiceBookingOrder = async (bookingData: {
       created_at: new Date().toISOString()
     };
     
-    console.log('Checking if an order already exists for booking:', insertedBooking.id);
     const { data: existingOrder, error: existingOrderError } = await supabaseClient
       .from('orders')
       .select('id')
@@ -1287,14 +1157,12 @@ export const createServiceBookingOrder = async (bookingData: {
       .maybeSingle();
 
     if (existingOrderError) {
-      console.error('Error checking existing order:', existingOrderError);
       throw new Error('No se pudo validar la orden existente de la reserva');
     }
 
     let insertedOrder: any = null;
 
     if (existingOrder?.id) {
-      console.log('Existing order found for booking, updating it:', existingOrder.id);
       const { data: updatedOrder, error: updateOrderError } = await supabaseClient
         .from('orders')
         .update({
@@ -1310,14 +1178,11 @@ export const createServiceBookingOrder = async (bookingData: {
         .single();
 
       if (updateOrderError || !updatedOrder) {
-        console.error('Error updating existing order:', updateOrderError);
         throw new Error('No se pudo actualizar la orden existente de la reserva');
       }
 
       insertedOrder = updatedOrder;
-      console.log('Existing order updated successfully:', insertedOrder.id);
     } else {
-      console.log('Creating order record...');
       const { data: createdOrder, error: orderError } = await supabaseClient
         .from('orders')
         .insert([orderData])
@@ -1325,12 +1190,10 @@ export const createServiceBookingOrder = async (bookingData: {
         .single();
 
       if (orderError || !createdOrder) {
-        console.error('Error creating order:', orderError);
         throw new Error('No se pudo crear la orden de pago');
       }
 
       insertedOrder = createdOrder;
-      console.log('Order created with ID:', insertedOrder.id);
     }
 
     // Registrar creaciÃ³n del booking en auditorÃ­a
@@ -1353,10 +1216,9 @@ export const createServiceBookingOrder = async (bookingData: {
         partner_amount: partnerAmount,
         order_id: insertedOrder.id
       }
-    }).catch(err => console.error('Error logging booking audit:', err));
+    }).catch(err => undefined);
 
     // PASO 7: CREAR PREFERENCIA DE PAGO EN MERCADO PAGO
-    console.log('âš ï¸ STEP 7: Creating payment preference...');
     let preference;
     try {
       preference = await createServicePaymentPreference(
@@ -1365,18 +1227,13 @@ export const createServiceBookingOrder = async (bookingData: {
         partnerConfig,
         commissionAmount
       );
-      console.log('âœ… Payment preference created:', preference.id);
     } catch (mpError) {
-      console.error('âŒ Failed to create MP preference:', mpError);
 
       // ROLLBACK: Eliminar la orden y booking si fallÃ³ la preferencia
-      console.warn('âš ï¸ Rolling back order and booking...');
       try {
         await supabaseClient.from('orders').delete().eq('id', insertedOrder.id);
         await supabaseClient.from('bookings').delete().eq('id', insertedBooking.id);
-        console.log('âœ… Rollback completed');
       } catch (rollbackError) {
-        console.error('âŒ Rollback failed:', rollbackError);
       }
 
       throw new Error(`Error al crear preferencia de pago: ${getErrorMessage(mpError)}`);
@@ -1401,7 +1258,6 @@ export const createServiceBookingOrder = async (bookingData: {
       throw new Error('No se pudo obtener la URL de pago');
     }
 
-    console.log('Payment URL generated successfully');
     
     return {
       success: true,
@@ -1409,7 +1265,6 @@ export const createServiceBookingOrder = async (bookingData: {
       orderId: insertedOrder.id
     };
   } catch (error) {
-    console.error('Error creating service booking order:', error);
     
     // Registrar error en auditorÃ­a
     await logError(error, {
@@ -1422,7 +1277,7 @@ export const createServiceBookingOrder = async (bookingData: {
         amount: bookingData.totalAmount,
         platform: Platform.OS
       }
-    }).catch(err => console.error('Error logging booking error audit:', err));
+    }).catch(err => undefined);
     
     return {
       success: false,
@@ -1445,17 +1300,9 @@ export const createServicePaymentPreference = async (
     const isTestMode = partnerConfig.access_token?.startsWith('TEST-');
     const tokenPrefix = partnerConfig.access_token?.substring(0, 20) || 'N/A';
 
-    console.log('Creating service payment preference:', {
-      orderId,
-      isTestMode,
-      tokenPrefix: tokenPrefix + '...',
-      commissionAmount,
-      willSkipApplicationFee: isTestMode
-    });
 
     // CRITICAL: In TEST mode, Mercado Pago does NOT support marketplace features
     if (isTestMode) {
-      console.warn('âš ï¸ TEST MODE DETECTED - Marketplace features (fees, splits) will be DISABLED');
     }
 
     // Format phone number (remove non-digits and ensure it's 8 digits)
@@ -1482,13 +1329,6 @@ export const createServicePaymentPreference = async (
       };
     }
 
-    console.log('Payer data prepared:', {
-      hasName: !!payerData.name,
-      hasEmail: !!payerData.email,
-      hasPhone: !!payerData.phone.number,
-      hasAddress: !!payerData.address,
-      phoneNumber: payerData.phone.number
-    });
 
     const preferenceData: any = {
       items: [{
@@ -1523,16 +1363,12 @@ export const createServicePaymentPreference = async (
     // 2. NOT in test mode (marketplace_fee doesn't work in test mode with mixed credentials)
     if (!isTestMode && partnerConfig.is_oauth && partnerConfig.user_id && !isNaN(parseInt(partnerConfig.user_id))) {
       preferenceData.marketplace_fee = commissionAmount;
-      console.log('Using OAuth marketplace fee for service booking (PRODUCTION)');
     } else {
       if (isTestMode) {
-        console.log('Test mode: skipping marketplace_fee to avoid mixed credentials');
       } else {
-        console.log('Manual configuration: no marketplace split');
       }
     }
     
-    console.log('Creating service payment preference...');
     const response = await fetch(`${MP_BASE_URL}/checkout/preferences`, {
       method: 'POST',
       headers: {
@@ -1544,25 +1380,14 @@ export const createServicePaymentPreference = async (
     
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('Mercado Pago API error for service booking:', errorData);
       throw new Error(`Failed to create payment preference: ${errorData.message || response.statusText}`);
     }
     
     const preference = await response.json();
 
-    console.log('Service payment preference created successfully:', {
-      preferenceId: preference.id,
-      isTestMode,
-      hasInitPoint: !!preference.init_point,
-      hasSandboxInitPoint: !!preference.sandbox_init_point,
-      initPointDomain: preference.init_point ? new URL(preference.init_point).hostname : 'N/A',
-      sandboxInitPointDomain: preference.sandbox_init_point ? new URL(preference.sandbox_init_point).hostname : 'N/A',
-      shouldUseUrl: isTestMode ? 'sandbox_init_point' : 'init_point'
-    });
 
     return preference;
   } catch (error) {
-    console.error('Error creating service payment preference:', error);
     throw error;
   }
 };
@@ -1591,7 +1416,6 @@ export const refreshPartnerToken = async (partnerId: string): Promise<string> =>
 
     return tokenData.access_token;
   } catch (error) {
-    console.error('Error refreshing partner token:', error);
     throw error;
   }
 };
@@ -1624,14 +1448,8 @@ export const createMarketplacePayment = async (
       paymentRequest.application_fee = commissionAmount; // Commission for marketplace
       paymentRequest.collector_id = collectorId; // Partner's MP user ID
     } else {
-      console.log('Manual Mercado Pago configuration detected - skipping marketplace split fields');
     }
 
-    console.log('Creating marketplace payment:', {
-      amount: paymentData.transaction_amount,
-      commission: commissionAmount,
-      collector_id: partnerConfig.user_id
-    });
 
     const response = await fetch(`${MP_BASE_URL}/v1/payments`, {
       method: 'POST',
@@ -1644,7 +1462,6 @@ export const createMarketplacePayment = async (
 
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('Mercado Pago payment error:', errorData);
       throw new Error(`Payment creation failed: ${errorData.message || response.statusText}`);
     }
 
@@ -1663,7 +1480,6 @@ export const createMarketplacePayment = async (
 
     return payment;
   } catch (error) {
-    console.error('Error creating marketplace payment:', error);
     throw error;
   }
 };
@@ -1722,7 +1538,6 @@ export const getPartnerOAuthStatus = async (partnerId: string): Promise<{
       needsReauthorization: false
     };
   } catch (error) {
-    console.error('Error checking partner OAuth status:', error);
     const authorizationUrl = await generateOAuth2AuthorizationUrlWithConfig(partnerId)
       .catch(() => generateOAuth2AuthorizationUrl(partnerId));
     return {
@@ -1746,7 +1561,6 @@ const validatePartnerToken = async (accessToken: string): Promise<boolean> => {
 
     return response.ok;
   } catch (error) {
-    console.error('Error validating partner token:', error);
     return false;
   }
 };
@@ -1764,19 +1578,16 @@ export const handleOAuth2Callback = async (
     }
 
     const partnerId = state;
-    console.log(`Handling OAuth2 callback for partner ${partnerId}`);
 
     // Exchange code for tokens
     const tokenData = await exchangeCodeForTokens(code, partnerId);
 
-    console.log(`OAuth2 authorization completed for partner ${partnerId}`);
 
     return {
       success: true,
       partnerId: partnerId
     };
   } catch (error) {
-    console.error('Error handling OAuth2 callback:', error);
     return {
       success: false,
       partnerId: state || 'unknown',
@@ -1800,7 +1611,6 @@ export const disconnectPartnerMercadoPago = async (partnerId: string): Promise<v
 
     if (partnerError) throw partnerError;
 
-    console.log('Disconnecting MP for all businesses of user:', partnerData.user_id);
 
     // Disconnect ALL partners with the same user_id
     await supabaseClient
@@ -1812,9 +1622,7 @@ export const disconnectPartnerMercadoPago = async (partnerId: string): Promise<v
       })
       .eq('user_id', partnerData.user_id);
 
-    console.log(`All businesses disconnected from Mercado Pago for user ${partnerData.user_id}`);
   } catch (error) {
-    console.error('Error disconnecting partner from Mercado Pago:', error);
     throw error;
   }
 };
@@ -1883,11 +1691,9 @@ export const validateCredentialsFormat = (accessToken: string, publicKey: string
  */
 export const isMercadoPagoAppInstalled = async (): Promise<boolean> => {
   try {
-    console.log('ðŸ” Checking for Mercado Pago app...', { platform: Platform.OS });
 
     // En web siempre retornamos false
     if (Platform.OS === 'web') {
-      console.log('âŒ Running on web, app detection not available');
       return false;
     }
 
@@ -1901,25 +1707,19 @@ export const isMercadoPagoAppInstalled = async (): Promise<boolean> => {
     // Intentar verificar si alguno de los esquemas estÃ¡ disponible
     for (const scheme of mpAppSchemes) {
       try {
-        console.log('   Trying scheme:', scheme);
         const canOpen = await Linking.canOpenURL(scheme);
-        console.log('   Result:', canOpen);
 
         if (canOpen) {
-          console.log('âœ… Mercado Pago app detected with scheme:', scheme);
           return true;
         }
       } catch (error) {
-        console.log('   Error with scheme:', getErrorMessage(error));
         // Continuar con el siguiente esquema
         continue;
       }
     }
 
-    console.log('âŒ Mercado Pago app not installed');
     return false;
   } catch (error) {
-    console.error('Error checking Mercado Pago app:', error);
     return false;
   }
 };
@@ -1932,7 +1732,6 @@ const extractPreferenceId = (url: string): string | null => {
     const match = url.match(/pref_id=([^&]+)/);
     return match ? match[1] : null;
   } catch (error) {
-    console.error('Error extracting preference ID:', error);
     return null;
   }
 };
@@ -1957,23 +1756,11 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
     const urlDomain = new URL(paymentUrl).hostname;
     const isSandboxUrl = urlDomain.includes('sandbox');
 
-    console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
-    console.log('ðŸš€ OPENING MERCADO PAGO PAYMENT');
-    console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
-    console.log('URL:', paymentUrl);
-    console.log('Domain:', urlDomain);
-    console.log('Is Test Mode:', isTestMode);
-    console.log('Is Sandbox URL:', isSandboxUrl);
-    console.log('Platform:', Platform.OS);
 
     // DiagnÃ³stico importante
     if (isSandboxUrl) {
-      console.log('âš ï¸  WARNING: Sandbox URLs may NOT open the app');
-      console.log('âš ï¸  Recommendation: Use production credentials with test cards');
-      console.log('âš ï¸  This will ensure the app opens correctly');
     }
 
-    console.log('');
 
     // ESTRATEGIA DIFERENTE PARA iOS Y ANDROID:
     //
@@ -1984,7 +1771,6 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
     //
     try {
       if (Platform.OS === 'ios') {
-        console.log('ðŸ“± iOS detected - trying to open MP app first');
 
         // En iOS, intentamos primero con el Universal Link de Mercado Pago
         // Esto deberÃ­a abrir la app si estÃ¡ instalada
@@ -1993,7 +1779,6 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
         try {
           // Intentar abrir directamente con el URL de pago
           // iOS deberÃ­a reconocer el dominio mercadopago.com y abrir la app
-          console.log('   Attempting to open payment URL:', paymentUrl);
 
           // En iOS, necesitamos usar una promesa con timeout para detectar
           // si la app se abriÃ³ o no
@@ -2005,18 +1790,13 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
           ]);
 
           appOpened = true;
-          console.log('âœ… Payment URL opened on iOS');
         } catch (error) {
-          console.log('   Direct open attempt completed (app may or may not have opened)');
           // En iOS, openURL no falla aunque la app no se abra
           // El sistema abre Safari si la app no estÃ¡ instalada
           appOpened = true;
         }
 
         if (appOpened) {
-          console.log('âœ… SUCCESS: Payment opened on iOS');
-          console.log('   iOS will use MP app if installed, Safari otherwise');
-          console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n');
 
           return {
             success: true,
@@ -2030,19 +1810,12 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
         };
       } else {
         // ANDROID: El sistema de App Links maneja automÃ¡ticamente
-        console.log('ðŸ¤– Android detected - opening URL (App Links will handle)');
-        console.log('   URL:', paymentUrl);
 
         const canOpen = await Linking.canOpenURL(paymentUrl);
         if (!canOpen) {
-          console.error('âŒ Cannot open URL:', paymentUrl);
-          console.log('Attempting to open anyway...');
         }
 
         await Linking.openURL(paymentUrl);
-        console.log('âœ… SUCCESS: Payment URL opened on Android');
-        console.log('   Android App Links will redirect to app if installed');
-        console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n');
 
         return {
           success: true,
@@ -2050,25 +1823,17 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
         };
       }
     } catch (openError: any) {
-      console.error('âŒ ERROR in Linking.openURL:', openError);
-      console.error('   Error message:', openError.message);
-      console.error('   Error name:', openError.name);
       // Re-throw para que sea capturado por el catch externo
       throw openError;
     }
 
   } catch (error) {
-    console.error('âŒ ERROR opening Mercado Pago payment:', error);
-    console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n');
 
     // Fallback: intentar abrir en navegador web
     try {
-      console.log('ðŸ”„ FALLBACK: Trying to open web URL...');
       await Linking.openURL(paymentUrl);
-      console.log('âœ… Fallback successful');
       return { success: true, openedInApp: false };
     } catch (fallbackError) {
-      console.error('âŒ Fallback failed:', fallbackError);
       return {
         success: false,
         openedInApp: false,
@@ -2088,11 +1853,6 @@ export const createSimplePaymentPreference = async (
   try {
     const isTest = isTestEnvironment(accessToken);
 
-    console.log('Creating payment preference:', {
-      amount: paymentData.amount,
-      description: paymentData.description,
-      isTestMode: isTest
-    });
 
     const response = await fetch(`${MP_BASE_URL}/checkout/preferences`, {
       method: 'POST',
@@ -2140,17 +1900,11 @@ export const createSimplePaymentPreference = async (
 
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('MercadoPago API Error:', errorData);
       throw new Error(`Error ${response.status}: ${errorData.message || 'Error al crear preferencia de pago'}`);
     }
 
     const preference = await response.json();
 
-    console.log('Payment preference created:', {
-      id: preference.id,
-      hasInitPoint: !!preference.init_point,
-      hasSandboxInitPoint: !!preference.sandbox_init_point
-    });
 
     return {
       id: preference.id,
@@ -2160,7 +1914,6 @@ export const createSimplePaymentPreference = async (
       sandbox_init_point: preference.sandbox_init_point
     };
   } catch (error) {
-    console.error('Error creating simple payment preference:', error);
     throw error;
   }
 };
@@ -2184,7 +1937,6 @@ export const getPartnerMercadoPagoSimpleConfig = async (
       connectedAt: fullConfig.connected_at
     };
   } catch (error) {
-    console.error('Error getting partner MP simple config:', error);
     throw error;
   }
 };
@@ -2199,7 +1951,6 @@ export const regeneratePaymentLink = async (orderId: string): Promise<{
   error?: string;
 }> => {
   try {
-    console.log('Regenerating payment link for order:', orderId);
 
     // 1. Obtener la orden existente
     const { data: order, error: orderError } = await supabaseClient
@@ -2209,7 +1960,6 @@ export const regeneratePaymentLink = async (orderId: string): Promise<{
       .single();
 
     if (orderError || !order) {
-      console.error('Order not found:', orderError);
       return {
         success: false,
         error: 'Orden no encontrada'
@@ -2232,7 +1982,6 @@ export const regeneratePaymentLink = async (orderId: string): Promise<{
       .single();
 
     if (partnerError || !partner?.mercadopago_config) {
-      console.error('Partner MP config not found:', partnerError);
       return {
         success: false,
         error: 'ConfiguraciÃ³n de pago no encontrada'
@@ -2242,7 +1991,6 @@ export const regeneratePaymentLink = async (orderId: string): Promise<{
     const partnerConfig = partner.mercadopago_config;
     const isTestMode = partnerConfig.access_token?.startsWith('TEST-');
 
-    console.log('Creating new payment preference...');
 
     // 4. Crear nueva preferencia de pago basada en el tipo de orden
     let paymentUrl: string;
@@ -2287,7 +2035,6 @@ export const regeneratePaymentLink = async (orderId: string): Promise<{
 
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('MP API error:', errorData);
         throw new Error('Error al crear preferencia de pago');
       }
 
@@ -2315,10 +2062,6 @@ export const regeneratePaymentLink = async (orderId: string): Promise<{
       };
     }
 
-    console.log('Payment link regenerated successfully:', {
-      orderId,
-      paymentUrl: paymentUrl.substring(0, 50) + '...'
-    });
 
     return {
       success: true,
@@ -2326,7 +2069,6 @@ export const regeneratePaymentLink = async (orderId: string): Promise<{
     };
 
   } catch (error) {
-    console.error('Error regenerating payment link:', error);
     return {
       success: false,
       error: getErrorMessage(error)

@@ -70,7 +70,6 @@ export default function BiometricSetup() {
         );
       }
     } catch (error) {
-      console.error('Error enabling biometric:', error);
       Alert.alert(
         'Error',
         'Hubo un problema configurando la biometría. Puedes intentarlo más tarde desde tu perfil.',

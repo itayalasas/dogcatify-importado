@@ -673,7 +673,6 @@ export const generateMedicalHistoryHTML = async (petId: string, ownerId: string)
       .single();
 
     if (petError || !petData) {
-      console.error('Error fetching pet data:', petError);
       if (petError?.message?.includes('JWT') || petError?.message?.includes('expired')) {
         throw new Error('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
       }
@@ -688,7 +687,6 @@ export const generateMedicalHistoryHTML = async (petId: string, ownerId: string)
       .single();
 
     if (ownerError || !ownerData) {
-      console.error('Error fetching owner data:', ownerError);
       if (ownerError?.message?.includes('JWT') || ownerError?.message?.includes('expired')) {
         throw new Error('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
       }
@@ -703,7 +701,6 @@ export const generateMedicalHistoryHTML = async (petId: string, ownerId: string)
       .order('created_at', { ascending: false });
 
     if (recordsError) {
-      console.error('Error fetching medical records:', recordsError);
       if (recordsError?.message?.includes('JWT') || recordsError?.message?.includes('expired')) {
         throw new Error('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
       }

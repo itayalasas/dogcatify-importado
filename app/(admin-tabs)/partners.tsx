@@ -33,18 +33,14 @@ export default function AdminPartners() {
 
   useEffect(() => {
     if (!currentUser) {
-      console.log('No user logged in');
       return;
     }
 
-    console.log('Current user email:', currentUser.email);
     const isAdmin = currentUser?.isAdmin === true;
     if (!isAdmin) {
-      console.log('User is not admin');
       return;
     }
 
-    console.log('Fetching admin partners data...');
     fetchPartners();
   }, [currentUser]);
 
@@ -64,7 +60,6 @@ export default function AdminPartners() {
 
   const fetchPartners = async () => {
     try {
-      console.log('Fetching partners...');
       const { data, error } = await supabaseClient
         .from('partners')
         .select(`
@@ -84,11 +79,9 @@ export default function AdminPartners() {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error fetching partners:', error);
         throw error;
       }
 
-      console.log('Partners data:', data?.length || 0, 'records found');
       
       // Fetch services count for each partner
       const partnersWithServices = await Promise.all(
@@ -102,7 +95,6 @@ export default function AdminPartners() {
               .eq('is_active', true);
             
             if (servicesError) {
-              console.error(`Error counting services for partner ${partner.id}:`, servicesError);
             }
             
             return {
@@ -110,7 +102,6 @@ export default function AdminPartners() {
               servicesCount: servicesCount || 0
             };
           } catch (error) {
-            console.error(`Error processing partner ${partner.id}:`, error);
             return {
               ...partner,
               servicesCount: 0
@@ -164,7 +155,6 @@ export default function AdminPartners() {
         supabaseClient.removeChannel(channel);
       };
     } catch (error) {
-      console.error('Error fetching partners:', error);
     }
   };
 
@@ -203,7 +193,6 @@ export default function AdminPartners() {
       setShowSubscriptionModal(false);
       Alert.alert('Éxito', 'Plan actualizado correctamente');
     } catch (error) {
-      console.error('Error updating subscription plan:', error);
       Alert.alert('Error', 'No se pudo actualizar el plan');
     } finally {
       setLoading(false);

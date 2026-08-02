@@ -135,15 +135,11 @@ export default function Register() {
     }
 
     setLoading(true);
-    console.log('=== STARTING REGISTRATION PROCESS ===');
-    console.log('Email:', email.toLowerCase().trim());
-    console.log('Full name:', fullName.trim());
 
     try {
       const trimmedEmail = email.toLowerCase().trim();
       const trimmedName = fullName.trim();
 
-      console.log('Step 1: Creating user with Supabase Auth...');
       const { data: authData, error: authError } = await supabaseClient.auth.signUp({
         email: trimmedEmail,
         password,
@@ -159,31 +155,22 @@ export default function Register() {
       });
 
       if (authError) {
-        console.error('Auth signup error:', authError);
         throw new Error(authError.message);
       }
 
       if (!authData.user) {
-        console.error('No user returned from signup');
         throw new Error('Error creating user');
       }
 
-      console.log('Step 2: User created successfully. User ID:', authData.user.id);
-      console.log('Step 3: Profile will be auto-created by database trigger with name:', trimmedName);
 
-      console.log('Step 4: Creating email confirmation token using helper function...');
       const confirmationToken = await createEmailConfirmationToken(
         authData.user.id,
         trimmedEmail,
         'signup'
       );
-      console.log('Step 5: Confirmation token created:', confirmationToken);
 
-      console.log('Step 6: Generating confirmation URL using helper function...');
       const confirmationUrl = generateConfirmationUrl(confirmationToken, 'signup');
-      console.log('Step 7: Confirmation URL generated:', confirmationUrl);
 
-      console.log('Step 8: Sending confirmation email using API helper function...');
       const emailResult = await sendConfirmationEmailAPI(
         trimmedEmail,
         trimmedName,
@@ -191,16 +178,11 @@ export default function Register() {
       );
 
       if (!emailResult.success) {
-        console.error('Email sending failed:', emailResult.error);
-        console.warn('User registered but email not sent. Manual intervention may be needed.');
       } else {
-        console.log('Email sent successfully');
         if (emailResult.log_id) {
-          console.log('Email log ID:', emailResult.log_id);
         }
       }
 
-      console.log('=== REGISTRATION COMPLETED ===');
 
       const confirmationTitle = emailResult.success ? 'Registro exitoso' : 'Cuenta creada';
       const confirmationMessage = emailResult.success
@@ -213,8 +195,6 @@ export default function Register() {
         [{ text: 'ENTENDIDO', onPress: () => router.replace('/auth/login') }]
       );
     } catch (error: any) {
-      console.error('Registration error:', error);
-      console.error('Error stack:', error.stack);
       Alert.alert(
         'No pudimos crear tu cuenta',
         getFriendlyAuthErrorMessage(error, 'owner')

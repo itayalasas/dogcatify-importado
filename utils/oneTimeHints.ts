@@ -14,7 +14,6 @@ export const hasSeenHint = async (hintKey: string, userId?: string | null): Prom
     const value = await AsyncStorage.getItem(storageKey);
     return value === 'true';
   } catch (error) {
-    console.warn('Error reading hint visibility:', error);
     return false;
   }
 };
@@ -24,6 +23,5 @@ export const markHintAsSeen = async (hintKey: string, userId?: string | null): P
     const storageKey = buildHintStorageKey(hintKey, userId);
     await AsyncStorage.setItem(storageKey, 'true');
   } catch (error) {
-    console.warn('Error storing hint visibility:', error);
   }
 };

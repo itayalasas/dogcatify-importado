@@ -157,7 +157,6 @@ export default function BecomePartner() {
       );
 
       if (!emailResult.success) {
-        console.warn('Partner confirmation email could not be sent:', emailResult.error);
       }
 
       const confirmationTitle = emailResult.success
@@ -173,7 +172,6 @@ export default function BecomePartner() {
         [{ text: 'ENTENDIDO', onPress: () => router.replace('/auth/login') }]
       );
     } catch (error: any) {
-      console.error('Partner registration error:', error);
       Alert.alert(
         'No pudimos crear la cuenta',
         getFriendlyAuthErrorMessage(error, 'partner')

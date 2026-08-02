@@ -58,7 +58,6 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // Check if running in Expo Go
       const isExpoGo = __DEV__ && !LocalAuthentication;
       if (isExpoGo) {
-        console.log('Biometric authentication not available in Expo Go');
         setIsBiometricAvailable(false);
         setIsBiometricSupported(false);
         setBiometricType(null);
@@ -82,7 +81,6 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
       }
     } catch (error) {
-      console.error('Error checking biometric availability:', error);
       setIsBiometricAvailable(false);
       setIsBiometricSupported(false);
       setBiometricType(null);
@@ -92,19 +90,15 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Check biometric enabled status from device storage only (no database dependency)
   const checkBiometricEnabledFromDevice = async () => {
     try {
-      console.log('Checking biometric enabled from device storage...');
       const storedCredentials = await getStoredCredentials();
       
       if (!storedCredentials) {
-        console.log('No stored credentials found, biometric disabled');
         setIsBiometricEnabled(false);
         return;
       }
 
-      console.log('Stored credentials found, biometric enabled');
       setIsBiometricEnabled(true);
     } catch (error) {
-      console.error('Error checking biometric from device:', error);
       setIsBiometricEnabled(false);
     }
   };
@@ -114,7 +108,6 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (!currentUser) return;
     
     try {
-      console.log('Syncing biometric status with database...');
       const storedCredentials = await getStoredCredentials();
       
       try {
@@ -128,10 +121,8 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (error) {
           // If column doesn't exist, gracefully handle it
           if (error.code === '42703' || error.code === 'PGRST204') {
-            console.log('Biometric columns not yet available in database');
             return;
           }
-          console.error('Error checking biometric status:', error);
           return;
         }
 
@@ -140,7 +131,6 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         
         // Sync database with local storage state
         if (dbEnabled && !hasLocalCredentials) {
-          console.log('Database shows biometric enabled but no local credentials found, updating database...');
           await supabaseClient
             .from('profiles')
             .update({ 
@@ -149,7 +139,6 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             })
             .eq('id', currentUser.id);
         } else if (!dbEnabled && hasLocalCredentials) {
-          console.log('Local credentials found but database shows disabled, updating database...');
           await supabaseClient
             .from('profiles')
             .update({ 
@@ -160,10 +149,8 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             .eq('id', currentUser.id);
         }
       } catch (dbError) {
-        console.log('Database sync failed, but local credentials determine biometric status:', dbError);
       }
     } catch (error) {
-      console.error('Error syncing biometric with database:', error);
     }
   };
 
@@ -177,17 +164,14 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const enableBiometric = async (email: string, password: string): Promise<boolean> => {
     try {
-      console.log('Starting biometric setup...');
       
       // Biometric authentication is not available on web
       if (Platform.OS === 'web') {
-        console.log('Biometric authentication not available on web');
         return false;
       }
 
       // Check if running in Expo Go
       if (!LocalAuthentication || !SecureStore) {
-        console.log('Biometric authentication not available in Expo Go');
         return false;
       }
 
@@ -232,17 +216,14 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       });
 
       if (!result.success) {
-        console.log('Biometric authentication failed or cancelled');
         return false;
       }
 
-      console.log('Biometric authentication successful, storing credentials...');
 
       // Store credentials securely
       await SecureStore.setItemAsync('biometric_email', email);
       await SecureStore.setItemAsync('biometric_password', password);
       
-      console.log('Credentials stored, updating user profile...');
 
       // Update user profile in Supabase (gracefully handle missing columns)
       try {
@@ -258,11 +239,9 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (error) {
           // If columns don't exist yet, continue anyway (credentials are stored locally)
           if (error.code === '42703' || error.code === 'PGRST204' || error.code === 'PGRST116') {
-            console.log('Biometric columns not available in database yet, but credentials stored locally');
             setIsBiometricEnabled(true);
             return true;
           }
-          console.error('Error updating biometric status in Supabase:', error);
           // Clean up stored credentials if database update fails
           await SecureStore.deleteItemAsync('biometric_email');
           await SecureStore.deleteItemAsync('biometric_password');
@@ -270,25 +249,20 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           return false;
         }
         
-        console.log('Biometric status updated in database successfully');
       } catch (dbError) {
-        console.log('Database update failed, but credentials stored locally:', dbError);
         // If database update fails but credentials are stored, still consider it enabled
         setIsBiometricEnabled(true);
         return true;
       }
 
-      console.log('Biometric setup completed successfully');
       setIsBiometricEnabled(true);
       return true;
     } catch (error) {
-      console.error('Error enabling biometric:', error);
       // Clean up any stored credentials on error
       try {
         await SecureStore.deleteItemAsync('biometric_email');
         await SecureStore.deleteItemAsync('biometric_password');
       } catch (cleanupError) {
-        console.error('Error cleaning up credentials:', cleanupError);
       }
       Alert.alert('Error', 'No se pudo configurar la autenticación biométrica');
       return false;
@@ -322,7 +296,6 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           .eq('id', currentUser.id);
 
         if (error && (error.code === '42703' || error.code === 'PGRST204')) {
-          console.log('Biometric column not available, credentials removed locally');
           // Column doesn't exist yet, but credentials are already removed locally
         } else if (error) {
           throw error;
@@ -340,7 +313,6 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       setIsBiometricEnabled(false);
     } catch (error) {
-      console.error('Error disabling biometric:', error);
       throw error;
     }
   };
@@ -368,7 +340,6 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       
       return null;
     } catch (error) {
-      console.error('Error authenticating with biometric:', error);
       return null;
     }
   };
@@ -389,7 +360,6 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       return null;
     } catch (error) {
-      console.error('Error getting stored credentials:', error);
       return null;
     }
   };

@@ -131,7 +131,6 @@ export default function ServiceBooking() {
         setAppliedDiscount(promotion.discount_percentage);
       }
     } catch (error) {
-      console.error('Error loading active promotion in booking:', error);
     }
   };
 
@@ -152,11 +151,9 @@ export default function ServiceBooking() {
   // Ocultar loader cuando el usuario regresa a la pantalla (al volver de MercadoPago)
   useFocusEffect(
     React.useCallback(() => {
-      console.log('📱 useFocusEffect triggered - isProcessingPayment:', isProcessingPayment.current);
 
       // CRÍTICO: NO ocultar el loader si estamos procesando pago
       if (isProcessingPayment.current) {
-        console.log('⚠️  Estamos procesando pago, NO ocultar loader');
         return;
       }
 
@@ -164,7 +161,6 @@ export default function ServiceBooking() {
       // Esto permite que Mercado Pago se abra completamente antes de ocultar el loader
       const timer = setTimeout(() => {
         if (paymentLoading && !isProcessingPayment.current) {
-          console.log('🔄 Usuario regresó a la pantalla de reserva, ocultando loader');
           setPaymentLoading(false);
           setPaymentMessage('Preparando tu pago con Mercado Pago');
         }
@@ -177,11 +173,9 @@ export default function ServiceBooking() {
   // NUEVO: Listener de AppState para detectar cuando la app vuelve al primer plano (iOS fix)
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
-      console.log('📱 AppState changed to:', nextAppState);
 
       // Si la app vuelve al primer plano ('active') y el loader está visible
       if (nextAppState === 'active' && paymentLoading && !isProcessingPayment.current) {
-        console.log('✅ iOS: App returned to foreground, hiding payment loader');
 
         // En iOS, agregar un pequeño delay para asegurar que la transición se complete
         const delay = Platform.OS === 'ios' ? 800 : 500;
@@ -269,7 +263,6 @@ export default function ServiceBooking() {
 
       setScheduleClosures(closureData || []);
     } catch (error) {
-      console.error('Error fetching booking data:', error);
       Alert.alert('Error', 'No se pudo cargar la información de la reserva');
     } finally {
       setLoading(false);
@@ -280,7 +273,6 @@ export default function ServiceBooking() {
     if (!partnerId || !serviceId) return [];
 
     try {
-      console.log('🔍 Fetching booked times for date:', date.toDateString(), 'service:', serviceId);
 
       const dateString = date.toISOString().split('T')[0];
 
@@ -293,7 +285,6 @@ export default function ServiceBooking() {
         .lte('date', `${dateString}T23:59:59`);
 
       if (error) {
-        console.error('❌ Error fetching booked times from bookings:', error);
         return [];
       }
 
@@ -302,11 +293,9 @@ export default function ServiceBooking() {
         service_duration: booking.service_duration,
       })) || [];
 
-      console.log('⏰ Booked bookings from BOOKINGS:', formattedBookings);
       setBookedBookings(formattedBookings);
       return formattedBookings;
     } catch (error) {
-      console.error('❌ Error fetching booked times:', error);
       return [];
     }
   };
@@ -547,7 +536,6 @@ export default function ServiceBooking() {
     const servicePrice = getServicePrice();
     const isFreeService = service?.has_cost === false || servicePrice === 0;
 
-    console.log('Confirming booking - Price:', servicePrice, 'Is Free:', isFreeService);
 
     if (isFreeService) {
       // Servicio gratuito - crear reserva directamente sin pago
@@ -579,7 +567,6 @@ export default function ServiceBooking() {
       if (selectedTime && selectedTime !== 'N/A') {
         const dateString = selectedDate.toISOString().split('T')[0];
 
-        console.log('🔍 Validando disponibilidad de horario para servicio gratuito...');
         const { data: existingBookings, error: checkError } = await supabaseClient
           .from('bookings')
           .select('id, time, service_duration, status')
@@ -589,7 +576,6 @@ export default function ServiceBooking() {
           .lte('date', `${dateString}T23:59:59`);
 
         if (checkError) {
-          console.error('❌ Error verificando disponibilidad:', checkError);
           throw new Error('No se pudo verificar la disponibilidad del horario');
         }
 
@@ -606,7 +592,6 @@ export default function ServiceBooking() {
         });
 
         if (!slotStillAvailable) {
-          console.warn('⚠️ Ya existe una reserva para esta fecha/hora/servicio:', existingBookings);
           setPaymentLoading(false);
           Alert.alert(
             'Horario No Disponible',
@@ -623,15 +608,12 @@ export default function ServiceBooking() {
           return;
         }
 
-        console.log('✅ Horario disponible, continuando con la reserva gratuita...');
       }
 
       // Crear fecha para appointment_date (solo la fecha, a medianoche UTC)
       const appointmentDate = new Date(selectedDate);
       appointmentDate.setUTCHours(0, 0, 0, 0);
 
-      console.log('📅 Appointment date (UTC midnight):', appointmentDate.toISOString());
-      console.log('⏰ Appointment time:', selectedTime);
 
       // PASO 1: Crear la reserva (booking)
       const { data: bookingData, error: bookingError } = await supabaseClient
@@ -759,16 +741,11 @@ export default function ServiceBooking() {
       }
 
       if (orderError) {
-        console.error('Error creating order:', orderError);
         // Si falla la orden, eliminamos el booking
         await supabaseClient.from('bookings').delete().eq('id', bookingData.id);
         throw orderError;
       }
 
-      console.log('✅ Free booking created successfully:', {
-        bookingId: bookingData.id,
-        orderId: orderData.id
-      });
 
       // Enviar notificación al partner mediante Edge Function
       try {
@@ -782,7 +759,6 @@ export default function ServiceBooking() {
           .single();
 
         if (partnerError || !partnerData?.user_id) {
-          console.error('Error loading partner user for notification:', partnerError);
         } else {
           const { data: profileData, error: profileError } = await supabaseClient
             .from('profiles')
@@ -791,7 +767,6 @@ export default function ServiceBooking() {
             .single();
 
           if (profileError || (!profileData?.fcm_token && !profileData?.push_token)) {
-            console.warn('Partner has no fcm_token for booking notification:', profileError);
           } else {
             await fetch(`${supabaseUrl}/functions/v1/send-notification-fcm-v1`, {
               method: 'POST',
@@ -815,7 +790,6 @@ export default function ServiceBooking() {
           }
         }
       } catch (notifError) {
-        console.error('Error sending notification:', notifError);
       }
 
       setPaymentLoading(false);
@@ -830,7 +804,6 @@ export default function ServiceBooking() {
         [{ text: 'Perfecto', onPress: () => router.replace('/(tabs)/services') }]
       );
     } catch (error) {
-      console.error('Error creating free booking:', error);
       setPaymentLoading(false);
       Alert.alert(
         'Error',
@@ -859,47 +832,30 @@ export default function ServiceBooking() {
       return;
     }
 
-    console.log('💳 ========== INICIO handleMercadoPagoPayment (BOOKING) ==========');
 
     // CRÍTICO: Activar flag de procesamiento para evitar que useFocusEffect oculte el loader
     isProcessingPayment.current = true;
-    console.log('🚩 isProcessingPayment = true');
 
     setPaymentLoading(true);
     setPaymentStep('processing');
     setPaymentMessage('Preparando tu reserva...');
-    console.log('✅ paymentLoading = true, loader DEBE estar visible');
 
     // Cerrar el modal de pago para mostrar el loader en pantalla completa
     setShowPaymentModal(false);
-    console.log('✅ Modal de pago cerrado');
 
     // Guardar el tiempo de inicio para garantizar 5 segundos mínimos
     const startTime = Date.now();
     const MIN_LOADING_TIME = 5000; // 5 segundos
-    console.log(`⏱️  Tiempo mínimo de loading: ${MIN_LOADING_TIME}ms`);
 
     try {
       // Esperar 800ms para que el loader sea visible
       await new Promise(resolve => setTimeout(resolve, 800));
 
-      console.log('=== Iniciando flujo de Mercado Pago ===');
-      console.log('Datos de la reserva:', {
-        serviceId: service.id,
-        partnerId: partner.id,
-        customerId: currentUser!.id,
-        petId: pet.id,
-        date: selectedDate.toISOString(),
-        time: selectedTime || 'N/A', // Para servicios de pensión, la hora no aplica
-        serviceName: service.name,
-        totalAmount: getServicePrice()
-      });
 
       // VALIDACIÓN CRÍTICA: Verificar que no exista una reserva para esta fecha/hora/servicio
       if (selectedTime && selectedTime !== 'N/A') {
         const dateString = selectedDate.toISOString().split('T')[0];
 
-        console.log('🔍 Validando disponibilidad de horario...');
         const { data: existingBookings, error: checkError } = await supabaseClient
           .from('bookings')
           .select('id, time, service_duration, status')
@@ -909,7 +865,6 @@ export default function ServiceBooking() {
           .lte('date', `${dateString}T23:59:59`);
 
         if (checkError) {
-          console.error('❌ Error verificando disponibilidad:', checkError);
           throw new Error('No se pudo verificar la disponibilidad del horario');
         }
 
@@ -926,7 +881,6 @@ export default function ServiceBooking() {
         });
 
         if (!slotStillAvailable) {
-          console.warn('⚠️ Ya existe una reserva para esta fecha/hora/servicio:', existingBookings);
           setPaymentLoading(false);
           setPaymentStep('methods');
           Alert.alert(
@@ -944,7 +898,6 @@ export default function ServiceBooking() {
           return;
         }
 
-        console.log('✅ Horario disponible, continuando con la reserva...');
       }
 
       const originalPrice = getBaseServicePrice();
@@ -973,14 +926,9 @@ export default function ServiceBooking() {
       };
 
       setPaymentMessage('Creando orden de reserva...');
-      console.log('Llamando a createServiceBookingOrder...');
       const result = await createServiceBookingOrder(bookingData);
-      console.log('Resultado de createServiceBookingOrder:', result);
 
       if (result.success && result.paymentUrl) {
-        console.log('✅ Orden creada exitosamente');
-        console.log('URL de pago:', result.paymentUrl);
-        console.log('ID de orden:', result.orderId);
 
         // Detect environment from payment URL
         const isTestMode = result.paymentUrl!.includes('sandbox');
@@ -995,21 +943,16 @@ export default function ServiceBooking() {
           const remainingTime = Math.max(0, MIN_LOADING_TIME - elapsedTime);
 
           if (remainingTime > 0) {
-            console.log(`⏳ Esperando ${remainingTime}ms para completar tiempo mínimo de loading`);
             await new Promise(resolve => setTimeout(resolve, remainingTime));
           }
 
           // Open Mercado Pago in browser
-          console.log('🚀 Abriendo Mercado Pago...');
           const openResult = await openMercadoPagoPayment(result.paymentUrl!, isTestMode);
-          console.log('📱 openMercadoPagoPayment completado:', openResult);
 
           if (!openResult.success) {
-            console.error('❌ Error abriendo Mercado Pago');
 
             // CRÍTICO: Desactivar flag de procesamiento si falla
             isProcessingPayment.current = false;
-            console.log('🚩 isProcessingPayment = false (error al abrir MP)');
 
             Alert.alert(
               'Error',
@@ -1019,31 +962,24 @@ export default function ServiceBooking() {
             setPaymentLoading(false);
             setPaymentMessage('Preparando tu pago con Mercado Pago');
           } else {
-            console.log('✅ Mercado Pago abierto exitosamente');
-            console.log('⏳ Loader DEBE permanecer visible hasta que el usuario regrese');
 
             // CRÍTICO: Desactivar flag de procesamiento DESPUÉS de abrir MP exitosamente
             // Esto permite que useFocusEffect oculte el loader cuando el usuario regrese
             isProcessingPayment.current = false;
-            console.log('🚩 isProcessingPayment = false (MP abierto, esperando retorno del usuario)');
 
             // IMPORTANTE: NO ocultar el loader aquí, se ocultará automáticamente cuando el usuario vuelva a la app
             // El useFocusEffect se encarga de ocultar el loader cuando regresa
           }
         } catch (linkError) {
-          console.error('Error abriendo URL de Mercado Pago:', linkError);
           Alert.alert('Error', 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.');
         }
       } else {
-        console.error('❌ Error en la respuesta:', result.error);
         throw new Error(result.error || 'Error creando la orden');
       }
     } catch (error: any) {
-      console.error('❌ Error with Mercado Pago payment:', error);
 
       // CRÍTICO: Desactivar flag de procesamiento si hay error
       isProcessingPayment.current = false;
-      console.log('🚩 isProcessingPayment = false (error en pago)');
 
       // CRÍTICO: Ocultar loader inmediatamente
       setPaymentLoading(false);

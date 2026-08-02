@@ -226,7 +226,6 @@ Responde ÚNICAMENTE en formato JSON válido:
 
 Si no encuentras ninguna desparasitación, retorna un array vacío con "totalFound": 0.`;
 
-    console.log('Calling OpenAI Vision API...');
 
     const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -265,7 +264,6 @@ Si no encuentras ninguna desparasitación, retorna un array vacío con "totalFou
 
     if (!openaiResponse.ok) {
       const errorData = await openaiResponse.text();
-      console.error('OpenAI API error:', errorData);
       return new Response(
         JSON.stringify({
           error: 'OpenAI API error',
@@ -281,7 +279,6 @@ Si no encuentras ninguna desparasitación, retorna un array vacío con "totalFou
     const openaiData = await openaiResponse.json();
     const responseText = openaiData.choices[0].message.content;
 
-    console.log('OpenAI response:', responseText);
 
     let extractedRecords: ExtractedRecords;
     try {
@@ -313,11 +310,9 @@ Si no encuentras ninguna desparasitación, retorna un array vacío con "totalFou
       return processedRecord;
     });
 
-    console.log(`Extracted ${processedRecords.length} ${recordType} records:`, processedRecords);
 
     // Validate species match if petSpecies was provided
     const detectedSpecies = extractedRecords.detectedSpecies;
-    console.log('Detected species:', detectedSpecies, 'Expected species:', petSpecies);
 
     if (petSpecies && detectedSpecies && detectedSpecies !== 'unknown' && detectedSpecies !== petSpecies) {
       const detectedSpeciesText = detectedSpecies === 'dog' ? 'perro' : 'gato';
@@ -355,7 +350,6 @@ Si no encuentras ninguna desparasitación, retorna un array vacío con "totalFou
     );
 
   } catch (error) {
-    console.error('Error in extract-medical-card-info:', error);
     return new Response(
       JSON.stringify({
         error: 'Internal server error',

@@ -89,7 +89,6 @@ export default function PetShareInvitationScreen() {
         .single();
 
       if (fetchError) {
-        console.error('Error loading invitation:', fetchError);
         if (fetchError.code === 'PGRST116') {
           setError('Invitación no encontrada o no tienes acceso a ella');
         } else {
@@ -120,7 +119,6 @@ export default function PetShareInvitationScreen() {
 
       setInvitation(data as any);
     } catch (error) {
-      console.error('Error loading invitation:', error);
       setError('Error al cargar la invitación');
     } finally {
       setLoading(false);
@@ -142,7 +140,6 @@ export default function PetShareInvitationScreen() {
         .eq('id', invitation.id);
 
       if (updateError) {
-        console.error('Error accepting invitation:', updateError);
         Alert.alert('Error', 'No se pudo aceptar la invitación');
         return;
       }
@@ -158,7 +155,6 @@ export default function PetShareInvitationScreen() {
         ]
       );
     } catch (error) {
-      console.error('Error accepting invitation:', error);
       Alert.alert('Error', 'No se pudo aceptar la invitación');
     } finally {
       setProcessing(false);
@@ -188,7 +184,6 @@ export default function PetShareInvitationScreen() {
                 .eq('id', invitation.id);
 
               if (updateError) {
-                console.error('Error rejecting invitation:', updateError);
                 Alert.alert('Error', 'No se pudo rechazar la invitación');
                 return;
               }
@@ -204,7 +199,6 @@ export default function PetShareInvitationScreen() {
                 ]
               );
             } catch (error) {
-              console.error('Error rejecting invitation:', error);
               Alert.alert('Error', 'No se pudo rechazar la invitación');
             } finally {
               setProcessing(false);

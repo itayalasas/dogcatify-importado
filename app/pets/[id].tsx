@@ -95,11 +95,9 @@ export default function PetDetail() {
   // Add effect to refetch health records when returning from health forms
   useEffect(() => {
     if (refresh === 'true' && activeTab === 'health') {
-      console.log('Refreshing health records due to refresh param');
       fetchHealthRecords();
     }
     if (refresh === 'true' && activeTab === 'behavior') {
-      console.log('Refreshing behavior history due to refresh param');
       fetchBehaviorHistory();
     }
   }, [refresh, activeTab]);
@@ -107,7 +105,6 @@ export default function PetDetail() {
   // Separate effect to create initial weight record after data is loaded
   useEffect(() => {
     if (pet && pet.weight && currentUser && weightRecords.length === 0 && !initialWeightCreated && !isCreatingInitialWeight) {
-      console.log('✅ Creating initial weight record for pet:', pet.name);
       createInitialWeightRecord();
     }
   }, [pet, weightRecords, currentUser, initialWeightCreated, isCreatingInitialWeight]);
@@ -138,7 +135,6 @@ export default function PetDetail() {
         });
       }
     } catch (error) {
-      console.error('Error fetching pet details:', error);
     } finally {
       setLoading(false);
     }
@@ -146,15 +142,12 @@ export default function PetDetail() {
 
   const fetchHealthRecords = async () => {
     try {
-      console.log('Fetching health records for pet:', id);
       const { data: healthRecords, error } = await supabaseClient
         .from('pet_health') 
         .select('*')
         .eq('pet_id', id)
         .order('created_at', { ascending: false });
       
-      console.log('Health records fetched:', healthRecords?.length || 0);
-      console.log('Raw health records data:', healthRecords);
       
       if (healthRecords && !error) {
         const processedRecords = healthRecords.map(record => ({
@@ -179,13 +172,6 @@ export default function PetDetail() {
         const dewormingsFiltered = processedRecords.filter(record => record.type === 'deworming');
         const weightRecordsFiltered = processedRecords.filter(record => record.type === 'weight');
         
-        console.log('Filtered records:', {
-          vaccines: vaccinesFiltered.length,
-          illnesses: illnessesFiltered.length,
-          allergies: allergiesFiltered.length,
-          dewormings: dewormingsFiltered.length,
-          weight: weightRecordsFiltered.length
-        });
         
         setVaccines(vaccinesFiltered);
         setIllnesses(illnessesFiltered);
@@ -196,15 +182,12 @@ export default function PetDetail() {
         
         // If no weight records exist but pet has weight, create initial record
         if (weightRecordsFiltered.length === 0 && pet && pet.weight && currentUser) {
-          console.log('No weight records found, creating initial record...');
           await createInitialWeightRecord();
         }
       } else if (error) {
-        console.error('Error fetching health records:', error);
         Alert.alert('Error', 'No se pudieron cargar los registros de salud');
       }
     } catch (error) {
-      console.error('Error fetching health records:', error);
       Alert.alert('Error', 'Error al cargar los datos de salud');
     }
   };
@@ -221,7 +204,6 @@ export default function PetDetail() {
         .maybeSingle();
 
       if (error) {
-        console.error('Error fetching lost pet post:', error);
         return;
       }
 
@@ -236,7 +218,6 @@ export default function PetDetail() {
         setLostAdditionalNotes(data.pet.lostPetAlert.additionalNotes || '');
       }
     } catch (error) {
-      console.error('Error fetching active lost pet post:', error);
     }
   };
 
@@ -249,13 +230,11 @@ export default function PetDetail() {
         .maybeSingle();
 
       if (error) {
-        console.error('Error fetching mating profile:', error);
         return;
       }
 
       setMatingProfile(data || null);
     } catch (error) {
-      console.error('Error fetching mating profile:', error);
     }
   };
 
@@ -294,7 +273,6 @@ export default function PetDetail() {
           : `${pet.name} ya no aparecerá en búsqueda de pareja.`
       );
     } catch (error) {
-      console.error('Error toggling mating status:', error);
       Alert.alert('Error', 'No se pudo actualizar el estado de búsqueda de pareja');
     } finally {
       setUpdatingMatingStatus(false);
@@ -481,7 +459,6 @@ export default function PetDetail() {
       setShowLostPetModal(false);
       Alert.alert('Alerta publicada', 'La publicación de mascota perdida ya está activa en el feed.');
     } catch (error) {
-      console.error('Error reporting lost pet:', error);
       Alert.alert('Error', 'No se pudo publicar la alerta de mascota perdida');
     } finally {
       setReportingLostPet(false);
@@ -514,7 +491,6 @@ export default function PetDetail() {
               resetLostPetForm();
               Alert.alert('Excelente noticia', 'La alerta se removió del feed.');
             } catch (updateError) {
-              console.error('Error marking pet as found:', updateError);
               Alert.alert('Error', 'No se pudo actualizar el estado de la alerta');
             }
           }
@@ -547,7 +523,6 @@ export default function PetDetail() {
               resetLostPetForm();
               Alert.alert('Alerta desactivada', 'La publicación fue removida del feed.');
             } catch (disableError) {
-              console.error('Error disabling lost pet alert:', disableError);
               Alert.alert('Error', 'No se pudo desactivar la alerta');
             }
           }
@@ -558,7 +533,6 @@ export default function PetDetail() {
   
   const createInitialWeightRecord = async () => {
     if (!pet || !pet.weight || !currentUser || weightRecords.length > 0) {
-      console.log('Cannot create initial weight record - missing data');
       return;
     }
     
@@ -571,21 +545,17 @@ export default function PetDetail() {
         .eq('type', 'weight');
       
       if (checkError) {
-        console.error('Error checking existing weight records:', checkError);
         return;
       }
       
       if (existingRecords && existingRecords.length > 0) {
-        console.log('Weight records already exist in database, skipping creation');
         return;
       }
     } catch (error) {
-      console.error('Error in duplicate check:', error);
       return;
     }
     
     try {
-      console.log('Creating initial weight record for:', pet.name, 'Weight:', pet.weight);
       
       const initialWeightData = {
         pet_id: id,
@@ -602,23 +572,19 @@ export default function PetDetail() {
         created_at: new Date().toISOString()
       };
       
-      console.log('Initial weight data:', initialWeightData);
       
       const { error } = await supabaseClient
         .from('pet_health')
         .insert(initialWeightData);
       
       if (error) {
-        console.error('Error creating initial weight record:', error);
       } else {
-        console.log('Initial weight record created successfully');
         // Refresh health records to show the new weight record
         setTimeout(() => {
           fetchHealthRecords();
         }, 500);
       }
     } catch (error) {
-      console.error('Error in createInitialWeightRecord:', error);
     }
   };
 
@@ -656,7 +622,6 @@ export default function PetDetail() {
         setAlbums(processedAlbums);
       }
     } catch (error) {
-      console.error('Error fetching albums:', error);
     }
   };
 
@@ -672,7 +637,6 @@ export default function PetDetail() {
       if (error) throw error;
       setMedicalAlerts(data || []);
     } catch (error) {
-      console.error('Error fetching medical alerts:', error);
     }
   };
 
@@ -700,7 +664,6 @@ export default function PetDetail() {
 
       fetchMedicalAlerts();
     } catch (error) {
-      console.error('Error completing alert:', error);
       Alert.alert('Error', 'No se pudo marcar la alerta como completada');
     }
   };
@@ -729,7 +692,6 @@ export default function PetDetail() {
 
       fetchMedicalAlerts();
     } catch (error) {
-      console.error('Error dismissing alert:', error);
       Alert.alert('Error', 'No se pudo descartar la alerta');
     }
   };
@@ -818,7 +780,6 @@ export default function PetDetail() {
         await processMedicalCard(result.assets[0].uri, result.assets[0].base64 ?? undefined);
       }
     } catch (error) {
-      console.error('Error taking photo:', error);
       Alert.alert('Error', 'No se pudo tomar la foto');
     }
   };
@@ -843,7 +804,6 @@ export default function PetDetail() {
         await processMedicalCard(result.assets[0].uri, result.assets[0].base64 ?? undefined);
       }
     } catch (error) {
-      console.error('Error selecting photo:', error);
       Alert.alert('Error', 'No se pudo seleccionar la foto');
     }
   };
@@ -856,7 +816,6 @@ export default function PetDetail() {
 
     setProcessingImage(true);
     try {
-      console.log('Processing medical card:', imageUri, 'Type:', scanRecordType);
 
       const result = await extractMedicalRecordsFromImage(
         imageUri,
@@ -868,7 +827,6 @@ export default function PetDetail() {
         base64Data
       );
 
-      console.log('Result from extraction:', result);
 
       if (!result || !result.records) {
         throw new Error('Respuesta inválida del servidor');
@@ -905,7 +863,6 @@ export default function PetDetail() {
         );
       }
     } catch (error: any) {
-      console.error('Error processing medical card:', error);
       const errorMessage = error?.message || 'Error desconocido';
       Alert.alert(
         'Error',
@@ -972,7 +929,6 @@ export default function PetDetail() {
 
       fetchHealthRecords();
     } catch (error) {
-      console.error('Error saving multiple records:', error);
       Alert.alert('Error', 'No se pudieron guardar los registros');
     } finally {
       setProcessingImage(false);
@@ -1044,7 +1000,6 @@ export default function PetDetail() {
               await fetchHealthRecords();
               Alert.alert('Éxito', 'Vacuna eliminada correctamente');
             } catch (error) {
-              console.error('Error deleting vaccine:', error);
               Alert.alert('Error', 'No se pudo eliminar la vacuna');
             }
           }
@@ -1074,7 +1029,6 @@ export default function PetDetail() {
               await fetchHealthRecords();
               Alert.alert('Éxito', 'Enfermedad eliminada correctamente');
             } catch (error) {
-              console.error('Error deleting illness:', error);
               Alert.alert('Error', 'No se pudo eliminar la enfermedad');
             }
           }
@@ -1104,7 +1058,6 @@ export default function PetDetail() {
               await fetchHealthRecords();
               Alert.alert('Éxito', 'Alergia eliminada correctamente');
             } catch (error) {
-              console.error('Error deleting allergy:', error);
               Alert.alert('Error', 'No se pudo eliminar la alergia');
             }
           }
@@ -1134,7 +1087,6 @@ export default function PetDetail() {
               await fetchHealthRecords();
               Alert.alert('Éxito', 'Desparasitación eliminada correctamente');
             } catch (error) {
-              console.error('Error deleting deworming:', error);
               Alert.alert('Error', 'No se pudo eliminar la desparasitación');
             }
           }
@@ -1155,7 +1107,6 @@ export default function PetDetail() {
         setBehaviorHistory(data);
       }
     } catch (error) {
-      console.error('Error fetching behavior history:', error);
     }
   };
 
@@ -1214,7 +1165,6 @@ export default function PetDetail() {
         }
       });
     } catch (error) {
-      console.error('Error generating medical history:', error);
       Alert.alert('Error', 'No se pudo generar la historia clínica');
     }
   };
@@ -1251,7 +1201,6 @@ export default function PetDetail() {
         }
       });
     } catch (error) {
-      console.error('Error generating QR for vet:', error);
       Alert.alert('Error', 'No se pudo generar el QR para veterinario');
     }
   };
@@ -1323,7 +1272,6 @@ export default function PetDetail() {
         Alert.alert('Éxito', 'Foto de perfil actualizada correctamente');
       }
     } catch (error) {
-      console.error('Error updating pet photo:', error);
       Alert.alert('Error', 'No se pudo actualizar la foto de perfil');
     }
   };
@@ -1981,7 +1929,7 @@ export default function PetDetail() {
           <Image 
             source={{ uri: breedImageUrl }} 
             style={styles.breedImage} 
-            onError={(e) => console.log('Error loading breed image:', breedImageUrl, e.nativeEvent.error)}
+            onError={(e) => undefined}
           />
         )}
         
@@ -2048,7 +1996,7 @@ export default function PetDetail() {
           <Image 
             source={{ uri: pet.photo_url || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100' }} 
             style={styles.petImage} 
-            onError={(e) => console.log('Error loading pet image:', pet.photo_url, e.nativeEvent.error)}
+            onError={(e) => undefined}
           />
           <View style={styles.editPhotoOverlay}>
             <Camera size={16} color="#FFFFFF" />

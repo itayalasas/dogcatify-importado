@@ -37,14 +37,12 @@ export default function PaymentSuccess() {
 
   const loadOrderDetails = async () => {
     if (!orderId) {
-      console.error('No order_id provided');
       setError('No se encontró el ID de la orden');
       setLoading(false);
       return;
     }
 
     try {
-      console.log('Loading order details:', { orderId, type: paymentType, paymentId });
 
       // Load order from database
       const { data: initialOrder, error: orderError } = await supabaseClient
@@ -54,7 +52,6 @@ export default function PaymentSuccess() {
         .single();
 
       if (orderError) {
-        console.error('Error loading order:', orderError);
         throw new Error('No se pudo cargar la orden');
       }
 
@@ -110,16 +107,9 @@ export default function PaymentSuccess() {
             order = refreshedOrder;
           }
         } catch (syncError) {
-          console.error('Error syncing payment from deep link:', syncError);
         }
       }
 
-      console.log('Order loaded:', {
-        id: order.id,
-        status: order.status,
-        total: order.total_amount,
-        payment_id: order.payment_id
-      });
 
       // Format order details for display
       const isPendingValidation = order.status === 'pending' || !order.payment_id;
@@ -167,10 +157,9 @@ export default function PaymentSuccess() {
           items_count: order.items?.length || 0,
           created_at: order.created_at
         }
-      }).catch(err => console.error('Error logging payment audit:', err));
+      }).catch(err => undefined);
       
     } catch (err: any) {
-      console.error('Error loading order details:', err);
       setError(err.message || 'Error al cargar la orden');
 
       // Fallback: use provided parameters

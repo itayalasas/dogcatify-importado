@@ -114,7 +114,6 @@ Formato de respuesta (SOLO JSON válido, sin texto adicional):
 
     if (!openaiResponse.ok) {
       const errorData = await openaiResponse.text();
-      console.error('OpenAI API error:', errorData);
       return new Response(
         JSON.stringify({ 
           error: 'OpenAI API error',
@@ -195,7 +194,6 @@ Formato de respuesta (SOLO JSON válido, sin texto adicional):
     );
 
   } catch (error) {
-    console.error('Error in generate-vaccine-recommendations:', error);
     return new Response(
       JSON.stringify({ 
         error: 'Internal server error',

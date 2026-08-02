@@ -22,7 +22,6 @@ export default function PartnerBookings() {
   useEffect(() => {
     if (!currentUser || !businessId) return;
 
-    console.log('Loading bookings for partner ID:', businessId as string);
 
     // Get partner profile using Supabase
     const fetchPartnerProfile = async () => {
@@ -46,7 +45,6 @@ export default function PartnerBookings() {
           fetchBookings(businessId as string);
         }
       } catch (error) {
-        console.error('Error fetching partner profile:', error);
       } finally {
         setLoading(false);
       }
@@ -145,7 +143,6 @@ export default function PartnerBookings() {
             .in('id', expiredIds);
 
           if (expiredUpdateError) {
-            console.error('Error updating expired partner bookings:', expiredUpdateError);
           }
         }
 
@@ -154,7 +151,6 @@ export default function PartnerBookings() {
         setBookings(normalizedBookings);
         setLoading(false);
       } catch (error) {
-        console.error('Error fetching bookings:', error);
         setLoading(false);
       }
     };
@@ -185,7 +181,6 @@ export default function PartnerBookings() {
   const handleUpdateBookingStatus = async (bookingId: string, newStatus: string) => {
     setUpdatingBooking(bookingId);
     try {
-      console.log('Updating booking status:', { bookingId, newStatus });
       
       const { error } = await supabaseClient
         .from('bookings')
@@ -198,7 +193,6 @@ export default function PartnerBookings() {
       
       if (error) throw error;
       
-      console.log('Booking status updated successfully');
       
       const statusMessages = {
         confirmed: 'Reserva confirmada',
@@ -213,7 +207,6 @@ export default function PartnerBookings() {
         fetchBookings(businessId as string);
       }
     } catch (error) {
-      console.error('Error updating booking status:', error);
       Alert.alert('Error', 'No se pudo actualizar la reserva');
     } finally {
       setUpdatingBooking(null);

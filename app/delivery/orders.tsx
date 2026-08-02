@@ -94,7 +94,6 @@ export default function DeliveryOrdersScreen() {
 
       setStoreIds((storesData || []).map((row: { partner_id: string }) => row.partner_id));
     } catch (error) {
-      console.error('Error loading delivery stores:', error);
       Alert.alert('Error', 'No se pudo cargar las tiendas asociadas del repartidor.');
       setStoreIds([]);
     }
@@ -135,7 +134,6 @@ export default function DeliveryOrdersScreen() {
 
       setOrders(deliveryOrders);
     } catch (error) {
-      console.error('Error loading delivery orders:', error);
       Alert.alert('Error', 'No se pudieron cargar los pedidos de reparto.');
     }
   };
@@ -214,7 +212,6 @@ export default function DeliveryOrdersScreen() {
 
       await fetchOrders();
     } catch (error) {
-      console.error('Error updating order status from delivery:', error);
       Alert.alert('Error', 'No se pudo actualizar el estado del pedido.');
     } finally {
       setUpdatingOrderId(null);

@@ -35,7 +35,6 @@ export default function MercadoPagoCallback() {
         return;
       }
 
-      console.log('Processing OAuth2 callback...');
       const result = await handleOAuth2Callback(code, state);
 
       if (result.success) {
@@ -44,7 +43,6 @@ export default function MercadoPagoCallback() {
         setErrorMessage(result.error || 'Error desconocido durante la autorización');
       }
     } catch (error) {
-      console.error('Error in OAuth2 callback:', error);
       setErrorMessage('Error procesando la autorización de Mercado Pago');
     } finally {
       setLoading(false);

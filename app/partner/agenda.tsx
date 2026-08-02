@@ -8,7 +8,6 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 
 const logDebug = (message: string, data?: any) => {
-  console.log(`[PartnerAgenda] ${message}`, data || '');
 };
 
 export default function PartnerAgenda() {
@@ -25,7 +24,6 @@ export default function PartnerAgenda() {
     
     const fetchPartnerProfile = async () => {
       try {
-        console.log('Fetching partner profile for ID:', partnerId);
         const { data, error } = await supabaseClient
           .from('partners')
           .select('*')
@@ -33,13 +31,11 @@ export default function PartnerAgenda() {
           .single();
         
         if (error) {
-          console.error('Error fetching partner profile:', error);
           setError(`Error al cargar perfil: ${error.message}`);
           return;
         }
         
         if (data) {
-          console.log('Partner profile loaded:', data.business_name);
           setPartnerProfile({
             id: data.id,
             businessName: data.business_name,
@@ -51,7 +47,6 @@ export default function PartnerAgenda() {
         
         fetchBookings();
       } catch (error) {
-        console.error('Error in fetchPartnerProfile:', error);
         setError('Error al cargar la información del negocio');
       } finally {
         setLoading(false);
@@ -106,8 +101,6 @@ export default function PartnerAgenda() {
     
     setError(null);
     try {
-      console.log('Fetching bookings for partner:', partnerId);
-      console.log('Selected date:', selectedDate.toISOString().split('T')[0]);
       
       const dateStr = selectedDate.toISOString().split('T')[0];
       
@@ -120,13 +113,10 @@ export default function PartnerAgenda() {
         .order('created_at', { ascending: true });
       
       if (error) {
-        console.error('Error fetching bookings:', error);
         setError(`Error al cargar reservas: ${error.message}`);
         return;
       }
       
-      console.log(`Found ${count} bookings for date ${dateStr}`);
-      console.log('Bookings data:', data);
       
       const bookingsData = data.map(booking => ({
         id: booking.id,
@@ -154,16 +144,13 @@ export default function PartnerAgenda() {
           .in('id', expiredIds);
 
         if (expiredUpdateError) {
-          console.error('Error updating expired bookings in agenda:', expiredUpdateError);
         }
       }
 
       const normalizedBookings = bookingsData.map(normalizeBookingStatus);
 
       setBookings(normalizedBookings);
-      console.log('Processed bookings:', normalizedBookings);
     } catch (error) {
-      console.error('Error fetching bookings:', error);
       setError('Error al cargar las reservas');
     }
   };
@@ -203,7 +190,6 @@ export default function PartnerAgenda() {
       // Refresh data from server
       fetchBookings();
     } catch (error) {
-      console.error('Error updating booking status:', error);
       Alert.alert('Error', 'No se pudo actualizar la reserva');
     }
   };

@@ -20,9 +20,6 @@ export default function AddAdoptionPet() {
   
   // Debug logs
   useEffect(() => {
-    console.log('AddAdoptionPet component loaded');
-    console.log('Partner ID:', partnerId);
-    console.log('Current user:', currentUser?.email);
   }, [partnerId, currentUser]);
 
   useEffect(() => {
@@ -58,7 +55,6 @@ export default function AddAdoptionPet() {
           setAccessDenied(true);
         }
       } catch (error) {
-        console.error('Error loading adoption partner:', error);
       } finally {
         setInitializing(false);
       }
@@ -279,7 +275,6 @@ export default function AddAdoptionPet() {
         { text: 'OK', onPress: () => router.back() }
       ]);
     } catch (error) {
-      console.error('Error adding adoption pet:', error);
       
       let errorMessage = 'No se pudo agregar la mascota para adopción';
       if (error && typeof error === 'object') {
@@ -290,7 +285,6 @@ export default function AddAdoptionPet() {
         }
       }
       
-      console.error('Detailed error:', JSON.stringify(error, null, 2));
       Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);

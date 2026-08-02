@@ -92,7 +92,6 @@ export default function PetAppointments() {
       const petData = await getPet(id as string);
       setPet(petData);
     } catch (error) {
-      console.error('Error fetching pet details:', error);
     }
   };
 
@@ -126,7 +125,6 @@ export default function PetAppointments() {
           .in('id', expiredIds);
 
         if (expiredUpdateError) {
-          console.error('Error updating expired appointments:', expiredUpdateError);
         }
       }
 
@@ -137,7 +135,6 @@ export default function PetAppointments() {
       // Fetch existing reviews for completed appointments
       await fetchExistingReviews(normalizedAppointments);
     } catch (error) {
-      console.error('Error fetching appointments:', error);
     } finally {
       setLoading(false);
     }
@@ -154,14 +151,12 @@ export default function PetAppointments() {
       const validBookingIds = bookingIds.filter(id => {
         // More strict validation
         if (!id || typeof id !== 'string' || id.length === 0) {
-          console.log('Invalid booking ID (empty or not string):', id);
           return false;
         }
         
         // Filter out obviously invalid values
         const invalidValues = ['booking', 'undefined', 'null', 'temp-', 'order_'];
         if (invalidValues.some(invalid => id.includes(invalid))) {
-          console.log('Invalid booking ID (contains invalid pattern):', id);
           return false;
         }
         
@@ -170,18 +165,15 @@ export default function PetAppointments() {
         const isValidUUID = uuidRegex.test(id);
         
         if (!isValidUUID) {
-          console.log('Invalid booking ID (not UUID format):', id);
         }
         
         return isValidUUID;
       });
       
       if (validBookingIds.length === 0) {
-        console.log('No valid booking IDs found for reviews');
         return;
       }
       
-      console.log('Valid booking IDs for reviews:', validBookingIds);
       
       const { data: reviews, error } = await supabaseClient
         .from('service_reviews')
@@ -189,7 +181,6 @@ export default function PetAppointments() {
         .in('booking_id', validBookingIds);
       
       if (error) {
-        console.error('Error fetching reviews:', error);
         return; // Don't throw, just return
       }
       
@@ -200,7 +191,6 @@ export default function PetAppointments() {
       
       setExistingReviews(reviewsMap);
     } catch (error) {
-      console.error('Error fetching existing reviews:', error);
     }
   };
 
@@ -248,7 +238,6 @@ export default function PetAppointments() {
       setShowReviewModal(false);
       Alert.alert('Éxito', 'Reseña enviada correctamente');
     } catch (error) {
-      console.error('Error submitting review:', error);
       Alert.alert('Error', 'No se pudo enviar la reseña');
     } finally {
       setSubmittingReview(false);

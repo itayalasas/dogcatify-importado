@@ -44,7 +44,6 @@ export default function PetCareIndex() {
       if (error) throw error;
       setPets(data || []);
     } catch (error) {
-      console.error('Error loading pets for care hub:', error);
       setPets([]);
     } finally {
       setLoading(false);

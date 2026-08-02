@@ -59,7 +59,6 @@ export default function SelectVeterinarian() {
 
   const fetchVeterinarians = async () => {
     try {
-      console.log('Fetching veterinary partners...');
       const { data, error } = await supabaseClient
         .from('partners')
         .select('*')
@@ -70,11 +69,9 @@ export default function SelectVeterinarian() {
 
       if (error) throw error;
       
-      console.log('Veterinary partners found:', data?.length || 0);
       setVeterinarians(data || []);
       setFilteredVeterinarians(data || []);
     } catch (error) {
-      console.error('Error fetching veterinarians:', error);
     } finally {
       setLoading(false);
     }
@@ -94,7 +91,6 @@ export default function SelectVeterinarian() {
   };
 
   const handleSelectVeterinarian = (veterinarian: any) => {
-    console.log('Navigating back with veterinarian:', veterinarian.business_name);
     router.replace({
       pathname: returnPath as any,
       params: {

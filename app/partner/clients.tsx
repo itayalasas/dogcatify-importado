@@ -97,7 +97,6 @@ export default function PartnerClients() {
 
         fetchClients();
       } catch (error) {
-        console.error('Error fetching partner profile:', error);
         setLoading(false);
       }
     };
@@ -211,7 +210,6 @@ export default function PartnerClients() {
             });
           }
         } catch (error) {
-          console.error('Error fetching user data:', error);
         }
       }
 
@@ -224,7 +222,6 @@ export default function PartnerClients() {
 
       setClients(clientsData);
     } catch (error) {
-      console.error('Error fetching clients:', error);
     } finally {
       setLoading(false);
     }
@@ -318,7 +315,6 @@ export default function PartnerClients() {
 
       Alert.alert('Sin contacto', 'Este cliente no tiene teléfono ni correo registrado.');
     } catch (error) {
-      console.error('Error contacting client:', error);
       Alert.alert('Error', 'No se pudo abrir el medio de contacto.');
     }
   };

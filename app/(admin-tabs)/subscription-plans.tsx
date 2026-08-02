@@ -395,7 +395,6 @@ export default function SubscriptionPlans() {
 
       setPlans((data || []).map(normalizePlan));
     } catch (error) {
-      console.error('Error loading subscription plans:', error);
       Alert.alert('Error', 'No se pudieron cargar los planes.');
     } finally {
       setLoading(false);
@@ -538,7 +537,6 @@ export default function SubscriptionPlans() {
       setShowEditModal(false);
       Alert.alert('Plan guardado', 'Los permisos quedaron guardados. Si cambiaste IDs de Mercado Pago, sincroniza el plan.');
     } catch (error) {
-      console.error('Error saving subscription plan:', error);
       Alert.alert('Error', 'No se pudo guardar el plan.');
     } finally {
       setSaving(false);
@@ -571,7 +569,6 @@ export default function SubscriptionPlans() {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error toggling subscription plan:', error);
       setPlans(previousPlans);
       Alert.alert('Error', 'No se pudo actualizar la visibilidad del plan.');
     }
@@ -584,16 +581,6 @@ export default function SubscriptionPlans() {
     try {
       setSyncingPlanId(plan.id);
 
-      console.log(`[SubscriptionPlans][${traceId}] Starting Mercado Pago sync`, {
-        planId: plan.id,
-        planName: plan.name,
-        monthlyMpPlanId: plan.mercadopago_monthly_plan_id,
-        yearlyMpPlanId: plan.mercadopago_yearly_plan_id,
-        priceMonthly: plan.price_monthly,
-        priceYearly: plan.price_yearly,
-        currency: plan.currency,
-        timeoutMs: SYNC_TIMEOUT_MS,
-      });
 
       const invokePromise = supabaseClient.functions.invoke('sync-subscription-plan', {
         headers: {
@@ -608,12 +595,6 @@ export default function SubscriptionPlans() {
 
       const { data, error } = await withTimeout(invokePromise, SYNC_TIMEOUT_MS, traceId);
 
-      console.log(`[SubscriptionPlans][${traceId}] Sync function response`, {
-        durationMs: Date.now() - startedAt,
-        hasError: !!error,
-        error,
-        data,
-      });
 
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || 'SYNC_FAILED');
@@ -629,11 +610,6 @@ export default function SubscriptionPlans() {
       const message = error?.message || 'No se pudo sincronizar el plan con Mercado Pago.';
       const timedOut = String(message).startsWith('SYNC_TIMEOUT');
 
-      console.error(`[SubscriptionPlans][${traceId}] Error syncing plan with Mercado Pago`, {
-        durationMs: Date.now() - startedAt,
-        timedOut,
-        error,
-      });
 
       await loadPlans();
 
@@ -644,9 +620,6 @@ export default function SubscriptionPlans() {
           : `${message}\n\nTrace: ${traceId}`
       );
     } finally {
-      console.log(`[SubscriptionPlans][${traceId}] Sync finished, clearing loading state`, {
-        durationMs: Date.now() - startedAt,
-      });
       setSyncingPlanId(null);
     }
   };

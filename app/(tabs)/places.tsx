@@ -91,7 +91,6 @@ export default function Places() {
 
       setPlaces(placesData);
     } catch (error) {
-      console.error('Error fetching places:', error);
       setError('No se pudieron cargar los lugares');
     } finally {
       setLoading(false);
@@ -130,7 +129,6 @@ export default function Places() {
         Alert.alert('Error', 'No se puede abrir la aplicación de llamadas');
       }
     } catch (error) {
-      console.error('Error opening phone app:', error);
       Alert.alert('Error', 'No se pudo realizar la llamada');
     }
   };
@@ -158,7 +156,6 @@ export default function Places() {
         Alert.alert('Error', 'No se puede abrir la aplicación de mapas');
       }
     } catch (error) {
-      console.error('Error opening maps app:', error);
       Alert.alert('Error', 'No se pudo abrir la ubicación');
     }
   };

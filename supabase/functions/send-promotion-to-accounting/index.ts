@@ -179,7 +179,6 @@ Deno.serve(async (req: Request) => {
       requestHeaders.apikey = supabaseServiceKey;
     }
 
-    console.log('Sending promotion to accounting URL:', targetAccountingUrl);
 
     let accountingResponse: Response | null = null;
     let responseText = '';

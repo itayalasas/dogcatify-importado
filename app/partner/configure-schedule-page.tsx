@@ -81,7 +81,6 @@ export default function ConfigureSchedulePage() {
         
         await Promise.all([fetchSchedule(), fetchClosures()]);
       } catch (error) {
-        console.error('Error fetching partner profile:', error);
       }
     };
     
@@ -151,7 +150,6 @@ export default function ConfigureSchedulePage() {
       
       setSchedule(scheduleData);
     } catch (error) {
-      console.error('Error fetching schedule:', error);
     }
   };
 
@@ -176,7 +174,6 @@ export default function ConfigureSchedulePage() {
         updated_at: item.updated_at,
       })));
     } catch (error) {
-      console.error('Error fetching closures:', error);
     }
   };
 
@@ -304,7 +301,6 @@ export default function ConfigureSchedulePage() {
         { text: 'OK', onPress: () => router.back() }
       ]);
     } catch (error) {
-      console.error('Error adding schedule:', error);
       Alert.alert('Error', 'No se pudo agregar el horario');
     } finally {
       setLoading(false);
@@ -325,7 +321,6 @@ export default function ConfigureSchedulePage() {
       // Refresh the schedule data
       fetchSchedule();
     } catch (error) {
-      console.error('Error toggling schedule:', error);
       Alert.alert('Error', 'No se pudo actualizar el horario');
     }
   };
@@ -350,7 +345,6 @@ export default function ConfigureSchedulePage() {
               
               Alert.alert('Éxito', 'Horario eliminado correctamente');
             } catch (error) {
-              console.error('Error deleting schedule:', error);
               Alert.alert('Error', 'No se pudo eliminar el horario');
             }
           }
@@ -395,7 +389,6 @@ export default function ConfigureSchedulePage() {
       await fetchClosures();
       Alert.alert('Éxito', 'El día quedó bloqueado en la agenda');
     } catch (error) {
-      console.error('Error adding closure:', error);
       Alert.alert('Error', 'No se pudo bloquear el día');
     } finally {
       setClosuresLoading(false);
@@ -423,7 +416,6 @@ export default function ConfigureSchedulePage() {
               await fetchClosures();
               Alert.alert('Éxito', 'El día volvió a estar disponible');
             } catch (error) {
-              console.error('Error deleting closure:', error);
               Alert.alert('Error', 'No se pudo quitar el cierre');
             }
           },
@@ -470,7 +462,6 @@ export default function ConfigureSchedulePage() {
       await fetchClosures();
       Alert.alert('Éxito', `Se cargaron los feriados del ${year}`);
     } catch (error) {
-      console.error('Error loading holiday closures:', error);
       Alert.alert('Error', 'No se pudieron cargar los feriados');
     } finally {
       setClosuresLoading(false);

@@ -155,11 +155,6 @@ const fetchMercadoPagoOptional = async (
     return await fetchMercadoPago(accessToken, path, init);
   } catch (error) {
     const status = error instanceof HttpError ? error.status : 500;
-    console.warn("Optional Mercado Pago fetch failed:", {
-      path,
-      status,
-      message: error instanceof Error ? error.message : String(error),
-    });
     return null;
   }
 };
@@ -640,28 +635,8 @@ Deno.serve(async (req: Request) => {
       throw new HttpError(500, `SUBSCRIPTION_CREATE_FAILED: ${subscriptionError?.message || "unknown"}`);
     }
 
-    console.log("[CreateUserSubscription] Local subscription created", {
-      local_subscription_id: localSubscription.id,
-      user_id: user.id,
-      plan_id: plan.id,
-      plan_name: plan.name,
-      billing_cycle: billingCycle,
-      trial_granted: canGrantTrial,
-      payer_email: payerEmail,
-      mp_plan_id: mpPlanId,
-    });
 
     const mpConfig = await getAdminMercadoPagoConfig(supabase);
-    console.log("create-user-subscription Mercado Pago config loaded:", {
-      isTestMode: mpConfig.is_test_mode ?? null,
-      credentialMode: mpConfig.credential_mode,
-      expectedCredentialMode: mpConfig.expected_credential_mode,
-      credentialModeMismatch: mpConfig.credential_mode_mismatch,
-      publicKeyMode: mpConfig.public_key_mode,
-      publicKeyInvalidFormat: mpConfig.public_key_invalid_format,
-      publicKeyModeMismatch: mpConfig.public_key_mode_mismatch,
-      hasAccessToken: !!mpConfig.access_token,
-    });
 
     const preapprovalPayload = {
       preapproval_plan_id: mpPlanId,
@@ -679,16 +654,6 @@ Deno.serve(async (req: Request) => {
       },
     };
 
-    console.log("[CreateUserSubscription] Creating Mercado Pago preapproval", {
-      local_subscription_id: localSubscription.id,
-      external_reference: preapprovalPayload.external_reference,
-      notification_url: preapprovalPayload.notification_url,
-      back_url: preapprovalPayload.back_url,
-      payer_email: payerEmail,
-      billing_cycle: billingCycle,
-      transaction_amount: price,
-      currency_id: preapprovalPayload.auto_recurring.currency_id,
-    });
 
     try {
       const preapproval = await fetchMercadoPago(mpConfig.access_token, "/preapproval", {
@@ -696,12 +661,6 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify(preapprovalPayload),
       });
 
-      console.log("[CreateUserSubscription] Mercado Pago preapproval response received", {
-        local_subscription_id: localSubscription.id,
-        mp_preapproval_id: preapproval?.id || null,
-        mp_status: preapproval?.status || null,
-        init_point: preapproval?.init_point || null,
-      });
 
       const mappedStatus = mapPreapprovalStatus(preapproval?.status);
       const finalStatus = (canGrantTrial ? "trialing" : mappedStatus) as UserSubscriptionStatus;
@@ -741,13 +700,6 @@ Deno.serve(async (req: Request) => {
         throw new HttpError(500, `SUBSCRIPTION_UPDATE_FAILED: ${updateError.message}`);
       }
 
-      console.log("[CreateUserSubscription] Local subscription synced after preapproval create", {
-        local_subscription_id: updatedSubscription.id,
-        status: finalStatus,
-        mp_preapproval_id: preapproval?.id || null,
-        mp_status: preapproval?.status || null,
-        trial_granted: canGrantTrial,
-      });
 
       return jsonResponse({
         success: true,
@@ -760,11 +712,6 @@ Deno.serve(async (req: Request) => {
         throw mpError;
       }
 
-      console.warn("[CreateUserSubscription] Mercado Pago preapproval failed, using checkout fallback", {
-        local_subscription_id: localSubscription.id,
-        error: mpError instanceof Error ? mpError.message : String(mpError),
-        fallback_url: planCheckoutUrl,
-      });
 
       const { data: fallbackSubscription, error: fallbackError } = await supabase
         .from("user_subscriptions")
@@ -797,11 +744,6 @@ Deno.serve(async (req: Request) => {
         throw new HttpError(500, `SUBSCRIPTION_FALLBACK_UPDATE_FAILED: ${fallbackError.message}`);
       }
 
-      console.log("[CreateUserSubscription] Local subscription updated with checkout fallback", {
-        local_subscription_id: fallbackSubscription?.id || localSubscription.id,
-        fallback_url: planCheckoutUrl,
-        trial_granted: canGrantTrial,
-      });
 
       return jsonResponse({
         success: true,
@@ -815,7 +757,6 @@ Deno.serve(async (req: Request) => {
     const status = error instanceof HttpError ? error.status : 500;
     const message = error instanceof Error ? error.message : "UNKNOWN_ERROR";
 
-    console.error("create-user-subscription error:", error);
 
     return jsonResponse({
       success: false,

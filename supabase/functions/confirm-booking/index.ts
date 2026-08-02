@@ -131,7 +131,6 @@ Deno.serve(async (req: Request) => {
       .eq("id", tokenData.order_id);
 
     if (updateOrderError) {
-      console.error("Error updating order:", updateOrderError);
       throw new Error(`Error al confirmar la reserva: ${updateOrderError.message}`);
     }
 
@@ -143,7 +142,6 @@ Deno.serve(async (req: Request) => {
       .eq("id", tokenData.id);
 
     if (updateTokenError) {
-      console.error("Error updating token:", updateTokenError);
     }
 
     return new Response(
@@ -167,7 +165,6 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error) {
-    console.error("Error in confirm-booking:", error);
     return new Response(
       JSON.stringify({
         success: false,

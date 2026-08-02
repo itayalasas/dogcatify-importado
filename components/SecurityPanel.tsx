@@ -55,10 +55,8 @@ export default function SecurityPanel() {
 
       if (profile?.role !== 'admin') {
         // No es admin, redirigir
-        console.error('Acceso denegado: No eres administrador');
       }
     } catch (error) {
-      console.error('Error verificando permisos:', error);
     }
   };
 
@@ -97,7 +95,6 @@ export default function SecurityPanel() {
       if (error) throw error;
       setLogs(data || []);
     } catch (error) {
-      console.error('Error fetching logs:', error);
     } finally {
       setLoading(false);
     }
@@ -121,7 +118,6 @@ export default function SecurityPanel() {
         setStats(data[0]);
       }
     } catch (error) {
-      console.error('Error fetching stats:', error);
     }
   };
 
@@ -179,7 +175,6 @@ export default function SecurityPanel() {
       ].join(','))
     ].join('\n');
 
-    console.log('Exportar CSV:', csv);
     // Aquí podrías implementar la descarga del archivo
   };
 

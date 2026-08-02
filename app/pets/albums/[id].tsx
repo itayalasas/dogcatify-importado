@@ -235,7 +235,6 @@ export default function AlbumDetail() {
         setIsShared(data.is_shared || false);
       }
     } catch (error) {
-      console.error('Error fetching album details:', error);
       Alert.alert('Error', 'No se pudo cargar la información del álbum');
     } finally {
       setLoading(false);
@@ -263,7 +262,6 @@ export default function AlbumDetail() {
         setSelectedImages(result.assets);
       }
     } catch (error) {
-      console.error('Error selecting photos:', error);
       Alert.alert('Error', 'No se pudieron seleccionar las fotos');
     }
   };
@@ -324,13 +322,11 @@ export default function AlbumDetail() {
             setValidatingVideo(false);
           }
         } catch (error) {
-          console.error('Error validating video:', error);
           Alert.alert('Error', 'No se pudo validar el video');
           setValidatingVideo(false);
         }
       }
     } catch (error) {
-      console.error('Error selecting video:', error);
       Alert.alert('Error', 'No se pudo seleccionar el video');
       setValidatingVideo(false);
     }
@@ -342,13 +338,11 @@ export default function AlbumDetail() {
 
   const uploadImageToStorage = async (imageAsset: ImagePicker.ImagePickerAsset) => {
     try {
-      console.log('Starting upload for album image:', imageAsset.uri);
 
       const timestamp = Date.now();
       const randomId = Math.random().toString(36).substring(7);
       const filename = `pets/albums/${album.pet_id}/${timestamp}-${randomId}.jpg`;
 
-      console.log('Uploading to Supabase with filename:', filename);
 
       const formData = new FormData();
       formData.append('file', {
@@ -375,20 +369,17 @@ export default function AlbumDetail() {
 
       return publicUrl;
     } catch (error) {
-      console.error('Error uploading image:', error);
       throw error;
     }
   };
 
   const uploadVideoToStorage = async (videoAsset: ImagePicker.ImagePickerAsset) => {
     try {
-      console.log('Starting upload for album video:', videoAsset.uri);
 
       const timestamp = Date.now();
       const randomId = Math.random().toString(36).substring(7);
       const filename = `pets/albums/${album.pet_id}/${timestamp}-${randomId}.mp4`;
 
-      console.log('Uploading video to Supabase with filename:', filename);
 
       const formData = new FormData();
       formData.append('file', {
@@ -415,7 +406,6 @@ export default function AlbumDetail() {
 
       return publicUrl;
     } catch (error) {
-      console.error('Error uploading video:', error);
       throw error;
     }
   };
@@ -433,7 +423,6 @@ export default function AlbumDetail() {
 
     setUploadingVideo(true);
     try {
-      console.log('Starting to upload video...');
 
       const videoUrl = await uploadVideoToStorage(selectedVideo);
 
@@ -458,7 +447,6 @@ export default function AlbumDetail() {
       setSelectedVideo(null);
 
       if (album.is_shared) {
-        console.log('Album is shared, creating new post for added video...');
 
         try {
           const { data: petData, error: petError } = await supabaseClient
@@ -498,21 +486,18 @@ export default function AlbumDetail() {
               .insert(postData);
 
             if (postError) {
-              console.error('Error creating feed post:', postError);
               Alert.alert('\u00c9xito', 'Video agregado correctamente');
             } else {
               Alert.alert('\u00c9xito', 'Video agregado y compartido en el feed \ud83c\udfa5');
             }
           }
         } catch (feedError) {
-          console.error('Error creating feed post:', feedError);
           Alert.alert('\u00c9xito', 'Video agregado correctamente');
         }
       } else {
         Alert.alert('\u00c9xito', 'Video agregado correctamente');
       }
     } catch (error) {
-      console.error('Error adding video:', error);
       Alert.alert('Error', 'No se pudo agregar el video');
     } finally {
       setUploadingVideo(false);
@@ -532,24 +517,20 @@ export default function AlbumDetail() {
 
     setUploadingImages(true);
     try {
-      console.log('Starting to upload', selectedImages.length, 'images...');
       
       // Upload images sequentially to avoid connection issues
       const imageUrls: string[] = [];
       
       for (let i = 0; i < selectedImages.length; i++) {
         try {
-          console.log(`Uploading image ${i + 1} of ${selectedImages.length}...`);
           const imageUrl = await uploadImageToStorage(selectedImages[i]);
           imageUrls.push(imageUrl);
-          console.log(`Image ${i + 1} uploaded successfully`);
           
           // Small delay between uploads
           if (i < selectedImages.length - 1) {
             await new Promise(resolve => setTimeout(resolve, 300));
           }
         } catch (uploadError) {
-          console.error(`Error uploading image ${i + 1}:`, uploadError);
           
           // Ask user if they want to continue
           const shouldContinue = await new Promise<boolean>((resolve) => {
@@ -600,7 +581,6 @@ export default function AlbumDetail() {
       
       // If album is shared, create a new post in the feed
       if (album.is_shared && imageUrls.length > 0) {
-        console.log('Album is shared, creating new post for added photos...');
         
         try {
           const canCreateFeedPost = await ensureDailyPostLimit();
@@ -651,13 +631,11 @@ export default function AlbumDetail() {
               .insert(postData);
             
             if (postError) {
-              console.error('Error creating feed post:', postError);
               Alert.alert(
                 'Éxito',
                 `${successMessage}\n\nNota: Las fotos se guardaron pero no se pudieron compartir automáticamente en el feed.`
               );
             } else {
-              console.log('Feed post created successfully');
               Alert.alert(
                 'Éxito',
                 `${successMessage}\n\n📸 Las nuevas fotos también se compartieron en el feed.`
@@ -666,14 +644,12 @@ export default function AlbumDetail() {
           }
           }
         } catch (feedError) {
-          console.error('Error creating feed post:', feedError);
           Alert.alert('Éxito', successMessage);
         }
       } else {
         Alert.alert('Éxito', successMessage);
       }
     } catch (error: unknown) {
-      console.error('Error adding photos:', error);
       
       const errorMessage = error instanceof Error
         ? (error.message.includes('conexión')
@@ -708,7 +684,6 @@ export default function AlbumDetail() {
       // Handle sharing status change
       if (!wasShared && willBeShared) {
         // Album is now being shared - create post in feed
-        console.log('Album is now shared, creating feed post...');
         const sharedInFeed = await createFeedPostFromAlbum();
         if (!sharedInFeed) {
           Alert.alert(
@@ -718,11 +693,9 @@ export default function AlbumDetail() {
         }
       } else if (wasShared && !willBeShared) {
         // Album is no longer shared - remove from feed
-        console.log('Album is no longer shared, removing from feed...');
         await removeFeedPostFromAlbum();
       } else if (wasShared && willBeShared) {
         // Album was already shared and still is - update existing post
-        console.log('Album still shared, updating existing post...');
         await updateExistingFeedPost();
       }
 
@@ -737,7 +710,6 @@ export default function AlbumDetail() {
       setShowEditModal(false);
       Alert.alert('Éxito', 'Álbum actualizado correctamente');
     } catch (error) {
-      console.error('Error updating album:', error);
       Alert.alert('Error', 'No se pudo actualizar el álbum');
     }
   };
@@ -756,7 +728,6 @@ export default function AlbumDetail() {
         .single();
       
       if (petError || !petData) {
-        console.error('Error fetching pet data:', petError);
         return;
       }
       
@@ -768,7 +739,6 @@ export default function AlbumDetail() {
         .single();
       
       if (userError) {
-        console.error('Error fetching user data:', userError);
       }
       
       const canCreateFeedPost = await ensureDailyPostLimit();
@@ -802,14 +772,11 @@ export default function AlbumDetail() {
         .insert(postData);
       
       if (postError) {
-        console.error('Error creating feed post:', postError);
         return false;
       } else {
-        console.log('Feed post created successfully');
         return true;
       }
     } catch (error) {
-      console.error('Error creating feed post from album:', error);
       return false;
     }
   };
@@ -823,12 +790,9 @@ export default function AlbumDetail() {
         .eq('album_id', album.id);
       
       if (error) {
-        console.error('Error removing feed post:', error);
       } else {
-        console.log('Feed post removed successfully');
       }
     } catch (error) {
-      console.error('Error removing feed post from album:', error);
     }
   };
 
@@ -845,12 +809,9 @@ export default function AlbumDetail() {
         .eq('album_id', album.id);
       
       if (error) {
-        console.error('Error updating feed post:', error);
       } else {
-        console.log('Feed post updated successfully');
       }
     } catch (error) {
-      console.error('Error updating feed post from album:', error);
     }
   };
   const handleDeleteAlbum = async () => {
@@ -878,7 +839,6 @@ export default function AlbumDetail() {
         }
       ]);
     } catch (error) {
-      console.error('Error deleting album:', error);
       Alert.alert('Error', 'No se pudo eliminar el álbum');
     }
   };
@@ -915,7 +875,6 @@ export default function AlbumDetail() {
       setImageToDelete(null);
       Alert.alert('Éxito', 'Imagen eliminada correctamente');
     } catch (error) {
-      console.error('Error deleting image:', error);
       Alert.alert('Error', 'No se pudo eliminar la imagen');
     }
   };

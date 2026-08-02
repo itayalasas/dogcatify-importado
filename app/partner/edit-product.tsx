@@ -88,7 +88,6 @@ export default function EditProduct() {
         router.back();
       }
     } catch (error) {
-      console.error('Error fetching product details:', error);
       Alert.alert('Error', 'No se pudo cargar la información del producto');
     } finally {
       setLoading(false);
@@ -207,7 +206,6 @@ export default function EditProduct() {
         { text: 'OK', onPress: () => router.back() }
       ]);
     } catch (error) {
-      console.error('Error updating product:', error);
       Alert.alert('Error', 'No se pudo actualizar el producto');
     } finally {
       setSaveLoading(false);

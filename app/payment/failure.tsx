@@ -26,7 +26,6 @@ export default function PaymentFailure() {
 
   const cancelFailedOrder = async () => {
     try {
-      console.log('Cancelling failed order:', order_id);
 
       // Fetch order details
       const { data: order, error: fetchError } = await supabaseClient
@@ -36,7 +35,6 @@ export default function PaymentFailure() {
         .maybeSingle();
 
       if (fetchError) {
-        console.error('Error fetching order:', fetchError);
         setOrderDetails({
           id: order_id || '#failed',
           orderNumber: '#failed',
@@ -49,7 +47,6 @@ export default function PaymentFailure() {
       }
 
       if (!order) {
-        console.log('Order not found:', order_id);
         setOrderDetails({
           id: order_id || '#failed',
           orderNumber: '#failed',
@@ -72,9 +69,7 @@ export default function PaymentFailure() {
         .eq('id', order_id);
 
       if (updateError) {
-        console.error('Error updating order status:', updateError);
       } else {
-        console.log('Order cancelled successfully');
       }
 
       // If this is a booking, update booking status as well
@@ -89,15 +84,12 @@ export default function PaymentFailure() {
           .eq('id', order.booking_id);
 
         if (bookingError) {
-          console.error('Error updating booking status:', bookingError);
         } else {
-          console.log('Booking cancelled successfully');
         }
       }
 
       // If order has items, restore stock for products
       if (order.items && Array.isArray(order.items) && order.items.length > 0) {
-        console.log('Restoring stock for cancelled order items');
         for (const item of order.items) {
           if (item.type !== 'service' && item.id) {
             // Only restore stock for products, not services
@@ -108,7 +100,6 @@ export default function PaymentFailure() {
               .maybeSingle();
 
             if (productFetchError) {
-              console.error(`Error fetching stock for product ${item.id}:`, productFetchError);
               continue;
             }
 
@@ -122,7 +113,6 @@ export default function PaymentFailure() {
               .eq('id', item.id);
 
             if (stockError) {
-              console.error(`Error restoring stock for product ${item.id}:`, stockError);
             }
           }
         }
@@ -165,10 +155,9 @@ export default function PaymentFailure() {
           status_before_cancel: order.status,
           created_at: order.created_at
         }
-      }).catch(err => console.error('Error logging payment failure audit:', err));
+      }).catch(err => undefined);
       
     } catch (error) {
-      console.error('Error in cancelFailedOrder:', error);
       setOrderDetails({
         id: order_id || '#failed',
         orderNumber: '#failed',

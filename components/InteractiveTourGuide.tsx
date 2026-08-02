@@ -104,7 +104,6 @@ export const InteractiveTourGuide: React.FC<InteractiveTourGuideProps> = ({
           .update({ onboarding_completed: true })
           .eq('id', currentUser.id);
       } catch (error) {
-        console.error('Error updating onboarding status:', error);
       }
     }
 

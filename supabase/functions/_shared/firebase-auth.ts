@@ -132,7 +132,6 @@ export async function getAccessToken(serviceAccount: ServiceAccount): Promise<st
     const data: AccessTokenResponse = await response.json();
     return data.access_token;
   } catch (error) {
-    console.error('Error getting access token:', error);
     throw error;
   }
 }

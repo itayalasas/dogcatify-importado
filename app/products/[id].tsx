@@ -62,10 +62,8 @@ export default function ProductDetail() {
       if (promotion) {
         setActivePromotion(promotion);
         setAppliedDiscount(promotion.discount_percentage);
-        console.log(`✨ Active promotion found for product: ${promotion.discount_percentage}% discount`);
       }
     } catch (error) {
-      console.error('Error loading active promotion:', error);
     }
   };
 
@@ -80,7 +78,6 @@ export default function ProductDetail() {
         .single();
       
       if (error) {
-        console.error('Error checking favorites:', error);
         return;
       }
       
@@ -88,7 +85,6 @@ export default function ProductDetail() {
         setIsFavorite(userData.favorite_products.includes(id));
       }
     } catch (error) {
-      console.error('Error checking if product is favorite:', error);
     }
   };
 
@@ -161,7 +157,6 @@ export default function ProductDetail() {
         }
       }
     } catch (error) {
-      console.error('Error fetching product details:', error);
     } finally {
       setLoading(false);
     }
@@ -189,7 +184,6 @@ export default function ProductDetail() {
     // Si tiene promoción activa, registrar click para facturación
     if (activePromotion) {
       incrementPromotionClicks(activePromotion.id);
-      console.log(`📊 Incremented promotion click for product detail: ${product.name}`);
     }
 
     addToCart({
@@ -247,7 +241,6 @@ export default function ProductDetail() {
         isFavorite ? 'El producto se eliminó de tus favoritos' : 'El producto se agregó a tus favoritos'
       );
     } catch (error) {
-      console.error('Error updating favorites:', error);
       Alert.alert('Error', 'No se pudo actualizar los favoritos');
     } finally {
       setFavoriteLoading(false);
@@ -276,7 +269,6 @@ export default function ProductDetail() {
         await Share.share(shareContent);
       }
     } catch (error) {
-      console.error('Error sharing product:', error);
       // No mostrar error si el usuario cancela
       const message = error instanceof Error ? error.message : String(error);
       if (message && !message.includes('cancelled')) {

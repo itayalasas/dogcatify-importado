@@ -136,13 +136,10 @@ export default function PetCareDetail() {
       }));
 
       if (healthError) {
-        console.error('Error loading health data:', healthError);
       }
       if (alertsError) {
-        console.error('Error loading alerts data:', alertsError);
       }
       if (behaviorError) {
-        console.error('Error loading behavior data:', behaviorError);
       }
 
       const vaccinesData = processedRecords.filter((record: any) => record.type === 'vaccine');
@@ -170,7 +167,6 @@ export default function PetCareDetail() {
         behaviorRecords: behaviorData || [],
       });
     } catch (error) {
-      console.error('Error loading care hub:', error);
       Alert.alert('Error', 'No se pudo cargar el centro de cuidado');
     } finally {
       setLoading(false);
@@ -351,7 +347,6 @@ export default function PetCareDetail() {
 
       setRecommendations(nextRecommendations);
     } catch (error) {
-      console.error('Error generating care recommendations:', error);
       setRecommendations({
         vaccines: buildFallbackVaccineTips(petData),
         allergies: buildFallbackAllergyTips(petData),
@@ -508,7 +503,6 @@ export default function PetCareDetail() {
         },
       });
     } catch (error) {
-      console.error('Error sharing medical history:', error);
       Alert.alert('Error', 'No se pudo generar el enlace seguro');
     } finally {
       setSharingHistory(false);

@@ -19,12 +19,6 @@ export default function ServiceDetail() {
   const { currentUser } = useAuth();
   
   // Debug the received ID - MOVED OUTSIDE useEffect
-  console.log('=== ServiceDetail Component Render ===');
-  console.log('ServiceDetail - Received ID:', id);
-  console.log('ServiceDetail - ID type:', typeof id);
-  console.log('ServiceDetail - ID length:', id?.length);
-  console.log('ServiceDetail - Current user:', currentUser?.id);
-  console.log('=== End ServiceDetail Debug ===');
   
   const [service, setService] = useState<any>(null);
   const [partnerInfo, setPartnerInfo] = useState<any>(null);
@@ -75,7 +69,6 @@ export default function ServiceDetail() {
           .in('status', ['pending', 'confirmed', 'in_progress']);
 
         if (error) {
-          console.error('Error counting bookings:', error);
           availability[category.id] = category.capacity;
           continue;
         }
@@ -88,7 +81,6 @@ export default function ServiceDetail() {
 
       setCategoryAvailability(availability);
     } catch (error) {
-      console.error('Error calculating availability:', error);
     }
   };
 
@@ -126,10 +118,8 @@ export default function ServiceDetail() {
       if (promotion) {
         setActivePromotion(promotion);
         setAppliedDiscount(promotion.discount_percentage);
-        console.log(`✨ Active promotion found for service: ${promotion.discount_percentage}% discount`);
       }
     } catch (error) {
-      console.error('Error loading active promotion:', error);
     }
   };
 
@@ -144,7 +134,6 @@ export default function ServiceDetail() {
     try {
       // Validate service ID before making any queries
       if (!id || typeof id !== 'string') {
-        console.error('Invalid service ID received:', id);
         setLoading(false);
         return;
       }
@@ -152,7 +141,6 @@ export default function ServiceDetail() {
       // Check if ID is a valid UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(id)) {
-        console.error('Service ID is not a valid UUID:', id);
         setLoading(false);
         return;
       }
@@ -254,7 +242,6 @@ export default function ServiceDetail() {
       // Fetch service reviews
       await fetchServiceReviews();
     } catch (error) {
-      console.error('Error fetching service details:', error);
     } finally {
       setLoading(false);
     }
@@ -264,14 +251,12 @@ export default function ServiceDetail() {
     try {
       // Validate service ID is a proper UUID before making the query
       if (!id || typeof id !== 'string') {
-        console.error('Invalid service ID for reviews:', id);
         return;
       }
       
       // Check if ID is a valid UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(id)) {
-        console.error('Service ID is not a valid UUID:', id);
         return;
       }
       
@@ -315,7 +300,6 @@ export default function ServiceDetail() {
               pets: petData
             };
           } catch (error) {
-            console.error('Error enriching review:', error);
             return {
               ...review,
               profiles: null,
@@ -334,7 +318,6 @@ export default function ServiceDetail() {
         setTotalReviews(enrichedReviews.length);
       }
     } catch (error) {
-      console.error('Error fetching service reviews:', error);
     }
   };
 
@@ -348,7 +331,6 @@ export default function ServiceDetail() {
         .eq('owner_id', currentUser!.id);
 
       if (ownedError) {
-        console.error('Error fetching owned pets:', ownedError);
       }
 
       // Fetch shared pets (accepted shares)
@@ -363,7 +345,6 @@ export default function ServiceDetail() {
         .eq('status', 'accepted');
 
       if (sharedError) {
-        console.error('Error fetching shared pets:', sharedError);
       }
 
       // Combine owned and shared pets
@@ -376,15 +357,9 @@ export default function ServiceDetail() {
         filteredPets = filteredPets.filter(pet => pet.species === service.petType);
       }
 
-      console.log('Fetched owned pets:', ownedPets?.length || 0);
-      console.log('Fetched shared pets:', sharedPets.length);
-      console.log('Total pets:', allPets.length);
-      console.log('Service pet type:', service?.petType);
-      console.log('Filtered pets:', filteredPets.length);
 
       setUserPets(filteredPets);
     } catch (error) {
-      console.error('Error fetching user pets:', error);
     } finally {
       setLoadingPets(false);
     }
@@ -405,39 +380,24 @@ export default function ServiceDetail() {
     // Si tiene promoción activa, registrar click para facturación
     if (activePromotion) {
       incrementPromotionClicks(activePromotion.id);
-      console.log(`📊 Incremented promotion click for service booking: ${service?.name}`);
     }
 
     setShowBookingModal(true);
   };
 
   const handleSelectPet = (petId: string) => {
-    console.log('=== handleSelectPet START ===');
-    console.log('Selected pet ID:', petId);
-    console.log('Current service ID:', id);
-    console.log('Current service partnerId:', service?.partnerId);
-    console.log('Cerrando modal...');
-    console.log('About to close modal and navigate...');
     
     setSelectedPet(petId);
     
     // Validate all required data before navigation
     setShowBookingModal(false);
     
-    console.log('Modal cerrado, esperando antes de navegar...');
     
     // Esperar un momento para que el modal se cierre completamente
     setTimeout(() => {
-      console.log('=== INICIANDO NAVEGACIÓN DESPUÉS DEL DELAY ===');
-      console.log('Datos para navegación:', {
-        serviceId: id,
-        partnerId: service?.partnerId,
-        petId: petId
-      });
       
       // Validar datos antes de navegar
       if (!id || !service?.partnerId || !petId) {
-        console.error('❌ Faltan datos requeridos:', { serviceId: id, partnerId: service?.partnerId, petId });
         Alert.alert('Error', 'Información incompleta para la reserva');
         return;
       }
@@ -445,15 +405,12 @@ export default function ServiceDetail() {
       // Validar formato UUID
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(id) || !uuidRegex.test(service.partnerId) || !uuidRegex.test(petId)) {
-        console.error('❌ Formato UUID inválido:', { serviceId: id, partnerId: service.partnerId, petId });
         Alert.alert('Error', 'Datos de identificación inválidos');
         return;
       }
       
-      console.log('✅ Validación exitosa, navegando...');
       
       try {
-        console.log('🚀 Ejecutando router.push...');
         const params: any = {
           serviceId: id,
           partnerId: service.partnerId,
@@ -474,16 +431,12 @@ export default function ServiceDetail() {
           pathname: '/services/booking/[serviceId]',
           params
         });
-        console.log('✅ router.push ejecutado exitosamente');
       } catch (navigationError) {
-        console.error('❌ Error en la navegación:', navigationError);
         Alert.alert('Error', 'No se pudo navegar a la pantalla de reserva');
       }
       
-      console.log('=== FIN DE NAVEGACIÓN ===');
     }, 500); // Esperar 500ms para que el modal se cierre
     
-    console.log('=== handleSelectPet FIN ===');
   };
 
   const handleShowReviews = () => {

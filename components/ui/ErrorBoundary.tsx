@@ -35,8 +35,6 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   componentDidCatch(error: Error, errorInfo: any) {
-    console.error('ErrorBoundary caught an error:', error);
-    console.error('Error info:', errorInfo);
     
     this.setState({
       error,
@@ -47,7 +45,6 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     if (error.message?.includes('JWT') || 
         error.message?.includes('expired') ||
         error.message?.includes('session')) {
-      console.log('Session error detected in ErrorBoundary');
       this.handleSessionError();
     }
   }

@@ -23,11 +23,9 @@ export const useTokenValidation = (enabled = true) => {
         const isValid = await checkTokenValidity();
 
         if (!isValid) {
-          console.log('Token invalid in screen, redirecting to login...');
           router.replace('/auth/login');
         }
       } catch (error) {
-        console.error('Error validating token in screen:', error);
       } finally {
         isValidatingRef.current = false;
       }

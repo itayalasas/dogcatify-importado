@@ -129,12 +129,10 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (!conversationId || !currentUser) {
-      console.log('Missing conversationId or currentUser');
       setLoading(false);
       return;
     }
     
-    console.log('Loading chat for conversation:', conversationId);
     loadConversationDetails();
     loadMessages();
     
@@ -150,7 +148,6 @@ export default function ChatScreen() {
 
   const loadConversationDetails = async () => {
     try {
-      console.log('Loading conversation details for:', conversationId);
       
       const { data: conversation, error } = await supabaseClient
         .from('chat_conversations')
@@ -159,11 +156,9 @@ export default function ChatScreen() {
         .single();
 
       if (error) {
-        console.error('Error loading conversation:', error);
         throw error;
       }
 
-      console.log('Conversation data:', conversation);
       setConversationDetails(conversation);
 
       // Determine recipient based on current user
@@ -193,14 +188,12 @@ export default function ChatScreen() {
         setRecipientName(customerData?.display_name || 'Usuario');
       }
     } catch (error) {
-      console.error('Error loading conversation details:', error);
       Alert.alert('Error', 'No se pudo cargar la información de la conversación');
     }
   };
 
   const loadMessages = async () => {
     try {
-      console.log('Loading messages for conversation:', conversationId);
       
       const { data, error } = await supabaseClient
         .from('chat_messages')
@@ -209,11 +202,9 @@ export default function ChatScreen() {
         .order('created_at', { ascending: true });
 
       if (error) {
-        console.error('Error loading messages:', error);
         throw error;
       }
 
-      console.log('Messages loaded:', data?.length || 0);
       
       // Get sender names for messages
       const messagesWithSenderNames = await Promise.all(
@@ -247,7 +238,6 @@ export default function ChatScreen() {
               }
             }
           } catch (error) {
-            console.error('Error getting sender name:', error);
           }
           
           return {
@@ -269,7 +259,6 @@ export default function ChatScreen() {
       }
       
     } catch (error) {
-      console.error('Error loading messages:', error);
     } finally {
       setLoading(false);
     }
@@ -283,10 +272,8 @@ export default function ChatScreen() {
         .in('id', messageIds);
       
       if (error) {
-        console.error('Error marking messages as read:', error);
       }
     } catch (error) {
-      console.error('Error marking messages as read:', error);
     }
   };
 
@@ -294,7 +281,6 @@ export default function ChatScreen() {
     if (!newMessage.trim() || !currentUser || !conversationId) return;
 
     try {
-      console.log('Sending message:', newMessage.trim());
       
       const messageData = {
         conversation_id: conversationId,
@@ -310,11 +296,9 @@ export default function ChatScreen() {
         .insert([messageData]);
 
       if (error) {
-        console.error('Error sending message:', error);
         throw error;
       }
 
-      console.log('Message sent successfully');
 
       // Send push notification to recipient
       if (recipientId && recipientName) {
@@ -330,9 +314,7 @@ export default function ChatScreen() {
               senderName: currentUser?.displayName || 'Usuario'
             }
           );
-          console.log('Push notification sent');
         } catch (notificationError) {
-          console.error('Error sending push notification:', notificationError);
           // Don't fail the message sending if notification fails
         }
       }
@@ -346,7 +328,6 @@ export default function ChatScreen() {
       }, 500);
       
     } catch (error) {
-      console.error('Error sending message:', error);
       Alert.alert('Error', 'No se pudo enviar el mensaje');
     }
   };

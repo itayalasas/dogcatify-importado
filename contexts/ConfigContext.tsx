@@ -60,10 +60,6 @@ const resolveDefaultEmailApiUrl = (): string => {
       !matchesSupabaseFunctionPath(explicitEmailUrl, 'send-email')
     )
   ) {
-    console.warn(
-      '[ConfigContext] Ignoring EXPO_PUBLIC_EMAIL_API_URL because it does not point to the current send-email function. Using current project fallback instead:',
-      explicitEmailUrl,
-    );
     return supabaseUrl ? `${supabaseUrl}/functions/v1/send-email` : '';
   }
 
@@ -89,41 +85,34 @@ const DEFAULT_CONFIG: AppConfig = {
 };
 
 export function ConfigProvider({ children }: { children: React.ReactNode }) {
-  console.log('[ConfigContext] Provider initializing...');
   const [config, setConfig] = useState<AppConfig | null>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const loadConfig = async () => {
     try {
-      console.log('[ConfigContext] loadConfig started');
       setLoading(true);
       setError(null);
 
       // Check if supabaseClient is available
       if (!supabaseClient) {
-        console.warn('[ConfigContext] Supabase client not initialized, using default config');
         setConfig(DEFAULT_CONFIG);
         setLoading(false);
         return;
       }
 
-      console.log('[ConfigContext] Fetching config from database...');
 
       const { data, error: fetchError } = await supabaseClient
         .from('app_config')
         .select('key, value');
 
       if (fetchError) {
-        console.warn('[ConfigContext] Error loading config from database, using defaults:', fetchError.message);
         setConfig(DEFAULT_CONFIG);
         return;
       }
 
-      console.log('[ConfigContext] Config data received:', data?.length || 0, 'items');
 
       if (!data || data.length === 0) {
-        console.log('[ConfigContext] No config data, using defaults');
         setConfig(DEFAULT_CONFIG);
         return;
       }
@@ -144,24 +133,17 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
         );
 
       if (shouldFallbackToDefault) {
-        console.warn(
-          '[ConfigContext] Ignoring app_config.email_api_url because it does not point to the current send-email function. Using default config instead:',
-          configuredEmailUrl,
-        );
       }
 
-      console.log('[ConfigContext] Config loaded successfully');
       setConfig({
         ...DEFAULT_CONFIG,
         ...configObject,
         email_api_url: shouldFallbackToDefault ? DEFAULT_CONFIG.email_api_url : (configuredEmailUrl || DEFAULT_CONFIG.email_api_url),
       });
     } catch (err) {
-      console.error('[ConfigContext] Error loading config:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');
       setConfig(DEFAULT_CONFIG);
     } finally {
-      console.log('[ConfigContext] loadConfig finished, loading=false');
       setLoading(false);
     }
   };

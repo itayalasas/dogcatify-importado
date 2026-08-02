@@ -1,5 +1,4 @@
 import { supabaseClient } from '../lib/supabase';
-import jsPDF from 'jspdf';
 
 /**
  * Configuración de precios para facturación de promociones
@@ -125,164 +124,6 @@ export const generateInvoiceNumber = (): string => {
 };
 
 /**
- * Generar PDF de factura
- */
-export const generateInvoicePDF = (invoice: PromotionInvoice): jsPDF => {
-  const doc = new jsPDF();
-
-  // Colores corporativos
-  const primaryColor: [number, number, number] = [220, 38, 38]; // #DC2626
-  const secondaryColor: [number, number, number] = [107, 114, 128]; // #6B7280
-  const bgGray: [number, number, number] = [249, 250, 251]; // #F9FAFB
-
-  // Header con logo y título
-  doc.setFillColor(...primaryColor);
-  doc.rect(0, 0, 210, 40, 'F');
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(28);
-  doc.setFont('helvetica', 'bold');
-  doc.text('DogCatify', 15, 20);
-
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Factura de Promoción', 15, 30);
-
-  // Información de la factura
-  doc.setTextColor(0, 0, 0);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`Factura No: ${invoice.invoiceNumber}`, 140, 20);
-
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Fecha: ${new Date().toLocaleDateString('es-UY')}`, 140, 26);
-  doc.text(`Estado: ${invoice.status.toUpperCase()}`, 140, 32);
-
-  // Información del aliado
-  let yPos = 55;
-  doc.setFillColor(...bgGray);
-  doc.rect(15, yPos - 5, 180, 25, 'F');
-
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Facturar a:', 20, yPos);
-
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text(invoice.partnerName, 20, yPos + 7);
-  doc.text(invoice.partnerEmail, 20, yPos + 13);
-
-  // Información de la promoción
-  yPos += 35;
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Detalles de la Promoción:', 15, yPos);
-
-  yPos += 7;
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Promoción: ${invoice.promotionTitle}`, 15, yPos);
-
-  yPos += 6;
-  const startDate = invoice.billingPeriodStart.toLocaleDateString('es-UY');
-  const endDate = invoice.billingPeriodEnd.toLocaleDateString('es-UY');
-  doc.text(`Período: ${startDate} - ${endDate}`, 15, yPos);
-
-  // Tabla de conceptos
-  yPos += 15;
-  doc.setFillColor(...primaryColor);
-  doc.rect(15, yPos, 180, 10, 'F');
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Concepto', 20, yPos + 7);
-  doc.text('Cantidad', 100, yPos + 7);
-  doc.text('Precio Unit.', 130, yPos + 7);
-  doc.text('Subtotal', 165, yPos + 7);
-
-  // Filas de la tabla
-  doc.setTextColor(0, 0, 0);
-  doc.setFont('helvetica', 'normal');
-
-  yPos += 15;
-
-  // Clicks
-  if (invoice.totalClicks > 0) {
-    doc.text('Clicks en la promoción', 20, yPos);
-    doc.text(invoice.totalClicks.toString(), 100, yPos);
-    doc.text(`$${invoice.costPerClick.toFixed(2)}`, 130, yPos);
-    doc.text(`$${invoice.clicksAmount.toFixed(2)}`, 165, yPos);
-    yPos += 8;
-  }
-
-  // Vistas
-  if (invoice.totalViews > 0) {
-    doc.text('Vistas de la promoción', 20, yPos);
-    doc.text(invoice.totalViews.toString(), 100, yPos);
-    doc.text(`$${invoice.pricePerView.toFixed(2)}`, 130, yPos);
-    doc.text(`$${invoice.viewsAmount.toFixed(2)}`, 165, yPos);
-    yPos += 8;
-  }
-
-  // Likes
-  if (invoice.totalLikes > 0) {
-    doc.text('Likes en la promoción', 20, yPos);
-    doc.text(invoice.totalLikes.toString(), 100, yPos);
-    doc.text(`$${invoice.pricePerLike.toFixed(2)}`, 130, yPos);
-    doc.text(`$${invoice.likesAmount.toFixed(2)}`, 165, yPos);
-    yPos += 8;
-  }
-
-  // Línea separadora
-  yPos += 5;
-  doc.setDrawColor(...secondaryColor);
-  doc.line(15, yPos, 195, yPos);
-
-  // Totales
-  yPos += 10;
-  doc.setFont('helvetica', 'normal');
-  doc.text('Subtotal:', 130, yPos);
-  doc.text(`$${invoice.subtotal.toFixed(2)}`, 165, yPos);
-
-  yPos += 8;
-  doc.text(`IVA (${invoice.taxPercentage}%):`, 130, yPos);
-  doc.text(`$${invoice.taxAmount.toFixed(2)}`, 165, yPos);
-
-  yPos += 10;
-  doc.setFillColor(...bgGray);
-  doc.rect(125, yPos - 5, 70, 10, 'F');
-
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text('TOTAL:', 130, yPos + 2);
-  doc.text(`$${invoice.totalAmount.toFixed(2)}`, 165, yPos + 2);
-
-  // Notas
-  if (invoice.notes) {
-    yPos += 20;
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Notas:', 15, yPos);
-
-    yPos += 6;
-    doc.setFont('helvetica', 'normal');
-    const notes = doc.splitTextToSize(invoice.notes, 180);
-    doc.text(notes, 15, yPos);
-  }
-
-  // Footer
-  const pageHeight = doc.internal.pageSize.getHeight();
-  doc.setFontSize(8);
-  doc.setTextColor(...secondaryColor);
-  doc.setFont('helvetica', 'italic');
-  doc.text('Gracias por confiar en DogCatify para promocionar sus servicios', 105, pageHeight - 20, { align: 'center' });
-  doc.text('Para consultas: admin@dogcatify.com', 105, pageHeight - 15, { align: 'center' });
-
-  return doc;
-};
-
-/**
  * Crear una factura para una promoción usando datos de Supabase
  */
 export const createPromotionInvoice = async (
@@ -364,7 +205,6 @@ export const createPromotionInvoice = async (
       invoice
     };
   } catch (error: any) {
-    console.error('Error creating invoice:', error);
     return {
       success: false,
       error: error.message || 'Error al crear la factura'
@@ -396,13 +236,11 @@ export const saveInvoiceToDatabase = async (
       });
 
     if (error) {
-      console.error('Error saving to database:', error);
       throw error;
     }
 
     return { success: true };
   } catch (error: any) {
-    console.error('Error in saveInvoiceToDatabase:', error);
     return {
       success: false,
       error: error.message || 'Error al guardar la factura'
@@ -434,7 +272,6 @@ export const updateInvoiceStatus = async (
 
     return { success: true };
   } catch (error: any) {
-    console.error('Error updating invoice status:', error);
     return {
       success: false,
       error: error.message || 'Error al actualizar estado de factura'
@@ -488,7 +325,6 @@ export const getAllInvoicesFromDatabase = async (): Promise<PromotionInvoice[]> 
       createdBy: item.created_by
     }));
   } catch (error) {
-    console.error('Error getting invoices from database:', error);
     return [];
   }
 };
@@ -540,7 +376,6 @@ export const getPartnerInvoicesFromDatabase = async (partnerId: string): Promise
       createdBy: item.created_by
     }));
   } catch (error) {
-    console.error('Error getting partner invoices:', error);
     return [];
   }
 };
@@ -562,7 +397,6 @@ export const generatePromotionInvoice = async (params: {
   invoiceDate: Date;
 }): Promise<void> => {
   try {
-    console.log('Generating promotion invoice...', params);
 
     // Por ahora solo registramos el evento
     // En el futuro aquí se puede:
@@ -570,9 +404,7 @@ export const generatePromotionInvoice = async (params: {
     // 2. Guardar el PDF usando saveInvoiceToDatabase
     // 3. Enviar el email con la factura
 
-    console.log('Invoice generation completed');
   } catch (error) {
-    console.error('Error generating promotion invoice:', error);
     throw error;
   }
 };

@@ -36,7 +36,6 @@ export default function PartnerTabLayout() {
 
   useEffect(() => {
     if (authInitialized && !currentUser) {
-      console.log('User not authenticated in partner tabs, redirecting to login');
       if (pathname !== '/auth/login') {
         router.replace('/auth/login');
       }
@@ -66,7 +65,6 @@ export default function PartnerTabLayout() {
           router.replace('/onboarding');
         }
       } catch (error) {
-        console.warn('Error checking onboarding before partner tabs route:', error);
         if (mounted) {
           setOnboardingChecked(true);
           setOnboardingRequired(false);
@@ -129,13 +127,11 @@ export default function PartnerTabLayout() {
       setLoading(true);
       setAccessDenied(false);
       fetchPartnerProfile(activeBusinessId);
-      console.log('PartnerTabLayout - Fetching profile for business ID:', activeBusinessId);
     } else {
       setPartnerProfile(null);
       setHasActiveSchedule(false);
       setAccessDenied(false);
       setLoading(false);
-      console.log('PartnerTabLayout - No business ID provided');
     }
   }, [activeBusinessId, currentUser?.id, authInitialized]);
 
@@ -154,7 +150,6 @@ export default function PartnerTabLayout() {
         .single();
       
       if (error) {
-        console.error('PartnerTabLayout - Error fetching partner profile:', error);
         return;
       }
       
@@ -163,7 +158,6 @@ export default function PartnerTabLayout() {
         const isOwner = partnerDoc.user_id === currentUser.id;
 
         if (!isOwner && !isAdmin) {
-          console.warn('PartnerTabLayout - Access denied for business:', businessId);
           setPartnerProfile(null);
           setHasActiveSchedule(false);
           setAccessDenied(true);
@@ -186,16 +180,12 @@ export default function PartnerTabLayout() {
         }
 
         setPartnerRows((accountPartnerRows || []) as any[]);
-        console.log('PartnerTabLayout - Profile loaded:', profileData.business_name);
-        console.log('PartnerTabLayout - Business type:', profileData.business_type);
         
         // Check if this business has active schedule
         await checkActiveSchedule(businessId);
       } else {
-        console.log('PartnerTabLayout - No partner document found for ID:', businessId);
       }
     } catch (error) {
-      console.error('PartnerTabLayout - Error fetching partner profile:', error);
     } finally {
       setLoading(false);
     }
@@ -203,7 +193,6 @@ export default function PartnerTabLayout() {
 
   const checkActiveSchedule = async (businessId: string) => {
     try {
-      console.log('Checking active schedule for business:', businessId);
       
       const { data: scheduleData, error } = await supabaseClient
         .from('business_schedule')
@@ -212,16 +201,13 @@ export default function PartnerTabLayout() {
         .eq('is_active', true);
       
       if (error) {
-        console.error('Error checking schedule:', error);
         setHasActiveSchedule(false);
         return;
       }
       
       const hasSchedule = scheduleData && scheduleData.length > 0;
-      console.log('Active schedule found:', hasSchedule, 'Count:', scheduleData?.length || 0);
       setHasActiveSchedule(hasSchedule);
     } catch (error) {
-      console.error('Error checking active schedule:', error);
       setHasActiveSchedule(false);
     }
   };
@@ -327,12 +313,6 @@ export default function PartnerTabLayout() {
   
   const hasProductsEnabled = features.products || businessType === 'shop';
   
-  console.log('PartnerTabLayout - Tab visibility:', {
-    businessType,
-    hasProductsEnabled,
-    hasActiveSchedule,
-    shouldShowReservas: canShowBookingsTab
-  });
 
   return (
     <Tabs

@@ -32,10 +32,8 @@ export const withTokenValidation = async <T>(
     const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
 
     if (sessionError) {
-      console.error(`Session error in ${context}:`, sessionError);
 
       if (isJWTError(sessionError)) {
-        console.log('JWT error detected before operation, redirecting to login');
         router.replace('/auth/login');
         throw new TokenExpiredError('Session invalid');
       }
@@ -44,7 +42,6 @@ export const withTokenValidation = async <T>(
     }
 
     if (!session) {
-      console.log('No session found, redirecting to login');
       router.replace('/auth/login');
       throw new TokenExpiredError('No session found');
     }
@@ -53,21 +50,16 @@ export const withTokenValidation = async <T>(
     const tokenExp = session.expires_at || 0;
 
     if (now >= tokenExp) {
-      console.log('Token expired, attempting refresh before operation...');
 
       try {
         const { data: refreshData, error: refreshError } = await supabaseClient.auth.refreshSession();
 
         if (refreshError || !refreshData.session) {
-          console.error('Failed to refresh session:', refreshError);
-          console.log('Redirecting to login due to refresh failure');
           router.replace('/auth/login');
           throw new TokenExpiredError('Failed to refresh session');
         }
 
-        console.log('Session refreshed successfully, proceeding with operation');
       } catch (refreshError) {
-        console.error('Exception during refresh:', refreshError);
         router.replace('/auth/login');
         throw new TokenExpiredError('Exception during refresh');
       }
@@ -81,8 +73,6 @@ export const withTokenValidation = async <T>(
     }
 
     if (isJWTError(error)) {
-      console.error(`JWT error during ${context}:`, error);
-      console.log('Redirecting to login due to JWT error');
       router.replace('/auth/login');
       throw new TokenExpiredError('JWT error during operation');
     }

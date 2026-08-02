@@ -39,7 +39,6 @@ export default function SelectDewormer() {
       const petAge = ageInMonths ? parseInt(ageInMonths) : 24;
       const petWeight = weight ? parseFloat(weight) : undefined;
 
-      console.log(`Searching cache for ${species} - ${petBreed}`);
 
       const { data: cachedData, error: cacheError } = await supabaseClient
         .from('dewormers_ai_cache')
@@ -52,7 +51,6 @@ export default function SelectDewormer() {
         .maybeSingle();
 
       if (cachedData && !cacheError) {
-        console.log('✓ Using cached dewormer data for', petBreed);
         const cachedDewormers = cachedData.recommendations.dewormers.map((d: any) => ({
           id: `ai_${d.name.toLowerCase().replace(/\s+/g, '_')}`,
           name: d.name,
@@ -77,10 +75,8 @@ export default function SelectDewormer() {
         return;
       }
 
-      console.log('⚠ No cache found, generating with AI...');
       await fetchFromAI(petBreed, petAge, petWeight);
     } catch (error) {
-      console.error('Error fetching dewormers:', error);
       await fetchFromCatalog();
     }
   };
@@ -136,7 +132,6 @@ export default function SelectDewormer() {
       setDewormers(aiDewormers);
       setFilteredDewormers(aiDewormers);
 
-      console.log(`✓ Generated ${aiDewormers.length} dewormer recommendations via AI`);
 
       const cacheKey = `${species}_${petBreed}_general`;
       const { error: cacheError } = await supabaseClient
@@ -152,13 +147,10 @@ export default function SelectDewormer() {
         });
 
       if (cacheError) {
-        console.warn('Could not cache AI recommendations:', cacheError);
       } else {
-        console.log('✓ Saved to cache for future use');
       }
 
     } catch (error) {
-      console.error('Error fetching from AI:', error);
       await fetchFromCatalog();
     } finally {
       setLoading(false);
@@ -178,7 +170,6 @@ export default function SelectDewormer() {
       setDewormers(data || []);
       setFilteredDewormers(data || []);
     } catch (error) {
-      console.error('Error fetching dewormers catalog:', error);
       setDewormers([]);
       setFilteredDewormers([]);
     } finally {
@@ -200,7 +191,6 @@ export default function SelectDewormer() {
   };
 
   const handleSelectDewormer = (dewormer: any) => {
-    console.log('Navigating back with dewormer:', dewormer.name);
     router.replace({
       pathname: returnPath as any,
       params: {

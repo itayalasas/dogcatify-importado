@@ -22,7 +22,6 @@ export class SafeAppWrapper extends React.Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): State {
-    console.error('[SafeAppWrapper] Error caught:', error);
     return {
       hasError: true,
       error,
@@ -31,8 +30,6 @@ export class SafeAppWrapper extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('[SafeAppWrapper] Component error:', error);
-    console.error('[SafeAppWrapper] Error info:', errorInfo);
     this.setState({
       error,
       errorInfo,

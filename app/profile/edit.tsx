@@ -178,7 +178,6 @@ export default function EditProfile() {
         }
       }
     } catch (error) {
-      console.error('Error loading countries:', error);
     }
   };
 
@@ -194,7 +193,6 @@ export default function EditProfile() {
       setDepartments(data || []);
       setFilteredDepartments(data || []);
     } catch (error) {
-      console.error('Error loading departments:', error);
     }
   };
 
@@ -237,7 +235,6 @@ export default function EditProfile() {
         }
       }
     } catch (error) {
-      console.error('Error loading user address data:', error);
     }
   };
 
@@ -318,8 +315,6 @@ export default function EditProfile() {
       const nominatimBaseUrl = envConfig.getOrDefault('EXPO_PUBLIC_NOMINATIM_BASE_URL', 'https://nominatim.openstreetmap.org');
       const searchUrl = `${nominatimBaseUrl}/search?q=${query}&format=json&limit=4&addressdetails=1`;
       
-      console.log('Geocoding query:', query);
-      console.log('Search URL:', searchUrl);
 
       const response = await fetch(searchUrl, {
         headers: {
@@ -332,7 +327,6 @@ export default function EditProfile() {
       }
 
       const results = await response.json();
-      console.log('Geocoding results:', results);
 
       if (!results || results.length === 0) {
         Alert.alert('Sin resultados', 'No se encontraron ubicaciones para la dirección ingresada. Verifica los datos e intenta nuevamente.');
@@ -349,7 +343,6 @@ export default function EditProfile() {
         return isHouse && containsStreetAndNumber;
       });
 
-      console.log('Filtered house results:', houseResults);
 
       if (houseResults.length === 0) {
         // Si no hay resultados de tipo "house", mostrar todos los resultados
@@ -360,7 +353,6 @@ export default function EditProfile() {
 
       setShowGeocodingResults(true);
     } catch (error) {
-      console.error('Error en geocodificación:', error);
       Alert.alert('Error', 'No se pudo obtener la ubicación. Verifica tu conexión e intenta nuevamente.');
     } finally {
       setIsGeocoding(false);
@@ -369,23 +361,16 @@ export default function EditProfile() {
 
   // Función para seleccionar un resultado de geocodificación
   const handleSelectGeocodingResult = (result: any) => {
-    console.log('Selected geocoding result:', result);
     
     // Extraer información del display_name
     const displayName = result.display_name || '';
     const parts = displayName.split(',').map((part: string) => part.trim());
     
-    console.log('Display name parts:', parts);
-    console.log('Current street:', calle);
-    console.log('Current number:', numero);
-    console.log('Current department:', selectedDepartment?.name);
-    console.log('Current country:', selectedCountry?.name);
     
     // Buscar código postal (patrón de 5 dígitos)
     const postalCodeMatch = displayName.match(/\b\d{5}\b/);
     if (postalCodeMatch) {
       setCodigoPostal(postalCodeMatch[0]);
-      console.log('Found postal code:', postalCodeMatch[0]);
     }
     
     // Extraer barrio - buscar el elemento que viene después de la calle
@@ -397,7 +382,6 @@ export default function EditProfile() {
       part.toLowerCase().includes(calle.toLowerCase())
     );
     
-    console.log('Street found at index:', streetIndex);
     
     if (streetIndex >= 0 && streetIndex + 1 < parts.length) {
       // El barrio debería estar en el siguiente elemento después de la calle
@@ -410,7 +394,6 @@ export default function EditProfile() {
           !possibleBarrio.match(/\b\d{5}\b/) && // No es código postal
           possibleBarrio.length > 2) { // Tiene longitud razonable
         barrioFound = possibleBarrio;
-        console.log('Barrio found:', barrioFound);
       }
     }
     
@@ -422,7 +405,6 @@ export default function EditProfile() {
                    address.quarter || 
                    address.district || 
                    address.city_district || '';
-      console.log('Barrio from address details:', barrioFound);
     }
     
     // Si aún no se encontró, intentar con el tercer elemento (método original como fallback)
@@ -433,7 +415,6 @@ export default function EditProfile() {
           possibleBarrio !== selectedCountry?.name &&
           !possibleBarrio.match(/\b\d{5}\b/)) {
         barrioFound = possibleBarrio;
-        console.log('Barrio from fallback method:', barrioFound);
       }
     }
     
@@ -476,7 +457,6 @@ export default function EditProfile() {
         setProfileImage(result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Error selecting photo:', error);
       Alert.alert('Error', 'No se pudo seleccionar la foto');
     }
   };
@@ -502,7 +482,6 @@ export default function EditProfile() {
         setProfileImage(result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Error taking photo:', error);
       Alert.alert('Error', 'No se pudo tomar la foto');
     }
   };
@@ -513,7 +492,6 @@ export default function EditProfile() {
       const filename = `profiles/${currentUser!.id}/${Date.now()}.jpg`;
       return await uploadImage(imageAsset.uri, filename);
     } catch (error) {
-      console.error('Error uploading image:', error);
       throw error;
     } finally {
       setUploadingImage(false);
@@ -522,7 +500,6 @@ export default function EditProfile() {
 
   const updateUserPostsAndComments = async (newPhotoURL: string, newDisplayName: string) => {
     try {
-      console.log('Updating user posts with new data...');
       // Update all posts by this user
       const { error: postsError } = await supabaseClient
         .from('posts')
@@ -533,24 +510,16 @@ export default function EditProfile() {
         .eq('user_id', currentUser!.id);
       
       if (postsError) {
-        console.error('Error updating posts:', postsError);
       } else {
-        console.log('Posts updated successfully');
       }
 
-      console.log('Updating user comments with new data...');
       // Comments table doesn't have author column, it uses user_id reference
       // The author info is fetched via join with profiles table
-      console.log('Comments use user_id reference, no direct update needed');
 
-      console.log('Updating user pet albums with new data...');
       // Pet albums table doesn't have author column, it uses user_id reference
       // The author info is fetched via join with profiles table
-      console.log('Pet albums use user_id reference, no direct update needed');
 
-      console.log('Successfully updated all user posts and comments');
     } catch (error) {
-      console.error('Error updating user posts and comments:', error);
       // Don't throw error here as profile update was successful
     }
   };
@@ -566,10 +535,6 @@ export default function EditProfile() {
       return;
     }
 
-    console.log('Starting profile save process...');
-    console.log('Current user ID:', currentUser.id);
-    console.log('Display name:', displayName.trim());
-    console.log('Selected image:', selectedImage ? 'Yes' : 'No');
 
     setLoading(true);
     try {
@@ -577,12 +542,9 @@ export default function EditProfile() {
 
       // Upload new image if selected
       if (selectedImage) {
-        console.log('Uploading new image...');
         try {
           photoURL = await uploadImageToStorage(selectedImage);
-          console.log('Image uploaded successfully:', photoURL);
         } catch (uploadError) {
-          console.error('Error uploading image:', uploadError);
           setLoading(false);
           Alert.alert('Error', 'No se pudo subir la imagen. ¿Deseas continuar sin cambiar la foto?', [
             { text: 'Cancelar', style: 'cancel' },
@@ -598,7 +560,6 @@ export default function EditProfile() {
       await saveProfileData(photoURL);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error('Error in handleSaveProfile:', error);
       Alert.alert('Error', `No se pudo actualizar el perfil: ${message}`);
     } finally {
       // ALWAYS clear loading state
@@ -611,7 +572,6 @@ export default function EditProfile() {
       await saveProfileData(profileImage);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error('Error saving profile without image:', error);
       Alert.alert('Error', `No se pudo actualizar el perfil: ${message}`);
     } finally {
       setLoading(false);
@@ -620,7 +580,6 @@ export default function EditProfile() {
 
   const saveProfileData = async (photoURL: string | null) => {
     try {
-      console.log('Updating Supabase profile...');
       
       // Prepare update data
       const updateData = {
@@ -641,7 +600,6 @@ export default function EditProfile() {
         updated_at: new Date().toISOString(),
       };
 
-      console.log('Update data:', updateData);
 
       // Update Supabase user profile
       const { error } = await supabaseClient
@@ -650,10 +608,8 @@ export default function EditProfile() {
         .eq('id', currentUser!.id);
 
       if (error) {
-        console.error('Supabase profile update error:', error);
         throw new Error(`Error de base de datos: ${error.message}`);
       }
-      console.log('Supabase profile updated successfully');
 
       // Update the current user in the auth context immediately
       const updatedUser = {
@@ -665,10 +621,8 @@ export default function EditProfile() {
         bio: bio.trim() || currentUser!.bio,
       };
       
-      console.log('Updating current user in context...');
       updateCurrentUser(updatedUser);
 
-      console.log('Profile save completed successfully');
       
       // Success - navigate immediately
       Alert.alert('Éxito', 'Perfil actualizado correctamente', [
@@ -676,7 +630,6 @@ export default function EditProfile() {
       ]);
       
     } catch (error) {
-      console.error('Error in saveProfileData:', error);
       throw error;
     }
   };

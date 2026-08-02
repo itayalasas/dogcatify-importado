@@ -32,14 +32,12 @@ export default function BreedSelector() {
   const fetchBreeds = async () => {
     setLoading(true);
     try {
-      console.log(`Fetching all ${species} breeds using optimized endpoint...`);
       
       // Use the optimized endpoint that returns all breeds at once
       const endpoint = species === 'dog'
         ? 'https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/alldogs'
         : 'https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/allcats';
       
-      console.log(`Using endpoint: ${endpoint}`);
       
       const response = await fetch(endpoint, {
         headers: {
@@ -50,8 +48,6 @@ export default function BreedSelector() {
       
       if (response.ok) {
         const data = await response.json();
-        console.log(`API returned ${data.length} breeds`);
-        console.log('Sample breed data:', data[0]); // Debug log to see structure
         
         // Handle different possible data structures
         let breedNames: string[] = [];
@@ -67,18 +63,14 @@ export default function BreedSelector() {
             .sort();
         }
         
-        console.log(`Processed ${breedNames.length} unique breeds`);
-        console.log('First 5 breeds:', breedNames.slice(0, 5)); // Debug log
         setBreeds(breedNames);
         setFilteredBreeds(breedNames);
       } else {
         const errorText = await response.text();
-        console.error('API Error:', response.status, errorText);
         throw new Error(`API Error: ${response.status}`);
       }
       
     } catch (error) {
-      console.error('Error fetching breeds:', error);
       Alert.alert(
         'Error', 
         'Ocurrió un error al cargar las razas. Por favor intenta de nuevo.',
@@ -93,7 +85,6 @@ export default function BreedSelector() {
   };
 
   const handleBreedSelect = (breed: string) => {
-    console.log("Breed selected:", breed);
     // Navigate back with the selected breed as a parameter
     router.push({
       pathname: '/pets/add',

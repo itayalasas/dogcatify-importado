@@ -56,11 +56,9 @@ export default function ServiceBooking() {
   };
 
   useEffect(() => {
-    console.log('ServiceBooking - Received params:', { serviceId, partnerId, petId });
     
     // Validate all required parameters
     if (!serviceId || !partnerId || !petId) {
-      console.error('Missing required parameters:', { serviceId, partnerId, petId });
       Alert.alert('Error', 'Información incompleta para la reserva', [
         { text: 'OK', onPress: () => router.back() }
       ]);
@@ -68,7 +66,6 @@ export default function ServiceBooking() {
     }
     
     if (!currentUser) {
-      console.error('No current user');
       Alert.alert('Error', 'Debes iniciar sesión para hacer una reserva', [
         { text: 'OK', onPress: () => router.replace('/auth/login') }
       ]);
@@ -78,7 +75,6 @@ export default function ServiceBooking() {
     // Validate UUID formats
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(serviceId) || !uuidRegex.test(partnerId) || !uuidRegex.test(petId)) {
-      console.error('Invalid UUID format in booking params:', { serviceId, partnerId, petId });
       Alert.alert('Error', 'Datos de identificación inválidos', [
         { text: 'OK', onPress: () => router.back() }
       ]);
@@ -106,13 +102,6 @@ export default function ServiceBooking() {
         // 3. En cualquier otro caso → tiene costo
         const isFreeService = serviceData.has_cost === false || serviceData.price === 0;
 
-        console.log('Service data loaded:', {
-          id: serviceData.id,
-          name: serviceData.name,
-          has_cost: serviceData.has_cost,
-          price: serviceData.price,
-          isFreeService: isFreeService
-        });
 
         setService({
           id: serviceData.id,
@@ -219,7 +208,6 @@ export default function ServiceBooking() {
         }
       }
     } catch (error) {
-      console.error('Error fetching booking data:', error);
       Alert.alert('Error', 'No se pudo cargar la información para la reserva');
     } finally {
       setLoading(false);
@@ -230,7 +218,6 @@ export default function ServiceBooking() {
     if (!partnerId || !serviceId) return [];
 
     try {
-      console.log('🔍 Fetching booked times for date:', date.toDateString(), 'service:', serviceId);
 
       const dateString = date.toISOString().split('T')[0];
 
@@ -243,7 +230,6 @@ export default function ServiceBooking() {
         .lte('date', `${dateString}T23:59:59`);
 
       if (error) {
-        console.error('❌ Error fetching booked times from bookings:', error);
         return [];
       }
 
@@ -252,12 +238,10 @@ export default function ServiceBooking() {
         service_duration: booking.service_duration,
       })) || [];
 
-      console.log('⏰ Booked bookings from BOOKINGS:', formattedBookings);
       setBookedBookings(formattedBookings);
 
       return formattedBookings;
     } catch (error) {
-      console.error('Error fetching existing bookings:', error);
       return [];
     }
   };
@@ -317,7 +301,6 @@ export default function ServiceBooking() {
 
     setBookingLoading(true);
     try {
-      console.log('Creating service booking order...');
 
       // Create booking date by combining selected date and time
       const bookingDate = new Date(selectedDate);
@@ -355,7 +338,6 @@ export default function ServiceBooking() {
 
       if (!serviceHasCost) {
         // Service is FREE - Create booking directly without payment
-        console.log('Service is free, creating booking directly...');
 
         const { data: bookingData, error: bookingError } = await supabaseClient
           .from('bookings')
@@ -392,7 +374,6 @@ export default function ServiceBooking() {
             .single();
 
           if (partnerUserError || !partnerUser?.user_id) {
-            console.warn('No se pudo resolver el usuario del partner para notificar:', partnerUserError);
           } else {
             const { data: profileData, error: profileError } = await supabaseClient
               .from('profiles')
@@ -403,7 +384,6 @@ export default function ServiceBooking() {
             const pushToken = profileData?.fcm_token || profileData?.push_token;
 
             if (profileError || !pushToken) {
-              console.warn('Partner sin token de notificación para reservas:', profileError);
             } else {
               await NotificationService.sendPushNotification(
                 pushToken,
@@ -418,7 +398,6 @@ export default function ServiceBooking() {
             }
           }
         } catch (notifError) {
-          console.error('Error sending notification:', notifError);
         }
 
         Alert.alert(
@@ -460,7 +439,6 @@ export default function ServiceBooking() {
         throw new Error('No se pudo obtener la URL de pago');
       }
 
-      console.log('Opening Mercado Pago for payment...');
 
       // Open Mercado Pago (app or web)
       const isTestMode = result.paymentUrl.includes('sandbox.mercadopago');
@@ -475,12 +453,8 @@ export default function ServiceBooking() {
           ]
         );
       } else {
-        console.log(openResult.openedInApp
-          ? '✅ Opened in Mercado Pago app'
-          : '🌐 Opened in browser');
       }
     } catch (error) {
-      console.error('Error creating booking:', error);
 
       let errorMessage = 'No se pudo crear la reserva';
       if (error instanceof Error) {
@@ -739,16 +713,12 @@ export default function ServiceBooking() {
           <Button
             title={bookingLoading ? 'Procesando...' : (service?.hasCost === false ? 'Confirmar Reserva' : 'Pagar')}
             onPress={() => {
-              console.log('Button pressed - Service hasCost:', service?.hasCost);
-              console.log('Service full object:', service);
 
               if (service?.hasCost === false) {
                 // Service is free, confirm directly
-                console.log('Service is free, confirming directly');
                 handleBookService();
               } else {
                 // Service has cost, show payment modal
-                console.log('Service has cost, showing payment modal');
                 setShowPaymentMethodModal(true);
               }
             }}

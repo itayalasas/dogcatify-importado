@@ -45,7 +45,6 @@ export default function AddIllness() {
       try {
         setDiagnosisDate(new Date(params.currentDiagnosisDate));
       } catch (error) {
-        console.error('Error parsing diagnosis date:', error);
       }
     }
     
@@ -55,9 +54,7 @@ export default function AddIllness() {
         const condition = JSON.parse(params.selectedCondition as string);
         setSelectedCondition(condition);
         setIllnessName(condition.name);
-        console.log('Selected condition:', condition.name);
       } catch (error) {
-        console.error('Error parsing selected condition:', error);
       }
     }
 
@@ -67,9 +64,7 @@ export default function AddIllness() {
         const condition = JSON.parse(params.currentSelectedCondition);
         setSelectedCondition(condition);
         setIllnessName(condition.name);
-        console.log('Restored selected condition:', condition.name);
       } catch (error) {
-        console.error('Error parsing currentSelectedCondition:', error);
       }
     }
 
@@ -79,9 +74,7 @@ export default function AddIllness() {
         const treatmentData = JSON.parse(params.selectedTreatment as string);
         setSelectedTreatment(treatmentData);
         setTreatment(treatmentData.name);
-        console.log('Selected treatment:', treatmentData.name);
       } catch (error) {
-        console.error('Error parsing selected treatment:', error);
       }
     }
     
@@ -90,9 +83,7 @@ export default function AddIllness() {
       try {
         const vetData = JSON.parse(params.selectedVeterinarian as string);
         setVeterinarian(vetData.name);
-        console.log('Selected veterinarian:', vetData.name);
       } catch (error) {
-        console.error('Error parsing selected veterinarian:', error);
       }
     }
     
@@ -102,34 +93,28 @@ export default function AddIllness() {
         const treatmentData = JSON.parse(params.currentSelectedTreatment);
         setSelectedTreatment(treatmentData);
         setTreatment(treatmentData.name);
-        console.log('Restored selected treatment:', treatmentData.name);
       } catch (error) {
-        console.error('Error parsing currentSelectedTreatment:', error);
       }
     }
 
     // Handle preserved notes
     if (params.currentNotes && typeof params.currentNotes === 'string') {
       setNotes(params.currentNotes);
-      console.log('Restored notes:', params.currentNotes);
     }
 
     // Handle preserved treatment
     if (params.currentTreatment && typeof params.currentTreatment === 'string') {
       setTreatment(params.currentTreatment);
-      console.log('Restored treatment:', params.currentTreatment);
     }
 
     // Handle preserved condition
     if (params.currentCondition && typeof params.currentCondition === 'string') {
       setIllnessName(params.currentCondition);
-      console.log('Restored condition:', params.currentCondition);
     }
 
     // Handle preserved veterinarian
     if (params.currentVeterinarian && typeof params.currentVeterinarian === 'string') {
       setVeterinarian(params.currentVeterinarian);
-      console.log('Restored veterinarian:', params.currentVeterinarian);
     }
   }, [params.selectedCondition, params.selectedTreatment, params.selectedVeterinarian, params.currentSelectedCondition, params.currentSelectedTreatment, params.currentTreatment, params.currentCondition, params.currentVeterinarian, params.currentNotes]);
   useEffect(() => {
@@ -152,7 +137,6 @@ export default function AddIllness() {
       if (error) throw error;
       setPet(data);
     } catch (error) {
-      console.error('Error fetching pet data:', error);
     }
   };
 
@@ -183,7 +167,6 @@ export default function AddIllness() {
         setNotes(data.notes || '');
       }
     } catch (error) {
-      console.error('Error fetching illness details:', error);
       Alert.alert('Error', 'No se pudo cargar la información de la enfermedad');
     }
   };
@@ -337,12 +320,9 @@ export default function AddIllness() {
             });
           
           if (alertError) {
-            console.warn('Could not create medical alert:', alertError);
           } else {
-            console.log('Medical alert created for illness checkup');
           }
         } catch (alertError) {
-          console.warn('Error creating medical alert:', alertError);
         }
       }
 
@@ -350,7 +330,6 @@ export default function AddIllness() {
         { text: 'OK', onPress: handleBackNavigation }
       ]);
     } catch (error) {
-      console.error('Error saving illness:', error);
       Alert.alert('Error', 'No se pudo registrar la enfermedad');
     } finally {
       setLoading(false);

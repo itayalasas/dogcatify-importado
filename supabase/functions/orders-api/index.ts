@@ -69,13 +69,12 @@ Deno.serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const adminToken = Deno.env.get("ADMIN_API_TOKEN") || "dogcatify_admin_2025_secure";
+    const adminToken = Deno.env.get("ADMIN_API_TOKEN");
     let isAdmin = false;
     let partnerId: string | null = null;
 
-    if (apiKey === adminToken) {
+    if (adminToken && apiKey === adminToken) {
       isAdmin = true;
-      console.log("🔐 Admin access granted - Full access to all orders");
     } else {
       const { data: partner, error: partnerError } = await supabase
         .from("profiles")
@@ -98,7 +97,6 @@ Deno.serve(async (req: Request) => {
       }
 
       partnerId = partner.id;
-      console.log(`👤 Partner access granted: ${partner.display_name}`);
     }
 
     if (req.method === "GET" && orderId && orderId !== "orders-api") {
@@ -252,7 +250,6 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error: any) {
-    console.error("Error in orders-api:", error);
     return new Response(
       JSON.stringify({
         error: "Error interno del servidor",

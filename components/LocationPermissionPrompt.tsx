@@ -30,9 +30,7 @@ export const LocationPermissionPrompt: React.FC = () => {
             accuracy: Location.Accuracy.Balanced,
           });
           setCurrentLocation(location);
-          console.log('Ubicación actual obtenida:', location.coords);
         } catch (locationError) {
-          console.error('Error obteniendo ubicación:', locationError);
         }
         return;
       }
@@ -47,18 +45,15 @@ export const LocationPermissionPrompt: React.FC = () => {
         }, 4000); // Mostrar después del prompt de notificaciones
       }
     } catch (error) {
-      console.error('Error checking location prompt:', error);
     }
   };
 
   const handleRequestLocationPermission = async () => {
     try {
-      console.log('Solicitando permisos de ubicación...');
       
       const { status } = await Location.requestForegroundPermissionsAsync();
       
       if (status === 'granted') {
-        console.log('Permisos de ubicación concedidos');
         setHasLocationPermission(true);
         
         // Obtener ubicación actual
@@ -67,7 +62,6 @@ export const LocationPermissionPrompt: React.FC = () => {
             accuracy: Location.Accuracy.Balanced,
           });
           setCurrentLocation(location);
-          console.log('Ubicación obtenida:', location.coords);
           
           await AsyncStorage.setItem(LOCATION_PROMPT_KEY, 'true');
           setShowPrompt(false);
@@ -78,7 +72,6 @@ export const LocationPermissionPrompt: React.FC = () => {
             [{ text: 'Perfecto' }]
           );
         } catch (locationError) {
-          console.error('Error obteniendo ubicación:', locationError);
           await AsyncStorage.setItem(LOCATION_PROMPT_KEY, 'true');
           setShowPrompt(false);
           
@@ -89,7 +82,6 @@ export const LocationPermissionPrompt: React.FC = () => {
           );
         }
       } else {
-        console.log('Permisos de ubicación denegados');
         await AsyncStorage.setItem(LOCATION_PROMPT_KEY, 'true');
         setShowPrompt(false);
         
@@ -100,7 +92,6 @@ export const LocationPermissionPrompt: React.FC = () => {
         );
       }
     } catch (error) {
-      console.error('Error enabling location:', error);
       
       await AsyncStorage.setItem(LOCATION_PROMPT_KEY, 'true');
       setShowPrompt(false);
@@ -118,7 +109,6 @@ export const LocationPermissionPrompt: React.FC = () => {
       await AsyncStorage.setItem(LOCATION_PROMPT_KEY, 'true');
       setShowPrompt(false);
     } catch (error) {
-      console.error('Error dismissing location prompt:', error);
     }
   };
 

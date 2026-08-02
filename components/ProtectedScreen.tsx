@@ -32,31 +32,26 @@ export const ProtectedScreen: React.FC<ProtectedScreenProps> = ({
 
       try {
         if (requireAuth && !currentUser) {
-          console.log('ProtectedScreen: No user, redirecting to login');
           setIsValid(false);
           router.replace(redirectTo as any);
           return;
         }
 
         if (requirePartner && currentUser && !currentUser.isPartner) {
-          console.log('ProtectedScreen: User is not a partner, redirecting');
           setIsValid(false);
           router.replace('/(tabs)' as any);
           return;
         }
 
         if (currentUser) {
-          console.log('ProtectedScreen: Validating token...');
           const tokenValid = await checkTokenValidity();
 
           if (!tokenValid) {
-            console.log('ProtectedScreen: Token invalid, redirecting to login');
             setIsValid(false);
             router.replace(redirectTo as any);
             return;
           }
 
-          console.log('ProtectedScreen: Token valid, rendering content');
           setIsValid(true);
         } else if (!requireAuth) {
           setIsValid(true);

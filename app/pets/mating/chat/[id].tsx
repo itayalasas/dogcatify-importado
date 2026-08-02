@@ -90,7 +90,6 @@ export default function PetMatchChatScreen() {
     try {
       await Promise.all([fetchChatMeta(), fetchMessages()]);
     } catch (error) {
-      console.error('Error initializing pet match chat:', error);
     } finally {
       setLoading(false);
     }
@@ -165,7 +164,6 @@ export default function PetMatchChatScreen() {
         });
       }
     } catch (error) {
-      console.error('Error sending pet match message:', error);
       setNewMessage(text);
       Alert.alert('Error', 'No se pudo enviar el mensaje.');
     } finally {

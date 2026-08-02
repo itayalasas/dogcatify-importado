@@ -52,7 +52,6 @@ export default function SelectRoleScreen() {
           setSelectedRole(storedRole);
         }
       } catch (error) {
-        console.warn('Error loading stored active role:', error);
       }
     };
 
@@ -159,7 +158,6 @@ export default function SelectRoleScreen() {
         : await resolveRoleRoute(currentUser.id, role);
       router.replace(nextRoute as any);
     } catch (error) {
-      console.error('Error selecting role:', error);
       Alert.alert('Error', 'No se pudo guardar el perfil seleccionado');
       setSelectedRole(null);
     }

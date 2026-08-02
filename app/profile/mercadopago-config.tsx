@@ -36,7 +36,6 @@ export default function MercadoPagoConfig() {
 
   const loadPartnerData = async () => {
     try {
-      console.log('Loading partner data for user:', currentUser?.id);
 
       const { data: partnersData, error } = await supabaseClient
         .from('partners')
@@ -46,7 +45,6 @@ export default function MercadoPagoConfig() {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error loading partner data:', error);
         Alert.alert('Error', 'No se pudo cargar la información del negocio');
         router.back();
         return;
@@ -63,26 +61,16 @@ export default function MercadoPagoConfig() {
 
       // Si tiene múltiples negocios, usar el primero (más reciente)
       const partnerData = partnersData[0];
-      console.log('Partner data loaded:', partnerData);
       setPartner(partnerData);
 
       // Extract Mercado Pago configuration
       if (partnerData.mercadopago_config) {
-        console.log('📥 MP config loaded from DB:', {
-          access_token_prefix: partnerData.mercadopago_config.access_token?.substring(0, 12) + '...',
-          public_key_prefix: partnerData.mercadopago_config.public_key?.substring(0, 12) + '...',
-          is_test_mode: partnerData.mercadopago_config.is_test_mode,
-          is_oauth: partnerData.mercadopago_config.is_oauth,
-          connected_at: partnerData.mercadopago_config.connected_at
-        });
         setMpConfig(partnerData.mercadopago_config);
         setIsTestMode(partnerData.mercadopago_config.is_test_mode || false);
       } else {
-        console.log('No MP config found');
         setMpConfig(null);
       }
     } catch (error) {
-      console.error('Error in loadPartnerData:', error);
       Alert.alert('Error', 'No se pudo cargar la información del negocio');
     } finally {
       setLoading(false);
@@ -98,10 +86,8 @@ export default function MercadoPagoConfig() {
     setConnectLoading(true);
     try {
       const authUrl = await generateOAuth2AuthorizationUrlWithConfig(partner.id);
-      console.log('Opening Mercado Pago OAuth URL for partner:', partner.id);
       await Linking.openURL(authUrl);
     } catch (error) {
-      console.error('Error starting Mercado Pago OAuth flow:', error);
       const errorMessage = error instanceof Error ? error.message : 'No se pudo iniciar la conexión con Mercado Pago.';
       const isMissingClientId = errorMessage.toLowerCase().includes('client id not configured');
       Alert.alert(
@@ -149,7 +135,6 @@ export default function MercadoPagoConfig() {
           };
         }
       } catch (apiError) {
-        console.log('API validation failed, using format validation:', apiError);
         return {
           isValid: true,
           warning: 'No se pudo validar con la API de Mercado Pago, pero el formato es correcto'
@@ -187,7 +172,6 @@ export default function MercadoPagoConfig() {
 
       // Show warning if API validation failed but format is correct
       if (validation.warning) {
-        console.warn('Validation warning:', validation.warning);
       }
 
       const config = {
@@ -198,15 +182,6 @@ export default function MercadoPagoConfig() {
         is_oauth: false
       };
 
-      console.log('💾 Saving NEW MP config:', {
-        public_key_prefix: config.public_key.substring(0, 12) + '...',
-        access_token_prefix: config.access_token.substring(0, 12) + '...',
-        is_test_mode: config.is_test_mode,
-        connected_at: config.connected_at,
-        partner_id: partner.id,
-        partner_name: partner.business_name,
-        user_id: partner.user_id
-      });
 
       const { error } = await supabaseClient
         .from('partners')
@@ -218,11 +193,9 @@ export default function MercadoPagoConfig() {
         .eq('user_id', partner.user_id);
 
       if (error) {
-        console.error('Error updating partners:', error);
         throw error;
       }
 
-      console.log('MP config saved successfully for ALL businesses of this partner');
 
       // Refresh partner data from database to ensure we have the latest
       await loadPartnerData();
@@ -235,7 +208,6 @@ export default function MercadoPagoConfig() {
         'Tu cuenta de Mercado Pago ha sido configurada correctamente para TODOS tus negocios. Ya puedes recibir pagos.'
       );
     } catch (error) {
-      console.error('Error saving MP config:', error);
       Alert.alert('Error', 'No se pudo guardar la configuración. Intenta nuevamente.');
     } finally {
       setSaveLoading(false);

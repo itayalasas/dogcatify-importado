@@ -60,7 +60,6 @@ export default function ConfigureActivities() {
         
         fetchActivities();
       } catch (error) {
-        console.error('Error fetching partner profile:', error);
       }
     };
     
@@ -89,8 +88,6 @@ export default function ConfigureActivities() {
 
   const fetchActivities = async () => {
     try {
-      console.log('Fetching activities for partner:', partnerId);
-      console.log('Business type:', businessType);
 
       // Para tiendas, buscar en partner_products; para otros, en partner_services
       const tableName = businessType === 'shop' ? 'partner_products' : 'partner_services';
@@ -102,7 +99,6 @@ export default function ConfigureActivities() {
 
       if (error) throw error;
 
-      console.log('Activities/Products fetched:', data?.length || 0);
 
       // Mapear datos según el tipo de tabla
       const activitiesData = data.map(item => {
@@ -136,9 +132,7 @@ export default function ConfigureActivities() {
       }) as Activity[];
 
       setActivities(activitiesData);
-      console.log('Activities/Products state updated with:', activitiesData.length, 'items');
     } catch (error) {
-      console.error('Error fetching activities:', error);
     }
 
     // Set up real-time subscription
@@ -220,7 +214,6 @@ export default function ConfigureActivities() {
     if (partnerProfile && partnerProfile.id) {
       // Si es un refugio, redirigir al formulario de adopción
       if (partnerProfile.businessType === 'shelter') {
-        console.log('Redirecting to adoption form for shelter');
         router.push({
           pathname: '/partner/add-adoption-pet',
           params: {
@@ -229,7 +222,6 @@ export default function ConfigureActivities() {
         });
       } else {
         // Para otros tipos de negocio, usar el formulario normal
-        console.log('Redirecting to service form for business type:', partnerProfile.businessType);
         router.push({
           pathname: '/partner/add-service',
           params: {
@@ -261,7 +253,6 @@ export default function ConfigureActivities() {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error toggling activity:', error);
       Alert.alert('Error', `No se pudo actualizar ${businessType === 'shop' ? 'el producto' : isShelterBusiness ? 'la mascota' : 'el servicio'}`);
     }
   };
@@ -308,7 +299,6 @@ export default function ConfigureActivities() {
 
               Alert.alert('Éxito', `${entityLabelCapitalized} eliminado correctamente`);
             } catch (error) {
-              console.error('Error deleting activity:', error);
               Alert.alert('Error', `No se pudo eliminar ${isProduct ? 'el producto' : isShelterBusiness ? 'la mascota' : 'el servicio'}`);
             }
           }

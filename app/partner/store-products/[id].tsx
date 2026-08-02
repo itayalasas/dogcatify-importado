@@ -83,7 +83,6 @@ export default function StoreProducts() {
         setPromotions(promotionsRes.data);
       }
     } catch (error) {
-      console.error('Error fetching store data:', error);
     } finally {
       setLoading(false);
     }
@@ -131,7 +130,6 @@ export default function StoreProducts() {
     try {
       await Linking.openURL(`tel:${normalizedPhone}`);
     } catch (error) {
-      console.error('Error opening store phone:', error);
     }
   };
 

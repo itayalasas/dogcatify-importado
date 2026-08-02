@@ -87,7 +87,6 @@ export default function DeliveryRegister() {
 				setSelectedStoreIds(ids);
 			}
 		} catch (error) {
-			console.error('Error loading delivery register data:', error);
 			Alert.alert('Error', 'No se pudo cargar la información de reparto.');
 		} finally {
 			setLoading(false);
@@ -199,7 +198,6 @@ export default function DeliveryRegister() {
 				{ text: 'OK', onPress: () => router.back() },
 			]);
 		} catch (error) {
-			console.error('Error saving delivery profile:', error);
 			Alert.alert('Error', 'No se pudo guardar tu perfil de repartidor.');
 		} finally {
 			setSaving(false);

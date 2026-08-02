@@ -148,16 +148,8 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    console.log(`${logPrefix} request received`, {
-      method: req.method,
-      url: req.url,
-    });
 
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error(`${logPrefix} missing environment variables`, {
-        hasSupabaseUrl: !!supabaseUrl,
-        hasSupabaseServiceKey: !!supabaseServiceKey,
-      });
       return jsonResponse(
         {
           success: false,
@@ -176,14 +168,8 @@ Deno.serve(async (req: Request) => {
 
     const { token, type } = await readConfirmationInput(req);
 
-    console.log(`${logPrefix} parsed confirmation input`, {
-      type,
-      hasToken: !!token?.trim(),
-      tokenPreview: token ? summarizeToken(token) : null,
-    });
 
     if (!token?.trim()) {
-      console.warn(`${logPrefix} missing token in request`);
       return jsonResponse(
         {
           success: false,
@@ -196,10 +182,6 @@ Deno.serve(async (req: Request) => {
     const confirmationType = normalizeType(type);
     const confirmationToken = token.trim();
 
-    console.log(`${logPrefix} looking up email confirmation row`, {
-      confirmationType,
-      tokenPreview: summarizeToken(confirmationToken),
-    });
 
     const { data: confirmation, error: tokenError } = await supabase
       .from("email_confirmations")
@@ -209,12 +191,6 @@ Deno.serve(async (req: Request) => {
       .maybeSingle() as { data: ConfirmationRecord | null; error: any };
 
     if (tokenError || !confirmation) {
-      console.warn(`${logPrefix} token lookup failed`, {
-        error: tokenError?.message || null,
-        code: tokenError?.code || null,
-        tokenPreview: summarizeToken(confirmationToken),
-        confirmationType,
-      });
       return jsonResponse(
         {
           success: false,
@@ -228,23 +204,8 @@ Deno.serve(async (req: Request) => {
     const nowIso = now.toISOString();
     const expiresAt = new Date(confirmation.expires_at);
 
-    console.log(`${logPrefix} token row found`, {
-      confirmationId: confirmation.id,
-      userId: confirmation.user_id,
-      email: confirmation.email,
-      isConfirmed: confirmation.is_confirmed,
-      expiresAt: confirmation.expires_at,
-      nowIso,
-    });
 
     if (!confirmation.is_confirmed && !Number.isNaN(expiresAt.getTime()) && now > expiresAt) {
-      console.warn(`${logPrefix} token expired`, {
-        confirmationId: confirmation.id,
-        userId: confirmation.user_id,
-        email: confirmation.email,
-        expiresAt: confirmation.expires_at,
-        nowIso,
-      });
       return jsonResponse(
         {
           success: false,
@@ -256,10 +217,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log(`${logPrefix} invoking atomic confirmation RPC`, {
-      tokenPreview: summarizeToken(confirmationToken),
-      confirmationType,
-    });
 
     const { data: atomicConfirmation, error: atomicError } = await supabase.rpc(
       "confirm_email_signup_atomically",
@@ -278,15 +235,6 @@ Deno.serve(async (req: Request) => {
       );
       const normalizedError = errorMessage.toUpperCase();
 
-      console.error(`${logPrefix} atomic confirmation RPC failed`, {
-        message: errorMessage,
-        code: atomicError?.code || null,
-        details: atomicError?.details || null,
-        hint: atomicError?.hint || null,
-        status: atomicError?.status || null,
-        tokenPreview: summarizeToken(confirmationToken),
-        confirmationType,
-      });
 
       if (normalizedError.includes("TOKEN_NOT_FOUND")) {
         return jsonResponse(
@@ -332,10 +280,6 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      console.error("Error confirming token/profile atomically:", {
-        error: errorMessage,
-        details: atomicError,
-      });
 
       return jsonResponse(
         {
@@ -350,21 +294,12 @@ Deno.serve(async (req: Request) => {
 
     let authMetadata: Record<string, any> = {};
     try {
-      console.log(`${logPrefix} reading auth metadata`, {
-        userId: confirmedRecord.user_id,
-      });
       const { data: authUserData } = await supabase.auth.admin.getUserById(confirmedRecord.user_id);
       authMetadata = authUserData?.user?.user_metadata || {};
     } catch (error) {
-      console.warn(`${logPrefix} could not read auth metadata`, error);
     }
 
     try {
-      console.log(`${logPrefix} updating auth.users`, {
-        userId: confirmedRecord.user_id,
-        email: confirmedRecord.email,
-        alreadyConfirmed: confirmedRecord.already_confirmed,
-      });
       const { error: authUpdateError } = await supabase.auth.admin.updateUserById(
         confirmedRecord.user_id,
         {
@@ -378,7 +313,6 @@ Deno.serve(async (req: Request) => {
       );
 
       if (authUpdateError) {
-        console.error(`${logPrefix} error updating auth.users`, authUpdateError);
         return jsonResponse(
           {
             success: false,
@@ -392,7 +326,6 @@ Deno.serve(async (req: Request) => {
         );
       }
     } catch (error) {
-      console.error(`${logPrefix} auth update threw`, error);
       return jsonResponse(
         {
           success: false,
@@ -406,20 +339,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log("✅ Email confirmation completed successfully", {
-      userId: confirmedRecord.user_id,
-      email: confirmedRecord.email,
-      alreadyConfirmed: confirmedRecord.already_confirmed,
-      confirmedAt: confirmedRecord.confirmed_at,
-    });
 
-    console.log(`${logPrefix} email confirmation completed successfully`, {
-      userId: confirmedRecord.user_id,
-      email: confirmedRecord.email,
-      alreadyConfirmed: confirmedRecord.already_confirmed,
-      confirmedAt: confirmedRecord.confirmed_at,
-      tokenPreview: summarizeToken(confirmationToken),
-    });
 
     return jsonResponse({
       success: true,
@@ -429,7 +349,6 @@ Deno.serve(async (req: Request) => {
       confirmedAt: confirmedRecord.confirmed_at,
     });
   } catch (error) {
-    console.error("Error in confirm-email function:", error);
     return jsonResponse(
       {
         success: false,

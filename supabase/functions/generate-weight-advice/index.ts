@@ -149,7 +149,6 @@ IMPORTANTE: Responde en español, solo el array JSON válido, sin texto adiciona
 
     if (!openaiResponse.ok) {
       const errorData = await openaiResponse.text();
-      console.error('OpenAI API error:', errorData);
       return new Response(
         JSON.stringify({ error: 'OpenAI API error', details: errorData }),
         { status: openaiResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -180,7 +179,6 @@ IMPORTANTE: Responde en español, solo el array JSON válido, sin texto adiciona
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('Error in generate-weight-advice:', error);
     return new Response(
       JSON.stringify({ error: 'Internal server error', message: String(error) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

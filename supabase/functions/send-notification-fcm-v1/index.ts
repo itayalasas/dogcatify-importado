@@ -184,17 +184,12 @@ async function resolveExpoPushTokenFromProfiles(apnsToken: string): Promise<stri
       .maybeSingle();
 
     if (error) {
-      console.warn('Could not resolve Expo push token from profiles:', error.message);
       return null;
     }
 
     const pushToken = profile?.push_token ?? null;
     return detectPushTokenType(pushToken) === 'expo' ? pushToken : null;
   } catch (error) {
-    console.warn(
-      'Unexpected error resolving Expo push token from profiles:',
-      error instanceof Error ? error.message : error,
-    );
     return null;
   }
 }
@@ -333,7 +328,6 @@ Deno.serve(async (req: Request) => {
     }
 
     if (primaryTokenType === 'expo' || (primaryTokenType === 'apns' && expoPushToken)) {
-      console.log('Sending notification via Expo Push Service...');
 
       const { response, result, ticket } = await sendViaExpo(expoPushToken!, payload);
       const normalizedExpoResult = result ?? {
@@ -378,7 +372,6 @@ Deno.serve(async (req: Request) => {
       try {
         serviceAccount = parseServiceAccount(serviceAccountJson);
       } catch {
-        console.warn('Invalid FIREBASE_SERVICE_ACCOUNT JSON, trying split FIREBASE_* secrets fallback');
       }
     }
 
@@ -401,17 +394,11 @@ Deno.serve(async (req: Request) => {
 
     const projectId = serviceAccount.project_id;
 
-    console.log('Getting access token...');
     const accessToken = await getAccessToken(serviceAccount);
-    console.log('Access token obtained successfully');
 
   const fcmUrl =
   `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
 
-console.log('Sending notification directly to FCM HTTP v1 API...', {
-  projectId,
-  tokenType: primaryTokenType,
-});
 
 const response = await fetch(fcmUrl, {
   method: 'POST',
@@ -438,7 +425,6 @@ const response = await fetch(fcmUrl, {
           typeof fcmErrorMessage === 'string'
           && fcmErrorMessage.toLowerCase().includes('not a valid fcm registration token')
         ) {
-          console.warn('Invalid FCM token detected, trying Expo fallback...');
 
           const { response: expoResponse, result: expoResult, ticket } = await sendViaExpo(expoPushToken, payload);
           const normalizedExpoResult = expoResult ?? {
@@ -465,11 +451,6 @@ const response = await fetch(fcmUrl, {
       }
 
       if (fcmErrorCode === 'SENDER_ID_MISMATCH') {
-        console.error('FCM SenderId mismatch detected:', {
-          firebaseProjectId: projectId,
-          tokenType: primaryTokenType,
-          details: normalizedResult,
-        });
 
         return new Response(
           JSON.stringify({
@@ -488,7 +469,6 @@ const response = await fetch(fcmUrl, {
         );
       }
 
-      console.error('FCM Error:', normalizedResult);
       return new Response(
         JSON.stringify({
           error: 'Failed to send notification',
@@ -507,7 +487,6 @@ const response = await fetch(fcmUrl, {
 
     const messageId = normalizedResult?.name ?? null;
 
-    console.log('Notification sent successfully:', messageId ?? `HTTP ${response.status} ${response.statusText}`);
 
     return new Response(
       JSON.stringify({
@@ -523,7 +502,6 @@ const response = await fetch(fcmUrl, {
     );
 
   } catch (error) {
-    console.error('Error sending notification:', error);
     return new Response(
       JSON.stringify({
         error: 'Internal server error',

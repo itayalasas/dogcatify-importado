@@ -623,7 +623,6 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setLanguageState(savedLanguage);
       }
     } catch (error) {
-      console.error('Error loading language:', error);
     }
   };
 
@@ -632,7 +631,6 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await AsyncStorage.setItem('language', lang);
       setLanguageState(lang);
     } catch (error) {
-      console.error('Error saving language:', error);
     }
   };
 

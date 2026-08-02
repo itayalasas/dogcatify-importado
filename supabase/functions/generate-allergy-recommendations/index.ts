@@ -51,7 +51,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log(`Generating allergy recommendations for ${species} - ${breed}, age: ${ageInMonths} months, weight: ${weight || 'N/A'}`);
 
     const speciesName = species === 'dog' ? 'perros' : 'gatos';
     const ageYears = Math.floor(ageInMonths / 12);
@@ -108,7 +107,6 @@ Responde SOLO con un array JSON válido, sin texto adicional.`;
 
     if (!response.ok) {
       const errorData = await response.text();
-      console.error("OpenAI API error:", errorData);
       throw new Error(`OpenAI API error: ${response.status}`);
     }
 
@@ -127,12 +125,9 @@ Responde SOLO con un array JSON válido, sin texto adicional.`;
       }
       allergies = JSON.parse(jsonMatch[0]);
     } catch (parseError) {
-      console.error("Error parsing JSON:", parseError);
-      console.error("Content received:", content);
       throw new Error("Error al parsear la respuesta de OpenAI");
     }
 
-    console.log(`Successfully generated ${allergies.length} allergy recommendations`);
 
     return new Response(
       JSON.stringify({ allergies }),
@@ -143,7 +138,6 @@ Responde SOLO con un array JSON válido, sin texto adicional.`;
     );
 
   } catch (error) {
-    console.error("Error:", error);
     return new Response(
       JSON.stringify({
         error: error.message || "Error generando recomendaciones de alergias"

@@ -115,7 +115,6 @@ Deno.serve(async (req: Request) => {
       throw new Error('PROMOTION_ALREADY_INVOICED: Los clics de esta promoción ya fueron facturados');
     }
 
-    console.log('Generating promotion invoice for:', promotion.id);
 
     const startDate = new Date(promotion.startDate).toLocaleDateString('es-ES');
     const endDate = new Date(promotion.endDate).toLocaleDateString('es-ES');
@@ -126,7 +125,6 @@ Deno.serve(async (req: Request) => {
     const partnerName = partnerInfo?.businessName || 'Cliente';
     const totalAmount = Number(total || 0).toFixed(2);
 
-    console.log('Sending promotion payload to accounting edge function...');
     const accountingResponse = await fetch(`${supabaseUrl}/functions/v1/send-promotion-to-accounting`, {
       method: 'POST',
       headers: {
@@ -155,7 +153,6 @@ Deno.serve(async (req: Request) => {
       throw new Error(`ACCOUNTING_WEBHOOK_FAILED (${accountingResponse.status}): ${accountingResponseText}`);
     }
 
-    console.log('Accounting webhook delivered successfully, sending promotion email...');
     const isSupabaseFunctionEmailEndpoint = emailApiUrl.includes('/functions/v1/');
     const emailHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -214,7 +211,6 @@ Deno.serve(async (req: Request) => {
         errorMessage.includes('failed to create pending communication');
 
       if (shouldRetryWithoutPendingCommunication) {
-        console.warn('Promotion email failed in wait_for_invoice mode, retrying without pending communication...');
 
         const fallbackPayload = {
           ...baseEmailPayload,
@@ -284,7 +280,6 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error: any) {
-    console.error('Error generating invoice:', error);
     return new Response(
       JSON.stringify({
         success: false,

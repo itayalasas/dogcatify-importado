@@ -43,13 +43,9 @@ const PromotionCard = memo(({ promotion, onPress, onLike }: PromotionCardProps) 
   };
 
   const handlePress = () => {
-    console.log('PromotionCard - handlePress called for promotion:', promotion.id);
-    console.log('PromotionCard - Current clicks before press:', promotion.clicks);
     if (onPress) {
-      console.log('PromotionCard - Calling onPress callback');
       onPress();
     } else {
-      console.warn('PromotionCard - No onPress callback provided');
     }
   };
 

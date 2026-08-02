@@ -120,7 +120,6 @@ export default function Subscription() {
         ...params,
         target: 'dogcatify://profile/subscription',
       })).catch((error) => {
-        console.warn('Could not open subscription deep link from web:', error);
       });
     }, 500);
 
@@ -223,7 +222,6 @@ export default function Subscription() {
       setTrialAlreadyUsed((data || []).length > 0);
       return true;
     } catch (error) {
-      console.error('Error loading trial usage:', error);
       setTrialAlreadyUsed(false);
       return false;
     }
@@ -246,7 +244,6 @@ export default function Subscription() {
       );
       return true;
     } catch (error) {
-      console.error('Error loading plans:', error);
       Alert.alert('Error', 'No se pudieron cargar los planes de suscripción');
       return false;
     }
@@ -328,7 +325,6 @@ export default function Subscription() {
 
       setUserSubscription(data || null);
     } catch (error) {
-      console.error('Error loading user subscription:', error);
     }
   };
 
@@ -357,7 +353,6 @@ export default function Subscription() {
 
       return data.subscription || null;
     } catch (error) {
-      console.error('Error syncing subscription status:', error);
       return null;
     } finally {
       setSyncingSubscriptionId(null);
@@ -429,7 +424,6 @@ export default function Subscription() {
 
       await loadUserSubscription();
     } catch (error: any) {
-      console.error('Error creating subscription:', error);
       Alert.alert(
         'Error',
         error?.message || 'No se pudo iniciar la suscripción.'
@@ -450,7 +444,6 @@ export default function Subscription() {
     try {
       await Linking.openURL(paymentUrl);
     } catch (error) {
-      console.error('Error opening pending subscription URL:', error);
       Alert.alert('Error', 'No se pudo abrir Mercado Pago.');
     }
   };

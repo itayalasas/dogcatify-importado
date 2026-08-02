@@ -10,7 +10,6 @@ import { Button } from '../../components/ui/Button';
 // Función para mostrar mensaje de depuración con timestamp
 const logDebug = (message: string, data?: any) => {
   const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
-  console.log(`[DEBUG Products ${timestamp}] ${message}`, data || '');
 };
 
 export default function PartnerProducts() {
@@ -38,7 +37,6 @@ export default function PartnerProducts() {
           .single();
         
         if (error) {
-          console.error('Error fetching partner profile:', error);
           setLoading(false);
           return;
         }
@@ -58,7 +56,6 @@ export default function PartnerProducts() {
           fetchProducts(businessId as string);
         }
       } catch (err) {
-        console.error('Error fetching partner profile:', err);
       } finally {
         setLoading(false);
       }
@@ -100,7 +97,6 @@ export default function PartnerProducts() {
           .eq('partner_id', partnerId);
           
         if (error) {
-          console.error('Error fetching products:', error);
           setError('Error al cargar los productos: ' + error.message);
           setLoading(false);
           return;
@@ -158,7 +154,6 @@ export default function PartnerProducts() {
         subscription.unsubscribe();
       };
     } catch (err: any) {
-      console.error('Error setting up products listener:', err);
       setError('Error al configurar el listener de productos: ' + err.message);
       setLoading(false);
       return () => {};
@@ -213,7 +208,6 @@ export default function PartnerProducts() {
         throw error;
       }
     } catch (error) {
-      console.error('Error toggling product:', error);
       Alert.alert('Error', 'No se pudo actualizar el producto');
     }
   };
@@ -248,7 +242,6 @@ export default function PartnerProducts() {
 
               Alert.alert('Éxito', 'Producto eliminado correctamente');
             } catch (error) {
-              console.error('Error deleting product:', error);
               Alert.alert('Error', 'No se pudo eliminar el producto');
             }
           }

@@ -125,8 +125,6 @@ export default function MedicalHistoryShared() {
   const fetchVaccines = async () => {
     try {
       const species = pet?.species || 'dog';
-      console.log('Fetching vaccines for species:', species, '(pet data available:', !!pet, ')');
-      console.log('Fetching vaccines for species:', species, '(pet data available:', !!pet, ')');
       
       const { data, error } = await supabaseClient
         .from('vaccines_catalog')
@@ -136,29 +134,20 @@ export default function MedicalHistoryShared() {
         .order('is_required', { ascending: false })
         .order('name', { ascending: true });
 
-      console.log('Vaccines query result:', { 
-        count: data?.length || 0, 
-        error: error?.message,
-        firstVaccine: data?.[0]?.name,
-        querySpecies: [species, 'both']
-      });
       
       if (error) {
-        console.error('Error fetching vaccines:', error);
         setVaccines([]);
         return;
       }
       
       setVaccines(data || []);
     } catch (error) {
-      console.error('Error in fetchVaccines:', error);
       setVaccines([]);
     }
   };
 
   const fetchConditions = async () => {
     try {
-      console.log('Fetching conditions for species:', pet?.species);
       
       const { data, error } = await supabaseClient
         .from('medical_conditions')
@@ -167,28 +156,20 @@ export default function MedicalHistoryShared() {
         .in('species', [pet?.species || 'dog', 'both'])
         .order('name', { ascending: true });
 
-      console.log('Conditions query result:', { 
-        count: data?.length || 0, 
-        error: error?.message,
-        firstCondition: data?.[0]?.name 
-      });
       
       if (error) {
-        console.error('Error fetching conditions:', error);
         setConditions([]);
         return;
       }
       
       setConditions(data || []);
     } catch (error) {
-      console.error('Error in fetchConditions:', error);
       setConditions([]);
     }
   };
 
   const fetchTreatments = async () => {
     try {
-      console.log('Fetching treatments for all conditions');
       
       const { data, error } = await supabaseClient
         .from('medical_treatments')
@@ -196,28 +177,20 @@ export default function MedicalHistoryShared() {
         .eq('is_active', true)
         .order('name', { ascending: true });
 
-      console.log('Treatments query result:', { 
-        count: data?.length || 0, 
-        error: error?.message,
-        firstTreatment: data?.[0]?.name 
-      });
       
       if (error) {
-        console.error('Error fetching treatments:', error);
         setTreatments([]);
         return;
       }
       
       setTreatments(data || []);
     } catch (error) {
-      console.error('Error in fetchTreatments:', error);
       setTreatments([]);
     }
   };
 
   const fetchAllergies = async () => {
     try {
-      console.log('Fetching allergies for species:', pet?.species);
       
       const { data, error } = await supabaseClient
         .from('allergies_catalog')
@@ -227,28 +200,20 @@ export default function MedicalHistoryShared() {
         .order('is_common', { ascending: false })
         .order('name', { ascending: true });
 
-      console.log('Allergies query result:', { 
-        count: data?.length || 0, 
-        error: error?.message,
-        firstAllergy: data?.[0]?.name 
-      });
       
       if (error) {
-        console.error('Error fetching allergies:', error);
         setAllergies([]);
         return;
       }
       
       setAllergies(data || []);
     } catch (error) {
-      console.error('Error in fetchAllergies:', error);
       setAllergies([]);
     }
   };
 
   const fetchDewormers = async () => {
     try {
-      console.log('Fetching dewormers for species:', pet?.species);
       
       const { data, error } = await supabaseClient
         .from('dewormers_catalog')
@@ -257,21 +222,14 @@ export default function MedicalHistoryShared() {
         .in('species', [pet?.species || 'dog', 'both'])
         .order('name', { ascending: true });
 
-      console.log('Dewormers query result:', { 
-        count: data?.length || 0, 
-        error: error?.message,
-        firstDewormer: data?.[0]?.name 
-      });
       
       if (error) {
-        console.error('Error fetching dewormers:', error);
         setDewormers([]);
         return;
       }
       
       setDewormers(data || []);
     } catch (error) {
-      console.error('Error in fetchDewormers:', error);
       setDewormers([]);
     }
   };
@@ -289,7 +247,6 @@ export default function MedicalHistoryShared() {
       if (error) throw error;
       setVeterinarians(data || []);
     } catch (error) {
-      console.error('Error fetching veterinarians:', error);
     }
   };
 
@@ -390,14 +347,12 @@ export default function MedicalHistoryShared() {
 
   const loadMedicalHistoryForWeb = async () => {
     try {
-      console.log('Loading medical history for web view...');
       
       // Call the Edge Function directly for web access
       const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
       const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY') ?? '';
       const apiUrl = `${supabaseUrl}/functions/v1/medical-history/${id}${token ? `?token=${token}` : ''}`;
       
-      console.log('Fetching from Edge Function:', apiUrl);
       
       const response = await fetch(apiUrl, {
         method: 'GET',
@@ -406,7 +361,6 @@ export default function MedicalHistoryShared() {
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Edge Function error:', response.status, errorText);
         
         if (response.status === 400) {
           setError('Enlace inválido o token no válido');
@@ -425,7 +379,6 @@ export default function MedicalHistoryShared() {
       setHtmlContent(htmlContent);
       setLoading(false);
     } catch (error) {
-      console.error('Error loading medical history for web:', error);
       setError('Error de conexión al cargar la historia clínica');
       setLoading(false);
     }
@@ -440,7 +393,6 @@ export default function MedicalHistoryShared() {
   // Fetch nomenclators after pet data is available
   useEffect(() => {
     if (pet && pet.species) {
-      console.log('Pet data available, fetching nomenclators for species:', pet.species);
       fetchVaccines();
       fetchConditions();
       fetchTreatments();
@@ -481,7 +433,6 @@ export default function MedicalHistoryShared() {
   // Fetch nomenclators when pet data is available
   useEffect(() => {
     if (pet && pet.species) {
-      console.log('Pet data available, fetching nomenclators for species:', pet.species);
     }
   }, [pet]);
 
@@ -492,38 +443,24 @@ export default function MedicalHistoryShared() {
   }, [showVetModal]);
   const verifyTokenAndFetchData = async () => {
     try {
-      console.log('=== VERIFYING TOKEN AND FETCHING DATA ===');
-      console.log('Pet ID:', id);
-      console.log('Token provided:', !!token);
       
       if (token) {
-        console.log('Token valid, fetching medical history...');
         
         // Try to fetch data via Edge Function first
         try {
-          console.log('=== CALLING EDGE FUNCTION FOR ALL DATA ===');
           const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
           const supabaseKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY') ?? '';
           
           const edgeFunctionUrl = `${supabaseUrl}/functions/v1/medical-history-data/${id}?token=${token}`;
-          console.log('Edge Function URL:', edgeFunctionUrl);
           
           const response = await fetch(edgeFunctionUrl, {
             method: 'GET',
             headers: createSupabaseHeaders(supabaseKey),
           });
           
-          console.log('Edge Function response status:', response.status);
           
           if (response.ok) {
             const data = await response.json();
-            console.log('Edge Function returned data:', {
-              success: data.success,
-              petName: data.pet?.name,
-              ownerName: data.owner?.display_name,
-              totalRecords: data.recordCounts?.total || 0,
-              recordsByType: data.recordCounts
-            });
             
             if (data.success) {
               setTokenExpired(false);
@@ -531,11 +468,9 @@ export default function MedicalHistoryShared() {
               setOwner(data.owner);
               setMedicalRecords(data.medicalRecords || []);
               setHasValidToken(true);
-              console.log('=== DATA SET SUCCESSFULLY ===');
               return;
             } else {
               if (data.isExpired) {
-                console.log('Token expired, showing expiration message');
                 setTokenExpired(true);
                 setError('El enlace ha expirado por seguridad. Solicita un nuevo enlace al propietario de la mascota.');
               } else {
@@ -544,7 +479,6 @@ export default function MedicalHistoryShared() {
             }
           }
         } catch (edgeError) {
-          console.error('Edge Function error:', edgeError);
           // Fallback to direct database access
           await fetchMedicalHistoryDirectly();
         }
@@ -558,7 +492,6 @@ export default function MedicalHistoryShared() {
         // Fetch veterinarians immediately since they don't depend on pet species
         await fetchVeterinarians();
     } catch (error) {
-      console.error('Error in verifyTokenAndFetchData:', error);
       Alert.alert('Error', 'No se pudo cargar la historia clínica');
     } finally {
       setLoading(false);
@@ -571,8 +504,6 @@ export default function MedicalHistoryShared() {
 
   const fetchMedicalHistoryDirectly = async () => {
     try {
-      console.log('=== FETCHING MEDICAL DATA FOR REACT COMPONENTS ===');
-      console.log('Pet ID:', id);
       
       // Fetch pet data
       const { data: petData, error: petError } = await supabaseClient
@@ -582,11 +513,9 @@ export default function MedicalHistoryShared() {
         .single();
       
       if (petError) {
-        console.error('Error fetching pet data:', petError);
         throw petError;
       }
       
-      console.log('Pet data loaded:', petData?.name);
       setPet(petData);
       
       // Fetch owner data
@@ -597,16 +526,12 @@ export default function MedicalHistoryShared() {
         .single();
       
       if (ownerError) {
-        console.error('Error fetching owner data:', ownerError);
         throw ownerError;
       }
       
-      console.log('Owner data loaded:', ownerData?.display_name);
       setOwner(ownerData);
       
       // Fetch medical records
-      console.log('Fetching medical records for pet:', id);
-      console.log('Fetching medical records directly from database...');
       
       const { data: recordsData, error: recordsError } = await supabaseClient
         .from('pet_health')
@@ -614,24 +539,15 @@ export default function MedicalHistoryShared() {
         .eq('pet_id', id)
         .order('created_at', { ascending: false });
       
-      console.log('Direct database query result:', {
-        recordsFound: recordsData?.length || 0,
-        error: recordsError?.message,
-        errorCode: recordsError?.code
-      });
       
       if (recordsError) {
-        console.error('Error fetching medical records:', recordsError);
         // Don't throw error, just log it
       }
       
       const records = recordsData || [];
-      console.log('Medical records loaded:', records.length);
       setMedicalRecords(records);
       
-      console.log('=== MEDICAL DATA LOADED SUCCESSFULLY ===');
     } catch (error) {
-      console.error('Error fetching medical history directly:', error);
       throw error;
     }
   };
@@ -658,7 +574,6 @@ export default function MedicalHistoryShared() {
         setShowDewormerModal(true);
         break;
       default:
-        console.warn('Unknown record type:', type);
     }
   };
 
@@ -701,7 +616,6 @@ export default function MedicalHistoryShared() {
       closeAllModals();
       fetchMedicalData();
     } catch (error) {
-      console.error('Error saving medical record:', error);
       Alert.alert('Error', 'No se pudo guardar el registro médico');
     }
   };
@@ -780,7 +694,6 @@ export default function MedicalHistoryShared() {
       if (error) throw error;
       setVaccines(data || []);
     } catch (error) {
-      console.error('Error loading vaccines:', error);
     }
   };
 
@@ -798,7 +711,6 @@ export default function MedicalHistoryShared() {
       if (error) throw error;
       setConditions(data || []);
     } catch (error) {
-      console.error('Error loading conditions:', error);
     }
   };
 
@@ -815,7 +727,6 @@ export default function MedicalHistoryShared() {
       if (error) throw error;
       setTreatments(data || []);
     } catch (error) {
-      console.error('Error loading treatments:', error);
     }
   };
 
@@ -834,7 +745,6 @@ export default function MedicalHistoryShared() {
       if (error) throw error;
       setAllergies(data || []);
     } catch (error) {
-      console.error('Error loading allergies:', error);
     }
   };
 
@@ -852,7 +762,6 @@ export default function MedicalHistoryShared() {
       if (error) throw error;
       setDewormers(data || []);
     } catch (error) {
-      console.error('Error loading dewormers:', error);
     }
   };
 
@@ -871,7 +780,6 @@ export default function MedicalHistoryShared() {
       if (error) throw error;
       setVeterinarians(data || []);
     } catch (error) {
-      console.error('Error loading veterinarians:', error);
     }
   };
 
@@ -900,7 +808,6 @@ export default function MedicalHistoryShared() {
       setShowVaccineModal(false);
       resetVaccineForm();
     } catch (error) {
-      console.error('Error saving vaccine:', error);
       Alert.alert('Error', 'No se pudo guardar la vacuna');
     } finally {
       setSaving(false);
@@ -934,7 +841,6 @@ export default function MedicalHistoryShared() {
       setShowIllnessModal(false);
       resetIllnessForm();
     } catch (error) {
-      console.error('Error saving illness:', error);
       Alert.alert('Error', 'No se pudo guardar la enfermedad');
     } finally {
       setSaving(false);
@@ -965,7 +871,6 @@ export default function MedicalHistoryShared() {
       setShowAllergyModal(false);
       resetAllergyForm();
     } catch (error) {
-      console.error('Error saving allergy:', error);
       Alert.alert('Error', 'No se pudo guardar la alergia');
     } finally {
       setSaving(false);
@@ -996,7 +901,6 @@ export default function MedicalHistoryShared() {
       setShowDewormingModal(false);
       resetDewormingForm();
     } catch (error) {
-      console.error('Error saving deworming:', error);
       Alert.alert('Error', 'No se pudo guardar la desparasitación');
     } finally {
       setSaving(false);
@@ -1026,7 +930,6 @@ export default function MedicalHistoryShared() {
       setShowWeightModal(false);
       resetWeightForm();
     } catch (error) {
-      console.error('Error saving weight:', error);
       Alert.alert('Error', 'No se pudo guardar el peso');
     } finally {
       setSaving(false);
@@ -1062,7 +965,6 @@ export default function MedicalHistoryShared() {
       await verifyTokenAndFetchData();
       Alert.alert('Éxito', 'Registro guardado correctamente');
     } catch (error) {
-      console.error('Error saving record:', error);
       throw error;
     }
   };

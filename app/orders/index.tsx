@@ -48,7 +48,6 @@ export default function MyOrders() {
           filter: `customer_id=eq.${currentUser.id}`
         },
         (payload) => {
-          console.log('📦 Order changed in real-time:', payload.eventType, payload.new || payload.old);
           fetchOrders(true);
           fetchOrderCounts();
         }
@@ -95,7 +94,6 @@ export default function MyOrders() {
       ]);
 
       if (activeError || completedError) {
-        console.error('Error fetching order counts:', activeError || completedError);
         return;
       }
 
@@ -104,7 +102,6 @@ export default function MyOrders() {
         completed: completedCount || 0,
       });
     } catch (error) {
-      console.error('Error fetching order counts:', error);
     }
   };
 
@@ -164,7 +161,6 @@ export default function MyOrders() {
       setHasMore(ordersData.length === PAGE_SIZE);
       setOrders(prev => reset ? ordersData : [...prev, ...ordersData]);
     } catch (error) {
-      console.error('Error fetching orders:', error);
       Alert.alert('Error', 'No se pudieron cargar los pedidos');
     } finally {
       if (reset) {
@@ -309,7 +305,6 @@ export default function MyOrders() {
 
       await Promise.all([fetchOrders(true), fetchOrderCounts()]);
     } catch (error) {
-      console.error('Error confirming pickup:', error);
       Alert.alert('Error', 'No se pudo confirmar el retiro del pedido');
       await Promise.all([fetchOrders(true), fetchOrderCounts()]);
     } finally {
@@ -381,7 +376,6 @@ export default function MyOrders() {
                     Alert.alert('Error', result.error || 'No se pudo generar el link de pago');
                   }
                 } catch (error) {
-                  console.error('Error regenerating payment:', error);
                   Alert.alert('Error', 'Hubo un problema al generar el link de pago');
                 }
               }
@@ -390,7 +384,6 @@ export default function MyOrders() {
         );
       }
     } catch (error) {
-      console.error('Error handling retry payment:', error);
       Alert.alert('Error', 'No se pudo procesar el reintento de pago');
     }
   };

@@ -31,7 +31,6 @@ export const initializeSupabase = async (): Promise<void> => {
   try {
     // Asegurarse de que envConfig estÃ© inicializado
     if (!envConfig.isInitialized()) {
-      console.log('[Supabase] â³ Waiting for envConfig initialization...');
       await envConfig.initialize();
     }
 
@@ -42,26 +41,15 @@ export const initializeSupabase = async (): Promise<void> => {
     // Si ya existe un cliente, reutilizarlo
     const existingClient = getSupabaseClientInstance();
     if (existingClient) {
-      console.log('[Supabase] â™»ï¸ Reusing existing Supabase client (Hot Reload)');
       return;
     }
 
-    console.log('[Supabase] ðŸš€ Initializing Supabase client...');
 
-    console.log('[Supabase] ðŸ”— Raw Supabase URL from config:', supabaseUrl);
-    console.log('[Supabase] ðŸ”‘ Raw Anon Key from config:', supabaseAnonKey);
-    console.log('[Supabase] ðŸ“Š URL type:', typeof supabaseUrl, 'length:', supabaseUrl?.length);
-    console.log('[Supabase] ðŸ“Š Key type:', typeof supabaseAnonKey, 'length:', supabaseAnonKey?.length);
 
     if (!supabaseUrl || !supabaseAnonKey) {
-      console.error('[Supabase] âŒ Missing variables:');
-      console.error('  - URL:', supabaseUrl ? 'Present' : 'MISSING');
-      console.error('  - Key:', supabaseAnonKey ? 'Present' : 'MISSING');
       throw new Error('Missing Supabase environment variables from API Gateway');
     }
 
-    console.log('[Supabase] ðŸ”— Supabase URL:', supabaseUrl);
-    console.log('[Supabase] ðŸ”‘ Anon Key (first 50 chars):', supabaseAnonKey.substring(0, 50) + '...');
 
     // Crear cliente de Supabase
     const newClient = createClient(supabaseUrl, supabaseAnonKey, {
@@ -80,9 +68,7 @@ export const initializeSupabase = async (): Promise<void> => {
     });
 
     setSupabaseClientInstance(newClient);
-    console.log('[Supabase] âœ… Supabase client initialized successfully');
   } catch (error) {
-    console.error('[Supabase] âŒ Failed to initialize Supabase client:', error);
     throw error;
   }
 };
@@ -104,7 +90,6 @@ export const supabaseClient = new Proxy({} as SupabaseClient, {
   get(target, prop) {
     const client = getSupabaseClientInstance();
     if (!client) {
-      console.warn('[Supabase] âš ï¸ Accessing supabaseClient before initialization');
       throw new Error('Supabase client not initialized. Call initializeSupabase() first.');
     }
     return (client as any)[prop];
@@ -117,15 +102,12 @@ export const supabaseClient = new Proxy({} as SupabaseClient, {
 export const setupAuthListeners = () => {
   const client = getSupabaseClientInstance();
   if (!client) {
-    console.warn('[Supabase] âš ï¸ Cannot setup auth listeners before initialization');
     return;
   }
 
   client.auth.onAuthStateChange((event, session) => {
     if (event === 'TOKEN_REFRESHED') {
-      console.log('Token refreshed automatically by Supabase');
     } else if (event === 'SIGNED_OUT') {
-      console.log('User signed out');
     }
   });
 };
@@ -162,11 +144,9 @@ const createAuthAwareFetch = () => {
         const responseText = await responseClone.text();
 
         if (isSessionErrorResponse(response.status, responseText) && tokenExpirationCallback) {
-          console.log('Session error detected from Supabase HTTP response, triggering expiration callback');
           tokenExpirationCallback();
         }
       } catch (inspectError) {
-        console.warn('Could not inspect Supabase response for session errors:', inspectError);
       }
     }
 
@@ -187,10 +167,8 @@ export const handleSupabaseError = (error: any) => {
       errorCode === 'pgrst301';
 
     if (isJWTError) {
-      console.log('JWT/Session error detected in API call:', errorMessage);
 
       if (tokenExpirationCallback) {
-        console.log('Triggering token expiration callback');
         tokenExpirationCallback();
       }
     }
@@ -262,8 +240,6 @@ export const getUserProfile = async (userId: string) => {
 
     // If profile doesn't exist, create it automatically
     if (!data) {
-      console.log('Profile not found for user:', userId);
-      console.log('Attempting to fetch user data from auth.users and create profile...');
 
       // Get user data from auth
       const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
@@ -290,7 +266,6 @@ export const getUserProfile = async (userId: string) => {
         following: []
       };
 
-      console.log('Creating missing profile:', newProfile);
 
       const { data: createdProfile, error: createError } = await supabaseClient
         .from('profiles')
@@ -299,11 +274,9 @@ export const getUserProfile = async (userId: string) => {
         .single();
 
       if (createError) {
-        console.error('Error creating profile:', createError);
         throw createError;
       }
 
-      console.log('Profile created successfully');
       return createdProfile;
     }
 
@@ -325,7 +298,6 @@ export const getUserProfile = async (userId: string) => {
           currentRoleFlags.isPartner !== roleFlags.isPartner ||
           currentRoleFlags.isAdmin !== roleFlags.isAdmin
         ) {
-          console.log('Syncing profile role flags with auth metadata for user:', userId);
           const { data: updatedProfile, error: roleUpdateError } = await supabaseClient
             .from('profiles')
             .update({
@@ -343,7 +315,6 @@ export const getUserProfile = async (userId: string) => {
           }
 
           if (roleUpdateError) {
-            console.warn('Could not sync profile role flags:', roleUpdateError);
           }
 
           return {
@@ -355,12 +326,10 @@ export const getUserProfile = async (userId: string) => {
         }
       }
     } catch (syncError) {
-      console.warn('Error syncing profile role flags on fetch:', syncError);
     }
 
     return data;
   } catch (error) {
-    console.error('Error fetching user profile:', error);
     throw error;
   }
 };
@@ -374,7 +343,6 @@ export const updateUserProfile = async (userId: string, updates: any) => {
       .maybeSingle();
 
     if (existingProfileError) {
-      console.warn('Error reading existing profile before update:', existingProfileError);
     }
 
     let resolvedEmail = String(updates?.email || '').trim();
@@ -388,7 +356,6 @@ export const updateUserProfile = async (userId: string, updates: any) => {
         const { data: authData } = await supabaseClient.auth.getUser();
         resolvedEmail = String(authData?.user?.email || '').trim();
       } catch (authError) {
-        console.warn('Could not resolve email from auth session before profile update:', authError);
       }
     }
 
@@ -407,7 +374,6 @@ export const updateUserProfile = async (userId: string, updates: any) => {
     
     if (error) throw error;
   } catch (error) {
-    console.error('Error updating user profile:', error);
     throw error;
   }
 };
@@ -424,7 +390,6 @@ export const getPet = async (petId: string) => {
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Error fetching pet:', error);
     throw error;
   }
 };
@@ -440,7 +405,6 @@ export const signIn = async (email: string, password: string) => {
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Error signing in:', error);
     throw error;
   }
 };
@@ -460,7 +424,6 @@ export const signUp = async (email: string, password: string, displayName: strin
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Error signing up:', error);
     throw error;
   }
 };
@@ -470,7 +433,6 @@ export const signOut = async () => {
     const { error } = await supabaseClient.auth.signOut();
     if (error) throw error;
   } catch (error) {
-    console.error('Error signing out:', error);
     throw error;
   }
 };
@@ -487,7 +449,6 @@ export const getPets = async (userId: string) => {
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Error fetching pets:', error);
     throw error;
   }
 };
@@ -501,7 +462,6 @@ export const deletePet = async (petId: string) => {
     
     if (error) throw error;
   } catch (error) {
-    console.error('Error deleting pet:', error);
     throw error;
   }
 };

@@ -229,7 +229,6 @@ export default function Home() {
 
       setOnboardingChecked(true);
     } catch (error) {
-      console.error('Error checking onboarding status:', error);
       setOnboardingChecked(true);
     }
   };
@@ -250,7 +249,6 @@ export default function Home() {
 
       setShowOnboarding(false);
     } catch (error) {
-      console.error('Error completing onboarding:', error);
       setShowOnboarding(false);
     }
   };
@@ -601,9 +599,6 @@ export default function Home() {
   };
 
   const handlePromotionLike = async (promotionId: string) => {
-    console.log('=== PROMOTION LIKE START ===');
-    console.log('Promotion ID:', promotionId);
-    console.log('User ID:', currentUser?.id);
 
     if (!currentUser) {
       Alert.alert('Error', 'Debes iniciar sesión para dar me gusta');
@@ -619,22 +614,18 @@ export default function Home() {
         .single();
 
       if (fetchError) {
-        console.error('Error fetching promotion:', fetchError);
         throw fetchError;
       }
 
-      console.log('Current likes from DB:', promotionData.likes);
 
       const likes = promotionData.likes || [];
       const isLiked = likes.includes(currentUser.id);
 
-      console.log('Is currently liked:', isLiked);
 
       const newLikes = isLiked
         ? likes.filter((id: string) => id !== currentUser.id)
         : [...likes, currentUser.id];
 
-      console.log('New likes array:', newLikes);
 
       // Update database
       const { error } = await supabaseClient
@@ -643,17 +634,14 @@ export default function Home() {
         .eq('id', promotionId);
 
       if (error) {
-        console.error('Error updating promotion likes:', error);
         throw error;
       }
 
-      console.log('Database updated successfully');
 
       // Update local state
       setPromotions(prevPromotions =>
         prevPromotions.map(promo => {
           if (promo.id === promotionId) {
-            console.log('Updating promotion in state:', promo.id);
             return { ...promo, likes: newLikes };
           }
           return promo;
@@ -664,17 +652,13 @@ export default function Home() {
       setFeedItems(prevItems =>
         prevItems.map(item => {
           if (item.type === 'promotion' && item.data.id === promotionId) {
-            console.log('Updating promotion in feedItems:', item.data.id);
             return { ...item, data: { ...item.data, likes: newLikes } };
           }
           return item;
         })
       );
 
-      console.log('=== PROMOTION LIKE END SUCCESS ===');
     } catch (error) {
-      console.error('=== PROMOTION LIKE END ERROR ===');
-      console.error('Error details:', error);
       Alert.alert('Error', 'No se pudo actualizar el me gusta. Intenta nuevamente.');
     }
   };
@@ -771,7 +755,6 @@ export default function Home() {
         }
       }
     } catch (error) {
-      console.error('Error handling promotion press:', error);
     }
   };
 
@@ -791,7 +774,6 @@ export default function Home() {
         fetchPromotions()
       ]);
     } catch (error) {
-      console.error('Error refreshing feed:', error);
     } finally {
       setRefreshing(false);
     }
@@ -801,7 +783,6 @@ export default function Home() {
     if (initialLoading || loading || refreshing || loadingMore || !postsLoaded || posts.length === 0 || allPostsLoaded || !hasMorePosts) {
       return;
     }
-    console.log('🔚 End reached, loading more posts...');
     fetchMorePosts();
   };
 

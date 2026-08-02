@@ -43,7 +43,6 @@ export const validateVideo = async (videoUri: string): Promise<{
 
     return { isValid: true, info };
   } catch (error) {
-    console.error('Error validating video:', error);
     return { isValid: false, error: 'Error al validar el video' };
   }
 };
@@ -54,13 +53,11 @@ export const uploadVideoToStorage = async (
   albumId: string
 ): Promise<string> => {
   try {
-    console.log('Starting video upload:', videoUri);
 
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substring(7);
     const filename = `pets/albums/${petId}/${albumId}/${timestamp}-${randomId}.mp4`;
 
-    console.log('Uploading video to Supabase with filename:', filename);
 
     // Read file as base64
     const base64 = await FileSystem.readAsStringAsync(videoUri, {
@@ -80,11 +77,9 @@ export const uploadVideoToStorage = async (
       });
 
     if (error) {
-      console.error('Upload error:', error);
       throw error;
     }
 
-    console.log('Video uploaded successfully:', data);
 
     const { data: { publicUrl } } = supabaseClient.storage
       .from('dogcatify')
@@ -92,7 +87,6 @@ export const uploadVideoToStorage = async (
 
     return publicUrl;
   } catch (error) {
-    console.error('Error uploading video:', error);
     throw error;
   }
 };
@@ -115,10 +109,8 @@ export const generateVideoThumbnail = async (videoUri: string): Promise<string |
   try {
     // In production, use expo-video-thumbnails or similar
     // For now, return null (will use default video icon)
-    console.log('Generating thumbnail for video:', videoUri);
     return null;
   } catch (error) {
-    console.error('Error generating thumbnail:', error);
     return null;
   }
 };

@@ -297,9 +297,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const savePosition = async (x: number, y: number) => {
     try {
       await AsyncStorage.setItem('dotty_position', JSON.stringify({ x, y }));
-      console.log('[Dotty] Position saved:', { x, y });
     } catch (error) {
-      console.error('[Dotty] Error saving position:', error);
     }
   };
 
@@ -308,11 +306,9 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       const saved = await AsyncStorage.getItem('dotty_position');
       if (saved) {
         const { x, y } = JSON.parse(saved);
-        console.log('[Dotty] Position loaded:', { x, y });
         position.setValue({ x, y });
       }
     } catch (error) {
-      console.error('[Dotty] Error loading position:', error);
     }
   };
 
@@ -331,7 +327,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
         // Obtener posición actual
         position.stopAnimation((value) => {
           startPosition.current = { x: value.x, y: value.y };
-          console.log('[Dotty] Drag started at:', value);
         });
       },
 
@@ -367,17 +362,14 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           Math.pow(gestureState.dx || 0, 2) + Math.pow(gestureState.dy || 0, 2)
         );
 
-        console.log('[Dotty] Drag ended:', { dragDuration, dragDistance });
 
         // Si fue un tap rápido (< 200ms y < 10px), expandir
         if (dragDuration < 200 && dragDistance < 10) {
-          console.log('[Dotty] Tap detected, toggling expand');
           isDragging.current = false;
           toggleExpand();
         } else {
           // Si fue un drag, guardar la posición
           position.stopAnimation((value) => {
-            console.log('[Dotty] Final position:', value);
             savePosition(value.x, value.y);
           });
           isDragging.current = false;
@@ -390,27 +382,21 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const dottyVisible = useMemo(() => {
     // Check 0: Estado cargando
     if (isDottyEnabled === null) {
-      console.log('[Dotty] shouldShowDotty: NO - Status not loaded yet (null)');
       return false;
     }
 
     // Check 1: Usuario autenticado
     if (!currentUser) {
-      console.log('[Dotty] shouldShowDotty: NO - No user authenticated');
       return false;
     }
 
     // Check 2: Dotty debe estar incluido en el plan activo
     if (dottyPlanEnabled !== true) {
-      console.log('[Dotty] shouldShowDotty: NO - Dotty not included in current plan', {
-        dottyPlanEnabled,
-      });
       return false;
     }
 
     // Check 3: Dotty habilitado por el usuario
     if (isDottyEnabled === false) {
-      console.log('[Dotty] shouldShowDotty: NO - Dotty disabled by user (isDottyEnabled=false)');
       return false;
     }
 
@@ -435,20 +421,9 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
     // Check 4: Ruta permitida
     if (isAuthRoute || isHiddenRoute) {
-      console.log('[Dotty] shouldShowDotty: NO - Hidden route', {
-        pathname: currentPath,
-        isAuthRoute,
-        isHiddenRoute
-      });
       return false;
     }
 
-    console.log('[Dotty] shouldShowDotty: YES - All checks passed', {
-      currentUser: !!currentUser,
-      isDottyEnabled,
-      pathname: currentPath,
-      segments
-    });
 
     return true;
   }, [dottyPlanEnabled, isDottyEnabled, currentUser, pathname, segments]);
@@ -463,7 +438,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     const keyboardWillShow = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
       (e) => {
-        console.log('[Dotty] Keyboard will show, height:', e.endCoordinates.height);
         setKeyboardHeight(e.endCoordinates.height);
       }
     );
@@ -471,7 +445,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     const keyboardWillHide = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
       () => {
-        console.log('[Dotty] Keyboard will hide');
         setKeyboardHeight(0);
       }
     );
@@ -486,7 +459,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   const checkDottyStatus = async () => {
     if (currentUser) {
       try {
-        console.log('[Dotty] Checking status for user:', currentUser.id);
         const { data: subscriptionData, error: subscriptionError } = await supabaseClient
           .from('user_subscriptions')
           .select(`
@@ -504,7 +476,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           .maybeSingle();
 
         if (subscriptionError) {
-          console.error('[Dotty] Error checking subscription limits:', subscriptionError);
         }
 
         const userPlanLimits = resolveSubscriptionPlanLimits(subscriptionData?.subscription_plans || null);
@@ -518,7 +489,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           .single();
 
         if (error) {
-          console.error('[Dotty] Error checking status:', error);
           // En caso de error, mantener null (no mostrar hasta confirmar)
           setIsDottyEnabled(null);
           return;
@@ -528,26 +498,16 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           // Si dotty_enabled es null o undefined, tratar como false hasta que el plan lo permita
           // y el usuario lo habilite explícitamente desde su perfil.
           const isEnabled = planAllowsDotty && data.dotty_enabled !== false;
-          console.log('[Dotty] Status loaded from DB:', {
-            raw_value: data.dotty_enabled,
-            computed_value: isEnabled,
-            plan_allows_dotty: planAllowsDotty,
-            is_null: data.dotty_enabled === null,
-            is_undefined: data.dotty_enabled === undefined
-          });
           setIsDottyEnabled(isEnabled);
         } else {
-          console.log('[Dotty] No profile data found, defaulting to hidden');
           setIsDottyEnabled(false);
         }
       } catch (error) {
-        console.error('[Dotty] Exception checking Dotty status:', error);
         // En caso de excepción, mantener null (no mostrar hasta confirmar)
         setIsDottyEnabled(null);
         setDottyPlanEnabled(false);
       }
     } else {
-      console.log('[Dotty] No current user, hiding Dotty');
       setIsDottyEnabled(false);
       setDottyPlanEnabled(false);
     }
@@ -557,7 +517,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   useEffect(() => {
     if (!currentUser?.id) return;
 
-    console.log('[Dotty] Setting up real-time subscription for user:', currentUser.id);
 
     // Usar un canal único por usuario
     const channelName = `dotty-config-${currentUser.id}`;
@@ -573,26 +532,15 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           filter: `id=eq.${currentUser.id}`,
         },
         (payload) => {
-          console.log('[Dotty] 🔄 Real-time update received:', {
-            event: payload.eventType,
-            old_value: payload.old?.dotty_enabled,
-            new_value: payload.new?.dotty_enabled
-          });
 
           if (payload.new && 'dotty_enabled' in payload.new) {
             // Si dotty_enabled es null o undefined, tratar como true (activado por defecto)
             // Si es explícitamente false, respetar esa configuración
             const isEnabled = payload.new.dotty_enabled !== false;
-            console.log('[Dotty] 🔄 Changing state from', isDottyEnabled, 'to', isEnabled, {
-              raw_value: payload.new.dotty_enabled,
-              is_null: payload.new.dotty_enabled === null,
-              is_false: payload.new.dotty_enabled === false
-            });
             setIsDottyEnabled(isEnabled);
 
             // Si se deshabilitó, cerrar el modal si está abierto
             if (!isEnabled) {
-              console.log('[Dotty] 🚫 Closing because disabled');
               Keyboard.dismiss();
               setIsExpanded(false);
               // Animar el cierre
@@ -603,17 +551,14 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                 useNativeDriver: false,
               }).start();
             } else {
-              console.log('[Dotty] ✅ Enabled - component should appear now');
             }
           }
         }
       )
       .subscribe((status) => {
-        console.log('[Dotty] Subscription status:', status);
       });
 
     return () => {
-      console.log('[Dotty] Cleaning up subscription');
       supabaseClient.removeChannel(subscription);
     };
   }, [currentUser?.id]);
@@ -622,7 +567,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   useEffect(() => {
     if (!currentUser?.id) return;
 
-    console.log('[Dotty] Setting up subscription plan listener for user:', currentUser.id);
 
     const channelName = `dotty-plan-${currentUser.id}`;
 
@@ -637,16 +581,13 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           filter: `user_id=eq.${currentUser.id}`,
         },
         () => {
-          console.log('[Dotty] Subscription change detected, reloading access state');
           checkDottyStatus();
         }
       )
       .subscribe((status) => {
-        console.log('[Dotty] Subscription plan listener status:', status);
       });
 
     return () => {
-      console.log('[Dotty] Cleaning up subscription plan listener');
       supabaseClient.removeChannel(subscription);
     };
   }, [currentUser?.id]);
@@ -654,10 +595,8 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   // Recargar estado cuando cambia el usuario
   useEffect(() => {
     if (currentUser?.id) {
-      console.log('[Dotty] User changed, reloading Dotty status for:', currentUser.id);
       checkDottyStatus();
     } else {
-      console.log('[Dotty] No user, hiding Dotty');
       setIsDottyEnabled(false);
       setDottyPlanEnabled(false);
     }
@@ -678,7 +617,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           setActivePartnerBusinessId(storedBusinessId);
         }
       } catch (error) {
-        console.error('[Dotty] Error loading active partner business:', error);
         if (isMounted) {
           setActivePartnerBusinessId(null);
         }
@@ -764,7 +702,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           });
         }
       } catch (error) {
-        console.error('[Dotty] Error loading pet summary:', error);
         if (isMounted) {
           setPetSummary({
             loading: false,
@@ -785,8 +722,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   // Log cuando cambia isDottyEnabled
   useEffect(() => {
-    console.log('[Dotty] isDottyEnabled changed to:', isDottyEnabled);
-    console.log('[Dotty] Component will', isDottyEnabled ? 'RENDER' : 'HIDE');
   }, [isDottyEnabled]);
 
   useEffect(() => {
@@ -887,41 +822,34 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           .update({ dotty_enabled: false })
           .eq('id', currentUser.id);
       } catch (error) {
-        console.error('Error hiding Dotty:', error);
       }
     }
   };
 
   const toggleExpand = () => {
-    console.log('[Dotty] toggleExpand called. Current isExpanded:', isExpanded);
 
     if (isExpanded) {
       // Cerrar: primero animar, luego actualizar estado
-      console.log('[Dotty] Closing: animating to 0');
       Animated.spring(expandAnim, {
         toValue: 0,
         tension: 50,
         friction: 8,
         useNativeDriver: false,
       }).start(() => {
-        console.log('[Dotty] Animation complete, setting isExpanded to false');
         setIsExpanded(false);
       });
     } else {
       // Abrir: primero actualizar estado, luego animar
-      console.log('[Dotty] Opening: setting isExpanded to true');
       setIsExpanded(true);
 
       // Esperar un frame para que React renderice
       requestAnimationFrame(() => {
-        console.log('[Dotty] Starting animation to 1');
         Animated.spring(expandAnim, {
           toValue: 1,
           tension: 50,
           friction: 8,
           useNativeDriver: false,
         }).start(() => {
-          console.log('[Dotty] Animation complete');
         });
       });
 
@@ -948,7 +876,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       if (error) throw error;
       setCurrentSessionId(data.id);
     } catch (error) {
-      console.error('Error creating chat session:', error);
     }
   };
 
@@ -964,7 +891,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
         audio_used: audioUsed,
       });
     } catch (error) {
-      console.error('Error saving message:', error);
     }
   };
 
@@ -976,7 +902,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   // Función para manejar acciones detectadas en las respuestas de la IA
   const handleAction = (action: string) => {
-    console.log('[Dotty] Handling action:', action);
     // Reutilizar la lógica de handleQuickAction
     handleQuickAction(action);
   };
@@ -1448,7 +1373,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     const actionMatch = response.match(/\[ACCIÓN:\s*([^\]]+)\]/i);
     if (actionMatch) {
       const action = actionMatch[1].trim();
-      console.log('[Dotty] Action detected:', action);
       handleAction(action);
     }
 
@@ -1493,7 +1417,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
             userName = profile.display_name;
           }
         } catch (error) {
-          console.error('[Dotty] Error fetching user profile:', error);
         }
       }
 
@@ -1522,13 +1445,11 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       const data = await response.json();
       return data.response || 'Lo siento, no pude procesar tu mensaje. ¿Podrías reformularlo?';
     } catch (error) {
-      console.error('Error getting AI response:', error);
       return 'Disculpa, estoy teniendo dificultades para responder en este momento. Puedes usar las acciones rápidas o intentar de nuevo en unos segundos.';
     }
   };
 
   const handleClose = () => {
-    console.log('[Dotty] handleClose called');
     Keyboard.dismiss();
 
     // Animar primero, luego actualizar estado
@@ -1538,7 +1459,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       friction: 8,
       useNativeDriver: false,
     }).start(() => {
-      console.log('[Dotty] handleClose: Animation complete, setting isExpanded to false');
       setIsExpanded(false);
     });
   };
@@ -1568,12 +1488,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       tension: 40,
     }).start();
 
-    console.log('[Dotty] Keyboard visible, adjusting modal:', {
-      keyboardHeight,
-      maxModalHeight,
-      offset,
-      topMargin: TOP_MARGIN
-    });
   }, [keyboardHeight, maxModalHeight]);
 
   const overlayOpacity = expandAnim.interpolate({
@@ -1584,28 +1498,19 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   // Log para debug
   useEffect(() => {
     const listenerId = expandAnim.addListener(({ value }) => {
-      console.log('[Dotty] expandAnim value:', value, 'height:', SCREEN_HEIGHT * 0.75 * value);
     });
     return () => expandAnim.removeListener(listenerId);
   }, []);
 
   // Log de visibilidad
   if (!dottyVisible) {
-    console.log('[Dotty] ❌ NOT VISIBLE - dottyVisible is false');
     return null;
   }
 
-  console.log('[Dotty] ✅ VISIBLE - Rendering component', {
-    isExpanded,
-    isDottyEnabled,
-    pathname,
-    currentUser: !!currentUser
-  });
 
   return (
     <>
       {isExpanded && (() => {
-        console.log('[Dotty] Rendering modal overlay');
         return (
         <Animated.View style={[styles.chatOverlay, { opacity: overlayOpacity }]}>
           <TouchableOpacity

@@ -51,7 +51,6 @@ export const MedicalAlertsWidget: React.FC = () => {
 
       setAlerts(alertsWithPetNames);
     } catch (error) {
-      console.error('Error fetching medical alerts:', error);
     } finally {
       setLoading(false);
     }
@@ -71,7 +70,6 @@ export const MedicalAlertsWidget: React.FC = () => {
       
       fetchAlerts(); // Refresh alerts
     } catch (error) {
-      console.error('Error completing alert:', error);
       Alert.alert('Error', 'No se pudo marcar como completada');
     }
   };
@@ -90,7 +88,6 @@ export const MedicalAlertsWidget: React.FC = () => {
       
       fetchAlerts(); // Refresh alerts
     } catch (error) {
-      console.error('Error dismissing alert:', error);
       Alert.alert('Error', 'No se pudo descartar la alerta');
     }
   };

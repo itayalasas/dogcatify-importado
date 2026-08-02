@@ -21,7 +21,6 @@ export const checkPetPermission = async (
       .single();
 
     if (petError) {
-      console.error('Error checking pet ownership:', petError);
       return false;
     }
 
@@ -38,7 +37,6 @@ export const checkPetPermission = async (
       .maybeSingle();
 
     if (shareError) {
-      console.error('Error checking pet share:', shareError);
       return false;
     }
 
@@ -49,7 +47,6 @@ export const checkPetPermission = async (
     return permissionHierarchy[share.permission_level as PermissionLevel] >=
            permissionHierarchy[requiredPermission];
   } catch (error) {
-    console.error('Error in checkPetPermission:', error);
     return false;
   }
 };
@@ -66,7 +63,6 @@ export const getPetPermissionLevel = async (
       .single();
 
     if (petError) {
-      console.error('Error checking pet ownership:', petError);
       return null;
     }
 
@@ -83,13 +79,11 @@ export const getPetPermissionLevel = async (
       .maybeSingle();
 
     if (shareError) {
-      console.error('Error checking pet share:', shareError);
       return null;
     }
 
     return share?.permission_level as PermissionLevel || null;
   } catch (error) {
-    console.error('Error in getPetPermissionLevel:', error);
     return null;
   }
 };
@@ -106,13 +100,11 @@ export const isPetOwner = async (
       .single();
 
     if (error) {
-      console.error('Error checking pet ownership:', error);
       return false;
     }
 
     return pet?.owner_id === userId;
   } catch (error) {
-    console.error('Error in isPetOwner:', error);
     return false;
   }
 };

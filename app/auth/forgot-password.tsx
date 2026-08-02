@@ -38,14 +38,11 @@ export default function ForgotPassword() {
         return;
       }
 
-      console.log('User found, creating custom password reset token...');
 
       // Crear token personalizado para reset de contraseña
       const token = await createEmailConfirmationToken(userData.id, email.toLowerCase().trim(), 'password_reset');
       const resetUrl = generateConfirmationUrl(token, 'password_reset');
 
-      console.log('Sending password reset email using new API...');
-      console.log('Reset URL:', resetUrl);
 
       // Enviar email usando la nueva API
       const { sendPasswordResetEmailAPI } = await import('../../utils/emailConfirmation');
@@ -59,9 +56,7 @@ export default function ForgotPassword() {
         throw new Error(emailResult.error || 'Error sending password reset email');
       }
 
-      console.log('✅ Password reset email sent successfully!');
       if (emailResult.log_id) {
-        console.log('Email log ID:', emailResult.log_id);
       }
 
       setResetSent(true);
@@ -79,7 +74,6 @@ export default function ForgotPassword() {
         ]
       );
     } catch (error) {
-      console.error('Error resetting password:', error);
       Alert.alert('Error', 'No se pudo enviar el correo de restablecimiento. Por favor verifica tu dirección de correo e intenta nuevamente.');
     } finally {
       setLoading(false);

@@ -88,7 +88,6 @@ serve(async (req: Request) => {
     );
 
     if (updateError) {
-      console.error('Error updating password:', updateError);
       return new Response(
         JSON.stringify({ error: "Failed to update password" }),
         {
@@ -116,7 +115,6 @@ serve(async (req: Request) => {
     );
 
   } catch (error) {
-    console.error('Error in reset-password function:', error);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),
       {

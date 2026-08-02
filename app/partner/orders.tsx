@@ -36,7 +36,6 @@ export default function PartnerOrders() {
   useEffect(() => {
     if (!currentUser || !normalizedPartnerId) return;
 
-    console.log('Loading orders for partner ID:', normalizedPartnerId as string);
 
     // Get partner profile using Supabase
     const fetchPartnerProfile = async () => {
@@ -59,7 +58,6 @@ export default function PartnerOrders() {
           fetchOrders(normalizedPartnerId as string);
         }
       } catch (error) {
-        console.error('Error fetching partner profile:', error);
       } finally {
         setLoading(false);
       }
@@ -166,7 +164,6 @@ export default function PartnerOrders() {
         setOrders(ordersData);
         setLoading(false);
       } catch (error) {
-        console.error('Error fetching orders:', error);
         setLoading(false);
       }
     };
@@ -235,7 +232,6 @@ export default function PartnerOrders() {
 
       Alert.alert('Éxito', statusMessages[newStatus as keyof typeof statusMessages]);
     } catch (error) {
-      console.error('Error updating order status:', error);
       Alert.alert('Error', 'No se pudo actualizar el pedido');
       // Revertir el cambio optimista recargando los datos
       if (normalizedPartnerId) {
@@ -359,7 +355,6 @@ export default function PartnerOrders() {
       if (error) throw error;
       return data;
     } catch (error) {
-      console.error('Error fetching customer info:', error);
       return null;
     }
   };

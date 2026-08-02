@@ -108,7 +108,6 @@ export default function AdminPlaces() {
 
       setPlaces(placesData);
     } catch (error) {
-      console.error('Error fetching places:', error);
     }
   };
 
@@ -160,7 +159,6 @@ export default function AdminPlaces() {
       const publicUrl = await uploadImageUtil(imageUri, filename);
       return publicUrl;
     } catch (error) {
-      console.error('Error subiendo imagen:', error);
       throw error;
     }
   };
@@ -188,7 +186,6 @@ export default function AdminPlaces() {
             coordinates = { lat, lng };
           }
         } catch (error) {
-          console.warn('Invalid coordinates format');
         }
       }
 

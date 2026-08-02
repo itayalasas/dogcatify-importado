@@ -28,10 +28,16 @@ Deno.serve(async (req: Request) => {
   try {
     // Validar token secreto para seguridad
     const cronSecret = req.headers.get('X-Cron-Secret');
-    const expectedSecret = Deno.env.get('CRON_SECRET') || 'default-secret-change-me';
+    const expectedSecret = Deno.env.get('CRON_SECRET');
+
+    if (!expectedSecret) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Server configuration error' }),
+        { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } },
+      );
+    }
 
     if (cronSecret !== expectedSecret) {
-      console.error('❌ Invalid or missing cron secret');
       return new Response(
         JSON.stringify({
           success: false,
@@ -51,13 +57,11 @@ Deno.serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    console.log('🔍 Iniciando limpieza de órdenes expiradas...');
 
     // Calcular el timestamp de hace 10 minutos
     const tenMinutesAgo = new Date();
     tenMinutesAgo.setMinutes(tenMinutesAgo.getMinutes() - 10);
 
-    console.log(`Buscando órdenes creadas antes de: ${tenMinutesAgo.toISOString()}`);
 
     // Buscar órdenes pendientes con más de 10 minutos
     const { data: expiredOrders, error: fetchError } = await supabase
@@ -68,12 +72,10 @@ Deno.serve(async (req: Request) => {
       .lt('created_at', tenMinutesAgo.toISOString());
 
     if (fetchError) {
-      console.error('Error fetching expired orders:', fetchError);
       throw fetchError;
     }
 
     if (!expiredOrders || expiredOrders.length === 0) {
-      console.log('✅ No hay órdenes expiradas para cancelar');
       return new Response(
         JSON.stringify({
           success: true,
@@ -90,7 +92,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log(`⚠️ Encontradas ${expiredOrders.length} órdenes expiradas`);
 
     let cancelledCount = 0;
     let errors: any[] = [];
@@ -98,14 +99,9 @@ Deno.serve(async (req: Request) => {
     // Procesar cada orden expirada
     for (const order of expiredOrders) {
       try {
-        console.log(`\n📦 Procesando orden: ${order.id}`);
-        console.log(`   Creada: ${order.created_at}`);
-        console.log(`   Tipo: ${order.order_type}`);
-        console.log(`   Payment Preference ID: ${order.payment_preference_id}`);
 
         // 1. Cancelar la reserva asociada si existe
         if (order.booking_id) {
-          console.log(`   Cancelando reserva: ${order.booking_id}`);
 
           const { error: bookingError } = await supabase
             .from('bookings')
@@ -116,10 +112,8 @@ Deno.serve(async (req: Request) => {
             .eq('id', order.booking_id);
 
           if (bookingError) {
-            console.error(`   ❌ Error cancelando reserva:`, bookingError);
             errors.push({ orderId: order.id, error: 'Failed to cancel booking' });
           } else {
-            console.log(`   ✅ Reserva cancelada`);
           }
         }
 
@@ -127,9 +121,7 @@ Deno.serve(async (req: Request) => {
         if (order.payment_preference_id) {
           try {
             await cancelMercadoPagoPayment(order.payment_preference_id, order.partner_id, supabase);
-            console.log(`   ✅ Pago cancelado en Mercado Pago`);
           } catch (mpError) {
-            console.error(`   ⚠️ Error cancelando pago en MP (puede que no se haya iniciado):`, mpError);
             // No bloqueamos la cancelación de la orden si falla MP
           }
         }
@@ -145,22 +137,16 @@ Deno.serve(async (req: Request) => {
           .eq('id', order.id);
 
         if (orderError) {
-          console.error(`   ❌ Error actualizando orden:`, orderError);
           errors.push({ orderId: order.id, error: 'Failed to update order' });
         } else {
-          console.log(`   ✅ Orden cancelada`);
           cancelledCount++;
         }
 
       } catch (error) {
-        console.error(`❌ Error procesando orden ${order.id}:`, error);
         errors.push({ orderId: order.id, error: error.message });
       }
     }
 
-    console.log(`\n✅ Limpieza completada:`);
-    console.log(`   - Órdenes canceladas: ${cancelledCount}`);
-    console.log(`   - Errores: ${errors.length}`);
 
     return new Response(
       JSON.stringify({
@@ -179,7 +165,6 @@ Deno.serve(async (req: Request) => {
     );
 
   } catch (error) {
-    console.error('❌ Error in cancel-expired-orders function:', error);
 
     return new Response(
       JSON.stringify({
@@ -214,7 +199,6 @@ async function cancelMercadoPagoPayment(
       .single();
 
     if (partnerError || !partner?.mercadopago_config?.access_token) {
-      console.log('   ⚠️ No se encontró configuración de MP para el partner');
       return;
     }
 
@@ -234,21 +218,18 @@ async function cancelMercadoPagoPayment(
     });
 
     if (!searchResponse.ok) {
-      console.log('   ⚠️ No se encontraron pagos para esta preferencia');
       return;
     }
 
     const searchData = await searchResponse.json();
 
     if (!searchData.results || searchData.results.length === 0) {
-      console.log('   ℹ️ No hay pagos iniciados para cancelar');
       return;
     }
 
     // Cancelar cada pago encontrado que esté pendiente
     for (const payment of searchData.results) {
       if (payment.status === 'pending' || payment.status === 'in_process') {
-        console.log(`   Cancelando pago MP: ${payment.id}`);
 
         const cancelUrl = `https://api.mercadopago.com/v1/payments/${payment.id}`;
 
@@ -264,16 +245,13 @@ async function cancelMercadoPagoPayment(
         });
 
         if (cancelResponse.ok) {
-          console.log(`   ✅ Pago ${payment.id} cancelado en MP`);
         } else {
           const errorData = await cancelResponse.json();
-          console.error(`   ❌ Error cancelando pago ${payment.id}:`, errorData);
         }
       }
     }
 
   } catch (error) {
-    console.error('Error en cancelMercadoPagoPayment:', error);
     throw error;
   }
 }

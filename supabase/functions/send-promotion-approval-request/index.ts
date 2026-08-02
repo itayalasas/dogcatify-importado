@@ -268,7 +268,6 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error: any) {
-    console.error("Error in send-promotion-approval-request:", error);
 
     const errorMessage = String(error?.message || "Failed to send promotion approval request");
     const statusCode = errorMessage.includes('APPROVAL_SCHEMA_MISSING') ? 409 : 500;

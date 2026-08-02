@@ -167,7 +167,6 @@ const VideoPlayer = memo(({
         onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
         onReadyForDisplay={() => {}}
         onError={(error) => {
-          console.log('Video error:', error);
         }}
       />
       <View style={styles.videoControlsOverlay}>
@@ -251,12 +250,6 @@ const PostCard: React.FC<PostCardProps> = ({
     }
     setLikesCount(post.likes?.length || 0);
 
-    console.log('PostCard useEffect - Post likes updated:', {
-      postId: post.id,
-      likesArray: post.likes,
-      isLiked: post.likes?.includes(currentUser?.id),
-      likesCount: post.likes?.length || 0
-    });
 
     // Always fetch comments count for display
     fetchCommentsCount();
@@ -338,14 +331,12 @@ const PostCard: React.FC<PostCardProps> = ({
       if (error) throw error;
       setCommentsCount(count || 0);
     } catch (error) {
-      console.error('Error fetching comments count:', error);
     }
   };
 
   const fetchComments = async () => {
     setLoadingComments(true);
     try {
-      console.log('Fetching comments for post:', post.id);
       const { data: commentsData, error } = await supabaseClient
         .from('comments')
         .select(`
@@ -363,7 +354,6 @@ const PostCard: React.FC<PostCardProps> = ({
       
       if (error) throw error;
       
-      console.log('Raw comments data:', commentsData);
       
       // Process comments data (profiles are already joined)
       const commentsWithProfiles = (commentsData || []).map(comment => ({
@@ -372,33 +362,26 @@ const PostCard: React.FC<PostCardProps> = ({
         profiles: comment.profiles || null
       }));
       
-      console.log('Comments with profiles:', commentsWithProfiles);
       
       // Organize comments into threads (parent comments with their replies)
       const organizedComments = organizeCommentsIntoThreads(commentsWithProfiles);
-      console.log('Organized comments:', organizedComments);
       setComments(organizedComments);
       setCommentsCount(commentsWithProfiles.length);
     } catch (error) {
-      console.error('Error fetching comments:', error);
     } finally {
       setLoadingComments(false);
     }
   };
 
   const organizeCommentsIntoThreads = (comments: any[]) => {
-    console.log('Organizing comments into threads:', comments);
     
     if (!comments || comments.length === 0) {
-      console.log('No comments to organize');
       return [];
     }
     
     const parentComments = comments.filter(comment => !comment.parent_id);
     const replies = comments.filter(comment => comment.parent_id);
     
-    console.log('Parent comments:', parentComments.length);
-    console.log('Replies:', replies.length);
     
     // Add replies to their parent comments
     const threaded = parentComments.map(parent => {
@@ -412,7 +395,6 @@ const PostCard: React.FC<PostCardProps> = ({
       };
     });
     
-    console.log('Threaded comments result:', threaded);
     return threaded;
   };
 
@@ -497,7 +479,6 @@ const PostCard: React.FC<PostCardProps> = ({
       fetchComments();
       fetchCommentsCount();
     } catch (error) {
-      console.error('Error adding comment:', error);
       Alert.alert('Error', 'No se pudo agregar el comentario');
     }
   };
@@ -506,14 +487,10 @@ const PostCard: React.FC<PostCardProps> = ({
     if (!currentUser) return;
 
     try {
-      console.log('=== COMMENT LIKE DEBUG START ===');
-      console.log('Comment ID:', commentId);
-      console.log('User ID:', currentUser.id);
       
       // Check current session before making the update
       const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
       if (sessionError || !session) {
-        console.error('No valid session for comment like');
         Alert.alert('Error', 'Sesión expirada. Por favor inicia sesión nuevamente.');
         return;
       }
@@ -527,12 +504,10 @@ const PostCard: React.FC<PostCardProps> = ({
       
       if (fetchError) throw fetchError;
       
-      console.log('Current comment likes from DB:', commentData.likes);
       
       const likes = commentData.likes || [];
       const isLiked = likes.includes(currentUser.id);
       
-      console.log('Is currently liked:', isLiked);
       
       let newLikes;
       if (isLiked) {
@@ -541,10 +516,8 @@ const PostCard: React.FC<PostCardProps> = ({
         newLikes = [...likes, currentUser.id];
       }
       
-      console.log('New likes array:', newLikes);
       
       // Use RPC function to update likes with proper permissions
-      console.log('Updating comment likes using direct update...');
       // Update database first
       const { error } = await supabaseClient
         .from('comments')
@@ -552,12 +525,9 @@ const PostCard: React.FC<PostCardProps> = ({
         .eq('id', commentId);
       
       if (error) {
-        console.error('Database update error:', error);
-        console.error('Error details:', JSON.stringify(error, null, 2));
         throw error;
       }
       
-      console.log('Database updated successfully');
       
       // Verify the update worked by fetching again
       const { data: verifyData, error: verifyError } = await supabaseClient
@@ -567,15 +537,11 @@ const PostCard: React.FC<PostCardProps> = ({
         .single();
       
       if (verifyError) {
-        console.error('Verification failed:', verifyError);
       } else {
-        console.log('Verification - likes in DB after update:', verifyData.likes);
         if (JSON.stringify(verifyData.likes) !== JSON.stringify(newLikes)) {
-          console.error('❌ Update not persisted! Expected:', newLikes, 'Got:', verifyData.likes);
           Alert.alert('Error', 'Los likes no se guardaron correctamente');
           return;
         } else {
-          console.log('✅ Update verified successfully');
         }
       }
       
@@ -596,10 +562,7 @@ const PostCard: React.FC<PostCardProps> = ({
         return comment;
       }));
       
-      console.log('Local comment state updated');
-      console.log('=== COMMENT LIKE DEBUG END ===');
     } catch (error) {
-      console.error('Error updating comment like:', error);
       // Show user feedback on error
       Alert.alert('Error', 'No se pudo actualizar el me gusta del comentario');
     }
@@ -740,9 +703,7 @@ const PostCard: React.FC<PostCardProps> = ({
       // Call the onShare callback
       onShare(post.id);
     } catch (error) {
-      console.error('Error sharing post:', error);
       // Don't show error alert, just log it
-      console.log('Share was cancelled or failed');
     }
   };
 

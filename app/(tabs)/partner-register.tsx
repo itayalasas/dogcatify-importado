@@ -21,7 +21,6 @@ const SYSTEM_CONFIG_KEY = 'system_config';
 
 const replicateMercadoPagoConfig = async (userId: string) => {
   try {
-    console.log('Checking for existing Mercado Pago configuration for user:', userId);
     
     // Find any existing business from this user with Mercado Pago configured
     const { data: existingPartners, error } = await supabaseClient
@@ -32,16 +31,13 @@ const replicateMercadoPagoConfig = async (userId: string) => {
       .limit(1);
     
     if (error) {
-      console.error('Error checking existing partners:', error);
       return;
     }
     
     if (existingPartners && existingPartners.length > 0) {
       const sourcePartner = existingPartners[0];
-      console.log('Found existing partner with MP config:', sourcePartner.business_name);
       
       if (sourcePartner.mercadopago_config) {
-        console.log('Replicating Mercado Pago configuration to new business...');
         
         // Get the newly created partner (last one created by this user)
         const { data: newPartners, error: newPartnerError } = await supabaseClient
@@ -52,7 +48,6 @@ const replicateMercadoPagoConfig = async (userId: string) => {
           .limit(1);
         
         if (newPartnerError || !newPartners || newPartners.length === 0) {
-          console.error('Error finding new partner:', newPartnerError);
           return;
         }
         
@@ -70,16 +65,12 @@ const replicateMercadoPagoConfig = async (userId: string) => {
           .eq('id', newPartner.id);
         
         if (updateError) {
-          console.error('Error replicating MP config:', updateError);
         } else {
-          console.log('Mercado Pago configuration replicated successfully to:', newPartner.business_name);
         }
       }
     } else {
-      console.log('No existing Mercado Pago configuration found for user');
     }
   } catch (error) {
-    console.error('Error in replicateMercadoPagoConfig:', error);
     // Don't throw error to avoid breaking the registration process
   }
 };
@@ -167,7 +158,6 @@ export default function PartnerRegister() {
 
       setAutoApprovePartners(Boolean(data?.value?.auto_approve_partners));
     } catch (error) {
-      console.error('Error loading system config for partner registration:', error);
     }
   };
 
@@ -190,7 +180,6 @@ export default function PartnerRegister() {
         }
       }
     } catch (error) {
-      console.error('Error loading countries:', error);
     }
   };
 
@@ -206,7 +195,6 @@ export default function PartnerRegister() {
       setDepartments(data || []);
       setFilteredDepartments(data || []);
     } catch (error) {
-      console.error('Error loading departments:', error);
     }
   };
 
@@ -284,7 +272,6 @@ export default function PartnerRegister() {
       setGeocodingResults(results.slice(0, 5));
       setShowGeocodingResults(true);
     } catch (error) {
-      console.error('Error en geocodificación:', error);
       Alert.alert('Error', 'No se pudo obtener la ubicación.');
     } finally {
       setIsGeocoding(false);
@@ -396,11 +383,9 @@ export default function PartnerRegister() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        console.log('Logo selected:', result.assets[0].uri);
         setLogo(result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Error selecting logo:', error);
       Alert.alert('Error', 'No se pudo seleccionar la imagen');
     }
   };
@@ -426,11 +411,9 @@ export default function PartnerRegister() {
 
       if (!result.canceled && result.assets) {
         const newImages = result.assets.map(asset => asset.uri);
-        console.log('Images selected:', newImages);
         setImages(prev => [...prev, ...newImages].slice(0, 5));
       }
     } catch (error) {
-      console.error('Error selecting images:', error);
       Alert.alert('Error', 'No se pudieron seleccionar las imágenes');
     }
   };
@@ -438,8 +421,6 @@ export default function PartnerRegister() {
 
   const uploadImage = async (imageUri: string, path: string): Promise<string> => {
     try {
-      console.log(`Uploading image to path: ${path}`);
-      console.log(`Image URI: ${imageUri}`);
 
       // Verificar que la URI existe
       if (!imageUri || imageUri.trim() === '') {
@@ -457,7 +438,6 @@ export default function PartnerRegister() {
       }
 
       const blob = await response.blob();
-      console.log(`Image blob size: ${blob.size} bytes, type: ${blob.type}`);
 
       // Verificar que el blob tiene contenido
       if (blob.size === 0) {
@@ -478,7 +458,6 @@ export default function PartnerRegister() {
         reader.readAsArrayBuffer(blob);
       });
 
-      console.log(`ArrayBuffer size: ${arrayBuffer.byteLength} bytes`);
 
       // Upload ArrayBuffer to Supabase storage
       const { data, error } = await supabaseClient.storage
@@ -490,20 +469,15 @@ export default function PartnerRegister() {
         });
 
       if (error) {
-        console.error('Supabase storage error:', error);
-        console.error('Error details:', JSON.stringify(error));
         throw error;
       }
 
-      console.log('Upload successful, data:', data);
-      console.log('Getting public URL...');
 
       const { data: urlData } = supabaseClient.storage
         .from('dogcatify')
         .getPublicUrl(path);
 
       const publicUrl = urlData.publicUrl;
-      console.log(`Generated public URL: ${publicUrl}`);
 
       // Verificar que la URL es válida
       if (!publicUrl || publicUrl.trim() === '') {
@@ -512,8 +486,6 @@ export default function PartnerRegister() {
 
       return publicUrl;
     } catch (error) {
-      console.error('Error in uploadImage:', error);
-      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       throw error;
     }
   };
@@ -613,7 +585,6 @@ export default function PartnerRegister() {
         return;
       }
     } catch (limitError) {
-      console.error('Error validating partner business limit:', limitError);
       Alert.alert('Error', 'No se pudo validar el límite de negocios de tu plan. Intenta nuevamente.');
       return;
     }
@@ -623,11 +594,8 @@ export default function PartnerRegister() {
       let logoUrl = null;
       if (logo) {
         try {
-          console.log('Uploading logo...');
           logoUrl = await uploadImage(logo, `partners/${currentUser.id}/${Date.now()}_logo.jpg`);
-          console.log('Logo uploaded successfully:', logoUrl);
         } catch (logoError) {
-          console.error('Error uploading logo:', logoError);
           Alert.alert(
             'Error al subir logo',
             'No se pudo subir el logo. ¿Deseas continuar sin logo?',
@@ -643,15 +611,11 @@ export default function PartnerRegister() {
       const imageUrls: string[] = [];
       if (images.length > 0) {
         try {
-          console.log(`Uploading ${images.length} gallery images...`);
           for (let i = 0; i < images.length; i++) {
-            console.log(`Uploading image ${i + 1} of ${images.length}...`);
             const imageUrl = await uploadImage(images[i], `partners/${currentUser.id}/gallery/${Date.now()}_${i}.jpg`);
             imageUrls.push(imageUrl);
           }
-          console.log('All gallery images uploaded successfully');
         } catch (galleryError) {
-          console.error('Error uploading gallery images:', galleryError);
           Alert.alert(
             'Error al subir imágenes',
             'No se pudieron subir las imágenes de la galería. ¿Deseas continuar sin galería?',
@@ -666,7 +630,6 @@ export default function PartnerRegister() {
 
       await createPartnerRecord(logoUrl, imageUrls);
     } catch (error) {
-      console.error('Error registering partner:', error);
       Alert.alert('Error', 'No se pudo completar el registro');
     } finally {
       setLoading(false);
@@ -677,7 +640,6 @@ export default function PartnerRegister() {
     try {
       await createPartnerRecord(null, []);
     } catch (error) {
-      console.error('Error registering partner without logo:', error);
       Alert.alert('Error', 'No se pudo completar el registro');
     } finally {
       setLoading(false);
@@ -697,7 +659,6 @@ export default function PartnerRegister() {
       }
       await createPartnerRecord(logoUrl, []);
     } catch (error) {
-      console.error('Error registering partner without gallery:', error);
       Alert.alert('Error', 'No se pudo completar el registro');
     } finally {
       setLoading(false);
@@ -706,7 +667,6 @@ export default function PartnerRegister() {
 
   const createPartnerRecord = async (logoUrl: string | null, imageUrls: string[]) => {
     try {
-      console.log('Creating partner record in database...');
       const currentUserId = currentUser?.id;
 
       if (!currentUserId) {
@@ -782,7 +742,6 @@ export default function PartnerRegister() {
         );
 
       if (thresholdColumnMissing) {
-        console.warn('free_shipping_threshold column missing in partners table. Retrying insert without threshold.');
         delete partnerPayload.free_shipping_threshold;
 
         const retry = await supabaseClient
@@ -794,7 +753,6 @@ export default function PartnerRegister() {
 
       if (error) throw error;
       
-      console.log('Partner record created successfully');
 
       // Check if user has other businesses with Mercado Pago configured
       await replicateMercadoPagoConfig(currentUserId);
@@ -830,9 +788,7 @@ export default function PartnerRegister() {
             deepLink: '(admin-tabs)/requests'
           }
         );
-        console.log('Push notification sent to admin');
       } catch (notificationError) {
-        console.error('Error sending push notification:', notificationError);
       }
 
       Alert.alert(
@@ -843,7 +799,6 @@ export default function PartnerRegister() {
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (error) {
-      console.error('Error creating partner record:', error);
       throw error;
     }
   };

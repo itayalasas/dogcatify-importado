@@ -479,7 +479,6 @@ async function getFaqReply(
           "\n\nSi me dices qué necesitas y tu zona/ciudad, te indico cómo buscarlo y reservar."
         );
       } catch (e) {
-        console.error("Failed to build services reply:", e);
         return (
           "En DogCatiFy puedes encontrar y reservar servicios para tu mascota (según disponibilidad de cada aliado). " +
           "Si me dices qué estás buscando (veterinaria, grooming, hospedaje, paseos, etc.) y tu zona/ciudad, te guío."
@@ -573,7 +572,6 @@ Deno.serve(async (req: Request) => {
             return jsonResponse(response, 200);
           }
         } catch (e) {
-          console.error("Failed to enrich services reply:", e);
         }
       }
 
@@ -624,7 +622,6 @@ Deno.serve(async (req: Request) => {
           return jsonResponse(response, 200);
         }
       } catch (e) {
-        console.error("Failed to answer hours from DB:", e);
       }
     }
 
@@ -651,7 +648,6 @@ Deno.serve(async (req: Request) => {
         return jsonResponse(response, 200);
       }
     } catch (e) {
-      console.error("DB-backed search failed:", e);
     }
 
     const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
@@ -749,7 +745,6 @@ Deno.serve(async (req: Request) => {
 
     return jsonResponse(response, 200);
   } catch (error) {
-    console.error("Error in dotty-widget-assistant:", error);
     return jsonResponse({ error: (error as Error)?.message ?? "Unknown error" }, 500);
   }
 });

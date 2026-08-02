@@ -83,7 +83,6 @@ export default function SubscriptionReturn() {
 
       await Linking.openURL(deepLink);
     } catch (error) {
-      console.warn('Could not open DogCatiFy subscription deep link:', error);
     }
   };
 

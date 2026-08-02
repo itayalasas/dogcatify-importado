@@ -64,7 +64,6 @@ async function sendAlertEmail(
     .limit(1);
 
   if (!adminProfiles || adminProfiles.length === 0) {
-    console.warn("No admin email found for alerts");
     return;
   }
 
@@ -124,12 +123,9 @@ async function sendAlertEmail(
     });
 
     if (!response.ok) {
-      console.error("Error sending alert email:", await response.text());
     } else {
-      console.log(`✅ Alert email sent to ${adminEmail}`);
     }
   } catch (error) {
-    console.error("Error sending alert email:", error);
   }
 }
 
@@ -154,12 +150,10 @@ async function checkAlertThresholds(supabase: any): Promise<{
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error(`Error checking ${type}:`, error);
       continue;
     }
 
     if (logs && logs.length >= count) {
-      console.warn(`⚠️ ALERT: ${logs.length} ${type} events in last ${timeWindowMinutes} minutes`);
       
       alerts.push({
         type,
@@ -216,7 +210,6 @@ Deno.serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    console.log("🔍 Checking alert thresholds...");
     
     const result = await checkAlertThresholds(supabase);
 
@@ -234,7 +227,6 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error: any) {
-    console.error("❌ Error in check-alert-thresholds:", error);
 
     return new Response(
       JSON.stringify({

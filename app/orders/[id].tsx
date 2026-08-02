@@ -48,7 +48,6 @@ export default function OrderDetail() {
           filter: `id=eq.${id}`
         },
         (payload) => {
-          console.log('📦 Order detail updated in real-time:', payload.new);
           // Actualizar el pedido en el estado local
           setOrder((prevOrder: any) => ({
             ...prevOrder,
@@ -141,7 +140,6 @@ export default function OrderDetail() {
         if (resolvedAddress) setPartnerAddress(resolvedAddress);
       }
     } catch (error) {
-      console.error('Error fetching order details:', error);
       Alert.alert('Error', 'No se pudo cargar el detalle del pedido');
     } finally {
       setLoading(false);
@@ -241,7 +239,6 @@ export default function OrderDetail() {
 
       await fetchOrderDetails();
     } catch (error) {
-      console.error('Error confirming pickup:', error);
       Alert.alert('Error', 'No se pudo confirmar el retiro del pedido');
     } finally {
       setPickupConfirming(false);

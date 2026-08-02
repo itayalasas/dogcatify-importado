@@ -66,7 +66,6 @@ export default function SelectVaccine() {
 
           // Caché válido por 7 días (604800000 ms)
           if (cacheAge < 604800000) {
-            console.log('Cargando vacunas desde caché');
             setVaccines(cachedData.vaccines || []);
             setFilteredVaccines(cachedData.vaccines || []);
             setLoading(false);
@@ -74,11 +73,9 @@ export default function SelectVaccine() {
           }
         }
       } catch (cacheError) {
-        console.log('No se pudo cargar caché:', cacheError);
       }
 
       // Si no hay caché válido, consultar la API
-      console.log('Consultando vacunas con IA...');
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (!session) {
         throw new Error('No hay sesión activa');
@@ -117,12 +114,9 @@ export default function SelectVaccine() {
           timestamp: Date.now(),
         };
         await AsyncStorage.setItem(cacheKey, JSON.stringify(cacheData));
-        console.log('Vacunas guardadas en caché');
       } catch (cacheError) {
-        console.error('Error al guardar en caché:', cacheError);
       }
     } catch (error) {
-      console.error('Error fetching vaccines:', error);
       // Fallback a lista básica si falla
       setVaccines([]);
       setFilteredVaccines([]);
@@ -145,7 +139,6 @@ export default function SelectVaccine() {
   };
 
   const handleSelectVaccine = (vaccine: any) => {
-    console.log('Navigating back with vaccine:', vaccine.name);
 
     // Calcular próxima dosis automáticamente basada en la frecuencia
     let calculatedNextDueDate = null;

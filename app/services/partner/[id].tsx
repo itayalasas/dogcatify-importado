@@ -45,10 +45,8 @@ export default function PartnerServices() {
   useEffect(() => {
     if (partner) {
       if (partner.business_type === 'shelter') {
-        console.log('Partner is shelter, fetching adoption pets...');
         fetchAdoptionPets();
       } else {
-        console.log('Partner is not shelter, fetching services...');
         fetchPartnerServices();
       }
       fetchPartnerReviews();
@@ -108,7 +106,6 @@ export default function PartnerServices() {
         });
       }
     } catch (error) {
-      console.error('Error fetching partner details:', error);
     }
   };
 
@@ -139,7 +136,6 @@ export default function PartnerServices() {
       setServices(servicesData);
       setFilteredServices(servicesData);
     } catch (error) {
-      console.error('Error fetching partner services:', error);
     } finally {
       setLoading(false);
     }
@@ -147,7 +143,6 @@ export default function PartnerServices() {
 
   const fetchAdoptionPets = async () => {
     try {
-      console.log('Fetching adoption pets for partner:', id);
       
       // Fetch from adoption_pets table (the correct table)
       const { data, error } = await supabaseClient
@@ -158,13 +153,10 @@ export default function PartnerServices() {
         .order('created_at', { ascending: false });
       
       if (error) {
-        console.error('Error fetching from adoption_pets:', error);
         setAdoptionPets([]);
         return;
       }
       
-      console.log('Found adoption pets:', data?.length || 0);
-      console.log('Adoption pets data:', data);
       
       // Process adoption pets data
       const adoptionData = data?.map(pet => {
@@ -210,10 +202,8 @@ export default function PartnerServices() {
         };
       }) || [];
       
-      console.log('Processed adoption data:', adoptionData.length, 'pets');
       setAdoptionPets(adoptionData);
     } catch (error) {
-      console.error('Error fetching adoption pets:', error);
       setAdoptionPets([]);
     } finally {
       setLoading(false);
@@ -223,7 +213,6 @@ export default function PartnerServices() {
   // Fallback method for backward compatibility
   const fetchAdoptionPetsFromServices = async () => {
     try {
-      console.log('Fetching adoption pets from partner_services (fallback)');
       
       const { data, error } = await supabaseClient
         .from('partner_services')
@@ -266,7 +255,6 @@ export default function PartnerServices() {
       
       setAdoptionPets(adoptionData);
     } catch (error) {
-      console.error('Error fetching adoption pets from services:', error);
     }
   };
 
@@ -294,14 +282,12 @@ export default function PartnerServices() {
         setTotalReviews(reviewsData.length);
       }
     } catch (error) {
-      console.error('Error fetching partner reviews:', error);
     }
   };
 
   const handleServicePress = (serviceId: string) => {
     // Validate service ID before navigation
     if (!serviceId || typeof serviceId !== 'string') {
-      console.error('Invalid service ID for navigation:', serviceId);
       Alert.alert('Error', 'ID de servicio inválido');
       return;
     }
@@ -309,16 +295,13 @@ export default function PartnerServices() {
     // Check if ID is a valid UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(serviceId)) {
-      console.error('Service ID is not a valid UUID for navigation:', serviceId);
       Alert.alert('Error', 'ID de servicio no válido');
       return;
     }
     
-    console.log('Navigating to service detail with valid UUID:', serviceId);
     try {
       router.push(`/services/${serviceId}?partnerId=${id}`);
     } catch (navigationError) {
-      console.error('Navigation error to service detail:', navigationError);
       Alert.alert('Error', 'No se pudo navegar al detalle del servicio');
     }
   };
@@ -333,11 +316,9 @@ export default function PartnerServices() {
     
     setLoadingDetailedReviews(true);
     try {
-      console.log('Fetching detailed reviews for partner:', partner?.id);
       
       // Validate partner ID
       if (!partner?.id || typeof partner.id !== 'string') {
-        console.error('Invalid partner ID for reviews:', partner?.id);
         return;
       }
       
@@ -357,11 +338,9 @@ export default function PartnerServices() {
         .limit(50);
 
       if (error) {
-        console.error('Error fetching detailed reviews:', error);
         return; // Don't throw, just return
       }
 
-      console.log('Reviews data received:', reviewsData?.length || 0);
       
       // Fetch user profiles and service names for each review
       const enrichedReviews = await Promise.all(
@@ -387,7 +366,6 @@ export default function PartnerServices() {
               service_name: serviceData?.name
             };
           } catch (error) {
-            console.error('Error enriching review:', error);
             return {
               ...review,
               user_profile: null,
@@ -397,10 +375,8 @@ export default function PartnerServices() {
         })
       );
       
-      console.log('Enriched reviews:', enrichedReviews);
       setDetailedReviews(enrichedReviews);
     } catch (error) {
-      console.error('Error fetching detailed reviews:', error);
     } finally {
       setLoadingDetailedReviews(false);
     }
@@ -535,7 +511,6 @@ export default function PartnerServices() {
         Alert.alert('Error', 'No se puede realizar la llamada desde este dispositivo');
       }
     } catch (error) {
-      console.error('Error making phone call:', error);
       Alert.alert('Error', 'No se pudo realizar la llamada');
     }
   };
@@ -568,7 +543,6 @@ export default function PartnerServices() {
         Alert.alert('Contacto', contactInfo);
       }
     } catch (error) {
-      console.error('Error contacting shelter:', error);
       Alert.alert('Error', 'No se pudo contactar al refugio');
     }
   };
@@ -579,10 +553,8 @@ export default function PartnerServices() {
       return;
     }
 
-    console.log('Starting adoption chat with:', { petId, petName, partnerId: id, userId: currentUser.id });
     
     if (!petId || !petName || !id) {
-      console.error('Missing required parameters for adoption chat:', { petId, petName, partnerId: id });
       Alert.alert('Error', 'Información incompleta para iniciar la conversación');
       return;
     }
@@ -593,7 +565,6 @@ export default function PartnerServices() {
 
   const createOrFindAdoptionConversation = async (petId: string, petName: string) => {
     try {
-      console.log('Creating/finding conversation for:', { petId, petName, partnerId: id, userId: currentUser?.id });
       
       if (!currentUser?.id || !id) {
         throw new Error('Usuario o partner ID no disponible');
@@ -607,13 +578,11 @@ export default function PartnerServices() {
         .eq('user_id', currentUser!.id)
         .single();
 
-      console.log('Existing conversation check:', { existingConversation, checkError });
 
       let conversationId;
 
       if (!existingConversation) {
         // No existe conversación, crear una nueva
-        console.log('Creating new conversation...');
         
         // Crear conversación usando insert directo
         const conversationData = {
@@ -629,11 +598,9 @@ export default function PartnerServices() {
           .insert([conversationData]);
 
         if (createError) {
-          console.error('Error creating conversation:', createError);
           throw createError;
         }
         
-        console.log('New conversation created successfully');
         
         // Buscar la conversación recién creada para obtener el ID
         const { data: createdConversation, error: fetchError } = await supabaseClient
@@ -645,12 +612,10 @@ export default function PartnerServices() {
           .single();
         
         if (fetchError || !createdConversation) {
-          console.error('Error fetching created conversation:', fetchError);
           throw new Error('No se pudo obtener el ID de la conversación creada');
         }
         
         conversationId = createdConversation.id;
-        console.log('Conversation ID obtained:', conversationId);
 
         // Enviar mensaje inicial
         const messageData = {
@@ -667,21 +632,16 @@ export default function PartnerServices() {
           .insert([messageData]);
         
         if (messageError) {
-          console.error('Error sending initial message:', messageError);
           // No lanzar error aquí, la conversación ya se creó
         } else {
-          console.log('Initial message sent successfully');
         }
       } else {
-        console.log('Using existing conversation:', existingConversation.id);
         conversationId = existingConversation.id;
       }
 
-      console.log('Navigating to chat with conversation ID:', conversationId);
       // Navegar al chat
       router.push(`/chat/${conversationId}?petName=${petName}`);
     } catch (error) {
-      console.error('Error starting adoption chat:', error);
       const message = error instanceof Error ? error.message : String(error);
       Alert.alert('Error', `No se pudo iniciar la conversación: ${message || 'Error desconocido'}`);
     }
@@ -811,11 +771,9 @@ export default function PartnerServices() {
           <TouchableOpacity 
             style={styles.adoptionButton}
             onPress={() => {
-              console.log('Adoption button pressed for pet:', { id: pet.id, name: pet.name });
               if (pet.id && pet.name) {
                 handleStartAdoptionChat(pet.id, pet.name);
               } else {
-                console.error('Pet ID or name is missing:', { id: pet.id, name: pet.name });
                 Alert.alert('Error', 'Información de la mascota incompleta');
               }
             }}

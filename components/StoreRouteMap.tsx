@@ -377,7 +377,6 @@ export const StoreRouteMap: React.FC<StoreRouteMapProps> = ({
 
       await Linking.openURL(url);
     } catch (error) {
-      console.error('Error opening external maps:', error);
       Alert.alert('Error', 'No se pudo abrir el mapa externo.');
     }
   };

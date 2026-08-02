@@ -114,7 +114,6 @@ export default function BusinessInsights() {
         reviewsCount: data.reviews_count || 0,
       });
     } catch (error) {
-      console.error('Error fetching partner profile:', error);
     }
   };
 
@@ -133,7 +132,6 @@ export default function BusinessInsights() {
 
   const fetchLocationBasedInsights = async () => {
     try {
-      console.log('Fetching location-based insights for partner:', partnerId);
       
       // 1. Obtener ubicación del negocio
       const [{ data: partnerData, error: partnerError }, accountSubscription] = await Promise.all([
@@ -146,7 +144,6 @@ export default function BusinessInsights() {
       ]);
       
       if (partnerError) {
-        console.error('Error fetching partner location:', partnerError);
         return;
       }
 
@@ -174,7 +171,6 @@ export default function BusinessInsights() {
       }
       
       if (!partnerData?.latitud || !partnerData?.longitud) {
-        console.log('Partner does not have GPS coordinates');
         setLocationInsights({
           nearbyPets: 0,
           sameNeighborhood: 0,
@@ -189,7 +185,6 @@ export default function BusinessInsights() {
       const partnerLat = parseFloat(partnerData.latitud);
       const partnerLon = parseFloat(partnerData.longitud);
       
-      console.log('Partner coordinates:', { lat: partnerLat, lon: partnerLon });
       
       // 2. Obtener todos los usuarios con mascotas y sus ubicaciones
       const { data: usersWithPets, error: usersError } = await supabaseClient
@@ -206,11 +201,9 @@ export default function BusinessInsights() {
         .not('pets', 'is', null);
       
       if (usersError) {
-        console.error('Error fetching users with pets:', usersError);
         return;
       }
       
-      console.log('Found users with pets:', usersWithPets?.length || 0);
       
       // 3. Calcular distancias y categorizar mascotas
       let nearbyPets = 0;
@@ -246,7 +239,6 @@ export default function BusinessInsights() {
           if (!isNaN(userLat) && !isNaN(userLon)) {
             const distance = calculateDistance(partnerLat, partnerLon, userLat, userLon);
             
-            console.log(`User ${user.id}: ${distance.toFixed(2)}km away, ${userPetsCount} pets`);
             
             // Categorizar por distancia
             if (distance <= 5) {
@@ -374,16 +366,8 @@ export default function BusinessInsights() {
         }
       });
       
-      console.log('Location insights calculated:', {
-        nearbyPets,
-        sameNeighborhood,
-        sameDepartment,
-        withinRadius,
-        recommendationsCount: recommendations.length
-      });
       
     } catch (error) {
-      console.error('Error fetching location-based insights:', error);
       setLocationInsights({
         nearbyPets: 0,
         hasCoordinates: false,
@@ -449,7 +433,6 @@ export default function BusinessInsights() {
         .select('age, age_display');
       
       if (ageError) {
-        console.error('Error fetching pets age data:', ageError);
       }
       
       const petsByAge = [
@@ -531,7 +514,6 @@ export default function BusinessInsights() {
           .gte('created_at', getDateRange(selectedTimeRange));
 
         if (ordersError) {
-          console.error('Error fetching orders data for insights:', ordersError);
         }
 
         const isOrderForCurrentPartner = (order: any) => {
@@ -598,7 +580,6 @@ export default function BusinessInsights() {
           .gte('created_at', getDateRange(selectedTimeRange));
 
         if (bookingsError) {
-          console.error('Error fetching bookings data:', bookingsError);
         }
 
         totalOperations = bookingsData?.length || 0;
@@ -685,7 +666,6 @@ export default function BusinessInsights() {
       });
 
     } catch (error) {
-      console.error('Error fetching business insights:', error);
     } finally {
       setLoading(false);
     }

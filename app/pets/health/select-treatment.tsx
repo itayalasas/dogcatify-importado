@@ -45,7 +45,6 @@ export default function SelectTreatment() {
         return;
       }
 
-      console.log(`Searching cache for ${petSpecies} - ${illness}`);
 
       const { data: cachedData, error: cacheError } = await supabaseClient
         .from('treatments_ai_cache')
@@ -58,7 +57,6 @@ export default function SelectTreatment() {
         .maybeSingle();
 
       if (cachedData && cachedData.treatments) {
-        console.log('✓ Using cached treatment data for', illness);
         const cachedTreatments = typeof cachedData.treatments === 'string'
           ? JSON.parse(cachedData.treatments)
           : cachedData.treatments;
@@ -68,7 +66,6 @@ export default function SelectTreatment() {
         return;
       }
 
-      console.log('⚠ No cache found, generating with AI...');
       const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
       const supabaseAnonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 
@@ -97,7 +94,6 @@ export default function SelectTreatment() {
       }
 
       const { treatments: aiTreatments } = await response.json();
-      console.log(`✓ Generated ${aiTreatments.length} treatment recommendations via AI`);
 
       const cacheKey = `${petSpecies}_${illness}_general`;
       await supabaseClient
@@ -111,11 +107,9 @@ export default function SelectTreatment() {
             cache_key: cacheKey
         });
 
-      console.log('✓ Saved to cache for future use');
       setTreatments(aiTreatments);
       setFilteredTreatments(aiTreatments);
     } catch (error) {
-      console.error('Error fetching treatments:', error);
     } finally {
       setLoading(false);
     }
@@ -135,7 +129,6 @@ export default function SelectTreatment() {
   };
 
   const handleSelectTreatment = (treatment: any) => {
-    console.log('Navigating back with treatment:', treatment.name);
     router.replace({
       pathname: returnPath as any,
       params: {

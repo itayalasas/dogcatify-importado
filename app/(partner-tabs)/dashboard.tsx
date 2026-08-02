@@ -56,12 +56,10 @@ export default function PartnerDashboard() {
     if (!currentUser?.id || !businessId) {
       setLoading(false);
       setPartnerRows([]);
-      console.log('Dashboard - Missing currentUser or businessId:', businessId);
       return;
     }
 
     // Use specific business ID from params
-    console.log('Loading dashboard for specific business ID:', businessId as string);
     
     const fetchPartnerProfile = async () => {
       try {
@@ -96,7 +94,6 @@ export default function PartnerDashboard() {
           fetchDashboardData(partnerData.id);
         }
       } catch (error) {
-        console.error('Error fetching partner profile:', error);
       } finally {
         setLoading(false);
       }
@@ -130,7 +127,6 @@ export default function PartnerDashboard() {
           filter: `partner_id=eq.${businessId}`
         },
         (payload) => {
-          console.log('Booking changed, refreshing dashboard data');
           fetchDashboardData(businessId as string);
         }
       )
@@ -146,7 +142,6 @@ export default function PartnerDashboard() {
           filter: `partner_id=eq.${businessId}`
         },
         (payload) => {
-          console.log('Order changed, refreshing dashboard data');
           fetchDashboardData(businessId as string);
         }
       )
@@ -195,7 +190,6 @@ export default function PartnerDashboard() {
 
   const fetchDashboardData = async (partnerId: string) => {
     try {
-      console.log('Fetching dashboard data for partner ID:', partnerId, 'with filter:', dateFilter);
 
       const { startDate, endDate } = getDateRange();
       
@@ -211,14 +205,12 @@ export default function PartnerDashboard() {
       if (bookingsError) throw bookingsError;
 
       const bookings = bookingsData || [];
-      console.log(`Found ${bookings.length} bookings for partner in date range`);
 
       // Calculate stats
       const pendingBookings = bookings.filter(booking => booking.status === 'pending');
       const completedBookings = bookings.filter(booking => booking.status === 'completed');
 
       const bookingsRevenue = bookings.reduce((sum, booking) => sum + (booking.total_amount || 0), 0);
-      console.log(`Bookings stats: ${bookings.length} bookings, $${bookingsRevenue} revenue`);
       
       // Get recent bookings
       const recent = bookings
@@ -239,7 +231,6 @@ export default function PartnerDashboard() {
         .order('created_at', { ascending: false });
 
       if (ordersError) {
-        console.error('Error fetching orders:', ordersError);
       }
 
       const orders = (ordersData || []).filter(order => {
@@ -251,7 +242,6 @@ export default function PartnerDashboard() {
         }
         return false;
       });
-      console.log(`Found ${orders.length} orders for partner in date range`);
 
       const isServiceOrder = (order: any) => order.order_type === 'service_booking';
 
@@ -293,7 +283,6 @@ export default function PartnerDashboard() {
 
       const ordersRevenue = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
 
-      console.log(`Orders stats: ${pendingOrders.length} pending, ${completedOrders.length} completed, ${processingOrders.length} processing`);
 
       setStats(prev => ({
         ...prev,
@@ -335,10 +324,8 @@ export default function PartnerDashboard() {
           .eq('is_active', true);
         
         if (productsError) {
-          console.error('Error fetching products count:', productsError);
         } else {
           const productsCount = productsData?.length || 0;
-          console.log(`Found ${productsCount} active products for partner`);
           
           setStats(prev => ({
             ...prev,
@@ -346,11 +333,9 @@ export default function PartnerDashboard() {
           }));
         }
       } catch (error) {
-        console.error('Error in products fetch:', error);
       }
       
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
     }
   };
 
@@ -420,7 +405,6 @@ export default function PartnerDashboard() {
     if (partnerProfile?.id) {
       // Si es un refugio, redirigir al formulario de adopción
       if (partnerProfile.businessType === 'shelter') {
-        console.log('Dashboard: Redirecting to adoption form for shelter');
         router.push({
           pathname: '/partner/add-adoption-pet',
           params: {
@@ -428,7 +412,6 @@ export default function PartnerDashboard() {
           }
         });
       } else {
-        console.log('Dashboard: Redirecting to service form for business type:', partnerProfile.businessType);
         router.push({
           pathname: '/partner/add-service',
           params: { 

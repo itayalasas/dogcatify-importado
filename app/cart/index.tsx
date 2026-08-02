@@ -110,11 +110,9 @@ export default function Cart() {
   // Recargar stocks y ocultar loader cada vez que la pantalla se enfoca (al volver desde Mercado Pago)
   useFocusEffect(
     React.useCallback(() => {
-      console.log('📱 useFocusEffect triggered - isProcessingPayment:', isProcessingPayment.current);
 
       // CRÍTICO: NO ocultar el loader si estamos procesando pago
       if (isProcessingPayment.current) {
-        console.log('⚠️ Estamos procesando pago, NO ocultar loader');
         return;
       }
 
@@ -122,7 +120,6 @@ export default function Cart() {
       // Esto permite que Mercado Pago se abra completamente antes de ocultar el loader
       const timer = setTimeout(() => {
         if (paymentLoading && !isProcessingPayment.current) {
-          console.log('🔄 Usuario regresó a la pantalla del carrito, ocultando loader');
           setPaymentLoading(false);
           setPaymentMessage('Preparando tu pago con Mercado Pago');
         }
@@ -139,11 +136,9 @@ export default function Cart() {
   // NUEVO: Listener de AppState para detectar cuando la app vuelve al primer plano (iOS fix)
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
-      console.log('📱 AppState changed to:', nextAppState);
 
       // Si la app vuelve al primer plano ('active') y el loader está visible
       if (nextAppState === 'active' && paymentLoading && !isProcessingPayment.current) {
-        console.log('✅ iOS: App returned to foreground, hiding payment loader');
 
         // En iOS, agregar un pequeño delay para asegurar que la transición se complete
         const delay = Platform.OS === 'ios' ? 800 : 500;
@@ -178,7 +173,6 @@ export default function Cart() {
         setProductStocks(stocks);
       }
     } catch (error) {
-      console.error('Error loading product stocks:', error);
     }
   };
 
@@ -220,7 +214,6 @@ export default function Cart() {
         }
       }
     } catch (error) {
-      console.error('Error loading partner shipping info:', error);
     }
   };
 
@@ -247,7 +240,6 @@ export default function Cart() {
         .maybeSingle();
 
       if (error) {
-        console.error('Error loading address with departments:', error);
         // Si falla el JOIN, intentamos sin departments (fallback)
         const { data: profileSimple } = await supabaseClient
           .from('profiles')
@@ -291,7 +283,6 @@ export default function Cart() {
         setSavedAddress(loadedAddress);
       }
     } catch (error) {
-      console.error('Error loading user address:', error);
     } finally {
       setLoadingAddress(false);
     }
@@ -354,31 +345,22 @@ export default function Cart() {
   };
 
   const handlePayWithMercadoPago = async () => {
-    console.log('💳 ========== INICIO handlePayWithMercadoPago ==========');
 
     // CRÍTICO: Activar flag de procesamiento para evitar que useFocusEffect oculte el loader
     isProcessingPayment.current = true;
-    console.log('🚩 isProcessingPayment = true');
 
     // Cerrar el modal de pago para mostrar el loader en pantalla completa
     setShowPaymentMethodModal(false);
-    console.log('✅ Modal de métodos de pago cerrado');
 
     setPaymentLoading(true);
-    console.log('✅ paymentLoading = true, loader DEBE estar visible');
 
     setPaymentMessage('Preparando tu pago...');
-    console.log('✅ Mensaje inicial establecido');
 
     // Guardar el tiempo de inicio para garantizar 5 segundos mínimos
     const startTime = Date.now();
     const MIN_LOADING_TIME = 5000; // 5 segundos
-    console.log(`⏱️ Tiempo mínimo de loading: ${MIN_LOADING_TIME}ms`);
 
     try {
-      console.log('=== Iniciando proceso de checkout ===');
-      console.log('Cart items:', cart);
-      console.log('Customer info:', currentUser);
 
       const addressToUse = useNewAddress ? newAddress : savedAddress;
 
@@ -399,7 +381,6 @@ export default function Cart() {
         if (partnerInfo?.city) fullAddress += `, ${partnerInfo.city}`;
       }
 
-      console.log('Shipping address:', fullAddress);
 
       const totalShippingCost = getEffectiveShippingCost();
 
@@ -414,9 +395,6 @@ export default function Cart() {
         totalShippingCost
       );
 
-      console.log('Orders created:', orders.length);
-      console.log('Payment preferences created:', paymentPreferences.length);
-      console.log('Environment detected:', isTestMode ? 'TEST' : 'PRODUCTION');
 
       if (paymentPreferences.length > 0) {
         const preference = paymentPreferences[0];
@@ -436,8 +414,6 @@ export default function Cart() {
           throw new Error('No se pudo obtener la URL de pago');
         }
 
-        console.log('✅ Orden creada exitosamente');
-        console.log('URL de pago:', paymentUrl);
 
         // Detect environment from payment URL (same as services)
         const isTestModeByUrl = paymentUrl.includes('sandbox');
@@ -449,19 +425,15 @@ export default function Cart() {
         const remainingTime = Math.max(0, MIN_LOADING_TIME - elapsedTime);
 
         if (remainingTime > 0) {
-          console.log(`⏳ Esperando ${remainingTime}ms para completar tiempo mínimo de loading`);
           await new Promise(resolve => setTimeout(resolve, remainingTime));
         }
 
         // Open Mercado Pago directly (same as services)
-        console.log('🚀 Abriendo Mercado Pago...');
 
         let openResult;
         try {
           openResult = await openMercadoPagoPayment(paymentUrl, isTestModeByUrl);
-          console.log('📱 openMercadoPagoPayment completado:', openResult);
         } catch (openMPError: any) {
-          console.error('❌ Exception al abrir Mercado Pago:', openMPError);
           openResult = {
             success: false,
             openedInApp: false,
@@ -470,11 +442,9 @@ export default function Cart() {
         }
 
         if (!openResult.success) {
-          console.error('❌ Error abriendo Mercado Pago');
 
           // CRÍTICO: Desactivar flag de procesamiento si falla
           isProcessingPayment.current = false;
-          console.log('🚩 isProcessingPayment = false (error al abrir MP)');
 
           // CRÍTICO: Ocultar loader si falló al abrir
           setPaymentLoading(false);
@@ -491,13 +461,10 @@ export default function Cart() {
             );
           }, 300);
         } else {
-          console.log('✅ Mercado Pago abierto exitosamente');
-          console.log('⏳ Loader DEBE permanecer visible hasta que el usuario regrese');
 
           // CRÍTICO: Desactivar flag de procesamiento DESPUÉS de abrir MP exitosamente
           // Esto permite que useFocusEffect oculte el loader cuando el usuario regrese
           isProcessingPayment.current = false;
-          console.log('🚩 isProcessingPayment = false (MP abierto, esperando retorno del usuario)');
 
           // IMPORTANTE: NO ocultar el loader aquí, se ocultará automáticamente cuando el usuario vuelva a la app
           // El useFocusEffect se encarga de ocultar el loader cuando regresa
@@ -507,11 +474,9 @@ export default function Cart() {
         throw new Error('No se pudo crear la preferencia de pago');
       }
     } catch (error: any) {
-      console.error('❌ Error with cart checkout:', error);
 
       // CRÍTICO: Desactivar flag de procesamiento si hay error
       isProcessingPayment.current = false;
-      console.log('🚩 isProcessingPayment = false (error en checkout)');
 
       // CRÍTICO: Ocultar loader inmediatamente
       setPaymentLoading(false);

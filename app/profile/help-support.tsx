@@ -45,7 +45,6 @@ export default function HelpSupport() {
         );
       }
     } catch (error) {
-      console.error('Error opening email:', error);
       Alert.alert('Error', 'No se pudo abrir la aplicación de correo');
     }
   };
@@ -65,7 +64,6 @@ export default function HelpSupport() {
         await Linking.openURL(webUrl);
       }
     } catch (error) {
-      console.error('Error opening WhatsApp:', error);
       Alert.alert(
         'Error',
         'No se pudo abrir WhatsApp. Verifica que esté instalado en tu dispositivo.',

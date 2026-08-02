@@ -35,7 +35,6 @@ export default function PetMatingScreen() {
       const petData = await fetchCurrentPet();
       await Promise.all([fetchCandidates(petData), fetchMatches()]);
     } catch (error) {
-      console.error('Error initializing pet matching:', error);
     } finally {
       setLoading(false);
     }
@@ -59,7 +58,6 @@ export default function PetMatingScreen() {
       .maybeSingle();
 
     if (profileError) {
-      console.error('Error fetching mating profile:', profileError);
       setMatingProfile(null);
       return data || null;
     }
@@ -143,7 +141,6 @@ export default function PetMatingScreen() {
       setCandidates(filteredCandidates);
       setCurrentIndex(0);
     } catch (error) {
-      console.error('Error fetching candidates:', error);
     }
   };
 
@@ -221,7 +218,6 @@ export default function PetMatingScreen() {
 
       setMatches(enrichedMatches);
     } catch (error) {
-      console.error('Error fetching matches:', error);
     }
   };
 
@@ -235,7 +231,6 @@ export default function PetMatingScreen() {
       .maybeSingle();
 
     if (reciprocalError) {
-      console.error('Error checking reciprocal like:', reciprocalError);
       return false;
     }
 
@@ -261,7 +256,6 @@ export default function PetMatingScreen() {
       }, { onConflict: 'match_key' });
 
     if (matchError) {
-      console.error('Error creating match:', matchError);
       return false;
     }
 
@@ -348,7 +342,6 @@ export default function PetMatingScreen() {
         setCurrentIndex(prev => prev + 1);
       }
     } catch (swipeError) {
-      console.error('Error saving swipe:', swipeError);
       Alert.alert('Error', 'No se pudo registrar la acción. Intenta nuevamente.');
     } finally {
       setActionLoading(false);
@@ -383,7 +376,6 @@ export default function PetMatingScreen() {
         }
       });
     } catch (error) {
-      console.error('Error opening match chat:', error);
       Alert.alert('Error', 'No se pudo abrir el chat del match.');
     }
   };

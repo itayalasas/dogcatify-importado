@@ -53,7 +53,6 @@ class EnvConfigService {
 
   private constructor() {
     // @ts-ignore
-    console.log('[EnvConfig] 🏗️ Constructor - Global state initialized:', global.__envInitialized);
   }
 
   public static getInstance(): EnvConfigService {
@@ -101,17 +100,14 @@ class EnvConfigService {
   public async initialize(forceRefresh = false): Promise<void> {
     // Si ya está inicializado, retornar inmediatamente salvo que pidamos refresco forzado
     if (!forceRefresh && this.initialized && this.config) {
-      console.log('[EnvConfig] ✅ Already initialized, skipping');
       return;
     }
 
     // Si ya está cargando, esperar a que termine
     if (this.loading && this.initPromise) {
       if (forceRefresh) {
-        console.log('[EnvConfig] 🔄 Force refresh requested while a config load is in progress; waiting and reloading...');
         return this.initPromise
           .catch((error) => {
-            console.warn('[EnvConfig] ⚠️ Current config load failed before force refresh, continuing anyway:', error);
           })
           .then(async () => {
             this.loading = false;
@@ -120,7 +116,6 @@ class EnvConfigService {
           });
       }
 
-      console.log('[EnvConfig] ⏳ Already loading, waiting...');
       return this.initPromise;
     }
 
@@ -137,17 +132,12 @@ class EnvConfigService {
 
   private async _loadConfig(forceRefresh = false): Promise<void> {
     try {
-      console.log('[EnvConfig] 🚀 Initializing environment configuration...', {
-        forceRefresh,
-      });
-      console.log('[EnvConfig] 🏗️ Execution environment:', Constants.executionEnvironment);
 
       // 1. Intentar cargar desde caché primero (más rápido), salvo que se pida refresco forzado
       if (!forceRefresh) {
         const cachedConfig = await this._loadFromCache();
         if (cachedConfig) {
           this.config = cachedConfig;
-          console.log('[EnvConfig] 📦 Loaded from cache');
           this.initialized = true;
           return;
         }
@@ -155,32 +145,22 @@ class EnvConfigService {
 
       // 2. SIEMPRE intentar API Gateway primero si está configurado
       const apiGatewayConfig = Constants.expoConfig?.extra?.apiGateway;
-      console.log('[EnvConfig] 🔍 API Gateway config:', {
-        hasUrl: !!apiGatewayConfig?.url,
-        hasApiKey: !!apiGatewayConfig?.apiKey,
-        url: apiGatewayConfig?.url,
-      });
 
       if (apiGatewayConfig?.url && apiGatewayConfig?.apiKey) {
-        console.log('[EnvConfig] 🌐 API Gateway configured, loading from server...');
         try {
           const config = await this._fetchAndCacheConfig(apiGatewayConfig.url, apiGatewayConfig.apiKey);
           this.config = config;
           this.initialized = true;
-          console.log('[EnvConfig] ✅ Configuration loaded from API Gateway');
           return;
         } catch (apiError: any) {
-          console.error('[EnvConfig] ❌ Failed to load from API Gateway:', apiError.message);
 
           // Fallback a variables embebidas si existen en el build.
           // Esto evita dejar la app trabada si el gateway falla en producción.
           const fallbackEnv = this._loadFromProcessEnv();
           if (fallbackEnv) {
-            console.warn('[EnvConfig] ⚠️ Falling back to process.env after API Gateway failure');
             this.config = fallbackEnv;
             this.initialized = true;
             await this._saveToCache(fallbackEnv);
-            console.log('[EnvConfig] ✅ Configuration loaded from process.env fallback');
             return;
           }
 
@@ -192,14 +172,12 @@ class EnvConfigService {
       }
 
       // 3. Si NO hay API Gateway configurado, intentar process.env (solo para desarrollo local)
-      console.log('[EnvConfig] 🔧 No API Gateway configured, trying process.env (development mode)...');
       const envVars = this._loadFromProcessEnv();
 
       if (envVars) {
         this.config = envVars;
         this.initialized = true;
         await this._saveToCache(envVars);
-        console.log('[EnvConfig] ✅ Configuration loaded from process.env (development)');
         return;
       }
 
@@ -211,8 +189,6 @@ class EnvConfigService {
       );
 
     } catch (error: any) {
-      console.error('[EnvConfig] ❌ Failed to load configuration:', error);
-      console.error('[EnvConfig] ❌ Error message:', error.message);
 
       // NO usar fallback - la app debe fallar claramente si no puede cargar configuración
       throw error;
@@ -225,9 +201,6 @@ class EnvConfigService {
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        console.log(`[EnvConfig] 📡 Fetching from API Gateway (attempt ${attempt}/${MAX_RETRIES})...`);
-        console.log('[EnvConfig]    URL:', url);
-        console.log('[EnvConfig]    API Key (first 20 chars):', apiKey.substring(0, 20) + '...');
 
         // Timeout de 60 segundos para redes lentas
         const controller = new AbortController();
@@ -236,7 +209,6 @@ class EnvConfigService {
           timeoutReject = reject;
         });
         const timeoutId = setTimeout(() => {
-          console.error(`[EnvConfig] ⏱️ API Gateway request timeout after ${TIMEOUT_MS}ms (attempt ${attempt})`);
           controller.abort();
           timeoutReject?.(new Error(`API Gateway request timeout after ${TIMEOUT_MS}ms`));
         }, TIMEOUT_MS);
@@ -251,7 +223,6 @@ class EnvConfigService {
           signal: controller.signal,
         });
 
-        console.log('[EnvConfig] ⏳ Waiting for API Gateway response...');
         let response!: Response;
         try {
           response = await Promise.race([fetchPromise, timeoutPromise]);
@@ -259,14 +230,8 @@ class EnvConfigService {
           clearTimeout(timeoutId);
         }
 
-        console.log('[EnvConfig] 📨 Response received:', {
-          status: response.status,
-          statusText: response.statusText,
-          ok: response.ok,
-        });
 
         if (!response.ok) {
-          console.error('[EnvConfig] ❌ API Gateway error status:', response.status, response.statusText);
 
           const gatewayError = new Error(`API Gateway returned ${response.status}: ${response.statusText}`);
           (gatewayError as any).retryable = response.status >= 500;
@@ -274,29 +239,23 @@ class EnvConfigService {
         }
 
         const data: ApiGatewayResponse = await response.json();
-        console.log('[EnvConfig] 📦 Received data keys:', Object.keys(data));
 
         if (!data.variables) {
-          console.error('[EnvConfig] ❌ Invalid response structure');
           throw new Error('Invalid API Gateway response: missing variables');
         }
 
-        console.log('[EnvConfig] ✅ Variables received:', Object.keys(data.variables));
 
         // Guardar en caché
         await this._saveToCache(data.variables);
 
-        console.log('[EnvConfig] 💾 Configuration cached successfully');
 
         return data.variables;
       } catch (error: any) {
         const isLastAttempt = attempt === MAX_RETRIES;
 
         if (error.name === 'AbortError' || error.message?.includes('request timeout')) {
-          console.error(`[EnvConfig] ❌ Request timeout (attempt ${attempt}/${MAX_RETRIES})`);
 
           if (!isLastAttempt) {
-            console.log(`[EnvConfig] 🔄 Retrying in 2 seconds...`);
             await new Promise(resolve => setTimeout(resolve, 2000));
             continue;
           }
@@ -304,9 +263,6 @@ class EnvConfigService {
           throw new Error('La conexión es muy lenta. Por favor, verifica tu conexión a internet y reintenta.');
         }
 
-        console.error(`[EnvConfig] ❌ Error fetching from API Gateway (attempt ${attempt}/${MAX_RETRIES}):`);
-        console.error('[EnvConfig]    Type:', error.constructor.name);
-        console.error('[EnvConfig]    Message:', error.message);
 
         if ((error as any).retryable === false) {
           throw error;
@@ -314,7 +270,6 @@ class EnvConfigService {
 
         if (error.message?.includes('Network request failed')) {
           if (!isLastAttempt) {
-            console.log(`[EnvConfig] 🔄 Retrying in 2 seconds...`);
             await new Promise(resolve => setTimeout(resolve, 2000));
             continue;
           }
@@ -328,7 +283,6 @@ class EnvConfigService {
         }
 
         // Esperar antes de reintentar
-        console.log(`[EnvConfig] 🔄 Retrying in 2 seconds...`);
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
@@ -344,7 +298,6 @@ class EnvConfigService {
         return JSON.parse(cached);
       }
     } catch (error) {
-      console.warn('[EnvConfig] ⚠️ Error loading from cache:', error);
     }
     return null;
   }
@@ -353,7 +306,6 @@ class EnvConfigService {
     try {
       await AsyncStorage.setItem('@env_config', JSON.stringify(config));
     } catch (error) {
-      console.warn('[EnvConfig] ⚠️ Error saving to cache:', error);
     }
   }
 
@@ -361,7 +313,6 @@ class EnvConfigService {
     try {
       // Intentar cargar desde process.env como fallback
       if (process.env.EXPO_PUBLIC_SUPABASE_URL && process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
-        console.log('[EnvConfig] 📝 Creating config from process.env');
         return {
           EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
           EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
@@ -385,7 +336,6 @@ class EnvConfigService {
         };
       }
     } catch (error) {
-      console.warn('[EnvConfig] ⚠️ Error loading from process.env:', error);
     }
     return null;
   }
@@ -396,12 +346,9 @@ class EnvConfigService {
    */
   public get(key: string): string | undefined {
     if (!this.initialized || !this.config) {
-      console.warn(`[EnvConfig] ⚠️ Trying to get '${key}' before initialization`);
-      console.warn(`[EnvConfig]    Initialized: ${this.initialized}, Config exists: ${!!this.config}`);
       return undefined;
     }
     const value = this.config[key];
-    console.log(`[EnvConfig] 📖 Getting '${key}': ${value ? (value.substring(0, 50) + '...') : 'UNDEFINED'}`);
     return value;
   }
 
@@ -431,13 +378,10 @@ class EnvConfigService {
    */
   public async clearCache(): Promise<void> {
     try {
-      console.log('[EnvConfig] 🗑️ Clearing cache...');
       await AsyncStorage.removeItem('@env_config');
       this.config = null;
       this.initialized = false;
-      console.log('[EnvConfig] ✅ Cache cleared');
     } catch (error) {
-      console.error('[EnvConfig] ❌ Error clearing cache:', error);
     }
   }
 
@@ -445,7 +389,6 @@ class EnvConfigService {
    * Fuerza una recarga de la configuración
    */
   public async reload(): Promise<void> {
-    console.log('[EnvConfig] 🔄 Forcing configuration reload...');
     this.initialized = false;
     this.config = null;
     this.loading = false;

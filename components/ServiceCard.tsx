@@ -15,12 +15,6 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
   
   // Debug service data
   React.useEffect(() => {
-    console.log('ServiceCard - Service data:', {
-      id: service?.id,
-      partnerId: service?.partnerId,
-      name: service?.name,
-      partnerType: service?.partnerType
-    });
   }, [service]);
   
   const [reviews, setReviews] = React.useState<any[]>([]);
@@ -46,7 +40,6 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
         .single();
       
       if (error) {
-        console.error('Error fetching partner logo:', error);
         return;
       }
       
@@ -54,7 +47,6 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
         setPartnerLogo(partnerData.logo);
       }
     } catch (error) {
-      console.error('Error fetching partner logo:', error);
     }
   };
 
@@ -64,12 +56,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
       setAverageRating(service.rating || 0);
       setTotalReviews(service.reviews || 0);
       
-      console.log('Service reviews set from partner data:', {
-        rating: service.rating || 0,
-        reviews: service.reviews || 0
-      });
     } catch (error) {
-      console.error('Error setting service reviews:', error);
     }
   };
 
@@ -78,18 +65,15 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
     
     setLoadingReviews(true);
     try {
-      console.log('Fetching detailed reviews for partner:', service.partnerId);
       
       // Validate partner ID is a valid UUID
       if (!service.partnerId || typeof service.partnerId !== 'string') {
-        console.error('Invalid partner ID:', service.partnerId);
         setLoadingReviews(false);
         return;
       }
       
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(service.partnerId)) {
-        console.error('Partner ID is not a valid UUID:', service.partnerId);
         setLoadingReviews(false);
         return;
       }
@@ -110,12 +94,10 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
         .limit(50); // Load more reviews for the modal
 
       if (error) {
-        console.error('Error fetching reviews:', error);
         setLoadingReviews(false);
         return; // Don't throw, just return
       }
 
-      console.log('Reviews data received:', reviewsData?.length || 0);
       
       // Fetch user profiles and service names for each review
       const enrichedReviews = await Promise.all(
@@ -141,7 +123,6 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
               service_name: serviceData?.name
             };
           } catch (error) {
-            console.error('Error enriching review:', error);
             return {
               ...review,
               user_profile: null,
@@ -151,10 +132,8 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
         })
       );
       
-      console.log('Enriched reviews:', enrichedReviews);
       setReviews(enrichedReviews);
     } catch (error) {
-      console.error('Error fetching detailed reviews:', error);
     } finally {
       setLoadingReviews(false);
     }

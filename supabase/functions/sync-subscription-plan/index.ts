@@ -76,7 +76,6 @@ const getTraceId = (req: Request, body?: JsonBody) =>
   crypto.randomUUID();
 
 const logInfo = (traceId: string, message: string, data?: Record<string, unknown>) => {
-  console.log(`[sync-subscription-plan][${traceId}] ${message}`, data || {});
 };
 
 const logError = (traceId: string, message: string, error: unknown, data?: Record<string, unknown>) => {
@@ -84,10 +83,6 @@ const logError = (traceId: string, message: string, error: unknown, data?: Recor
     ? { name: error.name, message: error.message, stack: error.stack }
     : { error };
 
-  console.error(`[sync-subscription-plan][${traceId}] ${message}`, {
-    ...errorPayload,
-    ...(data || {}),
-  });
 };
 
 const getAuthUser = async (supabase: any, req: Request) => {

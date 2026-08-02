@@ -97,20 +97,15 @@ async function readJsonBody(req: Request): Promise<any> {
 
     return JSON.parse(rawBody);
   } catch (error) {
-    console.warn('Could not parse Mercado Pago webhook body as JSON:', {
-      message: error instanceof Error ? error.message : String(error),
-    });
     return {};
   }
 }
 
 async function syncOrderPaymentByOrderId(supabase: any, orderId: string): Promise<boolean> {
   try {
-    console.log(`🔄 Manual payment sync requested for order: ${orderId}`);
 
     const tokenCandidates = await getMercadoPagoTokenCandidates(supabase);
     if (tokenCandidates.length === 0) {
-      console.error('❌ No Mercado Pago access tokens available for manual sync');
       return false;
     }
 
@@ -140,7 +135,6 @@ async function syncOrderPaymentByOrderId(supabase: any, orderId: string): Promis
         continue;
       }
 
-      console.log(`✅ Found payment ${selectedPayment.id} for order ${orderId}, processing...`);
 
       await processPaymentNotification(supabase, {
         id: Number(selectedPayment.id),
@@ -160,10 +154,8 @@ async function syncOrderPaymentByOrderId(supabase: any, orderId: string): Promis
       return true;
     }
 
-    console.warn(`⚠️ No payments found in MP for order ${orderId}`);
     return false;
   } catch (error) {
-    console.error('❌ Error syncing order payment by order_id:', error);
     return false;
   }
 }
@@ -174,14 +166,12 @@ async function verifyWebhookSignature(req: Request, notificationData: any): Prom
     const xRequestId = req.headers.get('x-request-id');
 
     if (!xSignature || !xRequestId) {
-      console.warn('Missing signature headers');
       return false;
     }
 
     const webhookSecret = Deno.env.get('MERCADOPAGO_WEBHOOK_SECRET');
 
     if (!webhookSecret) {
-      console.warn('MERCADOPAGO_WEBHOOK_SECRET not configured, skipping validation');
       return true;
     }
 
@@ -203,7 +193,6 @@ async function verifyWebhookSignature(req: Request, notificationData: any): Prom
     }
 
     if (!ts || !hash) {
-      console.error('Invalid signature format');
       return false;
     }
 
@@ -214,12 +203,8 @@ async function verifyWebhookSignature(req: Request, notificationData: any): Prom
                    '';
 
     if (!dataId) {
-      console.error('Missing data.id for signature validation');
-      console.error('URL search params:', Object.fromEntries(url.searchParams.entries()));
-      console.error('Notification data:', notificationData);
       const webhookSecret = Deno.env.get('MERCADOPAGO_WEBHOOK_SECRET');
       if (!webhookSecret) {
-        console.warn('⚠️ No webhook secret configured - allowing request in dev mode');
         return true;
       }
       return false;
@@ -228,7 +213,6 @@ async function verifyWebhookSignature(req: Request, notificationData: any): Prom
     const signatureTemplate = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
     const secretKey = webhookSecret;
 
-    console.log('Validating signature with template:', signatureTemplate);
 
     const encoder = new TextEncoder();
     const keyData = encoder.encode(secretKey);
@@ -249,18 +233,11 @@ async function verifyWebhookSignature(req: Request, notificationData: any): Prom
     const isValid = computedHash === hash;
 
     if (!isValid) {
-      console.error('Signature verification failed');
-      console.error('Expected:', hash);
-      console.error('Computed:', computedHash);
-      console.error('Template used:', signatureTemplate);
-      console.error('Data ID used:', dataId);
     } else {
-      console.log('✅ Signature verified successfully');
     }
 
     return isValid;
   } catch (error) {
-    console.error('Error verifying signature:', error);
     return false;
   }
 }
@@ -281,7 +258,6 @@ serve(async (req: Request) => {
     const url = new URL(req.url);
     const urlParams = Object.fromEntries(url.searchParams.entries());
 
-    console.log('Webhook URL params:', urlParams);
 
     const requestBody = await readJsonBody(req);
 
@@ -302,23 +278,11 @@ serve(async (req: Request) => {
 
     const notification: WebhookNotification = requestBody;
 
-    console.log('Received MP webhook notification FULL:', JSON.stringify(notification, null, 2));
-    console.log('Received MP webhook notification summary:', {
-      type: notification.type,
-      action: notification.action,
-      data_id: notification.data?.id,
-      live_mode: notification.live_mode,
-      urlParams: urlParams
-    });
 
     const paymentIdFromUrl = urlParams['id'] || urlParams['data.id'];
     const topicFromUrl = urlParams['topic'] || urlParams['type'];
 
     if (paymentIdFromUrl && topicFromUrl) {
-      console.log('📨 Payment notification via URL params:', {
-        topic: topicFromUrl,
-        id: paymentIdFromUrl
-      });
 
       const normalizedNotification = {
         ...notification,
@@ -341,7 +305,6 @@ serve(async (req: Request) => {
       } else if (topicFromUrl === 'subscription_preapproval_plan') {
         await processSubscriptionPlanNotification(supabase, normalizedNotification as WebhookNotification);
       } else {
-        console.warn(`Unknown URL param topic: ${topicFromUrl}`);
       }
 
       return new Response(
@@ -359,9 +322,7 @@ serve(async (req: Request) => {
     const isValid = await verifyWebhookSignature(req, notification);
 
     if (!isValid) {
-      console.error('Invalid webhook signature - rejecting request');
       if (notification.data?.id || notification.type) {
-        console.warn('⚠️ Processing despite signature failure (development mode)');
       } else {
         return new Response(
           JSON.stringify({ error: 'Invalid signature' }),
@@ -375,10 +336,8 @@ serve(async (req: Request) => {
         );
       }
     } else {
-      console.log('✅ Webhook signature verified');
     }
 
-    console.log('Processing webhook notification...');
 
     if (notification.type === 'payment') {
       await processPaymentNotification(supabase, notification);
@@ -391,7 +350,6 @@ serve(async (req: Request) => {
     } else if (notification.type === 'subscription_preapproval_plan') {
       await processSubscriptionPlanNotification(supabase, notification);
     } else {
-      console.warn('Unknown notification type:', notification.type);
     }
 
     return new Response(
@@ -405,7 +363,6 @@ serve(async (req: Request) => {
       }
     );
   } catch (error) {
-    console.error('Webhook error:', error);
     
     return new Response(
       JSON.stringify({ error: 'Webhook processing failed' }),
@@ -546,10 +503,6 @@ const createSplitChildOrders = async (
     .eq('parent_order_id', masterOrder.id);
 
   if (existingChildrenError) {
-    console.warn('[MP Webhook][Split] Could not check existing split children', {
-      orderId: masterOrder.id,
-      error: existingChildrenError.message,
-    });
   }
 
   const existingPartnerIds = new Set(
@@ -635,10 +588,6 @@ const createSplitChildOrders = async (
 
   for (const group of groupData) {
     if (group.isExisting) {
-      console.log('[MP Webhook][Split] Child order already exists, skipping insert', {
-        parentOrderId: masterOrder.id,
-        partnerId: group.partnerId,
-      });
       continue;
     }
 
@@ -713,10 +662,6 @@ const createSplitChildOrders = async (
 
     if (insertChildError) {
       if (insertChildError.code === '23505') {
-        console.warn('[MP Webhook][Split] Duplicate child order ignored', {
-          parentOrderId: masterOrder.id,
-          partnerId: group.partnerId,
-        });
         continue;
       }
 
@@ -724,11 +669,6 @@ const createSplitChildOrders = async (
     }
 
     createdCount += 1;
-    console.log('[MP Webhook][Split] Child order created', {
-      parentOrderId: masterOrder.id,
-      childOrderId: insertedChild?.id || null,
-      partnerId: group.partnerId,
-    });
   }
 
   return {
@@ -740,7 +680,6 @@ const createSplitChildOrders = async (
 async function processPaymentNotification(supabase: any, notification: WebhookNotification) {
   try {
     const paymentId = notification.data.id;
-    console.log(`📨 Processing payment notification for payment ID: ${paymentId}`);
 
     const { data: adminConfig, error: adminError } = await supabase
       .from('admin_settings')
@@ -752,7 +691,6 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
     let accessToken = '';
 
     if (adminConfig?.value?.access_token) {
-      console.log(`🔍 Attempting to fetch payment with admin credentials...`);
       const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
         headers: {
           'Authorization': `Bearer ${adminConfig.value.access_token}`,
@@ -763,9 +701,7 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
       if (mpResponse.ok) {
         paymentData = await mpResponse.json();
         accessToken = adminConfig.value.access_token;
-        console.log('✅ Payment fetched with admin credentials');
       } else {
-        console.log('⚠️ Could not fetch with admin credentials, will try partner credentials');
       }
     }
 
@@ -773,7 +709,6 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
     let mpResponse: any;
 
     if (!paymentData) {
-      console.log('⚠️ No payment data from admin credentials, trying partner credentials...');
 
       const { data: partners, error: partnersError } = await supabase
         .from('partners')
@@ -781,13 +716,11 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
         .not('mercadopago_config', 'is', null);
 
       if (partners && partners.length > 0) {
-        console.log(`🔍 Found ${partners.length} partners with MP credentials, trying each...`);
 
         for (const partner of partners) {
           const partnerToken = partner.mercadopago_config?.access_token;
           if (!partnerToken) continue;
 
-          console.log(`🔑 Trying credentials from partner: ${partner.business_name} (${partnerToken.substring(0, 20)}...)`);
 
           const testResponse = await fetch(mpApiUrl, {
             headers: {
@@ -799,16 +732,13 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
           if (testResponse.ok) {
             paymentData = await testResponse.json();
             accessToken = partnerToken;
-            console.log(`✅ Payment found with ${partner.business_name} credentials!`);
             break;
           } else {
-            console.log(`❌ Payment not found with ${partner.business_name} credentials`);
           }
         }
       }
     } else if (paymentData?.external_reference) {
       const orderId = paymentData.external_reference;
-      console.log(`🔍 Found external_reference: ${orderId}`);
 
       const { data: orderData } = await supabase
         .from('orders')
@@ -818,19 +748,15 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
 
       if (orderData?.partners?.mercadopago_config?.access_token) {
         accessToken = orderData.partners.mercadopago_config.access_token;
-        console.log(`🔑 Using partner credentials: ${accessToken.substring(0, 20)}...`);
       }
     }
 
     if (!paymentData) {
-      console.log(`🔍 Last attempt: Fetching payment from MP API: ${mpApiUrl}`);
 
       if (!accessToken) {
-        console.error('❌ No valid access token available');
         return;
       }
 
-      console.log(`🔑 Using access token: ${accessToken.substring(0, 20)}...`);
 
       mpResponse = await fetch(mpApiUrl, {
         headers: {
@@ -840,20 +766,10 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
       });
 
       if (!mpResponse.ok) {
-        console.error(`❌ Failed to fetch payment from MP API: ${mpResponse.status}`);
         const errorText = await mpResponse.text();
-        console.error('MP API Error:', errorText);
 
         if (mpResponse.status === 404) {
-          console.error('💡 Payment not found (404). Possible causes:');
-          console.error('   - Payment was not completed (user abandoned checkout)');
-          console.error('   - Wrong access token (using token from different account)');
-          console.error('   - Mixed environments (test token with prod payment ID or vice versa)');
-          console.error('   - Payment ID is actually a preference_id or merchant_order_id');
-          console.log('ℹ️ This is normal if the user created a preference but never completed the payment');
-          console.log('✅ No action needed - order will remain in pending status');
         } else if (mpResponse.status === 401) {
-          console.error('💡 Unauthorized (401). Check access token is valid and not expired');
         }
 
         return;
@@ -863,50 +779,27 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
     }
 
     if (!paymentData) {
-      console.error('❌ No payment data available');
       return;
     }
 
-    console.log('✅ Payment data fetched from MP API');
-    console.log(`   Status: ${paymentData.status}`);
-    console.log(`   Status Detail: ${paymentData.status_detail}`);
-    console.log(`   Transaction Amount: ${paymentData.transaction_amount}`);
-    console.log(`   External Reference: ${paymentData.external_reference}`);
-    console.log(`   Payment Method: ${paymentData.payment_method_id}`);
 
     let orderId = paymentData.external_reference;
 
     if (!orderId) {
-      console.error('❌ No external_reference found in payment. Cannot identify order.');
-      console.log('Payment data:', JSON.stringify(paymentData, null, 2));
       return;
     }
 
-    console.log(`🔍 Looking for order: ${orderId}`);
 
     // Verificar si el orderId es un UUID válido
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
     if (!uuidRegex.test(orderId)) {
-      console.warn(`⚠️ external_reference is not a valid UUID: ${orderId}`);
 
       // Intentar buscar la orden usando el preference_id del payment
       const preferenceId = paymentData.metadata?.preference_id || paymentData.order?.id;
 
-      console.log('🔍 Attempting to find order by payment_preference_id...');
-      console.log('   Payment ID:', paymentData.id);
-      console.log('   Preference ID from metadata:', paymentData.metadata?.preference_id);
-      console.log('   Order ID from payment:', paymentData.order?.id);
 
       if (!preferenceId) {
-        console.error('❌ No preference_id found in payment data');
-        console.log('Payment data structure:', JSON.stringify({
-          id: paymentData.id,
-          metadata: paymentData.metadata,
-          order: paymentData.order,
-          external_reference: paymentData.external_reference
-        }, null, 2));
-        console.error('This payment may belong to a preference that was never converted to an order');
         return;
       }
 
@@ -917,11 +810,8 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
         .maybeSingle();
 
       if (orderByPref) {
-        console.log(`✅ Found order by payment_preference_id: ${orderByPref.id}`);
         orderId = orderByPref.id;
       } else {
-        console.error(`❌ Could not find order with payment_preference_id: ${preferenceId}`);
-        console.error('This payment may belong to a preference that was never converted to an order');
         return;
       }
     }
@@ -933,18 +823,9 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
       .maybeSingle();
 
     if (orderError || !orderData) {
-      console.error('❌ Error fetching order or order not found:', {
-        error: orderError,
-        orderId,
-        hint: 'The order may not exist or the external_reference format is incorrect'
-      });
       return;
     }
 
-    console.log(`✅ Found order: ${orderId}`);
-    console.log(`   Current status: ${orderData.status}`);
-    console.log(`   Current payment_status: ${orderData.payment_status || 'none'}`);
-    console.log(`   Order type: ${orderData.order_type}`);
 
     const paymentStatus = paymentData.status;
     const statusDetail = paymentData.status_detail;
@@ -953,26 +834,15 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
       || Number(orderData?.partner_breakdown?.total_partners || 0) > 1
       || Object.keys(orderData?.partner_breakdown?.partners || {}).length > 1;
 
-    console.log(`💰 Payment validation:`);
-    console.log(`   MP Status: ${paymentStatus}`);
-    console.log(`   MP Status Detail: ${statusDetail}`);
-    console.log(`   Order Status (mapped): ${orderStatus}`);
 
     const isApproved = paymentStatus === 'approved';
     const isAccredited = statusDetail === 'accredited';
-    console.log(`   Is Approved: ${isApproved}`);
-    console.log(`   Is Accredited: ${isAccredited}`);
 
     const totalAmount = paymentData.transaction_amount;
     const commissionAmount = orderData.commission_amount || (totalAmount * 0.05);
     const partnerAmount = totalAmount - commissionAmount;
 
-    console.log(`💵 Amounts:`);
-    console.log(`   Total: $${totalAmount}`);
-    console.log(`   Commission (5%): $${commissionAmount}`);
-    console.log(`   Partner: $${partnerAmount}`);
 
-    console.log(`📝 Updating order ${orderId} to status: ${orderStatus}`);
 
     const updateData: any = {
       status: orderStatus,
@@ -991,14 +861,11 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
       .eq('id', orderId);
 
     if (updateError) {
-      console.error('❌ Error updating order:', updateError);
       return;
     }
 
-    console.log(`✅ Order ${orderId} updated successfully`);
 
     if (isApproved) {
-      console.log('🎉 Payment is APPROVED! Processing...');
 
       if (isSplitMasterOrder) {
         const splitResult = await createSplitChildOrders(
@@ -1010,23 +877,15 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
           orderStatus,
         );
 
-        console.log('🧩 Split order processing completed', {
-          masterOrderId: orderId,
-          splitChildrenCreated: splitResult.createdCount,
-          splitChildrenTotal: splitResult.totalCount,
-        });
       }
 
       await updateProductStock(supabase, orderId);
 
       if (orderData.order_type === 'service_booking' && orderData.booking_id) {
-        console.log(`📅 Updating booking ${orderData.booking_id} status to confirmed`);
         await updateBookingStatus(supabase, orderData.booking_id, 'confirmed', paymentId);
       }
 
       if (isSplitMasterOrder) {
-        console.log('🧾 Skipping accounting fallback for split master order');
-        console.log('✅ All post-payment actions completed');
         return;
       }
 
@@ -1037,7 +896,6 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
         const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
         if (!supabaseUrl || !serviceRoleKey) {
-          console.warn('⚠️ Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY, skipping accounting fallback call');
         } else {
           const accountingResponse = await fetch(`${supabaseUrl}/functions/v1/send-order-to-accounting`, {
             method: 'POST',
@@ -1049,23 +907,14 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
           });
 
           const accountingBody = await accountingResponse.text();
-          console.log('📨 Accounting fallback response:', {
-            status: accountingResponse.status,
-            ok: accountingResponse.ok,
-            body: accountingBody.slice(0, 500),
-          });
         }
       } catch (accountingError) {
-        console.error('❌ Error triggering accounting fallback from MP webhook:', accountingError);
       }
 
-      console.log('✅ All post-payment actions completed');
     } else {
-      console.log(`⏸️ Payment not approved yet. Status: ${paymentStatus}, Detail: ${statusDetail}`);
     }
 
   } catch (error) {
-    console.error('❌ Error processing payment notification:', error);
     throw error;
   }
 }
@@ -1073,10 +922,8 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
 async function processMerchantOrderNotification(supabase: any, notification: WebhookNotification) {
   try {
     const merchantOrderId = notification.data?.id;
-    console.log('Processing merchant order notification:', merchantOrderId);
 
     if (!merchantOrderId) {
-      console.error('❌ merchant_order notification without data.id');
       return;
     }
 
@@ -1105,7 +952,6 @@ async function processMerchantOrderNotification(supabase: any, notification: Web
     }
 
     if (tokenCandidates.length === 0) {
-      console.error('❌ No Mercado Pago access tokens available to process merchant_order');
       return;
     }
 
@@ -1120,19 +966,16 @@ async function processMerchantOrderNotification(supabase: any, notification: Web
 
       if (response.ok) {
         merchantOrderData = await response.json();
-        console.log('✅ merchant_order fetched from MP API');
         break;
       }
     }
 
     if (!merchantOrderData) {
-      console.error(`❌ Could not fetch merchant_order ${merchantOrderId} with available credentials`);
       return;
     }
 
     const payments = merchantOrderData.payments || [];
     if (payments.length === 0) {
-      console.warn(`⚠️ merchant_order ${merchantOrderId} has no payments yet`);
       return;
     }
 
@@ -1140,11 +983,9 @@ async function processMerchantOrderNotification(supabase: any, notification: Web
     const selectedPayment = approvedPayment || payments[0];
 
     if (!selectedPayment?.id) {
-      console.warn(`⚠️ merchant_order ${merchantOrderId} has payments without id`);
       return;
     }
 
-    console.log(`🔁 Converting merchant_order to payment notification using payment ${selectedPayment.id}`);
 
     await processPaymentNotification(supabase, {
       ...notification,
@@ -1155,7 +996,6 @@ async function processMerchantOrderNotification(supabase: any, notification: Web
       }
     } as WebhookNotification);
   } catch (error) {
-    console.error('Error processing merchant order notification:', error);
     throw error;
   }
 }
@@ -1176,10 +1016,6 @@ async function fetchMercadoPagoResource(supabase: any, path: string): Promise<an
     }
 
     const errorText = await response.text();
-    console.warn(`Mercado Pago resource fetch failed for ${path}:`, {
-      status: response.status,
-      body: errorText.slice(0, 300),
-    });
   }
 
   return null;
@@ -1296,19 +1132,8 @@ async function findOrCreateLocalSubscriptionForPreapproval(supabase: any, preapp
   const mpPlanId = String(preapproval?.preapproval_plan_id || '');
   const referenceInfo = getSubscriptionReferenceInfo(externalReference);
 
-  console.log('[MP Webhook][User] Resolving local subscription from preapproval', {
-    preapproval_id: preapprovalId || null,
-    external_reference: externalReference || null,
-    mp_plan_id: mpPlanId || null,
-    reference_scope: referenceInfo.scope,
-    reference_id: referenceInfo.id || null,
-  });
 
   if (referenceInfo.scope === 'partner') {
-    console.log('[MP Webhook][User] Skipping user lookup because preapproval is partner-scoped', {
-      preapproval_id: preapprovalId || null,
-      external_reference: externalReference || null,
-    });
     return null;
   }
 
@@ -1320,10 +1145,6 @@ async function findOrCreateLocalSubscriptionForPreapproval(supabase: any, preapp
     .maybeSingle();
 
     if (byExternalReference) {
-      console.log('[MP Webhook][User] Matched local subscription by external reference', {
-        local_subscription_id: byExternalReference.id,
-        preapproval_id: preapprovalId || null,
-      });
       return byExternalReference;
     }
   }
@@ -1336,21 +1157,12 @@ async function findOrCreateLocalSubscriptionForPreapproval(supabase: any, preapp
     .maybeSingle();
 
     if (byPreapprovalId) {
-      console.log('[MP Webhook][User] Matched local subscription by Mercado Pago preapproval id', {
-        local_subscription_id: byPreapprovalId.id,
-        preapproval_id: preapprovalId,
-      });
       return byPreapprovalId;
     }
   }
 
   const payerEmail = getPreapprovalPayerEmail(preapproval);
   if (!payerEmail || !mpPlanId) {
-    console.warn('[MP Webhook][User] Could not resolve payer email or MP plan id for preapproval', {
-      preapproval_id: preapprovalId || null,
-      payer_email: payerEmail,
-      mp_plan_id: mpPlanId || null,
-    });
     return null;
   }
 
@@ -1361,21 +1173,11 @@ async function findOrCreateLocalSubscriptionForPreapproval(supabase: any, preapp
     .maybeSingle();
 
   if (!profile) {
-    console.warn('[MP Webhook][User] Could not match Mercado Pago subscription payer to local profile', {
-      payer_email: payerEmail,
-      mp_plan_id: mpPlanId,
-      preapproval_id: preapprovalId || null,
-    });
     return null;
   }
 
   const localPlan = await findPlanByMercadoPagoPlanId(supabase, mpPlanId);
   if (!localPlan) {
-    console.warn('[MP Webhook][User] Could not match Mercado Pago plan to local subscription plan', {
-      payer_email: payerEmail,
-      mp_plan_id: mpPlanId,
-      preapproval_id: preapprovalId || null,
-    });
     return null;
   }
 
@@ -1390,13 +1192,6 @@ async function findOrCreateLocalSubscriptionForPreapproval(supabase: any, preapp
     .maybeSingle();
 
   if (pendingSubscription) {
-    console.log('[MP Webhook][User] Reusing pending local subscription matched by payer and plan', {
-      local_subscription_id: pendingSubscription.id,
-      user_id: pendingSubscription.user_id,
-      payer_email: payerEmail,
-      mp_plan_id: mpPlanId,
-      preapproval_id: preapprovalId || null,
-    });
     return pendingSubscription;
   }
 
@@ -1433,23 +1228,9 @@ async function findOrCreateLocalSubscriptionForPreapproval(supabase: any, preapp
     .single();
 
   if (createError) {
-    console.error('[MP Webhook][User] Error creating local subscription from Mercado Pago webhook', {
-      payer_email: payerEmail,
-      mp_plan_id: mpPlanId,
-      preapproval_id: preapprovalId || null,
-      error: createError.message,
-    });
     return null;
   }
 
-  console.log('[MP Webhook][User] Created local subscription from Mercado Pago webhook', {
-    local_subscription_id: createdSubscription?.id || null,
-    user_id: profile.id,
-    payer_email: payerEmail,
-    mp_plan_id: mpPlanId,
-    preapproval_id: preapprovalId || null,
-    trial_granted: canGrantTrial,
-  });
 
   return createdSubscription;
 }
@@ -1459,18 +1240,8 @@ async function findOrCreateLocalPartnerSubscriptionForPreapproval(supabase: any,
   const externalReference = String(preapproval?.external_reference || '');
   const referenceInfo = getSubscriptionReferenceInfo(externalReference);
 
-  console.log('[MP Webhook][Partner] Resolving local subscription from preapproval', {
-    preapproval_id: preapprovalId || null,
-    external_reference: externalReference || null,
-    reference_scope: referenceInfo.scope,
-    reference_id: referenceInfo.id || null,
-  });
 
   if (referenceInfo.scope !== 'partner') {
-    console.log('[MP Webhook][Partner] Skipping partner lookup because preapproval is user-scoped', {
-      preapproval_id: preapprovalId || null,
-      external_reference: externalReference || null,
-    });
     return null;
   }
 
@@ -1482,10 +1253,6 @@ async function findOrCreateLocalPartnerSubscriptionForPreapproval(supabase: any,
     .maybeSingle();
 
     if (byExternalReference) {
-      console.log('[MP Webhook][Partner] Matched local partner subscription by external reference', {
-        local_subscription_id: byExternalReference.id,
-        preapproval_id: preapprovalId || null,
-      });
       return byExternalReference;
     }
   }
@@ -1498,18 +1265,10 @@ async function findOrCreateLocalPartnerSubscriptionForPreapproval(supabase: any,
     .maybeSingle();
 
     if (byPreapprovalId) {
-      console.log('[MP Webhook][Partner] Matched local partner subscription by Mercado Pago preapproval id', {
-        local_subscription_id: byPreapprovalId.id,
-        preapproval_id: preapprovalId,
-      });
       return byPreapprovalId;
     }
   }
 
-  console.warn('[MP Webhook][Partner] Could not match Mercado Pago partner subscription to local record', {
-    preapproval_id: preapprovalId,
-    external_reference: externalReference,
-  });
   return null;
 }
 
@@ -1517,15 +1276,9 @@ async function processSubscriptionPreapprovalNotification(supabase: any, notific
   const preapprovalId = notification.data?.id;
 
   if (!preapprovalId) {
-    console.warn('subscription_preapproval notification without data.id');
     return;
   }
 
-  console.log('[MP Webhook][Subscription] Processing subscription_preapproval notification', {
-    preapproval_id: preapprovalId,
-    notification_type: notification.type,
-    action: notification.action,
-  });
 
   let preapproval = await fetchMercadoPagoResource(supabase, `/preapproval/${preapprovalId}`);
 
@@ -1538,32 +1291,14 @@ async function processSubscriptionPreapprovalNotification(supabase: any, notific
   }
 
   if (!preapproval) {
-    console.error(`Could not fetch Mercado Pago preapproval ${preapprovalId}`);
     return;
   }
 
   const referenceInfo = getSubscriptionReferenceInfo(String(preapproval.external_reference || ''));
-  console.log('[MP Webhook][Subscription] Mercado Pago preapproval fetched', {
-    preapproval_id: preapproval.id || preapprovalId,
-    mp_status: preapproval.status || null,
-    external_reference: preapproval.external_reference || null,
-    payer_email: getPreapprovalPayerEmail(preapproval),
-    mp_plan_id: preapproval.preapproval_plan_id || null,
-    reference_scope: referenceInfo.scope,
-    reference_id: referenceInfo.id || null,
-  });
   const localSubscription = referenceInfo.scope === 'partner'
     ? await findOrCreateLocalPartnerSubscriptionForPreapproval(supabase, preapproval)
     : await findOrCreateLocalSubscriptionForPreapproval(supabase, preapproval);
   if (!localSubscription) {
-    console.warn('[MP Webhook][Subscription] No local subscription matched for preapproval', {
-      id: preapproval.id,
-      external_reference: preapproval.external_reference,
-      preapproval_plan_id: preapproval.preapproval_plan_id,
-      payer_email: getPreapprovalPayerEmail(preapproval),
-      reference_scope: referenceInfo.scope,
-      reference_id: referenceInfo.id || null,
-    });
     return;
   }
 
@@ -1576,15 +1311,6 @@ async function processSubscriptionPreapprovalNotification(supabase: any, notific
       ? 'trialing'
       : localStatus;
 
-    console.log('[MP Webhook][Partner] Applying preapproval sync', {
-      local_subscription_id: localSubscription.id,
-      partner_id: localSubscription.partner_id,
-      mp_preapproval_id: preapproval.id,
-      mp_status: preapproval.status,
-      local_status: effectiveStatus,
-      trial_used: localSubscription.trial_used,
-      trial_ends_at: localSubscription.trial_ends_at || null,
-    });
 
     const metadata = {
       ...(localSubscription.metadata || {}),
@@ -1625,10 +1351,6 @@ async function processSubscriptionPreapprovalNotification(supabase: any, notific
       .eq('id', localSubscription.id);
 
     if (updateError) {
-      console.error('[MP Webhook][Partner] Error updating local partner subscription from preapproval', {
-        local_subscription_id: localSubscription.id,
-        error: updateError.message,
-      });
       return;
     }
 
@@ -1641,11 +1363,6 @@ async function processSubscriptionPreapprovalNotification(supabase: any, notific
       .maybeSingle();
 
     if (partnerLookupError) {
-      console.error('[MP Webhook][Partner] Error reading partner for subscription sync', {
-        local_subscription_id: localSubscription.id,
-        partner_id: partnerId,
-        error: partnerLookupError.message,
-      });
     }
 
     const partnerUserId = partnerForUpdate?.user_id || null;
@@ -1672,19 +1389,8 @@ async function processSubscriptionPreapprovalNotification(supabase: any, notific
       : { error: null };
 
     if (partnerUpdateError) {
-      console.error('[MP Webhook][Partner] Error updating partner profile from preapproval', {
-        local_subscription_id: localSubscription.id,
-        partner_id: partnerId,
-        error: partnerUpdateError.message,
-      });
     }
 
-    console.log('[MP Webhook][Partner] Local partner subscription synced from Mercado Pago preapproval', {
-      local_subscription_id: localSubscription.id,
-      preapproval_id: preapproval.id,
-      mp_status: preapproval.status,
-      local_status: effectiveStatus,
-    });
     return;
   }
 
@@ -1703,16 +1409,6 @@ async function processSubscriptionPreapprovalNotification(supabase: any, notific
     ? 'trialing'
     : localStatus;
 
-  console.log('[MP Webhook][User] Applying preapproval sync', {
-    local_subscription_id: localSubscription.id,
-    user_id: localSubscription.user_id,
-    mp_preapproval_id: preapproval.id,
-    mp_status: preapproval.status,
-    local_status: effectiveStatus,
-    billing_cycle: localSubscription.billing_cycle || getBillingCycleFromPreapproval(preapproval),
-    trial_used: localSubscription.trial_used || false,
-    trial_ends_at: trialEndsAt,
-  });
 
   const updatePayload: any = {
     status: effectiveStatus,
@@ -1745,32 +1441,18 @@ async function processSubscriptionPreapprovalNotification(supabase: any, notific
     .eq('id', localSubscription.id);
 
   if (updateError) {
-    console.error('[MP Webhook][User] Error updating local subscription from preapproval', {
-      local_subscription_id: localSubscription.id,
-      error: updateError.message,
-    });
     return;
   }
 
-  console.log('[MP Webhook][User] Local subscription synced from Mercado Pago preapproval', {
-    local_subscription_id: localSubscription.id,
-    preapproval_id: preapproval.id,
-    mp_status: preapproval.status,
-    local_status: effectiveStatus,
-  });
 }
 
 async function processSubscriptionAuthorizedPaymentNotification(supabase: any, notification: WebhookNotification) {
   const authorizedPaymentId = notification.data?.id;
 
   if (!authorizedPaymentId) {
-    console.warn('subscription_authorized_payment notification without data.id');
     return;
   }
 
-  console.log('[MP Webhook][Subscription] Processing subscription_authorized_payment notification', {
-    authorized_payment_id: authorizedPaymentId,
-  });
 
   const authorizedPayment = await fetchMercadoPagoResource(
     supabase,
@@ -1778,7 +1460,6 @@ async function processSubscriptionAuthorizedPaymentNotification(supabase: any, n
   );
 
   if (!authorizedPayment) {
-    console.error(`Could not fetch Mercado Pago authorized payment ${authorizedPaymentId}`);
     return;
   }
 
@@ -1789,11 +1470,6 @@ async function processSubscriptionAuthorizedPaymentNotification(supabase: any, n
     authorizedPayment.external_reference;
 
   if (preapprovalId) {
-    console.log('[MP Webhook][Subscription] Authorized payment resolved preapproval', {
-      authorized_payment_id: authorizedPaymentId,
-      preapproval_id: String(preapprovalId),
-      external_reference: authorizedPayment.external_reference || null,
-    });
 
     await processSubscriptionPreapprovalNotification(supabase, {
       ...notification,
@@ -1824,10 +1500,6 @@ async function processSubscriptionAuthorizedPaymentNotification(supabase: any, n
   const localSubscription = partnerSubscription || userSubscription;
 
   if (!localSubscription) {
-    console.warn('[MP Webhook][Subscription] Authorized payment did not match a local subscription', {
-      authorized_payment_id: authorizedPaymentId,
-      preapproval_id: preapprovalId,
-    });
     return;
   }
 
@@ -1865,34 +1537,21 @@ async function processSubscriptionAuthorizedPaymentNotification(supabase: any, n
       .eq('id', localSubscription.id);
 
   if (updateError) {
-    console.error('[MP Webhook][Subscription] Error updating subscription from authorized payment', {
-      authorized_payment_id: authorizedPaymentId,
-      preapproval_id: preapprovalId,
-      error: updateError.message,
-    });
     return;
   }
 
-  console.log('[MP Webhook][Subscription] Authorized payment synced local subscription', {
-    local_subscription_id: localSubscription.id,
-    preapproval_id: preapprovalId,
-    synced_status: effectiveStatus,
-  });
 }
 
 async function processSubscriptionPlanNotification(supabase: any, notification: WebhookNotification) {
   const mpPlanId = notification.data?.id;
 
   if (!mpPlanId) {
-    console.warn('subscription_preapproval_plan notification without data.id');
     return;
   }
 
-  console.log(`Processing subscription_preapproval_plan notification: ${mpPlanId}`);
 
   const mpPlan = await fetchMercadoPagoResource(supabase, `/preapproval_plan/${mpPlanId}`);
   if (!mpPlan) {
-    console.error(`Could not fetch Mercado Pago preapproval plan ${mpPlanId}`);
     return;
   }
 
@@ -1917,7 +1576,6 @@ async function processSubscriptionPlanNotification(supabase: any, notification: 
   }
 
   if (!localPlan) {
-    console.warn('No local subscription plan matched Mercado Pago plan:', mpPlanId);
     return;
   }
 
@@ -1964,7 +1622,6 @@ async function processSubscriptionPlanNotification(supabase: any, notification: 
     .eq('id', localPlan.id);
 
   if (updateError) {
-    console.error('Error updating local subscription plan from Mercado Pago:', updateError);
   }
 }
 
@@ -1988,13 +1645,11 @@ function mapPaymentStatusToOrderStatus(mpStatus: string): string {
 
 async function updateProductStock(supabase: any, orderId: string) {
   void supabase;
-  console.log(`Skipping direct stock update for order ${orderId}; stock is already managed by DB order triggers`);
 }
 
 async function updateBookingStatus(supabase: any, bookingId: string, status: string, paymentId: string) {
   void supabase;
   void status;
   void paymentId;
-  console.log(`Skipping direct booking update for ${bookingId}; booking sync is already handled by DB trigger`);
 }
 

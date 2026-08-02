@@ -46,7 +46,7 @@ export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete, onShar
             <Image
               source={{ uri: photoUri }}
               style={styles.petImage}
-              onError={(e) => console.log('Error loading pet image:', photoUri, e.nativeEvent.error)}
+              onError={(e) => undefined}
             />
           ) : (
             <View style={styles.imageFallback}>

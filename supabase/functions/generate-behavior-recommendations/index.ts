@@ -127,7 +127,6 @@ IMPORTANTE:
 
     if (!openaiResponse.ok) {
       const errorData = await openaiResponse.text();
-      console.error('OpenAI API error:', errorData);
       return new Response(
         JSON.stringify({ 
           error: 'OpenAI API error',
@@ -177,7 +176,6 @@ IMPORTANTE:
     );
 
   } catch (error) {
-    console.error('Error in generate-behavior-recommendations:', error);
     return new Response(
       JSON.stringify({ 
         error: 'Internal server error',

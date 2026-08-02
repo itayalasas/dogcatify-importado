@@ -79,11 +79,6 @@ const buildRouteWithQuery = (routePath: string, queryParams?: Record<string, any
 if (typeof ErrorUtils !== 'undefined') {
   const originalHandler = ErrorUtils.getGlobalHandler();
   ErrorUtils.setGlobalHandler((error, isFatal) => {
-    console.error('=== GLOBAL ERROR ===');
-    console.error('Fatal:', isFatal);
-    console.error('Error:', error);
-    console.error('Stack:', error.stack);
-    console.error('===================');
 
 
     if (originalHandler) {
@@ -95,10 +90,6 @@ if (typeof ErrorUtils !== 'undefined') {
 // Capture unhandled promise rejections
 const originalUnhandled = global.onunhandledrejection;
 global.onunhandledrejection = (event: any) => {
-  console.error('=== UNHANDLED PROMISE REJECTION ===');
-  console.error('Reason:', event.reason);
-  console.error('Promise:', event.promise);
-  console.error('===================================');
 
   const error = event.reason instanceof Error ? event.reason : new Error(String(event.reason));
 
@@ -153,10 +144,8 @@ function RootLayout() {
 
     const initializeApp = async () => {
       try {
-        console.log('[App] 🚀 Initializing application...');
 
         // 1. Inicializar configuración de entorno
-        console.log('[App] 📦 Loading environment configuration...');
         // En cada arranque forzamos refresco para no reutilizar credenciales viejas de AsyncStorage.
         await envConfig.initialize(true);
         clearConfigCache();
@@ -164,21 +153,17 @@ function RootLayout() {
         if (!mounted) return;
 
         // 2. Inicializar Supabase con la configuración cargada
-        console.log('[App] 🔌 Initializing Supabase client...');
         await initializeSupabase();
 
         if (!mounted) return;
 
         // 3. Configurar listeners de auth
-        console.log('[App] 🔐 Setting up auth listeners...');
         setupAuthListeners();
 
         if (!mounted) return;
 
-        console.log('[App] ✅ Application initialized successfully');
         setConfigReady(true);
       } catch (error: any) {
-        console.error('[App] ❌ Failed to initialize application:', error);
         if (mounted) {
           setConfigError(error.message || 'Failed to initialize application');
         }
@@ -200,7 +185,6 @@ function RootLayout() {
       const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
         (event, session) => {
           if (event !== 'INITIAL_SESSION' && session?.user) {
-            console.log('Auth event captured at root layout:', event);
           }
         }
       );
@@ -209,7 +193,6 @@ function RootLayout() {
         subscription?.unsubscribe();
       };
     } catch (error) {
-      console.error('Error setting up auth listener:', error);
     }
   }, [configReady]);
 
@@ -217,16 +200,13 @@ function RootLayout() {
   useEffect(() => {
     const handleDeepLink = (event: { url: string }) => {
       const url = event.url;
-      console.log('Deep link received:', url);
 
       try {
         const { hostname, path, queryParams, scheme } = Linking.parse(url);
         const routePath = normalizeDeepLinkPath({ scheme, hostname, path });
-        console.log('Parsed URL:', { hostname, path, queryParams, scheme, routePath });
 
         if (routePath.startsWith('album/')) {
           const albumId = routePath.replace('album/', '');
-          console.log('Navigating to album:', albumId);
 
           setTimeout(() => {
             const router = require('expo-router').router;
@@ -235,7 +215,6 @@ function RootLayout() {
         }
         else if (routePath.startsWith('post/')) {
           const postId = routePath.replace('post/', '');
-          console.log('Navigating to post:', postId);
 
           setTimeout(() => {
             const router = require('expo-router').router;
@@ -244,7 +223,6 @@ function RootLayout() {
         }
         else if (routePath.startsWith('pet-share/')) {
           const shareId = routePath.replace('pet-share/', '');
-          console.log('Navigating to pet share invitation:', shareId);
 
           setTimeout(() => {
             const router = require('expo-router').router;
@@ -253,7 +231,6 @@ function RootLayout() {
         }
         else if (routePath.startsWith('pets/')) {
           const petId = routePath.replace('pets/', '');
-          console.log('Navigating to pet details:', petId);
 
           setTimeout(() => {
             const router = require('expo-router').router;
@@ -261,7 +238,6 @@ function RootLayout() {
           }, 500);
         }
         else if (routePath.startsWith('payment/success')) {
-          console.log('Payment success deep link detected');
 
           setTimeout(() => {
             const router = require('expo-router').router;
@@ -269,7 +245,6 @@ function RootLayout() {
           }, 500);
         }
         else if (routePath.startsWith('payment/failure')) {
-          console.log('Payment failure deep link detected');
 
           setTimeout(() => {
             const router = require('expo-router').router;
@@ -277,7 +252,6 @@ function RootLayout() {
           }, 500);
         }
         else if (routePath.startsWith('payment/pending')) {
-          console.log('Payment pending deep link detected');
 
           setTimeout(() => {
             const router = require('expo-router').router;
@@ -285,7 +259,6 @@ function RootLayout() {
           }, 500);
         }
         else if (routePath.startsWith('partner/subscription')) {
-          console.log('Partner subscription deep link detected');
 
           setTimeout(() => {
             const router = require('expo-router').router;
@@ -293,7 +266,6 @@ function RootLayout() {
           }, 500);
         }
         else if (routePath.startsWith('profile/subscription')) {
-          console.log('Subscription deep link detected');
 
           setTimeout(() => {
             const router = require('expo-router').router;
@@ -301,13 +273,11 @@ function RootLayout() {
           }, 500);
         }
       } catch (error) {
-        console.error('Error handling deep link:', error, url);
       }
     };
 
     Linking.getInitialURL().then((url) => {
       if (url) {
-        console.log('Initial URL detected:', url);
         handleDeepLink({ url });
       }
     });
@@ -349,7 +319,6 @@ function RootLayout() {
           autoApprovePartners: config.auto_approve_partners ?? false,
         });
       } catch (error) {
-        console.error('Error loading runtime system config:', error);
       } finally {
         setLoadingSystemConfig(false);
       }
@@ -570,13 +539,10 @@ function RootLayout() {
     setConfigReady(false);
 
     try {
-      console.log('[App] 🔄 Retrying configuration...');
       await envConfig.reload();
       clearConfigCache();
       setConfigReady(true);
-      console.log('[App] ✅ Configuration retry successful');
     } catch (error: any) {
-      console.error('[App] ❌ Configuration retry failed:', error);
       setConfigError(error.message || 'Failed to initialize application');
     }
   };

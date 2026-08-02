@@ -21,10 +21,6 @@ export default function AdminTabLayout() {
   const [onboardingRequired, setOnboardingRequired] = useState(false);
 
   useEffect(() => {
-    console.log('🔍 [AdminTabLayout] Debugging info:');
-    console.log('  - currentUser:', currentUser);
-    console.log('  - isAdmin:', isAdmin);
-    console.log('  - Available routes should include: analytics, promotions, partners, places, settings, requests');
   }, [currentUser, isAdmin]);
 
   useEffect(() => {
@@ -50,7 +46,6 @@ export default function AdminTabLayout() {
           router.replace('/onboarding');
         }
       } catch (error) {
-        console.warn('Error checking onboarding before admin tabs route:', error);
         if (mounted) {
           setOnboardingChecked(true);
           setOnboardingRequired(false);
@@ -129,7 +124,6 @@ export default function AdminTabLayout() {
     );
   }
   
-  console.log('✅ [AdminTabLayout] Rendering Tabs component now...');
 
   return (
     <Tabs
@@ -155,7 +149,6 @@ export default function AdminTabLayout() {
         options={{
           title: 'Analytics',
           tabBarIcon: ({ size, color }) => {
-            console.log('📊 [Tab Icon] analytics rendering');
             return <BarChart3 size={size} color={color} />;
           },
         }}
@@ -165,7 +158,6 @@ export default function AdminTabLayout() {
         options={{
           title: 'Promociones',
           tabBarIcon: ({ size, color }) => {
-            console.log('📢 [Tab Icon] promotions rendering');
             return <Volume2 size={size} color={color} />;
           },
         }}

@@ -22,7 +22,6 @@ export const NotificationPermissionPrompt: React.FC = () => {
       // Don't show prompt in Expo Go only
       const isExpoGo = Constants.appOwnership === 'expo';
       if (isExpoGo) {
-        console.log('Skipping notification prompt in Expo Go');
         return;
       }
 
@@ -36,13 +35,11 @@ export const NotificationPermissionPrompt: React.FC = () => {
         }, 3000);
       }
     } catch (error) {
-      console.error('Error checking notification prompt:', error);
     }
   };
 
   const handleEnableNotifications = async () => {
     try {
-      console.log('User clicked enable notifications');
       
       // Additional check for production environment
       const isExpoGo = Constants.appOwnership === 'expo';
@@ -58,7 +55,6 @@ export const NotificationPermissionPrompt: React.FC = () => {
       const token = await registerForPushNotifications();
       
       if (token) {
-        console.log('Push token obtained successfully:', token);
         await AsyncStorage.setItem(NOTIFICATION_PROMPT_KEY, 'true');
         setShowPrompt(false);
         Alert.alert(
@@ -67,7 +63,6 @@ export const NotificationPermissionPrompt: React.FC = () => {
           [{ text: 'Perfecto' }]
         );
       } else {
-        console.log('No push token obtained');
         // Si no se pudo obtener token, marcar como mostrado para no volver a preguntar
         await AsyncStorage.setItem(NOTIFICATION_PROMPT_KEY, 'true');
         setShowPrompt(false);
@@ -79,7 +74,6 @@ export const NotificationPermissionPrompt: React.FC = () => {
         );
       }
     } catch (error) {
-      console.error('Error enabling notifications:', error);
       
       // Marcar como mostrado para no volver a preguntar
       await AsyncStorage.setItem(NOTIFICATION_PROMPT_KEY, 'true');
@@ -95,11 +89,9 @@ export const NotificationPermissionPrompt: React.FC = () => {
 
   const handleDismiss = async () => {
     try {
-      console.log('User dismissed notification prompt');
       await AsyncStorage.setItem(NOTIFICATION_PROMPT_KEY, 'true');
       setShowPrompt(false);
     } catch (error) {
-      console.error('Error dismissing prompt:', error);
       setShowPrompt(false);
     }
   };

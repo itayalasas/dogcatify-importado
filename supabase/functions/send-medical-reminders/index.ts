@@ -20,18 +20,15 @@ Deno.serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    console.log('Checking for pending medical reminders...');
 
     const { data: pendingAlerts, error: alertsError } = await supabase
       .rpc('get_pending_notifications');
 
     if (alertsError) {
-      console.error('Error fetching pending alerts:', alertsError);
       throw alertsError;
     }
 
     if (!pendingAlerts || pendingAlerts.length === 0) {
-      console.log('No pending alerts found');
       return new Response(
         JSON.stringify({ message: 'No pending alerts', processed: 0 }),
         {
@@ -40,7 +37,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log(`Found ${pendingAlerts.length} pending alerts`);
 
     const results = [];
     let successCount = 0;
@@ -48,7 +44,6 @@ Deno.serve(async (req: Request) => {
 
     for (const alert of pendingAlerts) {
       try {
-        console.log(`Processing alert ${alert.alert_id} for user ${alert.user_id}`);
 
         const notificationType = alert.should_notify_72h ? '72h' : '24h';
         const timeText = alert.should_notify_72h ? '3 días' : '24 horas';
@@ -63,14 +58,12 @@ Deno.serve(async (req: Request) => {
           .maybeSingle();
 
         if (profileError) {
-          console.error(`Error fetching profile for user ${alert.user_id}:`, profileError);
           errorCount++;
           results.push({ alert_id: alert.alert_id, success: false, error: 'Profile not found' });
           continue;
         }
 
         if (!userProfile?.fcm_token && !userProfile?.push_token) {
-          console.log(`User ${alert.user_id} has no push token`);
           await supabase.rpc('mark_notification_sent', {
             p_alert_id: alert.alert_id,
             p_notification_type: notificationType,
@@ -112,10 +105,8 @@ Deno.serve(async (req: Request) => {
           if (fcmResponse.ok) {
             pushResult = await fcmResponse.json();
             pushSent = true;
-            console.log('Push notification sent via FCM v1:', pushResult);
           } else {
             const fcmErrorText = await fcmResponse.text();
-            console.warn(`FCM v1 send failed, trying Expo fallback: ${fcmErrorText}`);
           }
         }
 
@@ -147,10 +138,8 @@ Deno.serve(async (req: Request) => {
           if (expoPushResponse.ok) {
             pushResult = await expoPushResponse.json();
             pushSent = true;
-            console.log('Push notification sent via Expo legacy:', pushResult);
           } else {
             const errorText = await expoPushResponse.text();
-            console.error(`Failed to send push notification: ${errorText}`);
           }
         }
 
@@ -165,7 +154,7 @@ Deno.serve(async (req: Request) => {
           p_notification_type: notificationType,
         });
 
-        if (markError) console.error('Error marking notification as sent:', markError);
+        if (markError) {}
 
         successCount++;
         results.push({
@@ -176,13 +165,11 @@ Deno.serve(async (req: Request) => {
         });
 
       } catch (error) {
-        console.error(`Error processing alert ${alert.alert_id}:`, error);
         errorCount++;
         results.push({ alert_id: alert.alert_id, success: false, error: error.message });
       }
     }
 
-    console.log(`Processed ${results.length} alerts: ${successCount} sent, ${errorCount} errors`);
 
     return new Response(
       JSON.stringify({
@@ -196,7 +183,6 @@ Deno.serve(async (req: Request) => {
     );
 
   } catch (error) {
-    console.error('Error in send-medical-reminders:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -10,7 +10,6 @@ import { NotificationService } from '../../utils/notifications';
 
 const replicateMercadoPagoConfigOnApproval = async (userId: string, newPartnerId: string) => {
   try {
-    console.log('Checking for existing Mercado Pago configuration for user on approval:', userId);
     
     // Find any existing verified business from this user with Mercado Pago configured
     const { data: existingPartners, error } = await supabaseClient
@@ -23,16 +22,13 @@ const replicateMercadoPagoConfigOnApproval = async (userId: string, newPartnerId
       .limit(1);
     
     if (error) {
-      console.error('Error checking existing partners on approval:', error);
       return;
     }
     
     if (existingPartners && existingPartners.length > 0) {
       const sourcePartner = existingPartners[0];
-      console.log('Found existing partner with MP config on approval:', sourcePartner.business_name);
       
       if (sourcePartner.mercadopago_config) {
-        console.log('Replicating Mercado Pago configuration to newly approved business...');
         
         // Replicate the Mercado Pago configuration to the newly approved partner
         const { error: updateError } = await supabaseClient
@@ -46,16 +42,12 @@ const replicateMercadoPagoConfigOnApproval = async (userId: string, newPartnerId
           .eq('id', newPartnerId);
         
         if (updateError) {
-          console.error('Error replicating MP config on approval:', updateError);
         } else {
-          console.log('Mercado Pago configuration replicated successfully on approval');
         }
       }
     } else {
-      console.log('No existing Mercado Pago configuration found for user on approval');
     }
   } catch (error) {
-    console.error('Error in replicateMercadoPagoConfigOnApproval:', error);
     // Don't throw error to avoid breaking the approval process
   }
 };
@@ -63,7 +55,6 @@ const replicateMercadoPagoConfigOnApproval = async (userId: string, newPartnerId
 // Función para añadir logs detallados
 const logDebug = (message: string, data?: any) => {
   const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
-  console.log(`[DEBUG AdminRequests ${timestamp}] ${message}`, data || '');
 };
 
 export default function AdminRequests() {
@@ -195,7 +186,6 @@ export default function AdminRequests() {
         .single();
 
       if (profileError) {
-        console.error('Error fetching profile data:', profileError);
       }
       
       const { error } = await supabaseClient
@@ -227,9 +217,7 @@ export default function AdminRequests() {
             deepLink: '(tabs)/profile'
           }
         );
-        console.log('Approval notification sent to user');
       } catch (notificationError) {
-        console.error('Error sending approval notification:', notificationError);
         // No interrumpir el flujo si falla la notificación
       }
 
@@ -250,9 +238,6 @@ export default function AdminRequests() {
               .join(' ');
           }
 
-          console.log('Sending partner welcome email to:', partnerData.email);
-          console.log('Partner name:', partnerName);
-          console.log('Business name:', partnerData.business_name);
 
           const emailResult = await sendPartnerWelcomeEmailAPI(
             partnerData.email,
@@ -261,15 +246,11 @@ export default function AdminRequests() {
           );
 
           if (emailResult.success) {
-            console.log('✅ Partner welcome email sent successfully!');
             if (emailResult.log_id) {
-              console.log('Email log ID:', emailResult.log_id);
             }
           } else {
-            console.error('❌ Partner welcome email failed:', emailResult.error);
           }
         } catch (emailError) {
-          console.error('Error sending partner welcome email:', emailError);
           // Continue with approval process even if email fails
         }
       }
@@ -291,7 +272,6 @@ export default function AdminRequests() {
         setProcessedRequests(prev => [updatedRequest, ...prev]);
       }
     } catch (error) {
-      console.error('Error approving request:', error);
       Alert.alert('Error', 'No se pudo aprobar la solicitud');
     } finally {
       setApprovingId(null);
@@ -339,7 +319,6 @@ export default function AdminRequests() {
                     'No cumple con los requisitos necesarios para ser parte de nuestra plataforma en este momento.'
                   );
                 } catch (emailError) {
-                  console.error('Error sending partner rejection email:', emailError);
                   // Continue with rejection process even if email fails
                 }
               }
@@ -353,7 +332,6 @@ export default function AdminRequests() {
                 setPendingRequests(prev => prev.filter(req => req.id !== requestId));
               }
             } catch (error) {
-              console.error('Error rejecting request:', error);
               Alert.alert('Error', 'No se pudo rechazar la solicitud');
             } finally {
               setRejectingId(null);

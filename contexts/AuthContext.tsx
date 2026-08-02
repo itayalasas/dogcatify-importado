@@ -55,11 +55,9 @@ async function getAppEmailConfirmationStatus(
     ]);
 
     if (profileError) {
-      console.warn('Error reading profile confirmation status:', profileError);
     }
 
     if (tokenError) {
-      console.warn('Error reading email confirmation token status:', tokenError);
     }
 
     const confirmedByProfile = profileData?.email_confirmed === true;
@@ -80,7 +78,6 @@ async function getAppEmailConfirmationStatus(
         : null,
     };
   } catch (error) {
-    console.error('Error checking app email confirmation status:', error);
     return {
       confirmed: false,
       confirmedBy: null,
@@ -131,7 +128,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let initializationComplete = false;
 
     setTokenExpirationCallback(() => {
-      console.log('Token expiration detected from global error handler');
       if (mounted && !isHandlingExpirationRef.current) {
         handleTokenExpiration();
       }
@@ -139,7 +135,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const safetyTimeout = setTimeout(() => {
       if (!initializationComplete && mounted) {
-        console.warn('Auth initialization timed out after 10 seconds');
         setLoading(false);
         setAuthInitialized(true);
       }
@@ -175,17 +170,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             );
             const isConfirmedInAuth = session.user.email_confirmed_at !== null;
 
-            console.log('AuthContext - Confirmation status for signed-in user:', {
-              userId: session.user.id,
-              email: session.user.email,
-              confirmed: confirmationStatus.confirmed,
-              confirmedBy: confirmationStatus.confirmedBy,
-              authTableConfirmed: isConfirmedInAuth,
-            });
             
             if (!confirmationStatus.confirmed) {
-              console.log('=== EMAIL NOT CONFIRMED - BLOCKING ACCESS ===');
-              console.log('No confirmation record found in profile or token table');
               
               setIsEmailConfirmed(false);
               setAuthError(`EMAIL_NOT_CONFIRMED:${session.user.email}`);
@@ -193,17 +179,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               return;
             }
             
-            console.log('=== EMAIL CONFIRMED - ACCESS GRANTED ===');
-            console.log('Confirmation validated for user:', session.user.email, {
-              confirmedBy: confirmationStatus.confirmedBy,
-            });
             setIsEmailConfirmed(true);
             setAuthError(null); // Clear any previous auth errors
             
             // Load user profile after email confirmation is validated
             await loadUserProfile(session.user.id, session.user.email!, true);
           } catch (error: any) {
-            console.error('Error loading user profile after login:', error);
             
             // Set auth error for display in UI
             if (error.message?.includes('perfil vÃ¡lido') || error.message?.includes('eliminada')) {
@@ -211,7 +192,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
             
             if (error.message?.includes('session_not_found') || error.message?.includes('JWT')) {
-              console.log('AuthContext - Session error after login, signing out');
               await supabaseClient.auth.signOut();
             }
           }
@@ -221,7 +201,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           try {
             await loadUserProfile(session.user.id, session.user.email!, true);
           } catch (error: any) {
-            console.error('Error loading user profile:', error);
           }
         }
         
@@ -255,7 +234,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (profileError: any) {
           // Handle case where user exists in auth.users but not in profiles (deleted account)
           if (profileError.code === 'PGRST116' && profileError.message?.includes('0 rows')) {
-            console.log('AuthContext - User exists in auth but not in profiles (deleted account)');
             // Sign out the user and throw error
             await supabaseClient.auth.signOut();
             setAuthError('Esta cuenta fue eliminada previamente. Por favor crea una nueva cuenta o contacta con soporte.');
@@ -346,7 +324,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           logger.info('New user profile created and logged in', { userId });
         }
       } catch (error) {
-        console.error('Error loading user profile:', error);
         throw error;
       }
     };
@@ -355,49 +332,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const checkSession = async () => {
       try {
         if (!mounted) return;
-        console.log('AuthContext - Checking initial session...');
         const { data } = await supabaseClient.auth.getSession();
         const session = data?.session;
 
-        console.log('AuthContext - Initial session check result:', session?.user?.email || 'No session');
         setSession(session);
 
         if (session?.user) {
           try {
             // Check email confirmation for initial session
-            console.log('AuthContext - Initial session: Checking email confirmation for user:', session.user.email);
             const confirmationStatus = await getAppEmailConfirmationStatus(
               session.user.id,
               session.user.email_confirmed_at !== null,
             );
 
-            console.log('AuthContext - Initial session confirmation status:', {
-              userId: session.user.id,
-              email: session.user.email,
-              confirmed: confirmationStatus.confirmed,
-              confirmedBy: confirmationStatus.confirmedBy,
-            });
 
             if (!confirmationStatus.confirmed) {
               
-              console.log('AuthContext - Initial session: Email not confirmed, signing out');
               setIsEmailConfirmed(false);
               setAuthError(`EMAIL_NOT_CONFIRMED:${session.user.email}`);
               await supabaseClient.auth.signOut();
               return;
             }
             
-            console.log('AuthContext - Initial session: Email confirmed, loading profile');
             setIsEmailConfirmed(true);
             await loadUserProfile(session.user.id, session.user.email!, true);
           } catch (error) {
-            console.error('AuthContext - Error loading profile:', error);
           }
         } else {
-          console.log('AuthContext - No initial session found');
         }
       } catch (error) {
-        console.error('AuthContext - Error in checkSession:', error);
       } finally {
         // ALWAYS complete initialization, even if there were errors
         if (mounted) {
@@ -425,7 +388,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Set up periodic token validation and app state monitoring
   useEffect(() => {
     if (currentUser && session) {
-      console.log('Setting up token validation for user:', currentUser.email);
 
       if (tokenCheckIntervalRef.current) {
         clearInterval(tokenCheckIntervalRef.current);
@@ -440,7 +402,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           lastValidationRef.current = now;
           const isValid = await checkTokenValidity();
           if (!isValid) {
-            console.log('Token expired in periodic check, redirecting to login...');
             await handleTokenExpiration();
           }
         }
@@ -453,10 +414,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           currentUser &&
           !isHandlingExpirationRef.current
         ) {
-          console.log('App returned to foreground, checking token validity...');
           const isValid = await checkTokenValidity();
           if (!isValid) {
-            console.log('Token expired on app resume, redirecting to login...');
             await handleTokenExpiration();
           }
         }
@@ -483,18 +442,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data: { session }, error } = await supabaseClient.auth.getSession();
 
       if (error) {
-        console.error('Error checking session:', error);
         if (error.message?.includes('refresh_token_not_found') ||
             error.message?.includes('session_not_found') ||
             error.message?.includes('Invalid Refresh Token')) {
-          console.log('Session completely invalid, cannot refresh');
           return false;
         }
         return false;
       }
 
       if (!session) {
-        console.log('No active session found');
         return false;
       }
 
@@ -503,55 +459,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const timeUntilExpiry = tokenExp - now;
 
       if (now >= tokenExp) {
-        console.log('Token has expired, attempting refresh...');
         try {
           const { data: refreshData, error: refreshError } = await supabaseClient.auth.refreshSession();
 
           if (refreshError) {
-            console.error('Failed to refresh expired session:', refreshError);
             if (refreshError.message?.includes('refresh_token_not_found') ||
                 refreshError.message?.includes('Invalid Refresh Token')) {
-              console.log('Refresh token invalid, session cannot be recovered');
               return false;
             }
             return false;
           }
 
           if (!refreshData.session) {
-            console.log('No session returned after refresh');
             return false;
           }
 
-          console.log('Session refreshed successfully after expiration');
           setSession(refreshData.session);
           return true;
         } catch (refreshError) {
-          console.error('Exception during session refresh:', refreshError);
           return false;
         }
       }
 
       if (timeUntilExpiry < 300) {
-        console.log('Token expires soon (< 5 min), attempting preemptive refresh...');
         try {
           const { data: refreshData, error: refreshError } = await supabaseClient.auth.refreshSession();
 
           if (refreshError) {
-            console.error('Failed to preemptively refresh session:', refreshError);
             if (timeUntilExpiry > 60) {
-              console.log('Still have time, continuing with current session');
               return true;
             }
             return false;
           }
 
           if (refreshData.session) {
-            console.log('Session preemptively refreshed successfully');
             setSession(refreshData.session);
           }
           return true;
         } catch (refreshError) {
-          console.error('Exception during preemptive refresh:', refreshError);
           if (timeUntilExpiry > 60) {
             return true;
           }
@@ -566,24 +511,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .limit(1);
 
       if (testError) {
-        console.error('Token validation API call failed:', testError);
 
         if (testError.message?.includes('JWT') ||
             testError.message?.includes('expired') ||
             testError.message?.includes('invalid') ||
             testError.code === 'PGRST301') {
-          console.log('JWT error detected during validation, token is invalid');
           return false;
         }
       }
 
       return true;
     } catch (error: any) {
-      console.error('Error in checkTokenValidity:', error);
       if (error?.message?.includes('JWT') ||
           error?.message?.includes('expired') ||
           error?.message?.includes('session_not_found')) {
-        console.log('Critical session error detected');
         return false;
       }
       return false;
@@ -592,14 +533,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const handleTokenExpiration = async () => {
     if (isHandlingExpirationRef.current) {
-      console.log('Already handling token expiration, skipping...');
       return;
     }
 
     isHandlingExpirationRef.current = true;
 
     try {
-      console.log('Handling token expiration...');
 
       if (tokenCheckIntervalRef.current) {
         clearInterval(tokenCheckIntervalRef.current);
@@ -616,14 +555,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         await supabaseClient.auth.signOut();
       } catch (signOutError) {
-        console.error('Error during sign out:', signOutError);
       }
 
       setTimeout(() => {
         try {
           router.replace('/auth/login');
         } catch (routerError) {
-          console.error('Error navigating to login:', routerError);
         }
       }, 100);
 
@@ -646,20 +583,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       );
     } catch (error) {
-      console.error('Error handling token expiration:', error);
       isHandlingExpirationRef.current = false;
       setTimeout(() => {
         try {
           router.replace('/auth/login');
         } catch (routerError) {
-          console.error('Error in fallback navigation:', routerError);
         }
       }, 100);
     }
   };
   const login = async (email: string, password: string): Promise<User | null> => {
     try {
-      console.log('AuthContext - Attempting login with Supabase for:', email);
 
       // Registrar intento de login
       await logAction('LOGIN_ATTEMPT', {
@@ -675,7 +609,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       
       if (error) {
-        console.error('AuthContext - Login error:', error.message);
         
         // Registrar fallo de login
         await logAction('LOGIN_FAILED', {
@@ -693,7 +626,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         // Handle specific session errors
         if (error.message?.includes('session_not_found') || error.message?.includes('JWT')) {
-          console.log('AuthContext - Session error during login, clearing state');
           await supabaseClient.auth.signOut();
         }
         
@@ -713,26 +645,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
         if (data.user) {
         // Validate app-level confirmation before allowing access
-        console.log('=== STRICT EMAIL CONFIRMATION CHECK ===');
-        console.log('User ID:', data.user.id);
-        console.log('User email:', data.user.email);
 
         const confirmationStatus = await getAppEmailConfirmationStatus(
           data.user.id,
           data.user.email_confirmed_at !== null,
         );
 
-        console.log('Login confirmation status:', {
-          userId: data.user.id,
-          email: data.user.email,
-          confirmed: confirmationStatus.confirmed,
-          confirmedBy: confirmationStatus.confirmedBy,
-        });
 
         if (!confirmationStatus.confirmed) {
           
-          console.log('=== EMAIL NOT CONFIRMED - BLOCKING LOGIN ===');
-          console.log('Neither profile nor token table shows a confirmed email');
           
           setIsEmailConfirmed(false);
           setAuthError(`EMAIL_NOT_CONFIRMED:${data.user.email}`);
@@ -743,7 +664,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           throw new Error('Debes confirmar tu correo electrÃ³nico antes de iniciar sesiÃ³n. Revisa tu bandeja de entrada.');
         }
         
-        console.log('=== EMAIL CONFIRMED - LOGIN ALLOWED ===');
         setIsEmailConfirmed(true);
         try {
           // Check if user profile exists
@@ -790,7 +710,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
           const resolvedActiveRole = await resolvePreferredActiveRole(data.user.id, availableRoles);
           
-          console.log('AuthContext - Login successful, setting user:', user.email);
           setActiveRoleState(resolvedActiveRole);
           setCurrentUser(user);
 
@@ -812,11 +731,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Esto se hace de forma asÃ­ncrona para no bloquear el flujo de login
           setTimeout(async () => {
             try {
-              console.log('ðŸ”” Auto-registering push notifications after login...');
               // La funciÃ³n validateAndUpdateTokens se ejecutarÃ¡ automÃ¡ticamente
               // cuando NotificationContext detecte que currentUser cambiÃ³
             } catch (notifError) {
-              console.log('âš ï¸ Could not auto-register notifications:', notifError);
               // No bloquear el login si falla el registro de notificaciones
             }
           }, 1000);
@@ -825,7 +742,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (error: any) {
           // Handle case where user exists in auth.users but not in profiles
           if (error.code === 'PGRST116' && error.message?.includes('0 rows')) {
-            console.log('AuthContext - Login: User exists in auth but not in profiles (deleted account)');
             // Sign out the user and throw clear error message
             await supabaseClient.auth.signOut();
             throw new Error('Esta cuenta fue eliminada previamente. Por favor crea una nueva cuenta o contacta con soporte.');
@@ -836,18 +752,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       return null;
     } catch (error) {
-      console.error('Login error:', error);
       throw error;
     }
   };
 
   const register = async (email: string, password: string, displayName: string) => {
     try {
-      console.log('AuthContext - Register function called, but registration is now handled in register.tsx');
-      console.log('This function should not be called anymore. Throwing error to prevent duplicate registration.');
       throw new Error('Register function in AuthContext is deprecated. Use the registration flow in register.tsx instead.');
     } catch (error) {
-      console.error('Register error:', error);
       throw error;
     }
   };
@@ -882,9 +794,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             })
             .eq('id', currentUser.id);
 
-          console.log('âœ… Tokens de notificaciÃ³n limpiados en logout');
         } catch (tokenError) {
-          console.warn('âš ï¸ Error limpiando tokens en logout:', tokenError);
           // No fallar el logout si falla la limpieza de tokens
         }
       }

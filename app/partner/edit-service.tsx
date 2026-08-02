@@ -106,7 +106,6 @@ export default function EditService() {
         router.back();
       }
     } catch (error) {
-      console.error('Error fetching service details:', error);
       Alert.alert('Error', 'No se pudo cargar la información del servicio');
     } finally {
       setLoading(false);
@@ -152,7 +151,6 @@ export default function EditService() {
         setNewImages(prev => [...prev, ...result.assets].slice(0, 5 - existingImages.length));
       }
     } catch (error) {
-      console.error('Error selecting images:', error);
       Alert.alert('Error', 'No se pudieron seleccionar las imágenes');
     }
   };
@@ -190,7 +188,6 @@ export default function EditService() {
         setNewImages(prev => [...prev, ...result.assets]);
       }
     } catch (error) {
-      console.error('Error taking photo:', error);
       Alert.alert('Error', 'No se pudo tomar la foto');
     }
   };
@@ -245,7 +242,6 @@ export default function EditService() {
       let uploadedImageUrls: string[] = [];
 
       if (newImages.length > 0) {
-        console.log(`Subiendo ${newImages.length} imágenes nuevas...`);
 
         for (let i = 0; i < newImages.length; i++) {
           const imageUrl = await uploadImage(newImages[i].uri);
@@ -343,7 +339,6 @@ export default function EditService() {
         }]
       );
     } catch (error) {
-      console.error('Error updating service:', error);
 
       let errorMessage = 'Error desconocido';
       if (error instanceof Error) {

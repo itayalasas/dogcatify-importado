@@ -116,7 +116,6 @@ const getClientIP = async (): Promise<string | undefined> => {
       return data.ip;
     }
   } catch (error) {
-    console.warn('Could not fetch client IP:', error);
   }
   return undefined;
 };
@@ -182,7 +181,6 @@ export const logAction = async (
       try {
         ipAddress = await getClientIP();
       } catch (error) {
-        console.warn('Could not get IP:', error);
       }
     }
     
@@ -213,14 +211,11 @@ export const logAction = async (
 
     if (error) {
       if (options.suppressConsoleError) {
-        console.warn('Error al registrar log de auditoría (suprimido para no interrumpir el flujo):', error);
       } else {
-        console.error('Error al registrar log de auditoría:', error);
       }
     }
   } catch (error) {
     // No lanzar error para no interrumpir el flujo principal
-    console.error('Error en logAction:', error);
   }
 };
 

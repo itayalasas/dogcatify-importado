@@ -85,7 +85,6 @@ export default function AdminSettings() {
         enableAnalytics: config.advanced_analytics_enabled ?? prev.enableAnalytics,
       }));
     } catch (error) {
-      console.error('Error loading system settings:', error);
     }
   };
 
@@ -126,7 +125,6 @@ export default function AdminSettings() {
         setSubscriptionsEnabled(data.enabled);
       }
     } catch (error) {
-      console.error('Error loading subscription settings:', error);
     }
   };
 
@@ -172,7 +170,6 @@ export default function AdminSettings() {
           : 'Sistema de suscripciones deshabilitado. Ya no será visible para los usuarios.'
       );
     } catch (error) {
-      console.error('Error toggling subscriptions:', error);
       Alert.alert('Error', 'No se pudo actualizar la configuración de suscripciones');
     } finally {
       setLoadingSubscriptions(false);
@@ -205,7 +202,6 @@ export default function AdminSettings() {
         });
       }
     } catch (error) {
-      console.error('Error loading admin MP config:', error);
     }
   };
 
@@ -347,7 +343,6 @@ export default function AdminSettings() {
         [{ text: 'Continuar', onPress: () => setShowMercadoPagoModal(false) }]
       );
     } catch (error) {
-      console.error('Error saving admin MP config:', error);
       Alert.alert('Error', 'No se pudo guardar la configuración. Intenta nuevamente.');
     } finally {
       setMpLoading(false);
@@ -404,7 +399,6 @@ export default function AdminSettings() {
 
       Alert.alert('¡Éxito!', 'El Client ID quedó guardado correctamente.');
     } catch (error) {
-      console.error('Error saving Mercado Pago client ID:', error);
       Alert.alert('Error', 'No se pudo guardar el Client ID.');
     } finally {
       setMpLoading(false);
@@ -505,7 +499,6 @@ export default function AdminSettings() {
       };
       
       // Realizar la petición a la función de Supabase
-      console.log('Enviando solicitud a:', apiUrl);
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
@@ -517,7 +510,6 @@ export default function AdminSettings() {
       
       // Procesar la respuesta
       const result = await response.json();
-      console.log('Respuesta del servidor:', result);
       
       if (response.ok) {
         return { success: true, messageId: result.messageId };
@@ -525,7 +517,6 @@ export default function AdminSettings() {
         return { success: false, error: result.error || 'Error desconocido' };
       }
     } catch (error) {
-      console.error('Error enviando email de prueba:', error);
       return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
     }
   };
@@ -544,7 +535,6 @@ export default function AdminSettings() {
     try {
       await saveSystemSettings(nextSettings);
     } catch (error) {
-      console.error(`Error saving system setting ${key}:`, error);
       setSettings(previousSettings);
       Alert.alert('Error', 'No se pudo guardar la configuración. Intenta nuevamente.');
       throw error;
@@ -558,7 +548,6 @@ export default function AdminSettings() {
       setIsLoggingOut(true);
       await logout();
     } catch (error: any) {
-      console.error('Error logging out:', error);
       setIsLoggingOut(false);
       Alert.alert('Error', error?.message || 'No se pudo cerrar sesion. Intenta nuevamente.');
     }
@@ -589,7 +578,6 @@ export default function AdminSettings() {
     
     setTestEmailLoading(true);
     try {
-      console.log('Sending test email to:', testEmail);
       // Llamar a la función de prueba
       const result = await sendTestEmail(testEmail);
       
@@ -716,7 +704,6 @@ export default function AdminSettings() {
                   .insert(notificationsToInsert);
 
                 if (insertError) {
-                  console.error('Error inserting batch:', insertError);
                 } else {
                   inserted += batch.length;
                 }
@@ -741,14 +728,11 @@ export default function AdminSettings() {
         ]
       );
     } catch (error) {
-      console.error('Error broadcasting notifications:', error);
       Alert.alert('Error', 'No se pudieron programar las notificaciones');
       setBroadcastLoading(false);
     }
   };
 
-  console.log('Current user email:', currentUser?.email);
-  console.log('Is admin check result:', isAdmin);
   
   if (!currentUser || !isAdmin) {
     return (

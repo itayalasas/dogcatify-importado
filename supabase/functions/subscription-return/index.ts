@@ -215,20 +215,11 @@ const fetchMercadoPagoOptional = async (accessToken: string, path: string) => {
 
     if (!response.ok) {
       const body = await response.text();
-      console.warn("Mercado Pago return fetch failed:", {
-        path,
-        status: response.status,
-        body: body.slice(0, 300),
-      });
       return null;
     }
 
     return await response.json();
   } catch (error) {
-    console.warn("Mercado Pago return fetch error:", {
-      path,
-      message: error instanceof Error ? error.message : String(error),
-    });
     return null;
   }
 };
@@ -420,16 +411,6 @@ const findLocalSubscriptionFromPreapproval = async (
   const referenceInfo = getSubscriptionReferenceInfo(externalReference);
   const planReferenceInfo = getPlanReferenceInfo(externalReference);
 
-  console.log(`[SubscriptionReturn][${scope === "partner" ? "Partner" : "User"}] Resolving local subscription from preapproval`, {
-    table,
-    preapprovalId: preapprovalId || null,
-    externalReference: externalReference || null,
-    mpPlanId: mpPlanId || null,
-    payerEmail: payerEmail || null,
-    referenceScope: referenceInfo.scope,
-    referenceId: referenceInfo.id || null,
-    planReference: planReferenceInfo,
-  });
 
   if (preapprovalId) {
     const { data: byPreapprovalId, error } = await supabase
@@ -439,17 +420,9 @@ const findLocalSubscriptionFromPreapproval = async (
       .maybeSingle();
 
     if (error) {
-      console.warn(`[SubscriptionReturn][${scope === "partner" ? "Partner" : "User"}] Local lookup by preapproval id failed`, {
-        preapprovalId,
-        error: error.message,
-      });
     }
 
     if (byPreapprovalId) {
-      console.log(`[SubscriptionReturn][${scope === "partner" ? "Partner" : "User"}] Matched local subscription by MP preapproval id`, {
-        localSubscriptionId: byPreapprovalId.id,
-        preapprovalId,
-      });
       return byPreapprovalId;
     }
   }
@@ -462,17 +435,9 @@ const findLocalSubscriptionFromPreapproval = async (
       .maybeSingle();
 
     if (error) {
-      console.warn(`[SubscriptionReturn][${scope === "partner" ? "Partner" : "User"}] Local lookup by external reference failed`, {
-        referenceId: referenceInfo.id,
-        error: error.message,
-      });
     }
 
     if (byExternalReference) {
-      console.log(`[SubscriptionReturn][${scope === "partner" ? "Partner" : "User"}] Matched local subscription by external reference`, {
-        localSubscriptionId: byExternalReference.id,
-        referenceId: referenceInfo.id,
-      });
       return byExternalReference;
     }
   }
@@ -488,19 +453,9 @@ const findLocalSubscriptionFromPreapproval = async (
       .maybeSingle();
 
     if (error) {
-      console.warn(`[SubscriptionReturn][${scope === "partner" ? "Partner" : "User"}] Local lookup by payer/plan failed`, {
-        mpPlanId,
-        payerEmail,
-        error: error.message,
-      });
     }
 
     if (byPayerAndPlan) {
-      console.log(`[SubscriptionReturn][${scope === "partner" ? "Partner" : "User"}] Matched local subscription by payer and plan`, {
-        localSubscriptionId: byPayerAndPlan.id,
-        mpPlanId,
-        payerEmail,
-      });
       return byPayerAndPlan;
     }
   }
@@ -521,30 +476,13 @@ const findLocalSubscriptionFromPreapproval = async (
       .maybeSingle();
 
     if (error) {
-      console.warn(`[SubscriptionReturn][${scope === "partner" ? "Partner" : "User"}] Local lookup by plan reference failed`, {
-        planId: planReferenceInfo.planId,
-        cycle: planReferenceInfo.cycle,
-        error: error.message,
-      });
     }
 
     if (byPlanReference) {
-      console.log(`[SubscriptionReturn][${scope === "partner" ? "Partner" : "User"}] Matched local subscription by plan reference`, {
-        localSubscriptionId: byPlanReference.id,
-        planId: planReferenceInfo.planId,
-        cycle: planReferenceInfo.cycle,
-      });
       return byPlanReference;
     }
   }
 
-  console.warn(`[SubscriptionReturn][${scope === "partner" ? "Partner" : "User"}] Could not resolve local subscription from preapproval`, {
-    preapprovalId: preapprovalId || null,
-    externalReference: externalReference || null,
-    mpPlanId: mpPlanId || null,
-    payerEmail: payerEmail || null,
-    planReference: planReferenceInfo,
-  });
 
   return null;
 };
@@ -560,27 +498,14 @@ const syncUserSubscription = async (supabase: any, subscriptionId: string): Prom
   let preapproval: any = null;
 
   if (error || !subscription) {
-    console.warn("[SubscriptionReturn][User] Could not load local subscription by id, trying preapproval fallback", {
-      subscriptionId,
-      error: error?.message || null,
-    });
 
     const mpConfig = await getAdminMercadoPagoConfig(supabase);
     preapproval = await fetchMercadoPagoOptional(mpConfig.access_token, `/preapproval/${subscriptionId}`);
 
     if (!preapproval) {
-      console.warn("[SubscriptionReturn][User] Could not resolve preapproval fallback", {
-        subscriptionId,
-      });
       return { success: false, localStatus: initialSubscription?.status || null, mpStatus: null };
     }
 
-    console.log("[SubscriptionReturn][User] Preapproval fallback resolved", {
-      subscriptionId,
-      preapprovalId: preapproval?.id || null,
-      mpStatus: preapproval?.status || null,
-      externalReference: preapproval?.external_reference || null,
-    });
 
     subscription = await findLocalSubscriptionFromPreapproval(supabase, preapproval, "user");
 
@@ -589,13 +514,6 @@ const syncUserSubscription = async (supabase: any, subscriptionId: string): Prom
     }
   }
 
-  console.log("[SubscriptionReturn][User] Loaded local subscription", {
-    subscriptionId,
-    userId: subscription.user_id || null,
-    status: subscription.status || null,
-    mpPreapprovalId: subscription.mercadopago_preapproval_id || null,
-    mpPlanId: subscription.mercadopago_preapproval_plan_id || null,
-  });
 
   const mpConfig = await getAdminMercadoPagoConfig(supabase);
   if (!preapproval) {
@@ -603,18 +521,9 @@ const syncUserSubscription = async (supabase: any, subscriptionId: string): Prom
   }
 
   if (!preapproval) {
-    console.warn("Subscription return could not find Mercado Pago preapproval:", {
-      subscriptionId,
-    });
     return { success: false, localStatus: subscription?.status || null, mpStatus: null };
   }
 
-  console.log("[SubscriptionReturn][User] Mercado Pago preapproval resolved", {
-    subscriptionId,
-    preapprovalId: preapproval?.id || null,
-    mpStatus: preapproval?.status || null,
-    externalReference: preapproval?.external_reference || null,
-  });
 
   const now = new Date().toISOString();
   const mappedStatus = mapPreapprovalStatus(preapproval?.status);
@@ -658,19 +567,9 @@ const syncUserSubscription = async (supabase: any, subscriptionId: string): Prom
     .eq("id", subscription.id);
 
   if (updateError) {
-    console.warn("Subscription return sync update failed:", {
-      subscriptionId,
-      error: updateError.message,
-    });
     return { success: false, localStatus: effectiveStatus, mpStatus: preapproval?.status || null };
   }
 
-  console.log("[SubscriptionReturn][User] Synced local subscription", {
-    subscriptionId,
-    preapprovalId: preapproval?.id,
-    mpStatus: preapproval?.status,
-    localStatus: effectiveStatus,
-  });
   return { success: true, localStatus: effectiveStatus, mpStatus: preapproval?.status || null };
 };
 
@@ -685,27 +584,14 @@ const syncPartnerSubscription = async (supabase: any, subscriptionId: string): P
   let preapproval: any = null;
 
   if (error || !subscription) {
-    console.warn("[SubscriptionReturn][Partner] Could not load local subscription by id, trying preapproval fallback", {
-      subscriptionId,
-      error: error?.message || null,
-    });
 
     const mpConfig = await getAdminMercadoPagoConfig(supabase);
     preapproval = await fetchMercadoPagoOptional(mpConfig.access_token, `/preapproval/${subscriptionId}`);
 
     if (!preapproval) {
-      console.warn("[SubscriptionReturn][Partner] Could not resolve preapproval fallback", {
-        subscriptionId,
-      });
       return { success: false, localStatus: initialSubscription?.status || null, mpStatus: null };
     }
 
-    console.log("[SubscriptionReturn][Partner] Preapproval fallback resolved", {
-      subscriptionId,
-      preapprovalId: preapproval?.id || null,
-      mpStatus: preapproval?.status || null,
-      externalReference: preapproval?.external_reference || null,
-    });
 
     subscription = await findLocalSubscriptionFromPreapproval(supabase, preapproval, "partner");
 
@@ -714,13 +600,6 @@ const syncPartnerSubscription = async (supabase: any, subscriptionId: string): P
     }
   }
 
-  console.log("[SubscriptionReturn][Partner] Loaded local subscription", {
-    subscriptionId,
-    partnerId: subscription.partner_id || null,
-    status: subscription.status || null,
-    mpPreapprovalId: subscription.mercadopago_preapproval_id || null,
-    mpPlanId: subscription.mercadopago_preapproval_plan_id || null,
-  });
 
   const mpConfig = await getAdminMercadoPagoConfig(supabase);
   if (!preapproval) {
@@ -728,18 +607,9 @@ const syncPartnerSubscription = async (supabase: any, subscriptionId: string): P
   }
 
   if (!preapproval) {
-    console.warn("Partner subscription return could not find Mercado Pago preapproval:", {
-      subscriptionId,
-    });
     return { success: false, localStatus: subscription?.status || null, mpStatus: null };
   }
 
-  console.log("[SubscriptionReturn][Partner] Mercado Pago preapproval resolved", {
-    subscriptionId,
-    preapprovalId: preapproval?.id || null,
-    mpStatus: preapproval?.status || null,
-    externalReference: preapproval?.external_reference || null,
-  });
 
   const now = new Date().toISOString();
   const mappedStatus = mapPreapprovalStatus(preapproval?.status);
@@ -781,19 +651,9 @@ const syncPartnerSubscription = async (supabase: any, subscriptionId: string): P
     .eq("id", subscription.id);
 
   if (updateError) {
-    console.warn("Partner subscription return sync update failed:", {
-      subscriptionId,
-      error: updateError.message,
-    });
     return { success: false, localStatus: String(updatePayload.status || mappedStatus), mpStatus: preapproval?.status || null };
   }
 
-  console.log("[SubscriptionReturn][Partner] Synced local subscription", {
-    subscriptionId,
-    preapprovalId: preapproval?.id,
-    mpStatus: preapproval?.status,
-    localStatus: mappedStatus,
-  });
 
   const { data: partnerOwnerRow, error: partnerOwnerError } = await supabase
     .from("partners")
@@ -802,10 +662,6 @@ const syncPartnerSubscription = async (supabase: any, subscriptionId: string): P
     .maybeSingle();
 
   if (partnerOwnerError) {
-    console.warn("Partner subscription return partner owner lookup failed:", {
-      subscriptionId,
-      error: partnerOwnerError.message,
-    });
   } else if (partnerOwnerRow?.user_id) {
     const { error: partnerUpdateError } = await supabase
       .from("partners")
@@ -826,10 +682,6 @@ const syncPartnerSubscription = async (supabase: any, subscriptionId: string): P
       .eq("user_id", partnerOwnerRow.user_id);
 
     if (partnerUpdateError) {
-      console.warn("Partner subscription return partner sync failed:", {
-        subscriptionId,
-        error: partnerUpdateError.message,
-      });
     }
   }
   return { success: true, localStatus: String(updatePayload.status || mappedStatus), mpStatus: preapproval?.status || null };
@@ -863,19 +715,6 @@ Deno.serve(async (req: Request) => {
   const syncReferenceId = subscriptionId || preapprovalIdParam || null;
   let syncResult: SubscriptionReturnSyncResult | null = null;
 
-  console.log("[SubscriptionReturn] Incoming return request", {
-    url: url.toString(),
-    pathname: url.pathname,
-    external_reference: externalReference || null,
-    subscription_id_param: subscriptionIdParam || null,
-    preapproval_id_param: preapprovalIdParam || null,
-    path_params: pathParams,
-    scope,
-    target,
-    partner_id: partnerId,
-    resolved_subscription_id: subscriptionId,
-    sync_reference_id: syncReferenceId,
-  });
 
   try {
     if (syncReferenceId) {
@@ -892,7 +731,6 @@ Deno.serve(async (req: Request) => {
       }
     }
   } catch (error) {
-    console.error("subscription-return sync failed:", error);
   }
 
   const resolvedStatus = syncResult?.localStatus || syncResult?.mpStatus || "unknown";
