@@ -1,0 +1,12 @@
+/*\n  # Actualizar Cron Job para Usar pg_net\n\n  1. Cambios\n    - Actualiza la función para usar pg_net.http_post\n    - Hardcodea la URL de Supabase y usa variables de sistema\n    - Maneja errores correctamente\n\n  2. Notas\n    - pg_net es más confiable en Supabase que http extension\n    - El service role key está disponible en variables de entorno del sistema\n*/\n\nCREATE OR REPLACE FUNCTION check_alert_thresholds_cron()\nRETURNS void\nLANGUAGE plpgsql\nSECURITY DEFINER\nAS $$\nDECLARE\n  request_id bigint;
+\n  supabase_url text := 'https://hpvzjuionqvgxlvhyqgz.supabase.co';
+\n  service_role_key text;
+\nBEGIN\n  -- Obtener service role key desde variables de entorno de Supabase\n  -- En Supabase, estas están disponibles automáticamente\n  service_role_key := current_setting('app.settings.service_role_key', true);
+\n  \n  -- Si no está configurado, intentar con la variable de entorno del sistema\n  IF service_role_key IS NULL THEN\n    service_role_key := current_setting('supabase.service_role_key', true);
+\n  END IF;
+\n  \n  -- Hacer request HTTP usando pg_net\n  SELECT INTO request_id net.http_post(\n    url := supabase_url || '/functions/v1/check-alert-thresholds',\n    headers := jsonb_build_object(\n      'Authorization', 'Bearer ' || COALESCE(service_role_key, ''),\n      'Content-Type', 'application/json'\n    ),\n    body := '{}'::jsonb,\n    timeout_milliseconds := 30000\n  );
+\n  \n  -- Log de ejecución exitosa\n  INSERT INTO audit_logs (\n    action,\n    resource_type,\n    success,\n    details\n  ) VALUES (\n    'CRON_ALERT_CHECK',\n    'system_cron',\n    true,\n    jsonb_build_object(\n      'job', 'check_alert_thresholds',\n      'executed_at', NOW(),\n      'request_id', request_id\n    )\n  );
+\n  \nEXCEPTION\n  WHEN OTHERS THEN\n    -- Log de error\n    INSERT INTO audit_logs (\n      action,\n      resource_type,\n      success,\n      error_message,\n      details\n    ) VALUES (\n      'CRON_ALERT_CHECK',\n      'system_cron',\n      false,\n      SQLERRM,\n      jsonb_build_object(\n        'job', 'check_alert_thresholds',\n        'executed_at', NOW(),\n        'error_detail', SQLSTATE\n      )\n    );
+\nEND;
+\n$$;
+\n;

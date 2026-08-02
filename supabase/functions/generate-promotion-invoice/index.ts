@@ -159,6 +159,7 @@ Deno.serve(async (req: Request) => {
     const isSupabaseFunctionEmailEndpoint = emailApiUrl.includes('/functions/v1/');
     const emailHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
+      'x-api-key': emailApiKey,
       'X-Integration-Key': emailApiKey,
     };
 

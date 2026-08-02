@@ -1,0 +1,3 @@
+/*\n  # Eliminar todas las políticas recursivas de profiles\n  \n  1. Problema\n    - Las políticas de admin que consultan profiles desde policies de profiles causan recursión\n    - "Admins can update all profiles" y "Admins can delete profiles" tienen el mismo problema\n  \n  2. Solución\n    - Eliminar estas políticas problemáticas\n    - La política "Enable read access for all users" ya permite SELECT a todos\n    - Los usuarios pueden actualizar sus propios perfiles con las políticas existentes\n*/\n\n-- Eliminar políticas de admin que causan recursión\nDROP POLICY IF EXISTS "Admins can update all profiles" ON profiles;
+\nDROP POLICY IF EXISTS "Admins can delete profiles" ON profiles;
+\n;

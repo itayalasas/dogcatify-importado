@@ -59,7 +59,7 @@ const ONBOARDING_VARIANTS: Record<AppRole, OnboardingVariant> = {
     subheadline: 'Todo lo que necesitas para cuidar a tus mascotas desde el primer día.',
     accentColor: '#2D6A6F',
     softColor: '#F0F9FF',
-    highlights: ['Mascotas', 'Salud', 'Dotty'],
+    highlights: ['Mascotas', 'Salud', 'Historial'],
     slides: [
       {
         id: 'owner-1',
@@ -69,9 +69,9 @@ const ONBOARDING_VARIANTS: Record<AppRole, OnboardingVariant> = {
       },
       {
         id: 'owner-2',
-        title: 'Recibí recomendaciones inteligentes',
-        description: 'Dotty te sugiere cuidados, alertas y próximos pasos según cada mascota.',
-        icon: <Sparkles size={44} color="#2D6A6F" />,
+        title: 'Recibí alertas útiles',
+        description: 'La app te avisa sobre pendientes, recordatorios y próximos pasos para cada mascota.',
+        icon: <ShieldCheck size={44} color="#2D6A6F" />,
       },
       {
         id: 'owner-3',

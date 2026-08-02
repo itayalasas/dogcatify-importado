@@ -23,6 +23,15 @@
     "plugins": [
       "expo-router",
       [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
+          }
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/images/logo-transp.png",

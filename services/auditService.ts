@@ -92,6 +92,7 @@ export interface AuditLog {
   user_agent?: string;
   details?: Record<string, any>;
   error_message?: string;
+  suppressConsoleError?: boolean;
 }
 
 /**
@@ -211,7 +212,11 @@ export const logAction = async (
       .insert([logEntry]);
 
     if (error) {
-      console.error('Error al registrar log de auditoría:', error);
+      if (options.suppressConsoleError) {
+        console.warn('Error al registrar log de auditoría (suprimido para no interrumpir el flujo):', error);
+      } else {
+        console.error('Error al registrar log de auditoría:', error);
+      }
     }
   } catch (error) {
     // No lanzar error para no interrumpir el flujo principal

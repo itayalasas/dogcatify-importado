@@ -1,0 +1,10 @@
+/*\n  # Corregir políticas RLS de audit_logs\n  \n  1. Problema\n    - Los administradores no pueden ver logs desde el frontend\n    - Las políticas RLS pueden tener conflictos o no estar funcionando correctamente\n  \n  2. Solución\n    - Eliminar todas las políticas existentes\n    - Recrear las políticas de forma limpia y verificada\n    - Asegurar que is_admin = true da acceso completo\n*/\n\n-- Eliminar todas las políticas existentes en audit_logs\nDO $$\nBEGIN\n  -- Drop all existing policies on audit_logs\n  DROP POLICY IF EXISTS "Admins can view all audit logs" ON audit_logs;
+\n  DROP POLICY IF EXISTS "Authenticated users can insert audit logs" ON audit_logs;
+\n  DROP POLICY IF EXISTS "Anonymous users can insert login failure logs" ON audit_logs;
+\n  DROP POLICY IF EXISTS "Service role can insert logs" ON audit_logs;
+\nEND $$;
+\n\n-- Política 1: Administradores pueden ver TODOS los logs\nCREATE POLICY "Admins can view all audit logs"\n  ON audit_logs\n  FOR SELECT\n  TO authenticated\n  USING (\n    EXISTS (\n      SELECT 1 FROM profiles\n      WHERE profiles.id = auth.uid()\n      AND profiles.is_admin = true\n    )\n  );
+\n\n-- Política 2: Todos los usuarios autenticados pueden insertar logs\nCREATE POLICY "Authenticated users can insert audit logs"\n  ON audit_logs\n  FOR INSERT\n  TO authenticated\n  WITH CHECK (true);
+\n\n-- Política 3: Usuarios anónimos pueden insertar logs de login fallidos\nCREATE POLICY "Anonymous users can insert login failure logs"\n  ON audit_logs\n  FOR INSERT\n  TO anon\n  WITH CHECK (\n    action IN ('LOGIN_FAILED', 'LOGIN_ERROR', 'LOGIN_ATTEMPT')\n  );
+\n\n-- Verificar que RLS está habilitado\nALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+;

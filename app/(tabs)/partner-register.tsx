@@ -101,7 +101,7 @@ type RegistrationPlanMeta = {
 };
 
 export default function PartnerRegister() {
-  const { currentUser } = useAuth();
+  const { currentUser, updateCurrentUser } = useAuth();
   const { sendNotificationToAdmin } = useNotifications();
   const [selectedType, setSelectedType] = useState<string>('');
   const [businessName, setBusinessName] = useState('');
@@ -809,6 +809,13 @@ export default function PartnerRegister() {
         .eq('id', currentUserId);
 
       if (profileError) throw profileError;
+
+      if (currentUser) {
+        updateCurrentUser({
+          ...currentUser,
+          isPartner: true,
+        });
+      }
 
       // Enviar notificación push al admin
       try {

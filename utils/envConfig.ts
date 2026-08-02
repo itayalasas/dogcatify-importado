@@ -19,6 +19,7 @@ interface EnvironmentVariables {
   FIREBASE_CLIENT_CERT_URL: string;
   EXPO_PUBLIC_EMAIL_API_URL: string;
   EXPO_PUBLIC_EMAIL_API_KEY: string;
+  EXPO_PUBLIC_CONFIRM_EMAIL_API_URL: string;
   EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID: string;
   [key: string]: string;
 }
@@ -97,21 +98,34 @@ class EnvConfigService {
   /**
    * Inicializa la configuración cargándola desde el API Gateway
    */
-  public async initialize(): Promise<void> {
-    // Si ya está inicializado, retornar inmediatamente
-    if (this.initialized && this.config) {
+  public async initialize(forceRefresh = false): Promise<void> {
+    // Si ya está inicializado, retornar inmediatamente salvo que pidamos refresco forzado
+    if (!forceRefresh && this.initialized && this.config) {
       console.log('[EnvConfig] ✅ Already initialized, skipping');
       return;
     }
 
     // Si ya está cargando, esperar a que termine
     if (this.loading && this.initPromise) {
+      if (forceRefresh) {
+        console.log('[EnvConfig] 🔄 Force refresh requested while a config load is in progress; waiting and reloading...');
+        return this.initPromise
+          .catch((error) => {
+            console.warn('[EnvConfig] ⚠️ Current config load failed before force refresh, continuing anyway:', error);
+          })
+          .then(async () => {
+            this.loading = false;
+            this.initPromise = null;
+            await this.initialize(true);
+          });
+      }
+
       console.log('[EnvConfig] ⏳ Already loading, waiting...');
       return this.initPromise;
     }
 
     this.loading = true;
-    this.initPromise = this._loadConfig();
+    this.initPromise = this._loadConfig(forceRefresh);
 
     try {
       await this.initPromise;
@@ -121,18 +135,22 @@ class EnvConfigService {
     }
   }
 
-  private async _loadConfig(): Promise<void> {
+  private async _loadConfig(forceRefresh = false): Promise<void> {
     try {
-      console.log('[EnvConfig] 🚀 Initializing environment configuration...');
+      console.log('[EnvConfig] 🚀 Initializing environment configuration...', {
+        forceRefresh,
+      });
       console.log('[EnvConfig] 🏗️ Execution environment:', Constants.executionEnvironment);
 
-      // 1. Intentar cargar desde caché primero (más rápido)
-      const cachedConfig = await this._loadFromCache();
-      if (cachedConfig) {
-        this.config = cachedConfig;
-        console.log('[EnvConfig] 📦 Loaded from cache');
-        this.initialized = true;
-        return;
+      // 1. Intentar cargar desde caché primero (más rápido), salvo que se pida refresco forzado
+      if (!forceRefresh) {
+        const cachedConfig = await this._loadFromCache();
+        if (cachedConfig) {
+          this.config = cachedConfig;
+          console.log('[EnvConfig] 📦 Loaded from cache');
+          this.initialized = true;
+          return;
+        }
       }
 
       // 2. SIEMPRE intentar API Gateway primero si está configurado
@@ -362,6 +380,7 @@ class EnvConfigService {
           FIREBASE_CLIENT_CERT_URL: process.env.FIREBASE_CLIENT_CERT_URL || '',
           EXPO_PUBLIC_EMAIL_API_URL: process.env.EXPO_PUBLIC_EMAIL_API_URL || '',
           EXPO_PUBLIC_EMAIL_API_KEY: process.env.EXPO_PUBLIC_EMAIL_API_KEY || '',
+          EXPO_PUBLIC_CONFIRM_EMAIL_API_URL: process.env.EXPO_PUBLIC_CONFIRM_EMAIL_API_URL || '',
           EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID: process.env.EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID || '',
         };
       }
@@ -429,7 +448,9 @@ class EnvConfigService {
     console.log('[EnvConfig] 🔄 Forcing configuration reload...');
     this.initialized = false;
     this.config = null;
-    await this.initialize();
+    this.loading = false;
+    this.initPromise = null;
+    await this.initialize(true);
   }
 }
 

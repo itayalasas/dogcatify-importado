@@ -379,8 +379,8 @@ export default function ServiceBooking() {
       return dates;
     }
 
-    // Generar fechas para el mes en curso
-    const daysInMonth = 30; // Aproximadamente un mes
+    // Generar fechas para más adelante y no quedarnos cortos si la agenda se llena
+    const daysInMonth = 60;
 
     for (let i = 0; i < daysInMonth; i++) {
       const date = new Date(today);
@@ -427,9 +427,9 @@ export default function ServiceBooking() {
       dates.push({ date, isAvailable });
 
       // Limitar la cantidad de fechas mostradas
-      if (boardingCategory === 'Fin de semana' && dates.length >= 9) break;
-      if (boardingCategory === 'Semanal' && dates.length >= 7) break;
-      if (!boardingCategory && dates.length >= 7) break;
+      if (boardingCategory === 'Fin de semana' && dates.length >= 14) break;
+      if (boardingCategory === 'Semanal' && dates.length >= 14) break;
+      if (!boardingCategory && dates.length >= 14) break;
     }
 
     return dates;

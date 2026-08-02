@@ -506,8 +506,9 @@ export default function ServiceBooking() {
     const dates = [];
     const today = new Date();
     
-    // Generate dates for the next 14 days
-    for (let i = 0; i < 14; i++) {
+    // Generate dates for a wider window so the picker keeps offering options
+    // when the first available days are already full.
+    for (let i = 0; i < 30; i++) {
       const date = new Date(today);
       date.setDate(today.getDate() + i);
       
