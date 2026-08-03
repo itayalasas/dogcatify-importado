@@ -40,9 +40,19 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
     
     checkFollowStatus();
     
-    // Set up real-time subscription
-    const subscription = supabaseClient
-      .channel('profile-changes')
+    // Each FollowButton needs its own channel. Newer realtime-js versions reuse
+    // channels by topic, so a shared name would try to register callbacks after
+    // the first component has already subscribed.
+    const channelName = [
+      'profile-changes',
+      currentUser.id,
+      userId,
+      Date.now(),
+      Math.random().toString(36).slice(2),
+    ].join(':');
+
+    const channel = supabaseClient
+      .channel(channelName)
       .on('postgres_changes', 
         { 
           event: 'UPDATE', 
@@ -51,13 +61,13 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
           filter: `id=eq.${currentUser.id}`
         }, 
         () => {
-          checkFollowStatus();
+          void checkFollowStatus();
         }
       )
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      void supabaseClient.removeChannel(channel);
     };
   }, [currentUser, userId]);
 
@@ -76,7 +86,6 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
       }
       
       // Update local state immediately
-      const newFollowingStatus = !isFollowing;
       setIsFollowing(!isFollowing);
       
     } catch (error) {
