@@ -8,11 +8,14 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://rywmkznsjbvvtavcgxbb.supabase.co';
-const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5d21rem5zamJ2dnRhdmNneGJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ1NTgwMzQsImV4cCI6MjA2MDEzNDAzNH0.Wr_a4UEv_qN3i_iBbZOzMQOGBfFPT4KEw5EDbF_-LWU';
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-// Tu API Key (puede ser Partner ID o Admin Token)
-const API_KEY = process.env.API_KEY || 'dogcatify_admin_2025_secure';
+const API_KEY = process.env.ORDERS_API_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !API_KEY) {
+  throw new Error('Faltan EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY u ORDERS_API_KEY');
+}
 
 const API_BASE_URL = `${SUPABASE_URL}/functions/v1/orders-api`;
 

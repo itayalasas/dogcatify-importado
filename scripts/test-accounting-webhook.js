@@ -4,8 +4,14 @@
  * Este script prueba el envío de órdenes al sistema contable
  */
 
-const SUPABASE_URL = 'https://hpvzjuionqvgxlvhyqgz.supabase.co';
-const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwdnpqdWlvbnF2Z3hsdmh5cWd6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDExNzI5MywiZXhwIjoyMDc5NjkzMjkzfQ.10BnGYY1A8HKpFM59m4MOkOnZoYvSzac45cP3A2_t2c';
+require('dotenv').config();
+
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+  throw new Error('Faltan EXPO_PUBLIC_SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY');
+}
 
 async function testAccountingWebhook(orderId) {
   console.log('🧪 Iniciando prueba del webhook de contabilidad');

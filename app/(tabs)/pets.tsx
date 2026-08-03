@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Dimensions, Alert, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Alert, Image } from 'react-native';
 import { router } from 'expo-router';
 import { Plus, Bell, Check, X, User } from 'lucide-react-native';
 import { PetCard } from '../../components/PetCard';

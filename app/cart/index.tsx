@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Modal, ActivityIndicator, Animated, AppState, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, Modal, ActivityIndicator, Animated, AppState, Platform } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { ArrowLeft, ShoppingCart, Trash2, Plus, Minus, MapPin, ChevronDown, ChevronUp, CreditCard, X } from 'lucide-react-native';

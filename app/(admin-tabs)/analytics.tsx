@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, RefreshControl } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import { TrendingUp, Users, Package, Clock, Crown, Shield, Sparkles, AlertTriangle, RefreshCw } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';

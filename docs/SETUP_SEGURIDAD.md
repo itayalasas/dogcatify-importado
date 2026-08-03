@@ -39,7 +39,7 @@ SELECT cron.schedule(
     url := 'https://hpvzjuionqvgxlvhyqgz.supabase.co/functions/v1/check-alert-thresholds',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwdnpqdWlvbnF2Z3hsdmh5cWd6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDExNzI5MywiZXhwIjoyMDc5NjkzMjkzfQ.10BnGYY1A8HKpFM59m4MOkOnZoYvSzac45cP3A2_t2c'
+      'Authorization', 'Bearer REDACTED_CREDENTIAL'
     ),
     body := '{}'::jsonb
   );

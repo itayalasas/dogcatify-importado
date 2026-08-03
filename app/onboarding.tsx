@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -9,8 +10,7 @@ import {
   NativeSyntheticEvent,
   TouchableOpacity,
   Image,
-  SafeAreaView,
-} from 'react-native';
+  } from 'react-native';
 import { router } from 'expo-router';
 import {
   BarChart3,

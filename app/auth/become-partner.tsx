@@ -19,9 +19,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import {
-  createEmailConfirmationToken,
-  generateConfirmationUrl,
-  sendConfirmationEmailAPI,
+  requestEmailConfirmation,
 } from '../../utils/emailConfirmation';
 import { getFriendlyAuthErrorMessage } from '../../utils/authErrorMessages';
 import { validatePassword, PASSWORD_MIN_LENGTH_EXCLUSIVE } from '../../utils/passwordValidation';
@@ -143,17 +141,11 @@ export default function BecomePartner() {
       await supabaseClient.auth.signOut().catch(() => undefined);
       await AsyncStorage.setItem(AUTO_BIOMETRIC_SUPPRESS_KEY, '1').catch(() => undefined);
 
-      const confirmationToken = await createEmailConfirmationToken(
+      const emailResult = await requestEmailConfirmation(
+        trimmedEmail,
+        'signup',
         authData.user.id,
-        trimmedEmail,
-        'signup'
-      );
-
-      const confirmationUrl = generateConfirmationUrl(confirmationToken, 'signup');
-      const emailResult = await sendConfirmationEmailAPI(
-        trimmedEmail,
         trimmedName,
-        confirmationUrl
       );
 
       if (!emailResult.success) {

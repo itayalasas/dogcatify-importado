@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.43.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -144,6 +145,8 @@ Deno.serve(async (req: Request) => {
 
     const emailApiUrl = Deno.env.get("EMAIL_API_URL")?.trim() || "";
     const emailApiKey = Deno.env.get("EMAIL_API_KEY")?.trim() || "";
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim() || "";
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")?.trim() || "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() || "";
     const targetInfo = emailApiUrl ? describeEmailTarget(emailApiUrl) : null;
 
@@ -182,6 +185,59 @@ Deno.serve(async (req: Request) => {
           },
         },
       );
+    }
+
+    const bearerToken = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    const isServiceRequest = Boolean(supabaseServiceKey && bearerToken === supabaseServiceKey);
+    let authenticatedUser: { id: string; email?: string } | null = null;
+
+    if (!isServiceRequest) {
+      if (!supabaseUrl || !supabaseAnonKey || !bearerToken) {
+        return new Response(JSON.stringify({ error: "Unauthorized", request_id: requestId }), {
+          status: 401,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: `Bearer ${bearerToken}` } },
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+      const { data: authData } = await authClient.auth.getUser(bearerToken);
+      if (!authData.user) {
+        return new Response(JSON.stringify({ error: "Unauthorized", request_id: requestId }), {
+          status: 401,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      authenticatedUser = { id: authData.user.id, email: authData.user.email };
+
+      if (body.template_name === "welcome") {
+        if (body.recipient_email?.toLowerCase() !== authenticatedUser.email?.toLowerCase()) {
+          return new Response(JSON.stringify({ error: "Forbidden", request_id: requestId }), {
+            status: 403,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+      } else if (body.template_name === "welcome-partner") {
+        const { data: profile } = await authClient
+          .from("profiles")
+          .select("is_admin")
+          .eq("id", authenticatedUser.id)
+          .maybeSingle();
+        if (!profile?.is_admin) {
+          return new Response(JSON.stringify({ error: "Forbidden", request_id: requestId }), {
+            status: 403,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+      } else {
+        return new Response(JSON.stringify({ error: "Forbidden", request_id: requestId }), {
+          status: 403,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
     }
 
     if (targetInfo?.pointsToConfirmEmail) {

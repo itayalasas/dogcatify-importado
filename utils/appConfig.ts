@@ -56,17 +56,8 @@ const resolveDefaultEmailApiUrl = (): string => {
   return fallbackEmailUrl;
 };
 
-const resolveDefaultEmailApiKey = (): string => {
-  return (
-    process.env.EXPO_PUBLIC_EMAIL_API_KEY?.trim() ||
-    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
-    ''
-  );
-};
-
 const DEFAULT_CONFIG = {
   email_api_url: resolveDefaultEmailApiUrl(),
-  email_api_key: resolveDefaultEmailApiKey(),
   mercadopago_public_key: '',
   app_name: 'DogCatify',
   support_email: 'support@dogcatify.com',
@@ -76,7 +67,6 @@ const DEFAULT_CONFIG = {
 
 const fallbackConfig = {
   email_api_url: DEFAULT_CONFIG.email_api_url,
-  email_api_key: DEFAULT_CONFIG.email_api_key,
   mercadopago_public_key: process.env.EXPO_PUBLIC_MERCADOPAGO_PUBLIC_KEY?.trim() || DEFAULT_CONFIG.mercadopago_public_key,
   app_name: DEFAULT_CONFIG.app_name,
   support_email: DEFAULT_CONFIG.support_email,
@@ -84,10 +74,9 @@ const fallbackConfig = {
   enable_notifications: DEFAULT_CONFIG.enable_notifications,
 };
 
-const normalizeEmailApiConfig = (emailApiUrl: string, emailApiKey: string) => {
+const normalizeEmailApiUrl = (emailApiUrl: string) => {
   const baseUrl = getSupabaseBaseUrl();
   const normalizedUrl = trimTrailingSlash(emailApiUrl);
-  const normalizedKey = String(emailApiKey || '').trim();
 
   if (
     normalizedUrl &&
@@ -97,16 +86,10 @@ const normalizeEmailApiConfig = (emailApiUrl: string, emailApiKey: string) => {
       !matchesSupabaseFunctionPath(normalizedUrl, 'send-email')
     )
   ) {
-    return {
-      email_api_url: fallbackConfig.email_api_url,
-      email_api_key: fallbackConfig.email_api_key,
-    };
+    return fallbackConfig.email_api_url;
   }
 
-  return {
-    email_api_url: normalizedUrl || fallbackConfig.email_api_url,
-    email_api_key: normalizedKey || fallbackConfig.email_api_key,
-  };
+  return normalizedUrl || fallbackConfig.email_api_url;
 };
 
 export async function getAppConfig(forceRefresh = false): Promise<Record<string, any>> {
@@ -134,20 +117,19 @@ export async function getAppConfig(forceRefresh = false): Promise<Record<string,
     }
 
     const configObject = data.reduce((acc, item) => {
+      if (item.key === 'email_api_key') return acc;
       acc[item.key] = item.value;
       return acc;
     }, {} as Record<string, any>);
 
     const mergedConfig = { ...fallbackConfig, ...configObject };
-    const safeEmailConfig = normalizeEmailApiConfig(
-      String(mergedConfig.email_api_url || ''),
-      String(mergedConfig.email_api_key || ''),
-    );
+    const safeEmailApiUrl = normalizeEmailApiUrl(String(mergedConfig.email_api_url || ''));
 
     cachedConfig = {
       ...mergedConfig,
-      ...safeEmailConfig,
+      email_api_url: safeEmailApiUrl,
     };
+    delete cachedConfig.email_api_key;
     lastFetchTime = now;
 
     return cachedConfig;

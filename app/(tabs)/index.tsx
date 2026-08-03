@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, SafeAreaView, Alert, RefreshControl, Image, Animated, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, FlatList, Alert, RefreshControl, Image, Animated, ActivityIndicator } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Platform, Linking, InteractionManager } from 'react-native';
 import Constants from 'expo-constants';

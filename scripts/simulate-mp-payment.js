@@ -5,8 +5,14 @@
  * Esto imita lo que MP enviaría cuando un pago es aprobado
  */
 
-const SUPABASE_URL = 'https://zkgiwamycbjcogcgqhff.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InprZ2l3YW15Y2JqY29nY2dxaGZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIyMDI2MTIsImV4cCI6MjA2Nzc3ODYxMn0.D-LyMJVBu0vR_iRInOKUkNLQMs5qwj_vUVZsW_JNGWE';
+require('dotenv').config();
+
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  throw new Error('Faltan EXPO_PUBLIC_SUPABASE_URL y EXPO_PUBLIC_SUPABASE_ANON_KEY');
+}
 
 async function simulatePayment() {
   console.log('\n💳 Simulando pago completo de Mercado Pago\n');

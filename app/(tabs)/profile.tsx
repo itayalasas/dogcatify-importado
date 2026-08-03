@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, ActivityIndicator } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, CircleHelp as HelpCircle, Building, Fingerprint, ChevronRight, ArrowRight, Trash2, Crown, Sparkles, RefreshCw } from 'lucide-react-native';

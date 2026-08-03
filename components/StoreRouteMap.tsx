@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Modal, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Alert, Linking, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Location from 'expo-location';
 import { WebView } from 'react-native-webview';
 import { ExternalLink, Navigation, X } from 'lucide-react-native';
@@ -337,7 +338,7 @@ export const StoreRouteMap: React.FC<StoreRouteMapProps> = ({
     setMapError(null);
   };
 
-  const handleOpenRoute = async () => {
+  const loadRoute = async () => {
     setVisible(true);
     setLoadingRoute(true);
     setWebViewReady(false);
@@ -363,6 +364,17 @@ export const StoreRouteMap: React.FC<StoreRouteMapProps> = ({
     } finally {
       setLoadingRoute(false);
     }
+  };
+
+  const handleOpenRoute = () => {
+    Alert.alert(
+      'Usar ubicación para calcular la ruta',
+      'Para mostrar el recorrido, DogCatiFy compartirá temporalmente tu ubicación actual y el destino con servicios cartográficos de OpenStreetMap/OSRM. Estos datos se usan solo para calcular esta ruta. ¿Deseas continuar?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Continuar', onPress: () => { void loadRoute(); } },
+      ],
+    );
   };
 
   const handleOpenExternalMaps = async () => {
@@ -391,7 +403,7 @@ export const StoreRouteMap: React.FC<StoreRouteMapProps> = ({
         style={styles.routeButton}
       />
       <Text style={styles.helperText}>
-        Te mostramos la ruta desde tu ubicación actual hasta la tienda.
+        Te pediremos confirmación antes de compartir tu ubicación con el servicio de rutas.
       </Text>
 
       <Modal

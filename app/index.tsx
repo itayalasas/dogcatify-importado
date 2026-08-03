@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, Alert, RefreshControl, ActivityIndicator, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, Alert, RefreshControl, ActivityIndicator, Platform } from 'react-native';
 import { router, usePathname } from 'expo-router';
 import { Linking } from 'react-native';
 import PostCard from '../components/PostCard';

@@ -17,9 +17,7 @@ import { Button } from '../../components/ui/Button';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { supabaseClient } from '../../lib/supabase';
 import {
-  createEmailConfirmationToken,
-  generateConfirmationUrl,
-  sendConfirmationEmailAPI,
+  requestEmailConfirmation,
 } from '../../utils/emailConfirmation';
 import { getFriendlyAuthErrorMessage } from '../../utils/authErrorMessages';
 import {
@@ -146,9 +144,6 @@ export default function Register() {
         options: {
           data: {
             full_name: trimmedName,
-            account_role: 'owner',
-            is_owner: true,
-            is_partner: false,
           },
           emailRedirectTo: undefined,
         },
@@ -163,18 +158,11 @@ export default function Register() {
       }
 
 
-      const confirmationToken = await createEmailConfirmationToken(
+      const emailResult = await requestEmailConfirmation(
+        trimmedEmail,
+        'signup',
         authData.user.id,
-        trimmedEmail,
-        'signup'
-      );
-
-      const confirmationUrl = generateConfirmationUrl(confirmationToken, 'signup');
-
-      const emailResult = await sendConfirmationEmailAPI(
-        trimmedEmail,
         trimmedName,
-        confirmationUrl
       );
 
       if (!emailResult.success) {

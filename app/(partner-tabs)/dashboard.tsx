@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Image, Alert, Modal } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Calendar, DollarSign, Users, Package, TrendingUp, Clock, MessageCircle, ChartBar as BarChart3, Settings, Filter, CreditCard } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';

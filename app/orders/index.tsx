@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Alert, Linking, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { ArrowLeft, Package, Clock, Truck, CircleCheck as CheckCircle, Circle as XCircle, MapPin, Phone, Star, AlertCircle, RefreshCw } from 'lucide-react-native';

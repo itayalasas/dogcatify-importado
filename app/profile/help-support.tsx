@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Linking } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { ArrowLeft, Mail, MessageCircle, Phone, CircleHelp as HelpCircle, FileText, Bug, Star, BookOpen, Users } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';

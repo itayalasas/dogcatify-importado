@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, TextInput, ActivityIndicator, Linking, Image, Animated, AppState, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput, ActivityIndicator, Linking, Image, Animated, AppState, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { ArrowLeft, Calendar, Clock, CreditCard, X, Lock, User, FileText, CircleCheck as CheckCircle } from 'lucide-react-native';

@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   Image,
   Alert,
   ActivityIndicator,
@@ -487,7 +487,9 @@ export default function PetCareDetail() {
         throw new Error(secureUrlResult.error || 'No se pudo generar el enlace seguro');
       }
 
-      const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(secureUrlResult.url)}&format=png&margin=20&ecc=M&color=2D6A6F&bgcolor=FFFFFF`;
+      const qrResult = await callEdgeFunction('generate-medical-qr', { url: secureUrlResult.url });
+      if (!qrResult?.qrCodeDataUrl) throw new Error('No se pudo generar el código QR');
+      const qrCodeUrl = qrResult.qrCodeDataUrl;
       const shortUrl = `dogcatify.com/vet/${secureUrlResult.token.slice(-8)}`;
 
       router.push({

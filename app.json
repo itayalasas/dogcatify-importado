@@ -13,9 +13,9 @@
       "web"
     ],
     "splash": {
-      "image": "./assets/images/icon.png",
+      "image": "./assets/images/logo-transp.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#2D6A6F"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -56,9 +56,8 @@
       "eas": {
         "projectId": "0618d9ae-6714-46bb-adce-f4ee57fff324"
       },
-      "apiGateway": {
-        "url": "https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/get-env",
-        "apiKey": "5ab77aa971422c10964faf2500a6f14ff71524a4e48a72e8f0241cfcec352ef5"
+      "mobileConfig": {
+        "functionName": "mobile-config"
       }
     },
     "ios": {

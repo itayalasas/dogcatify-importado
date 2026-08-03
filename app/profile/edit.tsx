@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Platform, Modal, TextInput } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, Platform, Modal, TextInput } from 'react-native';
 import { router } from 'expo-router';
 import { ArrowLeft, Camera, Upload, User, Phone, MapPin, Mail, ChevronDown, Check, Search } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';

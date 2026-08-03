@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Alert, FlatList } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, FlatList } from 'react-native';
 import { router } from 'expo-router';
 import { ArrowLeft, Truck, CircleCheck as CheckCircle, Clock } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';

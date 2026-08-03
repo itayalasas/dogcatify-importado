@@ -61,7 +61,7 @@ echo # MERCADOPAGO_ACCESS_TOKEN=APP-xxxxxxxx >> secrets.env
 echo # MERCADOPAGO_PUBLIC_KEY=APP_USR-xxxxxxxx >> secrets.env
 echo # OPENAI_API_KEY=sk-xxxxxxxx >> secrets.env
 echo # GOOGLE_CLOUD_PROJECT_ID=tu-proyecto >> secrets.env
-echo # GOOGLE_CLOUD_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----" >> secrets.env
+echo # GOOGLE_CLOUD_PRIVATE_KEY="PRIVATE_KEY_FROM_SECURE_STORE\n...\n" >> secrets.env
 echo # GOOGLE_CLOUD_CLIENT_EMAIL=tu@email.iam.gserviceaccount.com >> secrets.env
 
 echo.

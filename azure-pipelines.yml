@@ -9,6 +9,7 @@ pool:
 variables:
   # 🔐 Grupo de variables con los secretos del keystore
   - group: android-signing          # ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+  - group: supabase-prod            # SUPABASE_URL y SUPABASE_ANON_KEY (configuración pública de build)
 
   # Versión de Node
   - name: NODE_VERSION
@@ -68,8 +69,13 @@ steps:
 
   # 4. Generar código nativo de Android (Expo prebuild)
   - script: |
+      test -n "$EXPO_PUBLIC_SUPABASE_URL"
+      test -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
       npx expo prebuild --platform android --non-interactive
     displayName: 'Expo prebuild Android'
+    env:
+      EXPO_PUBLIC_SUPABASE_URL: $(SUPABASE_URL)
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
 
   # 5. Dar permisos de ejecución a gradlew
   - script: |
@@ -110,6 +116,8 @@ steps:
       ANDROID_KEYSTORE_PASSWORD: '$(ANDROID_KEYSTORE_PASSWORD)'
       ANDROID_KEY_ALIAS: '$(ANDROID_KEY_ALIAS)'
       ANDROID_KEY_PASSWORD: '$(ANDROID_KEY_PASSWORD)'
+      EXPO_PUBLIC_SUPABASE_URL: $(SUPABASE_URL)
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
 
   # 9. Publicar el artefacto (AAB)
   - task: PublishBuildArtifacts@1

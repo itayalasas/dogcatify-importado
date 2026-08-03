@@ -1,6 +1,4 @@
 import { supabaseClient } from '../lib/supabase';
-import { createClient } from '@supabase/supabase-js';
-import { getAppConfig } from './appConfig';
 import { envConfig } from './envConfig';
 
 export interface EmailConfirmationToken {
@@ -105,12 +103,7 @@ const resolveSupabaseFunctionUrl = (
   return configuredUrl;
 };
 
-const getEmailApiKey = (): string => {
-  return (
-    readEnvValue('EXPO_PUBLIC_EMAIL_API_KEY') ||
-    readEnvValue('EXPO_PUBLIC_SUPABASE_ANON_KEY')
-  );
-};
+const getPublicSupabaseKey = (): string => readEnvValue('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 
 const parseMetadataBoolean = (value: any): boolean | undefined => {
   if (value === true || value === 'true') return true;
@@ -182,25 +175,6 @@ const getRoleFlagsFromAuthUser = async (
     isPartner: false,
     isAdmin: false,
   };
-};
-
-/**
- * Get service role client for admin operations
- */
-const getServiceClient = () => {
-  const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
-  const supabaseServiceKey = envConfig.get('EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY');
-  
-  if (!supabaseServiceKey) {
-    return supabaseClient;
-  }
-  
-  return createClient(supabaseUrl!, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  });
 };
 
 const parseJsonSafely = (value: string): any | null => {
@@ -303,33 +277,7 @@ export const createEmailConfirmationToken = async (
   email: string,
   type: 'signup' | 'password_reset' = 'signup'
 ): Promise<string> => {
-  try {
-    await ensureRuntimeEnvConfig(true);
-
-    const token = await generateConfirmationToken();
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 24); // Token expires in 24 hours
-
-    // Use service client to bypass RLS for token creation
-    const serviceClient = getServiceClient();
-    const { error } = await serviceClient
-      .from('email_confirmations')
-      .insert({
-        user_id: userId,
-        email: email,
-        token_hash: token,
-        type: type,
-        is_confirmed: false,
-        expires_at: expiresAt.toISOString(),
-        created_at: new Date().toISOString()
-      });
-
-    if (error) throw error;
-
-    return token;
-  } catch (error) {
-    throw error;
-  }
+  throw new Error('Token creation is only available on the server');
 };
 
 /**
@@ -339,128 +287,7 @@ export const confirmEmailCustomLegacy = async (
   token: string,
   type: 'signup' | 'password_reset' = 'signup'
 ): Promise<ConfirmEmailApiResult> => {
-  try {
-    await ensureRuntimeEnvConfig(true);
-
-
-    const edgeResult = await confirmEmailViaEdgeFunction(token, type);
-    if (edgeResult) {
-      return edgeResult;
-    }
-
-    // Find the token in database using service client to bypass RLS
-    const serviceClient = getServiceClient();
-    
-    // First, check if token exists at all (including already confirmed ones)
-    const { data: anyTokenData, error: anyTokenError } = await serviceClient
-      .from('email_confirmations')
-      .select('*')
-      .eq('token_hash', token)
-      .eq('type', type)
-      .single();
-
-    if (anyTokenError) {
-      return { success: false, error: 'TOKEN_NOT_FOUND' };
-    }
-
-    if (!anyTokenData) {
-      return { success: false, error: 'TOKEN_NOT_FOUND' };
-    }
-
-    const tokenAlreadyUsed = Boolean(anyTokenData.is_confirmed);
-
-    if (tokenAlreadyUsed) {
-    }
-
-    // Check if token has expired. Already-confirmed tokens are allowed to pass.
-    const now = new Date();
-    const expiresAt = new Date(anyTokenData.expires_at);
-    
-    if (!tokenAlreadyUsed && now > expiresAt) {
-      return { 
-        success: false, 
-        error: 'TOKEN_EXPIRED',
-        userId: anyTokenData.user_id,
-        email: anyTokenData.email
-      };
-    }
-
-    // Mark token as confirmed
-    const { error: updateError } = await serviceClient
-      .from('email_confirmations')
-      .update({
-        is_confirmed: true,
-        confirmed_at: new Date().toISOString()
-      })
-      .eq('id', anyTokenData.id);
-
-    if (updateError) {
-    }
-
-    // CRITICAL: Update user in auth.users to mark email as confirmed
-    const { data: authUserData } = await serviceClient.auth.admin.getUserById(anyTokenData.user_id);
-    const existingAuthMetadata = authUserData?.user?.user_metadata || {};
-    const { error: authUpdateError } = await serviceClient.auth.admin.updateUserById(
-      anyTokenData.user_id,
-      { 
-        email_confirm: true,
-        user_metadata: {
-          ...existingAuthMetadata,
-          email_confirmed: true,
-          email_confirmed_at: new Date().toISOString()
-        }
-      }
-    );
-
-    if (authUpdateError) {
-      // Don't fail the confirmation if auth update fails, but log it
-    } else {
-    }
-    // Update user profile to mark email as confirmed
-    const { data: existingProfile } = await serviceClient
-      .from('profiles')
-      .select('is_owner, is_partner, is_admin')
-      .eq('id', anyTokenData.user_id)
-      .maybeSingle();
-
-    const roleFlags = await getRoleFlagsFromAuthUser(
-      serviceClient,
-      anyTokenData.user_id,
-      existingProfile
-        ? {
-            isOwner: existingProfile.is_owner ?? true,
-            isPartner: existingProfile.is_partner ?? false,
-            isAdmin: existingProfile.is_admin ?? false,
-          }
-        : null,
-    );
-
-    const { error: profileError } = await serviceClient
-      .from('profiles')
-      .update({
-        is_owner: roleFlags.isOwner,
-        is_partner: roleFlags.isPartner,
-        is_admin: roleFlags.isAdmin,
-        email_confirmed: true,
-        email_confirmed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', anyTokenData.user_id);
-
-    if (profileError) {
-      // Don't fail the confirmation if profile update fails
-    }
-
-
-    return {
-      success: true,
-      userId: anyTokenData.user_id,
-      email: anyTokenData.email,
-      alreadyConfirmed: tokenAlreadyUsed,
-    };
-  } catch (error) {
-    return { success: false, error: 'INTERNAL_ERROR' };
-  }
+  return confirmEmailCustom(token, type);
 };
 
 export const confirmEmailCustom = async (
@@ -469,90 +296,8 @@ export const confirmEmailCustom = async (
 ): Promise<ConfirmEmailApiResult> => {
   try {
     await ensureRuntimeEnvConfig(true);
-
-
     const edgeResult = await confirmEmailViaEdgeFunction(token, type);
-    if (edgeResult) {
-      return edgeResult;
-    }
-
-    const serviceClient = getServiceClient();
-    const { data: confirmationRows, error: confirmationError } = await serviceClient.rpc(
-      'confirm_email_signup_atomically',
-      {
-        p_token_hash: token,
-        p_type: type,
-      },
-    ) as { data: any[] | null; error: any };
-
-    if (confirmationError || !confirmationRows?.length) {
-      const rawMessage = String(
-        confirmationError?.message ||
-          confirmationError?.details ||
-          confirmationError?.hint ||
-          'CONFIRMATION_TRANSACTION_FAILED',
-      ).toUpperCase();
-
-      if (rawMessage.includes('TOKEN_NOT_FOUND')) {
-        return { success: false, error: 'TOKEN_NOT_FOUND' };
-      }
-
-      if (rawMessage.includes('TOKEN_EXPIRED')) {
-        return { success: false, error: 'TOKEN_EXPIRED' };
-      }
-
-      if (rawMessage.includes('TOKEN_REQUIRED')) {
-        return { success: false, error: 'TOKEN_REQUIRED' };
-      }
-
-      if (rawMessage.includes('PROFILE_NOT_FOUND')) {
-        return { success: false, error: 'PROFILE_NOT_FOUND' };
-      }
-
-
-      return { success: false, error: 'CONFIRMATION_TRANSACTION_FAILED' };
-    }
-
-    const confirmation = confirmationRows[0];
-
-    let authMetadata: Record<string, any> = {};
-    try {
-      const { data: authUserData } = await serviceClient.auth.admin.getUserById(confirmation.user_id);
-      authMetadata = authUserData?.user?.user_metadata || {};
-    } catch (error) {
-    }
-
-    const { error: authUpdateError } = await serviceClient.auth.admin.updateUserById(
-      confirmation.user_id,
-      {
-        email_confirm: true,
-        user_metadata: {
-          ...authMetadata,
-          email_confirmed: true,
-          email_confirmed_at: confirmation.confirmed_at,
-        },
-      },
-    );
-
-    if (authUpdateError) {
-      return {
-        success: false,
-        error: 'AUTH_UPDATE_ERROR',
-        userId: confirmation.user_id,
-        email: confirmation.email,
-        alreadyConfirmed: confirmation.already_confirmed,
-        confirmedAt: confirmation.confirmed_at,
-      };
-    }
-
-
-    return {
-      success: true,
-      userId: confirmation.user_id,
-      email: confirmation.email,
-      alreadyConfirmed: confirmation.already_confirmed,
-      confirmedAt: confirmation.confirmed_at,
-    };
+    return edgeResult || { success: false, error: 'CONFIRMATION_SERVICE_UNAVAILABLE' };
   } catch (error) {
     return { success: false, error: 'INTERNAL_ERROR' };
   }
@@ -589,21 +334,15 @@ export const completeUserRegistration = async (
   displayName: string
 ): Promise<{ success: boolean; error?: string }> => {
   try {
-    
-    // Use service client to create profile
-    const serviceClient = getServiceClient();
-    const roleFlags = await getRoleFlagsFromAuthUser(serviceClient, userId);
-    
-    // Create user profile
-    const { error: profileError } = await serviceClient
+    const { error: profileError } = await supabaseClient
       .from('profiles')
       .insert({
         id: userId,
         email: email,
         display_name: displayName,
-        is_owner: roleFlags.isOwner,
-        is_partner: roleFlags.isPartner,
-        is_admin: roleFlags.isAdmin,
+        is_owner: true,
+        is_partner: false,
+        is_admin: false,
         email_confirmed: true,
         email_confirmed_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
@@ -616,10 +355,6 @@ export const completeUserRegistration = async (
       return { success: false, error: 'Error creating user profile' };
     }
 
-    
-    // Here you can add other initial records if needed
-    // For example: default settings, welcome notifications, etc.
-    
     return { success: true };
   } catch (error) {
     return { success: false, error: 'Internal error completing registration' };
@@ -641,6 +376,42 @@ export const generateConfirmationUrl = (token: string, type: 'signup' | 'passwor
   }
 };
 
+export const requestEmailConfirmation = async (
+  email: string,
+  type: 'signup' | 'password_reset' = 'signup',
+  userId?: string,
+  displayName?: string,
+): Promise<{ success: boolean; error?: string; log_id?: string }> => {
+  await ensureRuntimeEnvConfig();
+
+  const supabaseUrl = getSupabaseBaseUrl();
+  const anonKey = getPublicSupabaseKey();
+  if (!supabaseUrl || !anonKey) {
+    return { success: false, error: 'PUBLIC_CONFIG_UNAVAILABLE' };
+  }
+
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/request-email-confirmation`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
+      },
+      body: JSON.stringify({ email, type, userId, displayName }),
+    });
+    const result = parseJsonSafely(await response.text()) || {};
+
+    if (!response.ok || result.success === false) {
+      return { success: false, error: result.error || 'EMAIL_REQUEST_FAILED' };
+    }
+
+    return { success: true, log_id: result.log_id };
+  } catch {
+    return { success: false, error: 'EMAIL_REQUEST_FAILED' };
+  }
+};
+
 /**
  * Base function to send emails via Supabase edge function
  */
@@ -652,18 +423,12 @@ const sendEmailViaSupabase = async (
 ): Promise<{ success: boolean; error?: string; log_id?: string }> => {
   await ensureRuntimeEnvConfig();
 
-  const appConfig = await getAppConfig(true).catch((error) => {
-    return null;
-  });
+  const emailApiUrl = resolveSupabaseFunctionUrl('send-email', 'EXPO_PUBLIC_EMAIL_API_URL');
+  const anonKey = getPublicSupabaseKey();
+  const { data: sessionData } = await supabaseClient.auth.getSession();
+  const accessToken = sessionData.session?.access_token || anonKey;
 
-  const configEmailApiUrl = trimTrailingSlash(String(appConfig?.email_api_url || ''));
-  const configEmailApiKey = String(appConfig?.email_api_key || '').trim();
-  const fallbackEmailApiUrl = resolveSupabaseFunctionUrl('send-email', 'EXPO_PUBLIC_EMAIL_API_URL');
-  const fallbackEmailApiKey = getEmailApiKey();
-  const emailApiUrl = configEmailApiUrl || fallbackEmailApiUrl;
-  const emailApiKey = configEmailApiKey || fallbackEmailApiKey;
-
-  if (!emailApiUrl) {
+  if (!emailApiUrl || !anonKey) {
     return { success: false, error: 'EMAIL_API_URL not configured' };
   }
 
@@ -682,8 +447,8 @@ const sendEmailViaSupabase = async (
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${emailApiKey}`,
-        'apikey': emailApiKey,
+        'Authorization': `Bearer ${accessToken}`,
+        'apikey': anonKey,
       },
       body: JSON.stringify(emailPayload),
     });
@@ -744,133 +509,7 @@ export const sendWelcomeEmailAPI = async (
  * Resend confirmation email
  */
 export const resendConfirmationEmail = async (email: string): Promise<{ success: boolean; error?: string }> => {
-  try {
-    await ensureRuntimeEnvConfig();
-
-    const serviceClient = getServiceClient();
-
-    // First try to find user in profiles table
-    const { data: profileData, error: profileError } = await supabaseClient
-      .from('profiles')
-      .select('id, display_name, is_owner, is_partner, is_admin')
-      .eq('email', email)
-      .maybeSingle();
-
-    let userId: string | null = null;
-    let displayName: string = 'Usuario';
-
-    if (profileData) {
-      userId = profileData.id;
-      displayName = profileData.display_name || 'Usuario';
-    } else {
-      // If not found in profiles, try to find in auth.users using service client
-      const serviceClient = getServiceClient();
-
-      const { data: authUser, error: authError } = await serviceClient.auth.admin.listUsers();
-
-      if (authError) {
-        return { success: false, error: 'Error buscando usuario' };
-      }
-
-      const foundUser = authUser.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
-
-      if (!foundUser) {
-        return { success: false, error: 'No existe una cuenta con este correo electrónico' };
-      }
-
-      userId = foundUser.id;
-      displayName = (foundUser.user_metadata?.full_name as string) || 'Usuario';
-      const roleFlags = resolveProfileRoleFlagsFromMetadata(foundUser.user_metadata, null);
-
-      // Create the missing profile
-      const { error: createProfileError } = await serviceClient
-        .from('profiles')
-        .insert({
-          id: userId,
-          email: email,
-          display_name: displayName,
-          is_owner: roleFlags.isOwner,
-          is_partner: roleFlags.isPartner,
-          is_admin: roleFlags.isAdmin,
-          email_confirmed: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (createProfileError) {
-        // Continue anyway, we can still send the email
-      } else {
-      }
-    }
-
-    if (!userId) {
-      return { success: false, error: 'No se pudo determinar el usuario para reenviar la confirmación' };
-    }
-
-    try {
-      const roleFlags = await getRoleFlagsFromAuthUser(
-        serviceClient,
-        userId,
-        profileData
-          ? {
-              isOwner: profileData.is_owner ?? true,
-              isPartner: profileData.is_partner ?? false,
-              isAdmin: profileData.is_admin ?? false,
-            }
-          : null,
-      );
-      const { error: roleSyncError } = await serviceClient
-        .from('profiles')
-        .update({
-          is_owner: roleFlags.isOwner,
-          is_partner: roleFlags.isPartner,
-          is_admin: roleFlags.isAdmin,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', userId);
-
-      if (roleSyncError) {
-      }
-    } catch (syncError) {
-    }
-
-
-    // Invalidate any existing signup tokens for this user
-    const { error: invalidateError } = await serviceClient
-      .from('email_confirmations')
-      .update({
-        is_confirmed: true,
-        confirmed_at: new Date().toISOString()
-      })
-      .eq('user_id', userId)
-      .eq('type', 'signup')
-      .eq('is_confirmed', false);
-
-    if (invalidateError) {
-    }
-
-    // Create new confirmation token
-    const token = await createEmailConfirmationToken(userId, email, 'signup');
-    const confirmationUrl = generateConfirmationUrl(token, 'signup');
-
-
-    // Send confirmation email using new API
-    const result = await sendConfirmationEmailAPI(
-      email,
-      displayName,
-      confirmationUrl
-    );
-
-    if (!result.success) {
-      return { success: false, error: result.error || 'Error sending email' };
-    }
-
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: 'Error al reenviar email de confirmación' };
-  }
+  return requestEmailConfirmation(email, 'signup');
 };
 
 /**

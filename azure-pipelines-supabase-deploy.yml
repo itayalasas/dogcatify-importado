@@ -87,7 +87,10 @@ stages:
           INVOICE_API_KEY="$INVOICE_API_KEY" \
           DGI_PDF_EMAIL_URL="$DGI_PDF_EMAIL_URL" \
           DGI_PDF_EMAIL_KEY="$DGI_PDF_EMAIL_KEY" \
-          CRON_SECRET="$CRON_SECRET"
+          CRON_SECRET="$CRON_SECRET" \
+          PET_API_BASE_URL="$PET_API_BASE_URL" \
+          PET_API_KEY="$PET_API_KEY" \
+          MOBILE_APP_DOMAIN="$MOBILE_APP_DOMAIN"
 
         echo "✅ Deploy Supabase OK"
       displayName: 'Deploy (db push + functions + secrets)'
@@ -125,3 +128,6 @@ stages:
         DGI_PDF_EMAIL_KEY: $(DGI_PDF_EMAIL_KEY)
 
         CRON_SECRET: $(CRON_SECRET)
+        PET_API_BASE_URL: $(PET_API_BASE_URL)
+        PET_API_KEY: $(PET_API_KEY)
+        MOBILE_APP_DOMAIN: $(MOBILE_APP_DOMAIN)

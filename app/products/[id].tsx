@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Share, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, Share, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, ShoppingCart, Star, Plus, Minus, Heart, Share2, Truck, Package, Clock, MapPin, Phone } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';

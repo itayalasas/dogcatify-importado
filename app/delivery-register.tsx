@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { ArrowLeft, Truck, Store, Check } from 'lucide-react-native';
 import { Card } from '../components/ui/Card';
@@ -143,8 +144,8 @@ export default function DeliveryRegister() {
 					.insert({
 						user_id: currentUser.id,
 						delivery_mode: deliveryMode,
-						is_active: true,
-						approval_status: 'approved',
+						is_active: false,
+						approval_status: 'pending',
 					})
 					.select('id')
 					.single();
@@ -157,7 +158,6 @@ export default function DeliveryRegister() {
 					.from('delivery_profiles')
 					.update({
 						delivery_mode: deliveryMode,
-						is_active: true,
 						updated_at: new Date().toISOString(),
 					})
 					.eq('id', profileId)

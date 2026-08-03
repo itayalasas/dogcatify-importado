@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Dimensions, TextInput } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, Dimensions, TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { ArrowLeft, ChevronDown, Check, Mars, Venus, Search } from '../../components/ui/Icons';
@@ -11,6 +12,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { supabaseClient } from '../../lib/supabase';
 import { uploadImage } from '../../utils/imageUpload';
 import { resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
+import { fetchPetBreedData } from '../../utils/petBreedApi';
 
 interface BreedInfo {
   name: string;
@@ -34,7 +36,6 @@ type PetSpecies = 'dog' | 'cat';
 type AgeUnit = 'years' | 'months' | 'days';
 type WeightUnit = 'kg' | 'lb';
 
-const API_KEY = 'pk_XYb1Nbel6qVH0fQfv3CpYwHJG1NC5aca';
 const { width: screenWidth } = Dimensions.get('window');
 
 // Lista completa de colores para mascotas
@@ -205,27 +206,11 @@ export default function AddPet() {
     
     setLoadingBreedInfo(true);
     try {
-      const endpoint = speciesType === 'dog' 
-        ? `https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/dogs?name=${encodeURIComponent(breedName)}`
-        : `https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/cats?name=${encodeURIComponent(breedName)}`;
-      
-      
-      const response = await fetch(endpoint, {
-        headers: {
-          'X-Api-Key': API_KEY
-        }
-      });
-      
-      
-      if (response.ok) {
-        const data = await response.json();
-        
-        if (data && data.length > 0) {
-          setBreedInfo(data[0]);
-        } else {
-          setBreedInfo(null);
-        }
+      const data = await fetchPetBreedData('search', speciesType, breedName);
+      if (data && data.length > 0) {
+        setBreedInfo(data[0]);
       } else {
+        setBreedInfo(null);
       }
     } catch (error) {
       setBreedInfo(null); 

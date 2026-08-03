@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, Switch, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, Switch, ActivityIndicator } from 'react-native';
 import { ArrowLeft, Check, Crown, Edit, Link as LinkIcon, Lock, RefreshCw, Shield, Sparkles, Star } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { Card } from '../../components/ui/Card';

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator, TextInput, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Search } from 'lucide-react-native';
-
-const API_KEY = 'pk_XYb1Nbel6qVH0fQfv3CpYwHJG1NC5aca';
+import { fetchPetBreedData } from '../../utils/petBreedApi';
 
 export default function BreedSelector() {
   const { species } = useLocalSearchParams<{ species: string }>();
@@ -33,21 +33,7 @@ export default function BreedSelector() {
     setLoading(true);
     try {
       
-      // Use the optimized endpoint that returns all breeds at once
-      const endpoint = species === 'dog'
-        ? 'https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/alldogs'
-        : 'https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/allcats';
-      
-      
-      const response = await fetch(endpoint, {
-        headers: {
-          'X-Api-Key': API_KEY,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
+      const data = await fetchPetBreedData('list', species === 'dog' ? 'dog' : 'cat');
         
         // Handle different possible data structures
         let breedNames: string[] = [];
@@ -65,11 +51,6 @@ export default function BreedSelector() {
         
         setBreeds(breedNames);
         setFilteredBreeds(breedNames);
-      } else {
-        const errorText = await response.text();
-        throw new Error(`API Error: ${response.status}`);
-      }
-      
     } catch (error) {
       Alert.alert(
         'Error', 

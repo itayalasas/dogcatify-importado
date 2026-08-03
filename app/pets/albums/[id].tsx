@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Modal, ActivityIndicator, Dimensions, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, Modal, ActivityIndicator, Dimensions, StatusBar } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Camera, Trash2, Share, X, CreditCard as Edit, Video as VideoIcon, Play, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';

@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   Image,
 } from 'react-native';
 import { router } from 'expo-router';

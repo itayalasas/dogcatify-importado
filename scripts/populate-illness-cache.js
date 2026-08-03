@@ -9,8 +9,8 @@
 
 require('dotenv').config();
 
-const SUPABASE_URL = "https://hpvzjuionqvgxlvhyqgz.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0cWZmbGF3d3R5d3hmb2R1ZXlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU4NTE1NTAsImV4cCI6MjA4MTQyNzU1MH0.8VwD0_qG5uO5H_SkTXVZMbrdroPf2xIq1uavjhu40u4";
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.error('❌ Error: Variables de entorno no configuradas');

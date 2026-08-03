@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -9,7 +10,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  SafeAreaView,
   Image,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';

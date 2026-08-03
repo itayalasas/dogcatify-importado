@@ -8,6 +8,7 @@ pool:
 
 variables:
   - group: ios-signing
+  - group: supabase-prod
 
   - name: NODE_VERSION
     value: '18.x'
@@ -47,6 +48,9 @@ steps:
   - script: |
       set -euo pipefail
 
+      test -n "$EXPO_PUBLIC_SUPABASE_URL"
+      test -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
+
       echo "Preparando workspace limpio..."
 
       rm -rf "$(Build.ArtifactStagingDirectory)/DerivedData"
@@ -76,6 +80,8 @@ steps:
     env:
       COPYFILE_DISABLE: '1'
       COPY_EXTENDED_ATTRIBUTES_DISABLE: '1'
+      EXPO_PUBLIC_SUPABASE_URL: $(SUPABASE_URL)
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
 
   # ============================================================
   # NODE
@@ -151,6 +157,8 @@ steps:
     env:
       COPYFILE_DISABLE: '1'
       COPY_EXTENDED_ATTRIBUTES_DISABLE: '1'
+      EXPO_PUBLIC_SUPABASE_URL: $(SUPABASE_URL)
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
 
   # ============================================================
   # COCOAPODS
@@ -788,6 +796,8 @@ steps:
       MAC_KEYCHAIN_PASSWORD: $(MAC_KEYCHAIN_PASSWORD)
       COPYFILE_DISABLE: '1'
       COPY_EXTENDED_ATTRIBUTES_DISABLE: '1'
+      EXPO_PUBLIC_SUPABASE_URL: $(SUPABASE_URL)
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
 
   # ============================================================
   # EXTRAER XCRESULT

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image } from 'react-native';
 import { router } from 'expo-router';
 import { ArrowLeft, Building, Camera, MapPin, Phone, Mail, FileText, DollarSign, Truck } from 'lucide-react-native';
 import { ChevronDown, Check } from 'lucide-react-native';

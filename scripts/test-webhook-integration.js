@@ -14,8 +14,14 @@
  *   node scripts/test-webhook-integration.js
  */
 
-const SUPABASE_URL = 'https://zkgiwamycbjcogcgqhff.supabase.co';
-const ADMIN_TOKEN = 'dogcatify_admin_2025_secure';
+require('dotenv').config();
+
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const ADMIN_TOKEN = process.env.ORDERS_API_KEY;
+
+if (!SUPABASE_URL || !ADMIN_TOKEN) {
+  throw new Error('Faltan EXPO_PUBLIC_SUPABASE_URL u ORDERS_API_KEY');
+}
 
 async function consultarOrdenes() {
   console.log('\n1️⃣  Consultando órdenes existentes...');

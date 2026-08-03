@@ -4,8 +4,7 @@ import { router, Stack } from 'expo-router';
 import { ArrowLeft, Mail } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
-import { createEmailConfirmationToken, generateConfirmationUrl } from '../../utils/emailConfirmation';
-import { supabaseClient } from '../../lib/supabase';
+import { requestEmailConfirmation } from '../../utils/emailConfirmation';
 import { useLanguage } from '../../contexts/LanguageContext'; 
 
 export default function ForgotPassword() {
@@ -22,34 +21,9 @@ export default function ForgotPassword() {
 
     setLoading(true);
     try {
-      // Verificar que el usuario existe
-      const { data: userData, error: userError } = await supabaseClient
-        .from('profiles')
-        .select('id, display_name, email')
-        .eq('email', email.toLowerCase().trim())
-        .single();
-
-      if (userError) {
-        if (userError.code === 'PGRST116') {
-          Alert.alert('Usuario no encontrado', 'No existe una cuenta con este correo electrónico.');
-        } else {
-          throw userError;
-        }
-        return;
-      }
-
-
-      // Crear token personalizado para reset de contraseña
-      const token = await createEmailConfirmationToken(userData.id, email.toLowerCase().trim(), 'password_reset');
-      const resetUrl = generateConfirmationUrl(token, 'password_reset');
-
-
-      // Enviar email usando la nueva API
-      const { sendPasswordResetEmailAPI } = await import('../../utils/emailConfirmation');
-      const emailResult = await sendPasswordResetEmailAPI(
+      const emailResult = await requestEmailConfirmation(
         email.toLowerCase().trim(),
-        userData.display_name || 'Usuario',
-        resetUrl
+        'password_reset',
       );
 
       if (!emailResult.success) {

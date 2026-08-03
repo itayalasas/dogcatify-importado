@@ -3,7 +3,6 @@ import { supabaseClient } from '@/lib/supabase';
 
 interface AppConfig {
   email_api_url: string;
-  email_api_key: string;
   mercadopago_public_key: string;
   app_name: string;
   support_email: string;
@@ -66,17 +65,8 @@ const resolveDefaultEmailApiUrl = (): string => {
   return explicitEmailUrl || (supabaseUrl ? `${supabaseUrl}/functions/v1/send-email` : '');
 };
 
-const resolveDefaultEmailApiKey = (): string => {
-  return (
-    process.env.EXPO_PUBLIC_EMAIL_API_KEY?.trim() ||
-    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
-    ''
-  );
-};
-
 const DEFAULT_CONFIG: AppConfig = {
   email_api_url: resolveDefaultEmailApiUrl(),
-  email_api_key: resolveDefaultEmailApiKey(),
   mercadopago_public_key: '',
   app_name: 'DogCatify',
   support_email: 'support@dogcatify.com',
@@ -118,6 +108,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
       }
 
       const configObject = data.reduce((acc, item) => {
+        if (item.key === 'email_api_key') return acc;
         acc[item.key as keyof AppConfig] = item.value;
         return acc;
       }, {} as any);

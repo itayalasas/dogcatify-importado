@@ -182,7 +182,7 @@ BEGIN
   -- Configuración de Supabase
   supabase_url := 'https://hpvzjuionqvgxlvhyqgz.supabase.co';
   function_url := supabase_url || '/functions/v1/send-invoice-email';
-  supabase_service_key := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwdnpqdWlvbnF2Z3hsdmh5cWd6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDExNzI5MywiZXhwIjoyMDc5NjkzMjkzfQ.10BnGYY1A8HKpFM59m4MOkOnZoYvSzac45cP3A2_t2c';
+  supabase_service_key := 'REDACTED_CREDENTIAL';
 
   -- Determinar el template y datos según el tipo de orden
   IF NEW.order_type = 'service_booking' THEN
@@ -343,7 +343,7 @@ BEGIN
   supabase_url := 'https://hpvzjuionqvgxlvhyqgz.supabase.co';
   function_url := supabase_url || '/functions/v1/send-order-to-crm';
   accounting_function_url := supabase_url || '/functions/v1/send-order-to-accounting';
-  supabase_service_key := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwdnpqdWlvbnF2Z3hsdmh5cWd6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDExNzI5MywiZXhwIjoyMDc5NjkzMjkzfQ.10BnGYY1A8HKpFM59m4MOkOnZoYvSzac45cP3A2_t2c';
+  supabase_service_key := 'REDACTED_CREDENTIAL';
 
   payload := jsonb_build_object(
     'order_id', NEW.id,

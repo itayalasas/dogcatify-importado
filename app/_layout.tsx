@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
@@ -11,15 +11,15 @@ import { NotificationProvider } from '../contexts/NotificationContext';
 import { ConfigProvider } from '../contexts/ConfigContext';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
-import { Platform, Alert, View, Text, ActivityIndicator, TouchableOpacity, Animated, Image, Dimensions } from 'react-native';
+import { Platform, Alert, View, Text, TouchableOpacity, Animated, Image } from 'react-native';
 import { supabaseClient, initializeSupabase, setupAuthListeners } from '@/lib/supabase';
 import { envConfig } from '@/utils/envConfig';
 import { clearConfigCache } from '@/utils/appConfig';
 import { SafeAppWrapper } from '../components/SafeAppWrapper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { FloatingVoiceBot } from '../components/FloatingVoiceBot';
+import { AppLoadingScreen } from '../components/AppLoadingScreen';
 
-const { width } = Dimensions.get('window');
 const SYSTEM_CONFIG_KEY = 'system_config';
 const APP_DEEP_LINK_SCHEME = 'dogcatify';
 
@@ -102,9 +102,8 @@ function RootLayout() {
   useFrameworkReady();
   const [configReady, setConfigReady] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
-  const logoScale = new Animated.Value(0.8);
-  const logoOpacity = new Animated.Value(0);
-  const pulseAnim = new Animated.Value(1);
+  const logoScale = useRef(new Animated.Value(0.8)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
 
   // Logo animation
   useEffect(() => {
@@ -122,21 +121,7 @@ function RootLayout() {
       }),
     ]).start();
 
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.05,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, []);
+  }, [logoOpacity, logoScale]);
 
   // Initialize environment configuration and Supabase
   useEffect(() => {
@@ -146,8 +131,7 @@ function RootLayout() {
       try {
 
         // 1. Inicializar configuración de entorno
-        // En cada arranque forzamos refresco para no reutilizar credenciales viejas de AsyncStorage.
-        await envConfig.initialize(true);
+        await envConfig.initialize();
         clearConfigCache();
 
         if (!mounted) return;
@@ -341,19 +325,7 @@ function RootLayout() {
     }, [currentUser?.id, isAdminUser]);
 
     if (loadingSystemConfig) {
-      return (
-        <View style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: '#F9FAFB',
-        }}>
-          <ActivityIndicator size="large" color="#2D6A6F" />
-          <Text style={{ marginTop: 12, color: '#6B7280', fontSize: 14 }}>
-            Verificando estado de la plataforma...
-          </Text>
-        </View>
-      );
+      return <AppLoadingScreen />;
     }
 
     if (systemConfig.maintenanceMode && !isAdminUser && !adminAccessRequested) {
@@ -655,111 +627,7 @@ function RootLayout() {
 
   // Show loading screen while configuration is being loaded - only render providers after config is ready
   if (!configReady) {
-    return (
-      <View style={{
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#2D6A6F',
-      }}>
-        <Animated.View
-          style={{
-            alignItems: 'center',
-            opacity: logoOpacity,
-            transform: [{ scale: logoScale }],
-          }}
-        >
-          <Animated.View
-            style={{
-              transform: [{ scale: pulseAnim }],
-              marginBottom: 40,
-            }}
-          >
-            <Image
-              source={require('../assets/images/logo-transp.png')}
-              style={{
-                width: Math.min(width * 0.5, 200),
-                height: Math.min(width * 0.5, 200),
-              }}
-              resizeMode="contain"
-            />
-          </Animated.View>
-
-          <View style={{
-            alignItems: 'center',
-            paddingHorizontal: 40,
-          }}>
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              marginBottom: 16,
-            }}>
-              <ActivityIndicator size="small" color="#fff" style={{ marginRight: 12 }} />
-              <Text style={{
-                color: '#fff',
-                fontSize: 18,
-                fontWeight: '600',
-                letterSpacing: 0.5,
-              }}>
-                Iniciando DogCatiFy
-              </Text>
-            </View>
-
-            <View style={{
-              height: 4,
-              width: 200,
-              backgroundColor: 'rgba(255, 255, 255, 0.2)',
-              borderRadius: 2,
-              overflow: 'hidden',
-              marginBottom: 20,
-            }}>
-              <Animated.View
-                style={{
-                  height: '100%',
-                  width: '70%',
-                  backgroundColor: '#fff',
-                  borderRadius: 2,
-                }}
-              />
-            </View>
-
-            <Text style={{
-              color: 'rgba(255, 255, 255, 0.85)',
-              fontSize: 15,
-              textAlign: 'center',
-              marginBottom: 8,
-              fontWeight: '500',
-            }}>
-              Conectando con el servidor
-            </Text>
-
-            <Text style={{
-              color: 'rgba(255, 255, 255, 0.6)',
-              fontSize: 13,
-              textAlign: 'center',
-              lineHeight: 18,
-            }}>
-              Cargando tu experiencia personalizada
-            </Text>
-          </View>
-        </Animated.View>
-
-        <View style={{
-          position: 'absolute',
-          bottom: 40,
-          alignItems: 'center',
-        }}>
-          <Text style={{
-            color: 'rgba(255, 255, 255, 0.4)',
-            fontSize: 11,
-            textAlign: 'center',
-            fontWeight: '500',
-          }}>
-            Powered by FlowBridge API
-          </Text>
-        </View>
-      </View>
-    );
+    return <AppLoadingScreen />;
   }
 
   return (

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, TextInput } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Filter, Search, ShoppingCart, Package } from 'lucide-react-native';
 import { FlatGrid } from 'react-native-super-grid';

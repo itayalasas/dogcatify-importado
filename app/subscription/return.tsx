@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
-import { ActivityIndicator, Linking, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SubscriptionReturnBanner } from '@/components/SubscriptionReturnBanner';
 import {

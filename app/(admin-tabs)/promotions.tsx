@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Image, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { Plus, Volume2, Search, Calendar, ExternalLink, Building, X, FileText, Pencil, Trash2, Send } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
