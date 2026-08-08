@@ -8,8 +8,14 @@ const corsHeaders = {
 };
 
 interface NotificationPayload {
-  token: string;
+  token?: string;
   expoPushToken?: string;
+  // Preferred client-facing way to target a notification: the client no
+  // longer needs to read another user's push_token/fcm_token itself — the
+  // function resolves it here with service_role, honoring notification
+  // preferences.
+  targetUserId?: string;
+  targetRole?: 'admin';
   title: string;
   body: string;
   data?: Record<string, string>;
@@ -167,6 +173,52 @@ async function sendViaExpo(
   };
 }
 
+type ResolvedTarget = { token: string; expoPushToken?: string } | { skipped: string };
+
+async function resolveTargetFromProfile(payload: NotificationPayload): Promise<ResolvedTarget | null> {
+  if (!payload.targetUserId && !payload.targetRole) {
+    return null;
+  }
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    return { skipped: 'SUPABASE_ENV_REQUIRED' };
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+  let query = supabase
+    .from('profiles')
+    .select('push_token, fcm_token, notification_preferences')
+    .limit(1);
+
+  query = payload.targetUserId
+    ? query.eq('id', payload.targetUserId)
+    : query.eq('is_admin', true);
+
+  const { data: profile, error } = await query.maybeSingle();
+
+  if (error || !profile) {
+    return { skipped: 'TARGET_PROFILE_NOT_FOUND' };
+  }
+
+  if (!profile.fcm_token && !profile.push_token) {
+    return { skipped: 'TARGET_HAS_NO_PUSH_TOKEN' };
+  }
+
+  const preferences = (profile.notification_preferences as Record<string, unknown>) || {};
+  if (preferences.push === false) {
+    return { skipped: 'TARGET_DISABLED_PUSH_NOTIFICATIONS' };
+  }
+
+  return {
+    token: profile.fcm_token || profile.push_token,
+    expoPushToken: profile.push_token || undefined,
+  };
+}
+
 async function resolveExpoPushTokenFromProfiles(apnsToken: string): Promise<string | null> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -228,7 +280,8 @@ function buildServiceAccountFromEnv() {
 function buildFcmMessage(payload: NotificationPayload): FCMMessage {
   return {
     message: {
-      token: payload.token,
+      // Validated non-empty by the caller before this is invoked.
+      token: payload.token!,
       notification: {
         title: payload.title,
         body: payload.body,
@@ -287,6 +340,25 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       );
+    }
+
+    if (!payload.token && (payload.targetUserId || payload.targetRole)) {
+      const resolved = await resolveTargetFromProfile(payload);
+
+      if (resolved && 'skipped' in resolved) {
+        // Not an error from the caller's point of view — e.g. the target has
+        // no token yet or opted out of push. Mirrors the previous client-side
+        // "silently return" behavior for these cases.
+        return new Response(
+          JSON.stringify({ success: false, skipped: resolved.skipped }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (resolved) {
+        payload.token = resolved.token;
+        payload.expoPushToken = resolved.expoPushToken;
+      }
     }
 
     if (!payload.token) {

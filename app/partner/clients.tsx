@@ -164,18 +164,21 @@ export default function PartnerClients() {
         }
       });
 
-      // Fetch customer details
+      // Fetch customer contact details in one call (server-side verifies
+      // this partner actually has a booking/order from each customer before
+      // returning display_name/email/photo_url/phone).
+      const { data: contactsData, error: contactsError } = await supabaseClient
+        .rpc('get_partner_customer_contacts', { p_partner_id: partnerId });
+
+      if (contactsError) throw contactsError;
+
+      const contactsById = new Map<string, any>((contactsData || []).map((c: any) => [c.customer_id, c]));
+
       const clientsData = [];
       for (const customerId of customerIds) {
         try {
-          const { data: userData, error: userError } = await supabaseClient
-            .from('profiles')
-            .select('*')
-            .eq('id', customerId)
-            .single();
-          
-          if (userError) continue;
-          
+          const userData = contactsById.get(customerId);
+
           if (userData) {
             // Count bookings for this customer from the bookings array
             const customerBookings = bookings.filter(

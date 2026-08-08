@@ -111,11 +111,9 @@ export default function EmailConfirmationScreen() {
 
             try {
               // Verificar si el email ya está confirmado en la base de datos
-              const { data: profileData } = await supabaseClient
-                .from('profiles')
-                .select('email_confirmed')
-                .eq('email', result.email)
-                .single();
+              const { data: statusRows } = await supabaseClient
+                .rpc('check_email_confirmation_status', { p_email: result.email });
+              const profileData = statusRows?.[0];
 
               if (profileData?.email_confirmed) {
                 console.log('Email is already confirmed, redirecting to web-info...');
@@ -182,12 +180,10 @@ export default function EmailConfirmationScreen() {
       await ensureRuntimeConfigLoaded();
       
       // First check if user is already confirmed
-      const { data: existingProfile, error: profileError } = await supabaseClient
-        .from('profiles')
-        .select('email_confirmed, display_name')
-        .eq('email', userEmail)
-        .single();
-      
+      const { data: statusRows, error: profileError } = await supabaseClient
+        .rpc('check_email_confirmation_status', { p_email: userEmail });
+      const existingProfile = statusRows?.[0];
+
       if (!profileError && existingProfile?.email_confirmed) {
         console.log('User is already confirmed, showing appropriate message');
         setError('ALREADY_CONFIRMED');

@@ -101,7 +101,8 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
     console.log('Follower ID:', followerId);
     console.log('Following ID:', followingId);
     
-    // Get current data for both users
+    // Get current data for both users (target user's row via the public view —
+    // followers/following are the only columns read cross-user)
     const [currentUserResult, targetUserResult] = await Promise.all([
       supabaseClient
         .from('profiles')
@@ -109,18 +110,18 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
         .eq('id', followerId)
         .single(),
       supabaseClient
-        .from('profiles')
+        .from('profiles_public')
         .select('followers')
         .eq('id', followingId)
         .single()
     ]);
-    
+
     if (currentUserResult.error) throw currentUserResult.error;
     if (targetUserResult.error) throw targetUserResult.error;
-    
+
     console.log('Current user following before:', currentUserResult.data.following);
     console.log('Target user followers before:', targetUserResult.data.followers);
-    
+
     // Update following list for current user
     const newFollowing = [...(currentUserResult.data.following || []), followingId];
     
@@ -160,7 +161,8 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
     console.log('Follower ID:', followerId);
     console.log('Following ID:', followingId);
     
-    // Get current data for both users
+    // Get current data for both users (target user's row via the public view —
+    // followers/following are the only columns read cross-user)
     const [currentUserResult, targetUserResult] = await Promise.all([
       supabaseClient
         .from('profiles')
@@ -168,18 +170,18 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
         .eq('id', followerId)
         .single(),
       supabaseClient
-        .from('profiles')
+        .from('profiles_public')
         .select('followers')
         .eq('id', followingId)
         .single()
     ]);
-    
+
     if (currentUserResult.error) throw currentUserResult.error;
     if (targetUserResult.error) throw targetUserResult.error;
-    
+
     console.log('Current user following before:', currentUserResult.data.following);
     console.log('Target user followers before:', targetUserResult.data.followers);
-    
+
     // Remove from following list for current user
     const newFollowing = (currentUserResult.data.following || []).filter((id: string) => id !== followingId);
     

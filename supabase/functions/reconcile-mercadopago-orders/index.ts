@@ -64,11 +64,11 @@ Deno.serve(async (req: Request) => {
     }
 
     const cronSecret = req.headers.get("X-Cron-Secret");
-    const expectedSecret = Deno.env.get("CRON_SECRET") || "default-secret-change-me";
+    const expectedSecret = Deno.env.get("CRON_SECRET") || "";
     const authHeader = req.headers.get("Authorization") || "";
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const hasValidCronSecret = cronSecret === expectedSecret;
-    const hasValidServiceAuth = authHeader === `Bearer ${serviceRoleKey}`;
+    const hasValidCronSecret = Boolean(expectedSecret) && cronSecret === expectedSecret;
+    const hasValidServiceAuth = Boolean(serviceRoleKey) && authHeader === `Bearer ${serviceRoleKey}`;
 
     if (!hasValidCronSecret && !hasValidServiceAuth) {
       return new Response(

@@ -124,31 +124,14 @@ export default function SharePetScreen() {
       setSearchingUsers(true);
       const searchTerm = query.trim().toLowerCase();
 
-      // Buscar usuarios
+      // Buscar usuarios vía RPC (authenticated-only; ya excluye a quienes
+      // ya tienen acceso a esta mascota)
       const { data: users, error: usersError } = await supabaseClient
-        .from('profiles')
-        .select('id, display_name, email')
-        .neq('id', currentUser?.id)
-        .or(`display_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
-        .limit(10);
+        .rpc('search_users_for_sharing', { p_query: searchTerm, p_pet_id: petId });
 
       if (usersError) throw usersError;
 
-      // Obtener usuarios que ya tienen acceso (pending o accepted)
-      const { data: existingShares, error: sharesError } = await supabaseClient
-        .from('pet_shares')
-        .select('shared_with_user_id')
-        .eq('pet_id', petId)
-        .neq('status', 'rejected');
-
-      if (sharesError) throw sharesError;
-
-      const sharedUserIds = new Set(existingShares?.map(s => s.shared_with_user_id) || []);
-
-      // Filtrar usuarios que ya tienen acceso
-      const availableUsers = users?.filter(user => !sharedUserIds.has(user.id)) || [];
-
-      setUserSuggestions(availableUsers);
+      setUserSuggestions(users || []);
       setShowSuggestions(true);
     } catch (error) {
       console.error('Error searching users:', error);
@@ -188,21 +171,24 @@ export default function SharePetScreen() {
   const loadShares = async () => {
     try {
       setLoadingShares(true);
+      // Vía RPC: el join embebido de PostgREST contra profiles ya no puede
+      // leer display_name/email de otro usuario ahora que profiles está
+      // restringido — la función server-side verifica que el caller sea el
+      // dueño de la mascota antes de devolver esos datos.
       const { data, error } = await supabaseClient
-        .from('pet_shares')
-        .select(`
-          *,
-          profiles!pet_shares_shared_with_user_id_fkey (
-            display_name,
-            email
-          )
-        `)
-        .eq('pet_id', petId)
-        .neq('status', 'rejected')
-        .order('created_at', { ascending: false });
+        .rpc('get_pet_share_contacts', { p_pet_id: petId });
 
       if (error) throw error;
-      setShares(data || []);
+
+      // The RPC already orders by created_at DESC.
+      const shares = (data || [])
+        .filter((row: any) => row.status !== 'rejected')
+        .map((row: any) => ({
+          ...row,
+          profiles: { display_name: row.display_name, email: row.email },
+        }));
+
+      setShares(shares);
     } catch (error) {
       console.error('Error loading shares:', error);
     } finally {

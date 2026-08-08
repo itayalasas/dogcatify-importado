@@ -180,15 +180,9 @@ export default function AdoptionChat() {
           .single();
 
         if (partnerData?.user_id) {
-          // Get partner's FCM token
-          const { data: profileData } = await supabaseClient
-            .from('profiles')
-            .select('push_token, fcm_token')
-            .eq('id', partnerData.user_id)
-            .single();
-
-          if (profileData?.fcm_token || profileData?.push_token) {
-            // Use FCM v1 endpoint
+          {
+            // Token resolution now happens server-side via targetUserId — the
+            // client no longer reads the partner's push_token/fcm_token.
             const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
             const response = await fetch(`${supabaseUrl}/functions/v1/send-notification-fcm-v1`, {
               method: 'POST',
@@ -197,8 +191,7 @@ export default function AdoptionChat() {
                 'Authorization': `Bearer ${envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY')}`,
               },
               body: JSON.stringify({
-                token: profileData.fcm_token || profileData.push_token,
-                expoPushToken: profileData.push_token || undefined,
+                targetUserId: partnerData.user_id,
                 title: `Nuevo mensaje sobre ${petName}`,
                 body: `${currentUser!.displayName}: ${textToSend.substring(0, 100)}`,
                 data: {

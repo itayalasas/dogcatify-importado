@@ -28,7 +28,15 @@ Deno.serve(async (req: Request) => {
   try {
     // Validar token secreto para seguridad
     const cronSecret = req.headers.get('X-Cron-Secret');
-    const expectedSecret = Deno.env.get('CRON_SECRET') || 'default-secret-change-me';
+    const expectedSecret = Deno.env.get('CRON_SECRET');
+
+    if (!expectedSecret) {
+      console.error('❌ CRON_SECRET not configured');
+      return new Response(
+        JSON.stringify({ success: false, error: 'CRON_SECRET not configured' }),
+        { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
+    }
 
     if (cronSecret !== expectedSecret) {
       console.error('❌ Invalid or missing cron secret');

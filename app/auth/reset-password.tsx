@@ -67,28 +67,23 @@ export default function ResetPasswordScreen() {
 
       try {
         console.log('Validating password reset token:', token);
-        
-        // Verify the password reset token
-        const { data: tokenData, error } = await supabaseClient
-          .from('email_confirmations')
-          .select('*')
-          .eq('token_hash', token)
-          .eq('type', 'password_reset')
-          .eq('is_confirmed', false)
-          .single();
 
-        if (error || !tokenData) {
+        // Verify the password reset token via a SECURITY DEFINER RPC scoped
+        // to this exact token (email_confirmations no longer allows a direct
+        // anon SELECT, since that let anyone dump every user's tokens).
+        const { data: rows, error } = await supabaseClient
+          .rpc('validate_confirmation_token', { p_token_hash: token, p_type: 'password_reset' });
+
+        const tokenData = rows?.[0];
+
+        if (error || !tokenData || tokenData.is_confirmed) {
           console.error('Token validation error:', error);
           setError('Token no válido o ya utilizado');
           setLoading(false);
           return;
         }
 
-        // Check if token has expired
-        const now = new Date();
-        const expiresAt = new Date(tokenData.expires_at);
-        
-        if (now > expiresAt) {
+        if (!tokenData.is_valid) {
           setError('El token ha expirado. Solicita un nuevo enlace de recuperación.');
           setLoading(false);
           return;

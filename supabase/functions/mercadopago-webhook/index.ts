@@ -181,8 +181,8 @@ async function verifyWebhookSignature(req: Request, notificationData: any): Prom
     const webhookSecret = Deno.env.get('MERCADOPAGO_WEBHOOK_SECRET');
 
     if (!webhookSecret) {
-      console.warn('MERCADOPAGO_WEBHOOK_SECRET not configured, skipping validation');
-      return true;
+      console.error('MERCADOPAGO_WEBHOOK_SECRET not configured — rejecting webhook');
+      return false;
     }
 
     const parts = xSignature.split(',');
@@ -217,11 +217,6 @@ async function verifyWebhookSignature(req: Request, notificationData: any): Prom
       console.error('Missing data.id for signature validation');
       console.error('URL search params:', Object.fromEntries(url.searchParams.entries()));
       console.error('Notification data:', notificationData);
-      const webhookSecret = Deno.env.get('MERCADOPAGO_WEBHOOK_SECRET');
-      if (!webhookSecret) {
-        console.warn('⚠️ No webhook secret configured - allowing request in dev mode');
-        return true;
-      }
       return false;
     }
 
@@ -360,23 +355,19 @@ serve(async (req: Request) => {
 
     if (!isValid) {
       console.error('Invalid webhook signature - rejecting request');
-      if (notification.data?.id || notification.type) {
-        console.warn('⚠️ Processing despite signature failure (development mode)');
-      } else {
-        return new Response(
-          JSON.stringify({ error: 'Invalid signature' }),
-          {
-            status: 401,
-            headers: {
-              'Content-Type': 'application/json',
-              ...corsHeaders,
-            },
-          }
-        );
-      }
-    } else {
-      console.log('✅ Webhook signature verified');
+      return new Response(
+        JSON.stringify({ error: 'Invalid signature' }),
+        {
+          status: 401,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders,
+          },
+        }
+      );
     }
+
+    console.log('✅ Webhook signature verified');
 
     console.log('Processing webhook notification...');
 

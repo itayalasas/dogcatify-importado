@@ -71,14 +71,11 @@ export interface PartnerMercadoPagoConfig {
 const getMercadoPagoOAuthClientId = async (): Promise<string> => {
   try {
     const { data, error } = await supabaseClient
-      .from('admin_settings')
-      .select('value')
-      .eq('key', 'mercadopago_config')
-      .maybeSingle();
+      .rpc('get_mercadopago_public_client_id');
 
     if (error) throw error;
 
-    const clientId = data?.value?.client_id || data?.value?.clientId || data?.value?.oauth_client_id || data?.value?.app_id;
+    const clientId = data;
 
     if (!clientId) {
       const envClientId = envConfig.getOrDefault('EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID', '').trim();
