@@ -1,5 +1,4 @@
 import { supabaseClient } from '../lib/supabase';
-import { createClient } from '@supabase/supabase-js';
 import { getAppConfig } from './appConfig';
 import { envConfig } from './envConfig';
 
@@ -13,12 +12,6 @@ export interface EmailConfirmationToken {
   expires_at: string;
   created_at: string;
 }
-
-type ProfileRoleFlags = {
-  isOwner: boolean;
-  isPartner: boolean;
-  isAdmin: boolean;
-};
 
 type ConfirmEmailApiResult = {
   success: boolean;
@@ -114,99 +107,6 @@ const getEmailApiKey = (): string => {
     readEnvValue('EXPO_PUBLIC_EMAIL_API_KEY') ||
     readEnvValue('EXPO_PUBLIC_SUPABASE_ANON_KEY')
   );
-};
-
-const parseMetadataBoolean = (value: any): boolean | undefined => {
-  if (value === true || value === 'true') return true;
-  if (value === false || value === 'false') return false;
-  return undefined;
-};
-
-const resolveProfileRoleFlagsFromMetadata = (
-  metadata: Record<string, any> | null | undefined,
-  existing?: Partial<ProfileRoleFlags> | null,
-): ProfileRoleFlags => {
-  const accountRole = String(metadata?.account_role || '').toLowerCase();
-  const explicitOwner = parseMetadataBoolean(metadata?.is_owner);
-  const explicitPartner = parseMetadataBoolean(metadata?.is_partner);
-  const explicitAdmin = parseMetadataBoolean(metadata?.is_admin);
-  const currentOwner = existing?.isOwner ?? true;
-  const currentPartner = existing?.isPartner ?? false;
-  const currentAdmin = existing?.isAdmin ?? false;
-
-  if (accountRole === 'partner') {
-    return {
-      isOwner: existing ? currentOwner : false,
-      isPartner: true,
-      isAdmin: explicitAdmin ?? currentAdmin,
-    };
-  }
-
-  if (accountRole === 'admin') {
-    return {
-      isOwner: explicitOwner ?? currentOwner,
-      isPartner: explicitPartner ?? currentPartner,
-      isAdmin: true,
-    };
-  }
-
-  if (accountRole === 'owner') {
-    return {
-      isOwner: true,
-      isPartner: existing ? currentPartner : false,
-      isAdmin: explicitAdmin ?? currentAdmin,
-    };
-  }
-
-  return {
-    isOwner: explicitOwner ?? currentOwner,
-    isPartner: explicitPartner ?? currentPartner,
-    isAdmin: explicitAdmin ?? currentAdmin,
-  };
-};
-
-const getRoleFlagsFromAuthUser = async (
-  serviceClient: any,
-  userId: string,
-  existing?: Partial<ProfileRoleFlags> | null,
-): Promise<ProfileRoleFlags> => {
-  try {
-    if (serviceClient?.auth?.admin?.getUserById) {
-      const { data, error } = await serviceClient.auth.admin.getUserById(userId);
-
-      if (!error && data?.user) {
-        return resolveProfileRoleFlagsFromMetadata(data.user.user_metadata, existing);
-      }
-    }
-  } catch (error) {
-    console.warn('Error resolving role flags from auth user, falling back to defaults:', error);
-  }
-
-  return {
-    isOwner: true,
-    isPartner: false,
-    isAdmin: false,
-  };
-};
-
-/**
- * Get service role client for admin operations
- */
-const getServiceClient = () => {
-  const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
-  const supabaseServiceKey = envConfig.get('EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY');
-  
-  if (!supabaseServiceKey) {
-    console.warn('Service role key not available, using regular client');
-    return supabaseClient;
-  }
-  
-  return createClient(supabaseUrl!, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  });
 };
 
 const parseJsonSafely = (value: string): any | null => {
@@ -325,30 +225,22 @@ export const createEmailConfirmationToken = async (
   email: string,
   type: 'signup' | 'password_reset' = 'signup'
 ): Promise<string> => {
+  if (type !== 'signup') {
+    throw new Error('createEmailConfirmationToken only supports type "signup" — use requestPasswordReset() for password resets.');
+  }
+
   try {
     await ensureRuntimeEnvConfig(true);
 
-    const token = await generateConfirmationToken();
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 24); // Token expires in 24 hours
+    const { data, error } = await supabaseClient.functions.invoke('manage-email-confirmation', {
+      body: { action: 'create-token', userId, email },
+    });
 
-    // Use service client to bypass RLS for token creation
-    const serviceClient = getServiceClient();
-    const { error } = await serviceClient
-      .from('email_confirmations')
-      .insert({
-        user_id: userId,
-        email: email,
-        token_hash: token,
-        type: type,
-        is_confirmed: false,
-        expires_at: expiresAt.toISOString(),
-        created_at: new Date().toISOString()
-      });
+    if (error || !data?.success || !data?.token) {
+      throw error || new Error(data?.error || 'TOKEN_CREATE_FAILED');
+    }
 
-    if (error) throw error;
-
-    return token;
+    return data.token as string;
   } catch (error) {
     console.error('Error creating email confirmation token:', error);
     throw error;
@@ -356,256 +248,28 @@ export const createEmailConfirmationToken = async (
 };
 
 /**
- * Verify email confirmation token
+ * Verify email confirmation token. The confirm-email edge function does the
+ * actual work server-side (service_role, admin.* calls) — this just relays
+ * its result. There is intentionally no client-side fallback anymore: it
+ * used to re-run the same logic locally with a service_role key shipped in
+ * the app bundle, which is exactly the exposure this removes.
  */
-export const confirmEmailCustomLegacy = async (
-  token: string,
-  type: 'signup' | 'password_reset' = 'signup'
-): Promise<ConfirmEmailApiResult> => {
-  try {
-    await ensureRuntimeEnvConfig(true);
-
-    console.log('Verifying token:', token, 'type:', type);
-
-    const edgeResult = await confirmEmailViaEdgeFunction(token, type);
-    if (edgeResult) {
-      console.log('confirm-email edge function result:', edgeResult);
-      return edgeResult;
-    }
-
-    // Find the token in database using service client to bypass RLS
-    const serviceClient = getServiceClient();
-    
-    // First, check if token exists at all (including already confirmed ones)
-    const { data: anyTokenData, error: anyTokenError } = await serviceClient
-      .from('email_confirmations')
-      .select('*')
-      .eq('token_hash', token)
-      .eq('type', type)
-      .single();
-
-    if (anyTokenError) {
-      console.error('Token not found at all:', anyTokenError);
-      return { success: false, error: 'TOKEN_NOT_FOUND' };
-    }
-
-    if (!anyTokenData) {
-      return { success: false, error: 'TOKEN_NOT_FOUND' };
-    }
-
-    const tokenAlreadyUsed = Boolean(anyTokenData.is_confirmed);
-
-    if (tokenAlreadyUsed) {
-      console.log('Token already used, continuing with idempotent confirmation flow:', {
-        userId: anyTokenData.user_id,
-        email: anyTokenData.email,
-        confirmedAt: anyTokenData.confirmed_at,
-      });
-    }
-
-    // Check if token has expired. Already-confirmed tokens are allowed to pass.
-    const now = new Date();
-    const expiresAt = new Date(anyTokenData.expires_at);
-    
-    if (!tokenAlreadyUsed && now > expiresAt) {
-      return { 
-        success: false, 
-        error: 'TOKEN_EXPIRED',
-        userId: anyTokenData.user_id,
-        email: anyTokenData.email
-      };
-    }
-
-    // Mark token as confirmed
-    const { error: updateError } = await serviceClient
-      .from('email_confirmations')
-      .update({
-        is_confirmed: true,
-        confirmed_at: new Date().toISOString()
-      })
-      .eq('id', anyTokenData.id);
-
-    if (updateError) {
-      console.error('Error updating token:', updateError);
-      console.warn('Token confirmation row could not be updated, but the auth/profile flow can continue.');
-    }
-
-    // CRITICAL: Update user in auth.users to mark email as confirmed
-    console.log('Updating user in auth.users to mark email as confirmed...');
-    const { data: authUserData } = await serviceClient.auth.admin.getUserById(anyTokenData.user_id);
-    const existingAuthMetadata = authUserData?.user?.user_metadata || {};
-    const { error: authUpdateError } = await serviceClient.auth.admin.updateUserById(
-      anyTokenData.user_id,
-      { 
-        email_confirm: true,
-        user_metadata: {
-          ...existingAuthMetadata,
-          email_confirmed: true,
-          email_confirmed_at: new Date().toISOString()
-        }
-      }
-    );
-
-    if (authUpdateError) {
-      console.error('Error updating user in auth.users:', authUpdateError);
-      // Don't fail the confirmation if auth update fails, but log it
-      console.warn('Email confirmed in our system but not in auth.users');
-    } else {
-      console.log('✅ User email confirmed in auth.users successfully');
-    }
-    // Update user profile to mark email as confirmed
-    const { data: existingProfile } = await serviceClient
-      .from('profiles')
-      .select('is_owner, is_partner, is_admin')
-      .eq('id', anyTokenData.user_id)
-      .maybeSingle();
-
-    const roleFlags = await getRoleFlagsFromAuthUser(
-      serviceClient,
-      anyTokenData.user_id,
-      existingProfile
-        ? {
-            isOwner: existingProfile.is_owner ?? true,
-            isPartner: existingProfile.is_partner ?? false,
-            isAdmin: existingProfile.is_admin ?? false,
-          }
-        : null,
-    );
-
-    const { error: profileError } = await serviceClient
-      .from('profiles')
-      .update({
-        is_owner: roleFlags.isOwner,
-        is_partner: roleFlags.isPartner,
-        is_admin: roleFlags.isAdmin,
-        email_confirmed: true,
-        email_confirmed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', anyTokenData.user_id);
-
-    if (profileError) {
-      console.error('Error updating profile:', profileError);
-      // Don't fail the confirmation if profile update fails
-    }
-
-    console.log('Email confirmation successful for user:', anyTokenData.user_id);
-
-    return {
-      success: true,
-      userId: anyTokenData.user_id,
-      email: anyTokenData.email,
-      alreadyConfirmed: tokenAlreadyUsed,
-    };
-  } catch (error) {
-    console.error('Error verifying email confirmation token:', error);
-    return { success: false, error: 'INTERNAL_ERROR' };
-  }
-};
-
 export const confirmEmailCustom = async (
   token: string,
   type: 'signup' | 'password_reset' = 'signup'
 ): Promise<ConfirmEmailApiResult> => {
-  try {
-    await ensureRuntimeEnvConfig(true);
+  await ensureRuntimeEnvConfig(true);
 
-    console.log('Verifying token:', token, 'type:', type);
+  console.log('Verifying token:', token, 'type:', type);
 
-    const edgeResult = await confirmEmailViaEdgeFunction(token, type);
-    if (edgeResult) {
-      console.log('confirm-email edge function result:', edgeResult);
-      return edgeResult;
-    }
-
-    const serviceClient = getServiceClient();
-    const { data: confirmationRows, error: confirmationError } = await serviceClient.rpc(
-      'confirm_email_signup_atomically',
-      {
-        p_token_hash: token,
-        p_type: type,
-      },
-    ) as { data: any[] | null; error: any };
-
-    if (confirmationError || !confirmationRows?.length) {
-      const rawMessage = String(
-        confirmationError?.message ||
-          confirmationError?.details ||
-          confirmationError?.hint ||
-          'CONFIRMATION_TRANSACTION_FAILED',
-      ).toUpperCase();
-
-      if (rawMessage.includes('TOKEN_NOT_FOUND')) {
-        return { success: false, error: 'TOKEN_NOT_FOUND' };
-      }
-
-      if (rawMessage.includes('TOKEN_EXPIRED')) {
-        return { success: false, error: 'TOKEN_EXPIRED' };
-      }
-
-      if (rawMessage.includes('TOKEN_REQUIRED')) {
-        return { success: false, error: 'TOKEN_REQUIRED' };
-      }
-
-      if (rawMessage.includes('PROFILE_NOT_FOUND')) {
-        return { success: false, error: 'PROFILE_NOT_FOUND' };
-      }
-
-      console.error('Error confirming email atomically:', {
-        error: confirmationError,
-        message: rawMessage,
-      });
-
-      return { success: false, error: 'CONFIRMATION_TRANSACTION_FAILED' };
-    }
-
-    const confirmation = confirmationRows[0];
-
-    let authMetadata: Record<string, any> = {};
-    try {
-      const { data: authUserData } = await serviceClient.auth.admin.getUserById(confirmation.user_id);
-      authMetadata = authUserData?.user?.user_metadata || {};
-    } catch (error) {
-      console.warn('Could not read auth metadata for confirmation:', error);
-    }
-
-    const { error: authUpdateError } = await serviceClient.auth.admin.updateUserById(
-      confirmation.user_id,
-      {
-        email_confirm: true,
-        user_metadata: {
-          ...authMetadata,
-          email_confirmed: true,
-          email_confirmed_at: confirmation.confirmed_at,
-        },
-      },
-    );
-
-    if (authUpdateError) {
-      console.error('Error updating user in auth.users:', authUpdateError);
-      return {
-        success: false,
-        error: 'AUTH_UPDATE_ERROR',
-        userId: confirmation.user_id,
-        email: confirmation.email,
-        alreadyConfirmed: confirmation.already_confirmed,
-        confirmedAt: confirmation.confirmed_at,
-      };
-    }
-
-    console.log('Email confirmation successful for user:', confirmation.user_id);
-
-    return {
-      success: true,
-      userId: confirmation.user_id,
-      email: confirmation.email,
-      alreadyConfirmed: confirmation.already_confirmed,
-      confirmedAt: confirmation.confirmed_at,
-    };
-  } catch (error) {
-    console.error('Error verifying email confirmation token:', error);
-    return { success: false, error: 'INTERNAL_ERROR' };
+  const edgeResult = await confirmEmailViaEdgeFunction(token, type);
+  if (edgeResult) {
+    console.log('confirm-email edge function result:', edgeResult);
+    return edgeResult;
   }
+
+  console.error('confirm-email edge function unavailable and returned no result');
+  return { success: false, error: 'CONFIRMATION_UNAVAILABLE' };
 };
 
 /**
@@ -631,56 +295,6 @@ export const isEmailConfirmed = async (userId: string): Promise<boolean> => {
   }
 };
 
-/**
- * Complete user registration after email confirmation
- * This creates the user profile and all necessary records
- */
-export const completeUserRegistration = async (
-  userId: string,
-  email: string,
-  displayName: string
-): Promise<{ success: boolean; error?: string }> => {
-  try {
-    console.log('Completing user registration for:', userId);
-    
-    // Use service client to create profile
-    const serviceClient = getServiceClient();
-    const roleFlags = await getRoleFlagsFromAuthUser(serviceClient, userId);
-    
-    // Create user profile
-    const { error: profileError } = await serviceClient
-      .from('profiles')
-      .insert({
-        id: userId,
-        email: email,
-        display_name: displayName,
-        is_owner: roleFlags.isOwner,
-        is_partner: roleFlags.isPartner,
-        is_admin: roleFlags.isAdmin,
-        email_confirmed: true,
-        email_confirmed_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        followers: [],
-        following: []
-      });
-
-    if (profileError) {
-      console.error('Error creating user profile:', profileError);
-      return { success: false, error: 'Error creating user profile' };
-    }
-
-    console.log('User profile created successfully');
-    
-    // Here you can add other initial records if needed
-    // For example: default settings, welcome notifications, etc.
-    
-    return { success: true };
-  } catch (error) {
-    console.error('Error completing user registration:', error);
-    return { success: false, error: 'Internal error completing registration' };
-  }
-};
 /**
  * Generate confirmation URL
  */
@@ -832,142 +446,28 @@ export const sendWelcomeEmailAPI = async (
 /**
  * Resend confirmation email
  */
+/**
+ * Resend the signup confirmation email. Runs entirely server-side now (the
+ * manage-email-confirmation edge function finds-or-creates the profile,
+ * syncs role flags, invalidates old tokens, issues a new one, and sends the
+ * email) — the raw token never reaches this client.
+ */
 export const resendConfirmationEmail = async (email: string): Promise<{ success: boolean; error?: string }> => {
   try {
     await ensureRuntimeEnvConfig();
 
     console.log('Resending confirmation email for:', email);
-    const serviceClient = getServiceClient();
 
-    // First try to find user in profiles table
-    const { data: profileData, error: profileError } = await supabaseClient
-      .from('profiles')
-      .select('id, display_name, is_owner, is_partner, is_admin')
-      .eq('email', email)
-      .maybeSingle();
+    const { data, error } = await supabaseClient.functions.invoke('manage-email-confirmation', {
+      body: { action: 'resend', email },
+    });
 
-    let userId: string | null = null;
-    let displayName: string = 'Usuario';
-
-    if (profileData) {
-      userId = profileData.id;
-      displayName = profileData.display_name || 'Usuario';
-      console.log('Found user in profiles:', userId);
-    } else {
-      // If not found in profiles, try to find in auth.users using service client
-      console.log('User not found in profiles, checking auth.users...');
-      const serviceClient = getServiceClient();
-
-      const { data: authUser, error: authError } = await serviceClient.auth.admin.listUsers();
-
-      if (authError) {
-        console.error('Error listing users from auth:', authError);
-        return { success: false, error: 'Error buscando usuario' };
-      }
-
-      const foundUser = authUser.users.find(u => u.email?.toLowerCase() === email.toLowerCase());
-
-      if (!foundUser) {
-        console.error('User not found in auth.users either');
-        return { success: false, error: 'No existe una cuenta con este correo electrónico' };
-      }
-
-      userId = foundUser.id;
-      displayName = (foundUser.user_metadata?.full_name as string) || 'Usuario';
-      console.log('Found user in auth.users:', userId);
-      const roleFlags = resolveProfileRoleFlagsFromMetadata(foundUser.user_metadata, null);
-
-      // Create the missing profile
-      console.log('Creating missing profile for user...');
-      const { error: createProfileError } = await serviceClient
-        .from('profiles')
-        .insert({
-          id: userId,
-          email: email,
-          display_name: displayName,
-          is_owner: roleFlags.isOwner,
-          is_partner: roleFlags.isPartner,
-          is_admin: roleFlags.isAdmin,
-          email_confirmed: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (createProfileError) {
-        console.error('Error creating profile:', createProfileError);
-        // Continue anyway, we can still send the email
-      } else {
-        console.log('Profile created successfully');
-      }
-    }
-
-    if (!userId) {
-      return { success: false, error: 'No se pudo determinar el usuario para reenviar la confirmación' };
-    }
-
-    try {
-      const roleFlags = await getRoleFlagsFromAuthUser(
-        serviceClient,
-        userId,
-        profileData
-          ? {
-              isOwner: profileData.is_owner ?? true,
-              isPartner: profileData.is_partner ?? false,
-              isAdmin: profileData.is_admin ?? false,
-            }
-          : null,
-      );
-      const { error: roleSyncError } = await serviceClient
-        .from('profiles')
-        .update({
-          is_owner: roleFlags.isOwner,
-          is_partner: roleFlags.isPartner,
-          is_admin: roleFlags.isAdmin,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', userId);
-
-      if (roleSyncError) {
-        console.warn('Could not sync profile role flags during resend:', roleSyncError);
-      }
-    } catch (syncError) {
-      console.warn('Could not sync profile role flags during resend:', syncError);
-    }
-
-    console.log('Resending confirmation email for user:', userId);
-
-    // Invalidate any existing signup tokens for this user
-    const { error: invalidateError } = await serviceClient
-      .from('email_confirmations')
-      .update({
-        is_confirmed: true,
-        confirmed_at: new Date().toISOString()
-      })
-      .eq('user_id', userId)
-      .eq('type', 'signup')
-      .eq('is_confirmed', false);
-
-    if (invalidateError) {
-      console.warn('Could not invalidate existing tokens:', invalidateError);
-    }
-
-    // Create new confirmation token
-    const token = await createEmailConfirmationToken(userId, email, 'signup');
-    const confirmationUrl = generateConfirmationUrl(token, 'signup');
-
-    console.log('New confirmation URL generated:', confirmationUrl);
-
-    // Send confirmation email using new API
-    const result = await sendConfirmationEmailAPI(
-      email,
-      displayName,
-      confirmationUrl
-    );
-
-    if (!result.success) {
-      return { success: false, error: result.error || 'Error sending email' };
+    if (error || !data?.success) {
+      const message = data?.error === 'USER_NOT_FOUND'
+        ? 'No existe una cuenta con este correo electrónico'
+        : (data?.error || 'Error al reenviar email de confirmación');
+      console.error('Error resending confirmation email:', message);
+      return { success: false, error: message };
     }
 
     console.log('Confirmation email resent successfully');
@@ -975,6 +475,34 @@ export const resendConfirmationEmail = async (email: string): Promise<{ success:
   } catch (error) {
     console.error('Error resending confirmation email:', error);
     return { success: false, error: 'Error al reenviar email de confirmación' };
+  }
+};
+
+/**
+ * Request a password reset email. Runs entirely server-side (creates the
+ * token and sends the email in one step) — no raw token is ever returned to
+ * the client, which closes the account-takeover vector that existed when
+ * this flow ran client-side with a service_role key.
+ */
+export const requestPasswordReset = async (email: string): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await ensureRuntimeEnvConfig();
+
+    const { data, error } = await supabaseClient.functions.invoke('manage-email-confirmation', {
+      body: { action: 'password-reset', email },
+    });
+
+    if (error || !data?.success) {
+      const message = data?.error === 'USER_NOT_FOUND'
+        ? 'No existe una cuenta con este correo electrónico'
+        : (data?.error || 'Error al enviar el correo de restablecimiento');
+      return { success: false, error: message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error requesting password reset:', error);
+    return { success: false, error: 'Error al enviar el correo de restablecimiento' };
   }
 };
 

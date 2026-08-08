@@ -367,9 +367,9 @@ export default function PartnerServices() {
       const enrichedReviews = await Promise.all(
         (reviewsData || []).map(async (review) => {
           try {
-            // Fetch user profile
+            // Fetch user profile (public columns only — other users' rows)
             const { data: userProfile } = await supabaseClient
-              .from('profiles')
+              .from('profiles_public')
               .select('display_name, photo_url')
               .eq('id', review.customer_id)
               .single();

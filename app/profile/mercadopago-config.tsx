@@ -40,7 +40,7 @@ export default function MercadoPagoConfig() {
 
       const { data: partnersData, error } = await supabaseClient
         .from('partners')
-        .select('*')
+        .select('id, business_name, business_type, user_id, mercadopago_connected')
         .eq('user_id', currentUser!.id)
         .eq('is_verified', true)
         .order('created_at', { ascending: false });
@@ -66,17 +66,28 @@ export default function MercadoPagoConfig() {
       console.log('Partner data loaded:', partnerData);
       setPartner(partnerData);
 
-      // Extract Mercado Pago configuration
-      if (partnerData.mercadopago_config) {
+      // Las credenciales de Mercado Pago viven en su propia tabla
+      // (protegida por RLS: solo el dueño puede leer/escribir su fila).
+      const { data: creds, error: credsError } = await supabaseClient
+        .from('partner_payment_credentials')
+        .select('*')
+        .eq('user_id', currentUser!.id)
+        .maybeSingle();
+
+      if (credsError) {
+        console.error('Error loading MP credentials:', credsError);
+      }
+
+      if (creds) {
         console.log('📥 MP config loaded from DB:', {
-          access_token_prefix: partnerData.mercadopago_config.access_token?.substring(0, 12) + '...',
-          public_key_prefix: partnerData.mercadopago_config.public_key?.substring(0, 12) + '...',
-          is_test_mode: partnerData.mercadopago_config.is_test_mode,
-          is_oauth: partnerData.mercadopago_config.is_oauth,
-          connected_at: partnerData.mercadopago_config.connected_at
+          access_token_prefix: creds.access_token?.substring(0, 12) + '...',
+          public_key_prefix: creds.public_key?.substring(0, 12) + '...',
+          is_test_mode: creds.is_test_mode,
+          is_oauth: creds.is_oauth,
+          connected_at: creds.connected_at
         });
-        setMpConfig(partnerData.mercadopago_config);
-        setIsTestMode(partnerData.mercadopago_config.is_test_mode || false);
+        setMpConfig(creds);
+        setIsTestMode(creds.is_test_mode || false);
       } else {
         console.log('No MP config found');
         setMpConfig(null);
@@ -191,11 +202,13 @@ export default function MercadoPagoConfig() {
       }
 
       const config = {
+        user_id: partner.user_id,
         public_key: manualPublicKey.trim(),
         access_token: manualAccessToken.trim(),
         connected_at: new Date().toISOString(),
         is_test_mode: isTestMode,
-        is_oauth: false
+        is_oauth: false,
+        updated_at: new Date().toISOString(),
       };
 
       console.log('💾 Saving NEW MP config:', {
@@ -209,17 +222,25 @@ export default function MercadoPagoConfig() {
       });
 
       const { error } = await supabaseClient
+        .from('partner_payment_credentials')
+        .upsert(config, { onConflict: 'user_id' });
+
+      if (error) {
+        console.error('Error saving MP credentials:', error);
+        throw error;
+      }
+
+      const { error: partnerUpdateError } = await supabaseClient
         .from('partners')
         .update({
           mercadopago_connected: true,
-          mercadopago_config: config,
           updated_at: new Date().toISOString()
         })
         .eq('user_id', partner.user_id);
 
-      if (error) {
-        console.error('Error updating partners:', error);
-        throw error;
+      if (partnerUpdateError) {
+        console.error('Error updating partners:', partnerUpdateError);
+        throw partnerUpdateError;
       }
 
       console.log('MP config saved successfully for ALL businesses of this partner');
@@ -395,11 +416,11 @@ export default function MercadoPagoConfig() {
                 </Text>
               </View>
 
-              {mpConfig.user_id && (
+              {mpConfig.mp_user_id && (
                 <View style={styles.credentialItem}>
                   <Text style={styles.credentialLabel}>User ID:</Text>
                   <Text style={styles.credentialValue} selectable>
-                    {String(mpConfig.user_id)}
+                    {String(mpConfig.mp_user_id)}
                   </Text>
                 </View>
               )}

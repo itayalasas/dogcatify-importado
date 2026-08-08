@@ -72,13 +72,13 @@ async function getMercadoPagoTokenCandidates(supabase: any): Promise<string[]> {
     tokenCandidates.push(adminConfig.value.access_token);
   }
 
-  const { data: partners } = await supabase
-    .from('partners')
-    .select('mercadopago_config')
-    .not('mercadopago_config', 'is', null);
+  const { data: credentials } = await supabase
+    .from('partner_payment_credentials')
+    .select('access_token')
+    .not('access_token', 'is', null);
 
-  for (const partner of partners || []) {
-    const token = partner?.mercadopago_config?.access_token;
+  for (const cred of credentials || []) {
+    const token = cred?.access_token;
     if (token && !tokenCandidates.includes(token)) {
       tokenCandidates.push(token);
     }
@@ -181,8 +181,8 @@ async function verifyWebhookSignature(req: Request, notificationData: any): Prom
     const webhookSecret = Deno.env.get('MERCADOPAGO_WEBHOOK_SECRET');
 
     if (!webhookSecret) {
-      console.warn('MERCADOPAGO_WEBHOOK_SECRET not configured, skipping validation');
-      return true;
+      console.error('MERCADOPAGO_WEBHOOK_SECRET not configured — rejecting webhook');
+      return false;
     }
 
     const parts = xSignature.split(',');
@@ -217,11 +217,6 @@ async function verifyWebhookSignature(req: Request, notificationData: any): Prom
       console.error('Missing data.id for signature validation');
       console.error('URL search params:', Object.fromEntries(url.searchParams.entries()));
       console.error('Notification data:', notificationData);
-      const webhookSecret = Deno.env.get('MERCADOPAGO_WEBHOOK_SECRET');
-      if (!webhookSecret) {
-        console.warn('⚠️ No webhook secret configured - allowing request in dev mode');
-        return true;
-      }
       return false;
     }
 
@@ -360,23 +355,19 @@ serve(async (req: Request) => {
 
     if (!isValid) {
       console.error('Invalid webhook signature - rejecting request');
-      if (notification.data?.id || notification.type) {
-        console.warn('⚠️ Processing despite signature failure (development mode)');
-      } else {
-        return new Response(
-          JSON.stringify({ error: 'Invalid signature' }),
-          {
-            status: 401,
-            headers: {
-              'Content-Type': 'application/json',
-              ...corsHeaders,
-            },
-          }
-        );
-      }
-    } else {
-      console.log('✅ Webhook signature verified');
+      return new Response(
+        JSON.stringify({ error: 'Invalid signature' }),
+        {
+          status: 401,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders,
+          },
+        }
+      );
     }
+
+    console.log('✅ Webhook signature verified');
 
     console.log('Processing webhook notification...');
 
@@ -777,14 +768,23 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
 
       const { data: partners, error: partnersError } = await supabase
         .from('partners')
-        .select('id, business_name, mercadopago_config')
-        .not('mercadopago_config', 'is', null);
+        .select('id, business_name, user_id');
 
-      if (partners && partners.length > 0) {
-        console.log(`🔍 Found ${partners.length} partners with MP credentials, trying each...`);
+      const { data: credentials } = await supabase
+        .from('partner_payment_credentials')
+        .select('user_id, access_token')
+        .not('access_token', 'is', null);
 
-        for (const partner of partners) {
-          const partnerToken = partner.mercadopago_config?.access_token;
+      const tokenByUserId = new Map((credentials || []).map((c: any) => [c.user_id, c.access_token]));
+      const partnersWithTokens = (partners || [])
+        .map((p: any) => ({ ...p, access_token: tokenByUserId.get(p.user_id) }))
+        .filter((p: any) => p.access_token);
+
+      if (partnersWithTokens.length > 0) {
+        console.log(`🔍 Found ${partnersWithTokens.length} partners with MP credentials, trying each...`);
+
+        for (const partner of partnersWithTokens) {
+          const partnerToken = partner.access_token;
           if (!partnerToken) continue;
 
           console.log(`🔑 Trying credentials from partner: ${partner.business_name} (${partnerToken.substring(0, 20)}...)`);
@@ -812,13 +812,21 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
 
       const { data: orderData } = await supabase
         .from('orders')
-        .select('*, partners!inner(mercadopago_config)')
+        .select('*, partners!inner(user_id)')
         .eq('id', orderId)
         .maybeSingle();
 
-      if (orderData?.partners?.mercadopago_config?.access_token) {
-        accessToken = orderData.partners.mercadopago_config.access_token;
-        console.log(`🔑 Using partner credentials: ${accessToken.substring(0, 20)}...`);
+      if (orderData?.partners?.user_id) {
+        const { data: orderPartnerCreds } = await supabase
+          .from('partner_payment_credentials')
+          .select('access_token')
+          .eq('user_id', orderData.partners.user_id)
+          .maybeSingle();
+
+        if (orderPartnerCreds?.access_token) {
+          accessToken = orderPartnerCreds.access_token;
+          console.log(`🔑 Using partner credentials: ${accessToken.substring(0, 20)}...`);
+        }
       }
     }
 
@@ -912,7 +920,7 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
 
       const { data: orderByPref, error: prefError } = await supabase
         .from('orders')
-        .select('*, partners!inner(mercadopago_config)')
+        .select('*, partners!inner(id)')
         .eq('payment_preference_id', preferenceId)
         .maybeSingle();
 
@@ -928,7 +936,7 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
 
     const { data: orderData, error: orderError } = await supabase
       .from('orders')
-      .select('*, partners!inner(mercadopago_config)')
+      .select('*, partners!inner(id)')
       .eq('id', orderId)
       .maybeSingle();
 
@@ -1080,29 +1088,7 @@ async function processMerchantOrderNotification(supabase: any, notification: Web
       return;
     }
 
-    const { data: adminConfig } = await supabase
-      .from('admin_settings')
-      .select('value')
-      .eq('key', 'mercadopago_config')
-      .maybeSingle();
-
-    const tokenCandidates: string[] = [];
-
-    if (adminConfig?.value?.access_token) {
-      tokenCandidates.push(adminConfig.value.access_token);
-    }
-
-    const { data: partners } = await supabase
-      .from('partners')
-      .select('mercadopago_config')
-      .not('mercadopago_config', 'is', null);
-
-    for (const partner of partners || []) {
-      const token = partner?.mercadopago_config?.access_token;
-      if (token && !tokenCandidates.includes(token)) {
-        tokenCandidates.push(token);
-      }
-    }
+    const tokenCandidates = await getMercadoPagoTokenCandidates(supabase);
 
     if (tokenCandidates.length === 0) {
       console.error('❌ No Mercado Pago access tokens available to process merchant_order');

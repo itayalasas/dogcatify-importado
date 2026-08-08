@@ -183,9 +183,9 @@ export default function ChatScreen() {
         // Current user is the partner, recipient is the customer
         setRecipientId(conversation.user_id);
         
-        // Get customer name
+        // Get customer name (public columns only — other user's row)
         const { data: customerData } = await supabaseClient
-          .from('profiles')
+          .from('profiles_public')
           .select('display_name')
           .eq('id', conversation.user_id)
           .single();
@@ -224,9 +224,9 @@ export default function ChatScreen() {
             if (msg.sender_id === currentUser?.id) {
               senderName = currentUser?.displayName || 'Tú';
             } else {
-              // Get sender name from profiles
+              // Get sender name (public columns only — other user's row)
               const { data: senderData } = await supabaseClient
-                .from('profiles')
+                .from('profiles_public')
                 .select('display_name')
                 .eq('id', msg.sender_id)
                 .single();

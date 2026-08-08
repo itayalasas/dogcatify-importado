@@ -19,64 +19,63 @@ import { resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimit
 
 const SYSTEM_CONFIG_KEY = 'system_config';
 
+// Mercado Pago credentials now live in partner_payment_credentials, keyed by
+// user_id — every business of this user already shares the same row, so
+// there's nothing to copy anymore. Just flip mercadopago_connected on the
+// newly created business if the user already has credentials on file.
 const replicateMercadoPagoConfig = async (userId: string) => {
   try {
-    console.log('Checking for existing Mercado Pago configuration for user:', userId);
-    
-    // Find any existing business from this user with Mercado Pago configured
-    const { data: existingPartners, error } = await supabaseClient
+    const { data: creds, error } = await supabaseClient
+      .from('partner_payment_credentials')
+      .select('user_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error checking existing MP credentials:', error);
+      return;
+    }
+
+    if (!creds) {
+      console.log('No existing Mercado Pago configuration found for user');
+      return;
+    }
+
+    const { data: existingPartners } = await supabaseClient
       .from('partners')
-      .select('*')
+      .select('commission_percentage')
       .eq('user_id', userId)
       .eq('mercadopago_connected', true)
       .limit(1);
-    
-    if (error) {
-      console.error('Error checking existing partners:', error);
+
+    // Get the newly created partner (last one created by this user)
+    const { data: newPartners, error: newPartnerError } = await supabaseClient
+      .from('partners')
+      .select('id, business_name')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (newPartnerError || !newPartners || newPartners.length === 0) {
+      console.error('Error finding new partner:', newPartnerError);
       return;
     }
-    
-    if (existingPartners && existingPartners.length > 0) {
-      const sourcePartner = existingPartners[0];
-      console.log('Found existing partner with MP config:', sourcePartner.business_name);
-      
-      if (sourcePartner.mercadopago_config) {
-        console.log('Replicating Mercado Pago configuration to new business...');
-        
-        // Get the newly created partner (last one created by this user)
-        const { data: newPartners, error: newPartnerError } = await supabaseClient
-          .from('partners')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .limit(1);
-        
-        if (newPartnerError || !newPartners || newPartners.length === 0) {
-          console.error('Error finding new partner:', newPartnerError);
-          return;
-        }
-        
-        const newPartner = newPartners[0];
-        
-        // Replicate the Mercado Pago configuration
-        const { error: updateError } = await supabaseClient
-          .from('partners')
-          .update({
-            mercadopago_connected: true,
-            mercadopago_config: sourcePartner.mercadopago_config,
-            commission_percentage: sourcePartner.commission_percentage || 5.0,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', newPartner.id);
-        
-        if (updateError) {
-          console.error('Error replicating MP config:', updateError);
-        } else {
-          console.log('Mercado Pago configuration replicated successfully to:', newPartner.business_name);
-        }
-      }
+
+    const newPartner = newPartners[0];
+
+    const { error: updateError } = await supabaseClient
+      .from('partners')
+      .update({
+        mercadopago_connected: true,
+        commission_percentage: existingPartners?.[0]?.commission_percentage ?? 5.0,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', newPartner.id);
+
+    if (updateError) {
+      console.error('Error marking new partner as MP-connected:', updateError);
     } else {
-      console.log('No existing Mercado Pago configuration found for user');
+      console.log('New partner marked as Mercado Pago connected:', newPartner.business_name);
     }
   } catch (error) {
     console.error('Error in replicateMercadoPagoConfig:', error);

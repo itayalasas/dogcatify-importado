@@ -378,7 +378,7 @@ export default function Profile() {
       console.log('=== FETCHING FOLLOWERS ===');
       console.log('Looking for users who have', currentUser!.id, 'in their following array');
       const { data: followersData, error: followersError } = await supabaseClient
-        .from('profiles')
+        .from('profiles_public')
         .select('id, display_name')
         .contains('following', [currentUser!.id]);
       

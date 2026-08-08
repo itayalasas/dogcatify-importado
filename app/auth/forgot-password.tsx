@@ -4,8 +4,7 @@ import { router, Stack } from 'expo-router';
 import { ArrowLeft, Mail } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
-import { createEmailConfirmationToken, generateConfirmationUrl } from '../../utils/emailConfirmation';
-import { supabaseClient } from '../../lib/supabase';
+import { requestPasswordReset } from '../../utils/emailConfirmation';
 import { useLanguage } from '../../contexts/LanguageContext'; 
 
 export default function ForgotPassword() {
@@ -22,47 +21,20 @@ export default function ForgotPassword() {
 
     setLoading(true);
     try {
-      // Verificar que el usuario existe
-      const { data: userData, error: userError } = await supabaseClient
-        .from('profiles')
-        .select('id, display_name, email')
-        .eq('email', email.toLowerCase().trim())
-        .single();
+      // El edge function verifica que el usuario existe, crea el token y
+      // envía el email, todo server-side; el token nunca vuelve a este
+      // cliente.
+      const resetResult = await requestPasswordReset(email.toLowerCase().trim());
 
-      if (userError) {
-        if (userError.code === 'PGRST116') {
-          Alert.alert('Usuario no encontrado', 'No existe una cuenta con este correo electrónico.');
-        } else {
-          throw userError;
+      if (!resetResult.success) {
+        if (resetResult.error === 'No existe una cuenta con este correo electrónico') {
+          Alert.alert('Usuario no encontrado', resetResult.error);
+          return;
         }
-        return;
-      }
-
-      console.log('User found, creating custom password reset token...');
-
-      // Crear token personalizado para reset de contraseña
-      const token = await createEmailConfirmationToken(userData.id, email.toLowerCase().trim(), 'password_reset');
-      const resetUrl = generateConfirmationUrl(token, 'password_reset');
-
-      console.log('Sending password reset email using new API...');
-      console.log('Reset URL:', resetUrl);
-
-      // Enviar email usando la nueva API
-      const { sendPasswordResetEmailAPI } = await import('../../utils/emailConfirmation');
-      const emailResult = await sendPasswordResetEmailAPI(
-        email.toLowerCase().trim(),
-        userData.display_name || 'Usuario',
-        resetUrl
-      );
-
-      if (!emailResult.success) {
-        throw new Error(emailResult.error || 'Error sending password reset email');
+        throw new Error(resetResult.error || 'Error sending password reset email');
       }
 
       console.log('✅ Password reset email sent successfully!');
-      if (emailResult.log_id) {
-        console.log('Email log ID:', emailResult.log_id);
-      }
 
       setResetSent(true);
       Alert.alert(

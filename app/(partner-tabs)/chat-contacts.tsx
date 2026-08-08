@@ -106,9 +106,9 @@ export default function ChatContacts() {
             .eq('id', conv.adoption_pet_id)
             .single();
           
-          // Get customer profile
+          // Get customer profile (public columns only — other user's row)
           const { data: customerData } = await supabaseClient
-            .from('profiles')
+            .from('profiles_public')
             .select('display_name, photo_url')
             .eq('id', conv.user_id)
             .single();

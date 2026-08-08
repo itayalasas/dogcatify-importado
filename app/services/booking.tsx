@@ -7,8 +7,8 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { LoadingScreen } from '../../components/ui/LoadingScreen';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { supabaseClient } from '@/lib/supabase';
-import { NotificationService } from '../../utils/notifications';
 import { createServiceBookingOrder, openMercadoPagoPayment } from '../../utils/mercadoPago';
 import {
   generateAvailableTimeOptions,
@@ -27,6 +27,7 @@ export default function ServiceBooking() {
   }>();
   
   const { currentUser } = useAuth();
+  const { sendNotificationToUser } = useNotifications();
   const [service, setService] = useState<any>(null);
   const [pet, setPet] = useState<any>(null);
   const [partnerInfo, setPartnerInfo] = useState<any>(null);
@@ -394,28 +395,19 @@ export default function ServiceBooking() {
           if (partnerUserError || !partnerUser?.user_id) {
             console.warn('No se pudo resolver el usuario del partner para notificar:', partnerUserError);
           } else {
-            const { data: profileData, error: profileError } = await supabaseClient
-              .from('profiles')
-              .select('push_token, fcm_token')
-              .eq('id', partnerUser.user_id)
-              .single();
-
-            const pushToken = profileData?.fcm_token || profileData?.push_token;
-
-            if (profileError || !pushToken) {
-              console.warn('Partner sin token de notificación para reservas:', profileError);
-            } else {
-              await NotificationService.sendPushNotification(
-                pushToken,
-                '🎉 Nueva Reserva',
-                `${currentUser.displayName || 'Un cliente'} ha reservado ${service.name} para el ${bookingDate.toLocaleDateString()}`,
-                {
-                  type: 'booking',
-                  bookingId: bookingData.id,
-                  serviceId: serviceId
-                }
-              );
-            }
+            // Token resolution now happens server-side (send-notification-fcm-v1
+            // resolves it via targetUserId) — the client no longer reads the
+            // partner's push_token/fcm_token directly.
+            await sendNotificationToUser(
+              partnerUser.user_id,
+              '🎉 Nueva Reserva',
+              `${currentUser.displayName || 'Un cliente'} ha reservado ${service.name} para el ${bookingDate.toLocaleDateString()}`,
+              {
+                type: 'booking',
+                bookingId: bookingData.id,
+                serviceId: serviceId
+              }
+            );
           }
         } catch (notifError) {
           console.error('Error sending notification:', notifError);

@@ -69,11 +69,11 @@ Deno.serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const adminToken = Deno.env.get("ADMIN_API_TOKEN") || "dogcatify_admin_2025_secure";
+    const adminToken = Deno.env.get("ADMIN_API_TOKEN") || null;
     let isAdmin = false;
     let partnerId: string | null = null;
 
-    if (apiKey === adminToken) {
+    if (adminToken && apiKey === adminToken) {
       isAdmin = true;
       console.log("🔐 Admin access granted - Full access to all orders");
     } else {

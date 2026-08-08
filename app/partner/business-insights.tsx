@@ -191,99 +191,25 @@ export default function BusinessInsights() {
       
       console.log('Partner coordinates:', { lat: partnerLat, lon: partnerLon });
       
-      // 2. Obtener todos los usuarios con mascotas y sus ubicaciones
-      const { data: usersWithPets, error: usersError } = await supabaseClient
-        .from('profiles')
-        .select(`
-          id,
-          latitud,
-          longitud,
-          barrio,
-          department_id,
-          country_id,
-          pets:pets(id, name, species, breed, age)
-        `)
-        .not('pets', 'is', null);
-      
-      if (usersError) {
-        console.error('Error fetching users with pets:', usersError);
+      // 2. Calcular analíticas de "mascotas cercanas" server-side: el cliente
+      // ya no recibe latitud/longitud/barrio individuales de otros usuarios,
+      // solo los agregados (conteos, no coordenadas). Ver
+      // get_nearby_pets_for_partner en supabase/migrations.
+      const { data: nearbyInsights, error: nearbyError } = await supabaseClient
+        .rpc('get_nearby_pets_for_partner', { p_partner_id: normalizedPartnerId });
+
+      if (nearbyError || !nearbyInsights) {
+        console.error('Error fetching nearby pets insights:', nearbyError);
         return;
       }
-      
-      console.log('Found users with pets:', usersWithPets?.length || 0);
-      
-      // 3. Calcular distancias y categorizar mascotas
-      let nearbyPets = 0;
-      let sameNeighborhood = 0;
-      let sameDepartment = 0;
-      const withinRadius = { '5km': 0, '10km': 0, '20km': 0 };
-      const petsBySpecies = { dogs: 0, cats: 0, others: 0 };
-      const petsByAge = { puppies: 0, young: 0, adult: 0, senior: 0 };
-      const nearbyBreeds: { [key: string]: number } = {};
-      
-      usersWithPets?.forEach(user => {
-        if (!user.pets || user.pets.length === 0) return;
-        
-        const userPetsCount = user.pets.length;
-        
-        // Verificar si está en el mismo barrio
-        if (user.barrio && partnerData.barrio && 
-            String(user.barrio).toLowerCase() === String(partnerData.barrio).toLowerCase()) {
-          sameNeighborhood += userPetsCount;
-        }
-        
-        // Verificar si está en el mismo departamento
-        if (user.department_id && partnerData.department_id && 
-            user.department_id === partnerData.department_id) {
-          sameDepartment += userPetsCount;
-        }
-        
-        // Calcular distancia si tiene coordenadas GPS
-        if (user.latitud && user.longitud) {
-          const userLat = parseFloat(user.latitud);
-          const userLon = parseFloat(user.longitud);
-          
-          if (!isNaN(userLat) && !isNaN(userLon)) {
-            const distance = calculateDistance(partnerLat, partnerLon, userLat, userLon);
-            
-            console.log(`User ${user.id}: ${distance.toFixed(2)}km away, ${userPetsCount} pets`);
-            
-            // Categorizar por distancia
-            if (distance <= 5) {
-              withinRadius['5km'] += userPetsCount;
-              nearbyPets += userPetsCount;
-            }
-            if (distance <= 10) {
-              withinRadius['10km'] += userPetsCount;
-            }
-            if (distance <= 20) {
-              withinRadius['20km'] += userPetsCount;
-            }
-            
-            // Si está dentro de 10km, analizar las mascotas
-            if (distance <= 10) {
-              user.pets.forEach((pet: any) => {
-                // Contar por especie
-                if (pet.species === 'dog') petsBySpecies.dogs++;
-                else if (pet.species === 'cat') petsBySpecies.cats++;
-                else petsBySpecies.others++;
-                
-                // Contar por edad
-                const age = pet.age || 0;
-                if (age <= 1) petsByAge.puppies++;
-                else if (age <= 3) petsByAge.young++;
-                else if (age <= 7) petsByAge.adult++;
-                else petsByAge.senior++;
-                
-                // Contar razas
-                if (pet.breed) {
-                  nearbyBreeds[pet.breed] = (nearbyBreeds[pet.breed] || 0) + 1;
-                }
-              });
-            }
-          }
-        }
-      });
+
+      const nearbyPets = nearbyInsights.nearbyPets || 0;
+      const sameNeighborhood = nearbyInsights.sameNeighborhood || 0;
+      const sameDepartment = nearbyInsights.sameDepartment || 0;
+      const withinRadius = nearbyInsights.withinRadius || { '5km': 0, '10km': 0, '20km': 0 };
+      const petsBySpecies = nearbyInsights.petsBySpecies || { dogs: 0, cats: 0, others: 0 };
+      const petsByAge = nearbyInsights.petsByAge || { puppies: 0, young: 0, adult: 0, senior: 0 };
+      const topNearbyBreeds = nearbyInsights.topNearbyBreeds || [];
       
       // 4. Generar recomendaciones basadas en datos reales
       const recommendations = [];
@@ -349,12 +275,6 @@ export default function BusinessInsights() {
           action: 'Servicios geriátricos especializados'
         });
       }
-      
-      // Top razas cercanas
-      const topNearbyBreeds = Object.entries(nearbyBreeds)
-        .sort(([,a], [,b]) => (b as number) - (a as number))
-        .slice(0, 5)
-        .map(([breed, count]) => ({ breed, count }));
       
       setLocationInsights({
         nearbyPets,

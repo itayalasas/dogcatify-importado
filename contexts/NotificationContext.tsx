@@ -891,24 +891,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     data?: any
   ): Promise<void> => {
     try {
-      // Check if target user has notifications enabled and get FCM token
-      const { data: profile } = await supabaseClient
-        .from('profiles')
-        .select('push_token, fcm_token, notification_preferences')
-        .eq('id', userId)
-        .single();
-
-      if (!profile?.fcm_token && !profile?.push_token) {
-        console.log('❌ User does not have FCM token');
-        return;
-      }
-
-      const preferences = profile.notification_preferences || {};
-      if (preferences.push === false) {
-        console.log('❌ User has disabled push notifications');
-        return;
-      }
-
+      // Token resolution (and the notification-preferences check) now happens
+      // server-side in the edge function — the client no longer needs to
+      // read another user's push_token/fcm_token itself.
       console.log('🚀 Sending push notification via FCM v1 Edge Function...');
       console.log('Target user ID:', userId);
       console.log('Title:', title);
@@ -930,8 +915,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           'Authorization': `Bearer ${anonKey}`,
         },
         body: JSON.stringify({
-          token: profile.fcm_token || profile.push_token,
-          expoPushToken: profile.push_token || undefined,
+          targetUserId: userId,
           title,
           body,
           data: data || {}
@@ -965,19 +949,39 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       console.log('🚀 Sending notification to admin via Edge Function...');
 
-      const { data: adminProfile, error: adminError } = await supabaseClient
-        .from('profiles')
-        .select('id')
-        .eq('is_admin', true)
-        .limit(1)
-        .maybeSingle();
+      // Regular users can no longer look up who the admin is client-side
+      // (profiles.is_admin isn't publicly readable) — the edge function
+      // resolves the admin's token itself via targetRole.
+      const supabaseUrl = envConfig.get('EXPO_PUBLIC_SUPABASE_URL');
+      const anonKey = envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 
-      if (adminError || !adminProfile?.id) {
-        console.error('❌ Admin profile not found for push notification:', adminError);
+      if (!supabaseUrl || !anonKey) {
+        console.error('❌ Missing Supabase configuration');
         return;
       }
 
-      await sendNotificationToUser(adminProfile.id, title, body, data);
+      const response = await fetch(`${supabaseUrl}/functions/v1/send-notification-fcm-v1`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${anonKey}`,
+        },
+        body: JSON.stringify({
+          targetRole: 'admin',
+          title,
+          body,
+          data: data || {}
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ FCM v1 Edge Function error (admin):', response.status, errorText);
+        return;
+      }
+
+      const result = await response.json();
+      console.log('✅ Push notification sent to admin via FCM v1:', result);
     } catch (error) {
       console.error('❌ Error sending notification to admin:', error);
     }
