@@ -36,3 +36,4 @@ supabase/.env.dev
 *.tsbuildinfo
 firebase-service-account.json
 firebase-service-account.json
+supabase/.env.dev
