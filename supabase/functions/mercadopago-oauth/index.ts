@@ -99,7 +99,7 @@ const persistPartnerTokens = async (
 ) => {
   const { data: partnerData, error: partnerError } = await supabase
     .from("partners")
-    .select("user_id, mercadopago_config")
+    .select("user_id")
     .eq("id", partnerId)
     .single();
 
@@ -111,13 +111,19 @@ const persistPartnerTokens = async (
     throw new Error("Partner user_id not found");
   }
 
-  const existingConfig = (partnerData.mercadopago_config || {}) as Record<string, any>;
+  const { data: existingCreds } = await supabase
+    .from("partner_payment_credentials")
+    .select("*")
+    .eq("user_id", partnerData.user_id)
+    .maybeSingle();
+
+  const existingConfig = (existingCreds || {}) as Record<string, any>;
   const now = new Date().toISOString();
   const nextConfig = {
-    ...existingConfig,
+    user_id: partnerData.user_id,
     access_token: tokenData.access_token,
     refresh_token: tokenData.refresh_token || existingConfig.refresh_token || null,
-    user_id: tokenData.user_id ?? existingConfig.user_id ?? partnerData.user_id,
+    mp_user_id: tokenData.user_id ?? existingConfig.mp_user_id ?? null,
     public_key: tokenData.public_key || existingConfig.public_key || "",
     connected_at: existingConfig.connected_at || now,
     is_oauth: true,
@@ -130,22 +136,30 @@ const persistPartnerTokens = async (
   };
 
   const { error: updateError } = await supabase
-    .from("partners")
-    .update({
-      mercadopago_connected: true,
-      mercadopago_config: nextConfig,
-      updated_at: now,
-    })
-    .eq("user_id", partnerData.user_id);
+    .from("partner_payment_credentials")
+    .upsert(nextConfig, { onConflict: "user_id" });
 
   if (updateError) {
     throw updateError;
   }
 
+  const { error: partnerUpdateError } = await supabase
+    .from("partners")
+    .update({
+      mercadopago_connected: true,
+      updated_at: now,
+    })
+    .eq("user_id", partnerData.user_id);
+
+  if (partnerUpdateError) {
+    throw partnerUpdateError;
+  }
+
+  // Never echo the raw access_token/refresh_token back to the client — the
+  // caller only needs to know the connect/refresh succeeded.
   return {
     partnerId,
     userId: partnerData.user_id,
-    tokenData: nextConfig,
   };
 };
 
@@ -186,7 +200,7 @@ const refreshPartnerTokens = async (partnerId: string) => {
 
   const { data: partnerData, error: partnerError } = await supabase
     .from("partners")
-    .select("mercadopago_config")
+    .select("user_id")
     .eq("id", partnerId)
     .single();
 
@@ -194,7 +208,17 @@ const refreshPartnerTokens = async (partnerId: string) => {
     throw partnerError;
   }
 
-  const refreshToken = partnerData?.mercadopago_config?.refresh_token;
+  const { data: creds, error: credsError } = await supabase
+    .from("partner_payment_credentials")
+    .select("refresh_token")
+    .eq("user_id", partnerData?.user_id)
+    .maybeSingle();
+
+  if (credsError) {
+    throw credsError;
+  }
+
+  const refreshToken = creds?.refresh_token;
 
   if (!refreshToken) {
     throw new Error("No refresh token available for partner");

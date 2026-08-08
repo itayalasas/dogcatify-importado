@@ -8,51 +8,52 @@ import { useNotifications } from '../../contexts/NotificationContext';
 import { supabaseClient } from '../../lib/supabase';
 import { NotificationService } from '../../utils/notifications';
 
+// Mercado Pago credentials now live in partner_payment_credentials, keyed by
+// user_id — every business of that user already shares the same row, so
+// there's nothing to copy anymore. Just flip mercadopago_connected on the
+// newly approved business if the user already has credentials on file.
+// (No access_token/refresh_token ever passes through this admin screen.)
 const replicateMercadoPagoConfigOnApproval = async (userId: string, newPartnerId: string) => {
   try {
-    console.log('Checking for existing Mercado Pago configuration for user on approval:', userId);
-    
-    // Find any existing verified business from this user with Mercado Pago configured
-    const { data: existingPartners, error } = await supabaseClient
-      .from('partners')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('is_verified', true)
-      .eq('mercadopago_connected', true)
-      .neq('id', newPartnerId) // Exclude the newly approved partner
-      .limit(1);
-    
+    const [{ data: creds, error }, { data: existingPartners }] = await Promise.all([
+      supabaseClient
+        .from('partner_payment_credentials')
+        .select('user_id')
+        .eq('user_id', userId)
+        .maybeSingle(),
+      supabaseClient
+        .from('partners')
+        .select('commission_percentage')
+        .eq('user_id', userId)
+        .eq('is_verified', true)
+        .eq('mercadopago_connected', true)
+        .neq('id', newPartnerId)
+        .limit(1),
+    ]);
+
     if (error) {
-      console.error('Error checking existing partners on approval:', error);
+      console.error('Error checking existing MP credentials on approval:', error);
       return;
     }
-    
-    if (existingPartners && existingPartners.length > 0) {
-      const sourcePartner = existingPartners[0];
-      console.log('Found existing partner with MP config on approval:', sourcePartner.business_name);
-      
-      if (sourcePartner.mercadopago_config) {
-        console.log('Replicating Mercado Pago configuration to newly approved business...');
-        
-        // Replicate the Mercado Pago configuration to the newly approved partner
-        const { error: updateError } = await supabaseClient
-          .from('partners')
-          .update({
-            mercadopago_connected: true,
-            mercadopago_config: sourcePartner.mercadopago_config,
-            commission_percentage: sourcePartner.commission_percentage || 5.0,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', newPartnerId);
-        
-        if (updateError) {
-          console.error('Error replicating MP config on approval:', updateError);
-        } else {
-          console.log('Mercado Pago configuration replicated successfully on approval');
-        }
-      }
-    } else {
+
+    if (!creds) {
       console.log('No existing Mercado Pago configuration found for user on approval');
+      return;
+    }
+
+    const { error: updateError } = await supabaseClient
+      .from('partners')
+      .update({
+        mercadopago_connected: true,
+        commission_percentage: existingPartners?.[0]?.commission_percentage ?? 5.0,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', newPartnerId);
+
+    if (updateError) {
+      console.error('Error marking new partner as MP-connected on approval:', updateError);
+    } else {
+      console.log('New partner marked as Mercado Pago connected on approval');
     }
   } catch (error) {
     console.error('Error in replicateMercadoPagoConfigOnApproval:', error);

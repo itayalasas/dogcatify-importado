@@ -217,16 +217,27 @@ async function cancelMercadoPagoPayment(
     // Obtener la configuración de Mercado Pago del partner
     const { data: partner, error: partnerError } = await supabase
       .from('partners')
-      .select('mercadopago_config')
+      .select('user_id')
       .eq('id', partnerId)
       .single();
 
-    if (partnerError || !partner?.mercadopago_config?.access_token) {
+    if (partnerError || !partner?.user_id) {
+      console.log('   ⚠️ No se encontró el partner');
+      return;
+    }
+
+    const { data: creds, error: credsError } = await supabase
+      .from('partner_payment_credentials')
+      .select('access_token')
+      .eq('user_id', partner.user_id)
+      .maybeSingle();
+
+    if (credsError || !creds?.access_token) {
       console.log('   ⚠️ No se encontró configuración de MP para el partner');
       return;
     }
 
-    const accessToken = partner.mercadopago_config.access_token;
+    const accessToken = creds.access_token;
 
     // Buscar el pago asociado a esta preferencia
     // Nota: Mercado Pago no permite cancelar una preferencia directamente,

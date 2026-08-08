@@ -11,7 +11,7 @@ import { LoadingScreen } from '../../../components/ui/LoadingScreen';
 import { MercadoPagoRedirectModal } from '../../../components/MercadoPagoRedirectModal';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
-import { createServiceBookingOrder, openMercadoPagoPayment, isTestEnvironment } from '../../../utils/mercadoPago';
+import { createServiceBookingOrder, openMercadoPagoPayment } from '../../../utils/mercadoPago';
 import { envConfig } from '../../../utils/envConfig';
 import { getActivePromotionForItem } from '@/utils/promotions';
 import {

@@ -74,6 +74,12 @@ export default function PartnerDashboard() {
         if (error) throw error;
         
         if (data) {
+          const { data: creds } = await supabaseClient
+            .from('partner_payment_credentials')
+            .select('is_oauth')
+            .eq('user_id', data.user_id)
+            .maybeSingle();
+
           const partnerData = {
             id: data.id,
             businessName: data.business_name,
@@ -81,9 +87,10 @@ export default function PartnerDashboard() {
             logo: data.logo,
             isVerified: data.is_verified,
             isActive: data.is_active,
-            ...data
+            ...data,
+            mercadopagoIsOAuth: creds?.is_oauth === true,
           };
-          
+
           setPartnerProfile(partnerData);
           const { data: accountPartnerRows, error: accountPartnersError } = await supabaseClient
             .from('partners')
@@ -780,17 +787,17 @@ export default function PartnerDashboard() {
             <TouchableOpacity
               style={[
                 styles.quickAction,
-                partnerProfile?.mercadopago_config?.is_oauth ? styles.quickActionSuccess : null,
+                partnerProfile?.mercadopagoIsOAuth ? styles.quickActionSuccess : null,
               ]}
               onPress={() => router.push('/profile/mercadopago-config')}
             >
               <CreditCard
                 size={24}
-                color={partnerProfile?.mercadopago_config?.is_oauth ? '#10B981' : '#F59E0B'}
+                color={partnerProfile?.mercadopagoIsOAuth ? '#10B981' : '#F59E0B'}
               />
               <Text style={styles.quickActionText}>Mercado Pago</Text>
               <Text style={styles.quickActionSubtext}>
-                {partnerProfile?.mercadopago_config?.is_oauth
+                {partnerProfile?.mercadopagoIsOAuth
                   ? 'OAuth activo'
                   : partnerProfile?.mercadopago_connected
                     ? 'Conexión pendiente'
