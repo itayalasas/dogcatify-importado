@@ -9,6 +9,8 @@ ALTER TABLE public.admin_settings ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Enable read access for all users" ON public.admin_settings;
 DROP POLICY IF EXISTS "Enable insert for authenticated users only" ON public.admin_settings;
+DROP POLICY IF EXISTS "Public can read system_config" ON public.admin_settings;
+DROP POLICY IF EXISTS "Admins can manage admin settings" ON public.admin_settings;
 
 -- Keep "Admin can manage all settings" (already correctly admin-only) as-is.
 

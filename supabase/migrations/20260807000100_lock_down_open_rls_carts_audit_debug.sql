@@ -16,6 +16,7 @@
 
 -- user_carts: restrict SELECT to the owner (INSERT/UPDATE/DELETE were already owner-scoped)
 DROP POLICY IF EXISTS "Enable read access for all users" ON public.user_carts;
+DROP POLICY IF EXISTS "Users can read their own cart" ON public.user_carts;
 
 CREATE POLICY "Users can read their own cart"
 ON public.user_carts

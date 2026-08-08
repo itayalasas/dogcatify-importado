@@ -14,7 +14,7 @@
 -- partners automatically stops leaking it, with zero changes needed at
 -- those call sites.
 
-CREATE TABLE public.partner_payment_credentials (
+CREATE TABLE IF NOT EXISTS public.partner_payment_credentials (
   user_id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   access_token text,
   refresh_token text,
@@ -32,6 +32,8 @@ CREATE TABLE public.partner_payment_credentials (
 
 ALTER TABLE public.partner_payment_credentials ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Owners can manage their own MP credentials" ON public.partner_payment_credentials;
+
 CREATE POLICY "Owners can manage their own MP credentials"
 ON public.partner_payment_credentials
 FOR ALL
@@ -42,31 +44,40 @@ WITH CHECK (auth.uid() = user_id);
 -- One row per user_id: take the most recently updated non-empty config
 -- among that user's partner rows (today they're always identical copies,
 -- per the "all businesses share one config" model, but guard against drift
--- with DISTINCT ON + ORDER BY just in case).
-INSERT INTO public.partner_payment_credentials (
-  user_id, access_token, refresh_token, public_key, mp_user_id,
-  connected_at, is_oauth, is_test_mode, token_type, expires_in,
-  live_mode, last_refresh_at, updated_at
-)
-SELECT DISTINCT ON (user_id)
-  user_id,
-  mercadopago_config->>'access_token',
-  mercadopago_config->>'refresh_token',
-  mercadopago_config->>'public_key',
-  mercadopago_config->>'user_id',
-  NULLIF(mercadopago_config->>'connected_at', '')::timestamptz,
-  COALESCE((mercadopago_config->>'is_oauth')::boolean, false),
-  COALESCE((mercadopago_config->>'is_test_mode')::boolean, false),
-  mercadopago_config->>'token_type',
-  NULLIF(mercadopago_config->>'expires_in', '')::integer,
-  (mercadopago_config->>'live_mode')::boolean,
-  NULLIF(mercadopago_config->>'last_refresh_at', '')::timestamptz,
-  COALESCE(NULLIF(mercadopago_config->>'updated_at', '')::timestamptz, updated_at)
-FROM public.partners
-WHERE mercadopago_config IS NOT NULL
-  AND mercadopago_config != '{}'::jsonb
-  AND mercadopago_config->>'access_token' IS NOT NULL
-ORDER BY user_id, updated_at DESC
-ON CONFLICT (user_id) DO NOTHING;
+-- with DISTINCT ON + ORDER BY just in case). Guarded so a retry after a
+-- partial failure (e.g. mercadopago_config already dropped below) is safe.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'partners' AND column_name = 'mercadopago_config'
+  ) THEN
+    INSERT INTO public.partner_payment_credentials (
+      user_id, access_token, refresh_token, public_key, mp_user_id,
+      connected_at, is_oauth, is_test_mode, token_type, expires_in,
+      live_mode, last_refresh_at, updated_at
+    )
+    SELECT DISTINCT ON (user_id)
+      user_id,
+      mercadopago_config->>'access_token',
+      mercadopago_config->>'refresh_token',
+      mercadopago_config->>'public_key',
+      mercadopago_config->>'user_id',
+      NULLIF(mercadopago_config->>'connected_at', '')::timestamptz,
+      COALESCE((mercadopago_config->>'is_oauth')::boolean, false),
+      COALESCE((mercadopago_config->>'is_test_mode')::boolean, false),
+      mercadopago_config->>'token_type',
+      NULLIF(mercadopago_config->>'expires_in', '')::integer,
+      (mercadopago_config->>'live_mode')::boolean,
+      NULLIF(mercadopago_config->>'last_refresh_at', '')::timestamptz,
+      COALESCE(NULLIF(mercadopago_config->>'updated_at', '')::timestamptz, updated_at)
+    FROM public.partners
+    WHERE mercadopago_config IS NOT NULL
+      AND mercadopago_config != '{}'::jsonb
+      AND mercadopago_config->>'access_token' IS NOT NULL
+    ORDER BY user_id, updated_at DESC
+    ON CONFLICT (user_id) DO NOTHING;
 
-ALTER TABLE public.partners DROP COLUMN mercadopago_config;
+    ALTER TABLE public.partners DROP COLUMN mercadopago_config;
+  END IF;
+END $$;

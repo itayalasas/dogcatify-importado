@@ -14,6 +14,8 @@
 -- later migrations, not blanket table access.
 
 DROP POLICY IF EXISTS "Enable read access for all users" ON public.profiles;
+DROP POLICY IF EXISTS "Users can read their own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Admins can read all profiles" ON public.profiles;
 
 CREATE POLICY "Users can read their own profile"
 ON public.profiles
