@@ -40,7 +40,7 @@ type AccountSubscriptionSummary = {
   subscriptionPlanExpiresAt: string | null;
 };
 
-const PARTNER_PLAN_ORDER: Array<'starter' | 'growth' | 'pro'> = ['starter', 'growth', 'pro'];
+const PARTNER_PLAN_ORDER: ('starter' | 'growth' | 'pro')[] = ['starter', 'growth', 'pro'];
 
 const isCurrentPartnerSubscription = (status?: string | null, expiresAt?: string | null) => {
   const normalizedStatus = String(status || '').toLowerCase();

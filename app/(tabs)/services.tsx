@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, LogBox, TextInput, Image, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, LogBox, TextInput, Image, Dimensions , FlatList } from 'react-native';
 import { Search, MapPin, Star, Phone, Stethoscope, Scissors, Home, Dog } from 'lucide-react-native';
-import { FlatList } from 'react-native';
+
 import { ServiceCard } from '../../components/ServiceCard';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';

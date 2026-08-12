@@ -129,6 +129,24 @@ steps:
       COPY_EXTENDED_ATTRIBUTES_DISABLE: '1'
 
   # ============================================================
+  # TYPECHECK + LINT
+  # ============================================================
+  - script: |
+      set -euo pipefail
+      npm run typecheck
+    displayName: 'Typecheck (tsc --noEmit)'
+
+  - script: |
+      set -euo pipefail
+      npm run lint
+    displayName: 'Lint (eslint)'
+
+  - script: |
+      set -euo pipefail
+      npm test -- --ci
+    displayName: 'Tests (jest)'
+
+  # ============================================================
   # EXPO PREBUILD
   # ============================================================
   - script: |

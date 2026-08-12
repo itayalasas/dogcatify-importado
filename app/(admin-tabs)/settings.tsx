@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Switch, Alert, Modal, ActivityIndicator } from 'react-native';
 import { Bell, Shield, Globe, Database, LogOut, CreditCard, Crown } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
@@ -1224,7 +1224,7 @@ export default function AdminSettings() {
                   <Text style={styles.mpHelpTitle}>💡 ¿Cómo obtener las credenciales legacy?</Text>
                   <Text style={styles.mpHelpStep}>1. Ve a developers.mercadopago.com</Text>
                   <Text style={styles.mpHelpStep}>2. Inicia sesión con tu cuenta de Mercado Pago</Text>
-                  <Text style={styles.mpHelpStep}>3. Ve a "Tus integraciones" → "Credenciales"</Text>
+                  <Text style={styles.mpHelpStep}>3. Ve a &quot;Tus integraciones&quot; → &quot;Credenciales&quot;</Text>
                   <Text style={styles.mpHelpStep}>4. Copia el Access Token y Public Key si necesitas respaldo legacy</Text>
                   <Text style={styles.mpHelpStep}>5. Completa el N° de aplicación / App ID si vas a usar OAuth para aliados</Text>
                 </View>
@@ -1350,7 +1350,7 @@ export default function AdminSettings() {
                   <Text style={styles.mpHelpTitle}>💡 ¿Cómo obtener las credenciales?</Text>
                   <Text style={styles.mpHelpStep}>1. Ve a developers.mercadopago.com</Text>
                   <Text style={styles.mpHelpStep}>2. Inicia sesión con tu cuenta de Mercado Pago</Text>
-                  <Text style={styles.mpHelpStep}>3. Ve a "Tus integraciones" → "Credenciales"</Text>
+                  <Text style={styles.mpHelpStep}>3. Ve a &quot;Tus integraciones&quot; → &quot;Credenciales&quot;</Text>
                   <Text style={styles.mpHelpStep}>4. Copia el Access Token y Public Key si necesitas respaldo legacy</Text>
                 </View>
 

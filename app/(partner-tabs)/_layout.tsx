@@ -1,11 +1,9 @@
-import { Tabs } from 'expo-router';
-import { ChartBar as BarChart3, Building, ShoppingBag, Calendar, User, CreditCard } from 'lucide-react-native';
-import { MessageCircle } from 'lucide-react-native';
+import { Tabs , router, useLocalSearchParams, usePathname } from 'expo-router';
+import { ChartBar as BarChart3, Building, ShoppingBag, Calendar, User, CreditCard , MessageCircle } from 'lucide-react-native';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { TouchableOpacity, View, Text, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams, usePathname } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { supabaseClient } from '../../lib/supabase';
 import { LoadingScreen } from '../../components/ui/LoadingScreen';

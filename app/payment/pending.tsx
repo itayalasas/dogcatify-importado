@@ -92,7 +92,7 @@ export default function PaymentPending() {
                 • Recibirás una notificación cuando el pago sea confirmado
               </Text>
               <Text style={styles.infoItem}>
-                • Puedes verificar el estado en "Mis Pedidos"
+                • Puedes verificar el estado en &quot;Mis Pedidos&quot;
               </Text>
               <Text style={styles.infoItem}>
                 • El proceso puede tomar unos minutos

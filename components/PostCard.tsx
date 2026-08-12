@@ -201,6 +201,7 @@ const VideoPlayer = memo(({
          prevProps.playbackRate === nextProps.playbackRate &&
          prevProps.source.uri === nextProps.source.uri;
 });
+VideoPlayer.displayName = 'VideoPlayer';
 
 interface PostCardProps {
   post: any;

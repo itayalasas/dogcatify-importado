@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { Alert, AppState, AppStateStatus } from 'react-native';
 import { router } from 'expo-router';
 import { supabaseClient, getUserProfile, updateUserProfile, signIn as supabaseSignIn, signUp as supabaseSignUp, signOut as supabaseSignOut, setTokenExpirationCallback } from '../lib/supabase';
@@ -109,6 +109,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const appState = useRef(AppState.currentState);
   const isHandlingExpirationRef = useRef(false);
   const lastValidationRef = useRef<number>(0);
+  const isExplicitLoginRef = useRef(false);
 
   const updateCurrentUser = (updatedUser: User) => {
     setCurrentUser(updatedUser);
@@ -165,7 +166,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         
         setSession(session);
-        
+
+        // login() below already runs this exact confirmation+profile flow
+        // for its own signInWithPassword call. Letting this listener run it
+        // again concurrently for the very same SIGNED_IN event was a race:
+        // whichever of the two independent DB round-trips landed second
+        // could see stale/partial state and call signOut(), wiping out the
+        // other one's success right as it was setting currentUser. login()
+        // sets this ref for the duration of its own flow so this listener
+        // just updates `session` and steps aside.
+        if (isExplicitLoginRef.current) {
+          if (!mounted) return;
+          setLoading(false);
+          setAuthInitialized(true);
+          initializationComplete = true;
+          return;
+        }
+
         // Only validate email confirmation for SIGNED_IN events (login)
         if (session?.user) {
           try {
@@ -206,7 +223,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.error('Error loading user profile after login:', error);
             
             // Set auth error for display in UI
-            if (error.message?.includes('perfil vÃ¡lido') || error.message?.includes('eliminada')) {
+            if (error.message?.includes('perfil válido') || error.message?.includes('eliminada')) {
               setAuthError(error.message);
             }
             
@@ -628,8 +645,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }, 100);
 
       Alert.alert(
-        'SesiÃ³n expirada',
-        'Tu sesiÃ³n ha expirado por seguridad. Por favor inicia sesiÃ³n nuevamente.',
+        'Sesión expirada',
+        'Tu sesión ha expirado por seguridad. Por favor inicia sesión nuevamente.',
         [
           {
             text: 'OK',
@@ -658,6 +675,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
   const login = async (email: string, password: string): Promise<User | null> => {
+    // Tells the onAuthStateChange listener below to skip its own
+    // confirmation+profile-load pass for the SIGNED_IN event this call is
+    // about to trigger, since this function already does that work itself.
+    isExplicitLoginRef.current = true;
     try {
       console.log('AuthContext - Attempting login with Supabase for:', email);
 
@@ -680,7 +701,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Registrar fallo de login
         await logAction('LOGIN_FAILED', {
           success: false,
-          user_email: email,  // Importante: pasar email aunque no estÃ© autenticado
+          user_email: email,  // Importante: pasar email aunque no esté autenticado
           error_message: error.message,
           resource_type: 'user',
           details: { 
@@ -697,7 +718,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await supabaseClient.auth.signOut();
         }
         
-        // Mejorar mensajes de error especÃ­ficos
+        // Mejorar mensajes de error específicos
         if (error.message.includes('Invalid login credentials')) {
           throw new Error('Invalid login credentials');
         } else if (error.message.includes('Email not confirmed')) {
@@ -710,7 +731,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         throw error;
       }
-      
+
         if (data.user) {
         // Validate app-level confirmation before allowing access
         console.log('=== STRICT EMAIL CONFIRMATION CHECK ===');
@@ -740,7 +761,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Sign out the user immediately
           await supabaseClient.auth.signOut();
           
-          throw new Error('Debes confirmar tu correo electrÃ³nico antes de iniciar sesiÃ³n. Revisa tu bandeja de entrada.');
+          throw new Error('Debes confirmar tu correo electrónico antes de iniciar sesión. Revisa tu bandeja de entrada.');
         }
         
         console.log('=== EMAIL CONFIRMED - LOGIN ALLOWED ===');
@@ -808,13 +829,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           });
 
-          // IMPORTANTE: Intentar registrar notificaciones push automÃ¡ticamente despuÃ©s del login
-          // Esto se hace de forma asÃ­ncrona para no bloquear el flujo de login
+          // IMPORTANTE: Intentar registrar notificaciones push automáticamente después del login
+          // Esto se hace de forma asíncrona para no bloquear el flujo de login
           setTimeout(async () => {
             try {
               console.log('ðŸ”” Auto-registering push notifications after login...');
-              // La funciÃ³n validateAndUpdateTokens se ejecutarÃ¡ automÃ¡ticamente
-              // cuando NotificationContext detecte que currentUser cambiÃ³
+              // La función validateAndUpdateTokens se ejecutará automáticamente
+              // cuando NotificationContext detecte que currentUser cambió
             } catch (notifError) {
               console.log('âš ï¸ Could not auto-register notifications:', notifError);
               // No bloquear el login si falla el registro de notificaciones
@@ -838,6 +859,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error('Login error:', error);
       throw error;
+    } finally {
+      isExplicitLoginRef.current = false;
     }
   };
 
@@ -870,7 +893,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
 
-      // Limpiar tokens de notificaciÃ³n del usuario que cierra sesiÃ³n
+      // Limpiar tokens de notificación del usuario que cierra sesión
       if (currentUser?.id) {
         try {
           await supabaseClient
@@ -882,7 +905,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             })
             .eq('id', currentUser.id);
 
-          console.log('âœ… Tokens de notificaciÃ³n limpiados en logout');
+          console.log('âœ… Tokens de notificación limpiados en logout');
         } catch (tokenError) {
           console.warn('âš ï¸ Error limpiando tokens en logout:', tokenError);
           // No fallar el logout si falla la limpieza de tokens

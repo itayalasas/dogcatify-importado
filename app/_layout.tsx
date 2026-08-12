@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
-import { AuthProvider } from '../contexts/AuthContext';
-import { useAuth } from '../contexts/AuthContext';
+import { AuthProvider , useAuth } from '../contexts/AuthContext';
+
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { BiometricProvider } from '../contexts/BiometricContext';
 import { CartProvider } from '../contexts/CartContext';

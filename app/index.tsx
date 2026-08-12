@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, Alert, RefreshControl, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, Alert, RefreshControl, ActivityIndicator, Platform , Linking } from 'react-native';
 import { router, usePathname } from 'expo-router';
-import { Linking } from 'react-native';
+
 import PostCard from '../components/PostCard';
 import PromotionCard from '../components/PromotionCard';
 import { useLanguage } from '../contexts/LanguageContext';

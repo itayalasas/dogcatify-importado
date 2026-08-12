@@ -141,12 +141,12 @@ export const validateVideoDuration = async (videoUri: string): Promise<{
 };
 
 // Validate multiple media items (images and videos)
-export const validateMediaForPets = async (mediaUris: Array<{ uri: string; type: 'image' | 'video' }>): Promise<{
-  validMedia: Array<{ uri: string; type: 'image' | 'video'; duration?: number }>;
-  invalidMedia: Array<{ uri: string; type: 'image' | 'video'; reason: string }>;
+export const validateMediaForPets = async (mediaUris: { uri: string; type: 'image' | 'video' }[]): Promise<{
+  validMedia: { uri: string; type: 'image' | 'video'; duration?: number }[];
+  invalidMedia: { uri: string; type: 'image' | 'video'; reason: string }[];
 }> => {
-  const validMedia: Array<{ uri: string; type: 'image' | 'video'; duration?: number }> = [];
-  const invalidMedia: Array<{ uri: string; type: 'image' | 'video'; reason: string }> = [];
+  const validMedia: { uri: string; type: 'image' | 'video'; duration?: number }[] = [];
+  const invalidMedia: { uri: string; type: 'image' | 'video'; reason: string }[] = [];
 
   for (const media of mediaUris) {
     if (media.type === 'video') {

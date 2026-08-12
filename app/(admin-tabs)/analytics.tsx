@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, SafeAreaView, RefreshControl } from 'react-native';
 import { TrendingUp, Users, Package, Clock, Crown, Shield, Sparkles, AlertTriangle, RefreshCw } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';

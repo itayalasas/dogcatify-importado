@@ -503,7 +503,7 @@ export default function MercadoPagoConfig() {
                 <Text style={styles.helpTitle}>💡 ¿Cómo obtener las credenciales?</Text>
                 <Text style={styles.helpStep}>1. Ve a developers.mercadopago.com</Text>
                 <Text style={styles.helpStep}>2. Inicia sesión con tu cuenta de MP</Text>
-                <Text style={styles.helpStep}>3. Ve a "Tus integraciones" → "Credenciales"</Text>
+                <Text style={styles.helpStep}>3. Ve a &quot;Tus integraciones&quot; → &quot;Credenciales&quot;</Text>
                 <Text style={styles.helpStep}>4. Copia el Access Token y Public Key</Text>
               </View>
 

@@ -162,7 +162,7 @@ export default function BreedSelector() {
           {filteredBreeds.length === 0 && searchQuery && (
             <View style={styles.noResultsContainer}>
               <Text style={styles.noResultsText}>
-                No se encontraron razas que coincidan con "{searchQuery}"
+                No se encontraron razas que coincidan con &quot;{searchQuery}&quot;
               </Text>
             </View>
           )}

@@ -395,7 +395,7 @@ export default function SharePetScreen() {
                 !selectedUser && (
                   <View style={styles.noResultsContainer}>
                     <Text style={styles.noResultsText}>
-                      No se encontraron usuarios disponibles con "{searchQuery}"
+                      No se encontraron usuarios disponibles con &quot;{searchQuery}&quot;
                     </Text>
                     <Text style={styles.noResultsSubtext}>
                       Es posible que ya tengan acceso a esta mascota

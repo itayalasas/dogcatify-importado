@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image , Modal, TextInput } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowLeft, Building, Camera, MapPin, Phone, Mail, FileText, DollarSign, Truck } from 'lucide-react-native';
-import { ChevronDown, Check } from 'lucide-react-native';
+import { ArrowLeft, Building, Camera, MapPin, Phone, Mail, FileText, DollarSign, Truck , ChevronDown, Check } from 'lucide-react-native';
+
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import * as ImagePicker from 'expo-image-picker';
-import { Modal, TextInput } from 'react-native';
+
 import { supabaseClient } from '../../lib/supabase';
 import { NotificationService } from '@/utils/notifications';
 import { PartnerServiceAgreement } from '../../components/PartnerServiceAgreement';
@@ -547,7 +547,7 @@ export default function PartnerRegister() {
         throw partnerCountError;
       }
 
-      const order: Array<'starter' | 'growth' | 'pro'> = ['starter', 'growth', 'pro'];
+      const order: ('starter' | 'growth' | 'pro')[] = ['starter', 'growth', 'pro'];
       const representativePartner = (partnerRows || []).reduce((best: any, row: any) => {
         const resolvedTier = resolvePartnerPlanTier(
           row.subscription_plan_tier,

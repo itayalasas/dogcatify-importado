@@ -133,6 +133,7 @@ const PromotionCard = memo(({ promotion, onPress, onLike }: PromotionCardProps) 
     prevProps.promotion.imageURL === nextProps.promotion.imageURL
   );
 });
+PromotionCard.displayName = 'PromotionCard';
 
 export default PromotionCard;
 

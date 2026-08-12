@@ -75,7 +75,7 @@ export default function TermsOfService() {
             Al descargar, instalar o utilizar la aplicación DogCatify, aceptas estar sujeto a estos Términos de Servicio. Si no estás de acuerdo con alguno de estos términos, no debes utilizar nuestra aplicación o servicios.
           </Text>
           <Text style={styles.paragraph}>
-            Estos términos constituyen un acuerdo legal vinculante entre tú (el "Usuario") y DogCatify (la "Empresa") con respecto al uso de nuestra plataforma de gestión integral de mascotas.
+            Estos términos constituyen un acuerdo legal vinculante entre tú (el &quot;Usuario&quot;) y DogCatify (la &quot;Empresa&quot;) con respecto al uso de nuestra plataforma de gestión integral de mascotas.
           </Text>
         </View>
 

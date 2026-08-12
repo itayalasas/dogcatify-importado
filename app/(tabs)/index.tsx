@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, SafeAreaView, Alert, RefreshControl, Image, Animated, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, SafeAreaView, Alert, RefreshControl, Image, Animated, ActivityIndicator , Platform, Linking, InteractionManager } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { Platform, Linking, InteractionManager } from 'react-native';
+
 import Constants from 'expo-constants';
 import PostCard from '../../components/PostCard';
 import PromotionCard from '../../components/PromotionCard';
@@ -161,6 +161,7 @@ const PromotionWrapper = React.memo(({ promotion, onPress, onLike }: { promotion
          prevLikes.length === nextLikes.length &&
          JSON.stringify(prevLikes.sort()) === JSON.stringify(nextLikes.sort());
 });
+PromotionWrapper.displayName = 'PromotionWrapper';
 
 export default function Home() {
   const [posts, setPosts] = useState<any[]>([]);

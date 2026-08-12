@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, TextInput, ActivityIndicator, Linking, Image, Animated, AppState, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -367,7 +367,7 @@ export default function ServiceBooking() {
     schedules = partnerSchedule,
     closures = scheduleClosures,
   ) => {
-    const dates: Array<{ date: Date; isAvailable: boolean }> = [];
+    const dates: { date: Date; isAvailable: boolean }[] = [];
     const today = new Date();
     const now = new Date();
 

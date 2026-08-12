@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Modal, ActivityIndicator, Animated, AppState, Platform } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
@@ -57,7 +57,7 @@ export default function Cart() {
       partnerName: item.partnerName || 'Tienda',
     });
     return stores;
-  }, [] as Array<{ partnerId: string; partnerName: string }>);
+  }, [] as { partnerId: string; partnerName: string }[]);
 
   const hasMixedStores = cartStores.length > 1;
   const cartStoreLabel = cartStores.map((store) => store.partnerName).join(', ');
@@ -939,7 +939,7 @@ export default function Cart() {
                       {!useNewAddress && !savedAddress.street && !savedAddress.number && (
                         <View style={styles.noAddressContainer}>
                           <Text style={styles.noAddressText}>
-                            No tienes una dirección guardada. Marca "Usar dirección diferente" para ingresar una.
+                            No tienes una dirección guardada. Marca &quot;Usar dirección diferente&quot; para ingresar una.
                           </Text>
                         </View>
                       )}

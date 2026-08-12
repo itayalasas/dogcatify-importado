@@ -151,11 +151,11 @@ const ENTITLEMENTS: Entitlement[] = [
   },
 ];
 
-const AUDIENCE_FILTERS: Array<{
+const AUDIENCE_FILTERS: {
   key: PlanAudienceFilter;
   label: string;
   subtitle: string;
-}> = [
+}[] = [
   { key: 'all', label: 'Todos', subtitle: 'Ver todo el catálogo' },
   { key: 'users', label: 'Usuarios', subtitle: 'Planes de clientes' },
   { key: 'partners', label: 'Aliados', subtitle: 'Planes de negocios' },
@@ -734,7 +734,7 @@ export default function SubscriptionPlans() {
         <View style={styles.filterHintBox}>
           <Text style={styles.filterHintTitle}>Vista actual: {getAudienceFilterLabel(audienceFilter)}</Text>
           <Text style={styles.filterHintText}>
-            Los planes marcados como "Todos" tambien se muestran al filtrar usuarios o aliados.
+            Los planes marcados como &quot;Todos&quot; tambien se muestran al filtrar usuarios o aliados.
           </Text>
         </View>
 

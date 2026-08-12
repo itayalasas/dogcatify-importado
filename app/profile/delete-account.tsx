@@ -30,7 +30,7 @@ const extractDogcatifyStoragePath = (value?: string | null) => {
   return path ? decodeURIComponent(path) : null;
 };
 
-const removeDogcatifyStorageObjects = async (values: Array<string | null | undefined>) => {
+const removeDogcatifyStorageObjects = async (values: (string | null | undefined)[]) => {
   const paths = Array.from(
     new Set(
       values

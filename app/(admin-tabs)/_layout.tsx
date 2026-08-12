@@ -1,10 +1,9 @@
-import { Tabs, usePathname } from 'expo-router';
+import { Tabs, usePathname , router } from 'expo-router';
 import { ChartBar as BarChart3, Users, Volume2, Settings, MapPin, FileText, ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { View, Text, Platform } from 'react-native';
 import { useEffect, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
 import { getAvailableRoles, shouldShowOnboarding } from '../../utils/onboarding';
 import { LoadingScreen } from '../../components/ui/LoadingScreen';
 

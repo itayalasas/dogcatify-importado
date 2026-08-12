@@ -1,10 +1,9 @@
-import { Tabs, usePathname } from 'expo-router';
+import { Tabs, usePathname , router } from 'expo-router';
 import { Chrome as Home, Heart, ShoppingBag, Briefcase, MapPin, User } from 'lucide-react-native';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { getAvailableRoles, shouldShowOnboarding } from '../../utils/onboarding';
 import { LoadingScreen } from '../../components/ui/LoadingScreen';

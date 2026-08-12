@@ -293,7 +293,7 @@ export default function PaymentSuccess() {
                   • Te notificaremos cuando tu pedido sea enviado
                 </Text>
                 <Text style={styles.successItem}>
-                  • Puedes rastrear tu pedido en "Mis Pedidos"
+                  • Puedes rastrear tu pedido en &quot;Mis Pedidos&quot;
                 </Text>
               </>
             )}

@@ -58,7 +58,7 @@ export const PartnerServiceAgreement: React.FC<PartnerServiceAgreementProps> = (
             <Text style={styles.sectionTitle}>1. OBJETO DEL CONTRATO</Text>
             <Text style={styles.paragraph}>
               El presente contrato tiene por objeto establecer los términos y condiciones bajo los cuales
-              <Text style={styles.bold}> DogCatiFy</Text> (en adelante "LA PLATAFORMA") permite al
+              <Text style={styles.bold}> DogCatiFy</Text> (en adelante &quot;LA PLATAFORMA&quot;) permite al
               <Text style={styles.bold}> ALIADO</Text> ofrecer sus servicios y/o productos relacionados con
               mascotas a través de la aplicación móvil y plataforma web.
             </Text>

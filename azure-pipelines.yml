@@ -35,6 +35,19 @@ steps:
       npm install
     displayName: 'Instalar dependencias (npm install)'
 
+  # 2.5. Verificar tipos y lint antes de gastar tiempo en prebuild/gradle
+  - script: |
+      npm run typecheck
+    displayName: 'Typecheck (tsc --noEmit)'
+
+  - script: |
+      npm run lint
+    displayName: 'Lint (eslint)'
+
+  - script: |
+      npm test -- --ci
+    displayName: 'Tests (jest)'
+
   # 3. Actualizar versionCode/version en app.json ANTES del prebuild
   - script: |
       echo "Actualizando app.json con versionCode=$(ANDROID_VERSION_CODE) y version=$(ANDROID_VERSION_NAME)"
