@@ -10,7 +10,7 @@ variables:
   - group: ios-signing
 
   - name: NODE_VERSION
-    value: '18.x'
+    value: '20.x'
 
   - name: IOS_SCHEME
     value: 'DogCatiFy'

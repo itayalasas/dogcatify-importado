@@ -12,7 +12,7 @@ variables:
 
   # Versión de Node
   - name: NODE_VERSION
-    value: '18.x'
+    value: '20.x'
 
   # 🔢 versionCode incremental (2, 3, 4, ...)
   # Como ya usaste el 1 en Google Play, arrancamos en 2
