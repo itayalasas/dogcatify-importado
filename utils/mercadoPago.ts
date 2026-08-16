@@ -1,6 +1,7 @@
 import { supabaseClient } from '@/lib/supabase';
 import { logger } from '@/utils/datadogLogger';
-import { Linking, Platform } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { envConfig } from './envConfig';
 import { logResourceAction, logError } from '../services/auditService';
 
@@ -490,6 +491,40 @@ export const openMercadoPagoPayment = async (paymentUrl: string, isTestMode: boo
     }
 
     console.log('');
+
+    // Si la app de Mercado Pago está instalada, dejamos elegir al usuario en
+    // vez de confiar en que el banner nativo de Universal Links/App Links
+    // aparezca solo — ese banner es silencioso y fácil de perderse (o de no
+    // aparecer directamente, sobre todo con URLs de sandbox). Con la
+    // elección explícita, "Continuar en el navegador" fuerza un navegador
+    // in-app (expo-web-browser) que no dispara el hand-off automático a la
+    // app, para que la elección del usuario se respete en los dos sentidos.
+    if (Platform.OS !== 'web') {
+      const appInstalled = await isMercadoPagoAppInstalled();
+
+      if (appInstalled) {
+        const choice = await new Promise<'app' | 'web'>((resolve) => {
+          Alert.alert(
+            'Continuar con el pago',
+            'Detectamos que tenés la app de Mercado Pago instalada. ¿Cómo querés continuar?',
+            [
+              { text: 'Abrir en la app', onPress: () => resolve('app') },
+              { text: 'Continuar en el navegador', onPress: () => resolve('web') },
+            ],
+            { cancelable: false }
+          );
+        });
+
+        if (choice === 'web') {
+          console.log('ðŸŒ User chose to continue in the browser');
+          await WebBrowser.openBrowserAsync(paymentUrl);
+          console.log('â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n');
+          return { success: true, openedInApp: false };
+        }
+
+        console.log('ðŸ“± User chose to open the Mercado Pago app');
+      }
+    }
 
     // ESTRATEGIA DIFERENTE PARA iOS Y ANDROID:
     //
