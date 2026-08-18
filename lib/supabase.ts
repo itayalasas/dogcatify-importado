@@ -9,7 +9,7 @@ if (!global.__supabaseClient) {
   global.__supabaseClient = null;
 }
 
-// Supabase configuration - Ahora se carga dinÃ¡micamente
+// Supabase configuration - Ahora se carga dinámicamente
 let supabaseUrl: string | undefined;
 let supabaseAnonKey: string | undefined;
 
@@ -25,11 +25,11 @@ function setSupabaseClientInstance(client: SupabaseClient | null): void {
 }
 
 /**
- * Inicializa el cliente de Supabase con la configuraciÃ³n del API Gateway
+ * Inicializa el cliente de Supabase con la configuración del API Gateway
  */
 export const initializeSupabase = async (): Promise<void> => {
   try {
-    // Asegurarse de que envConfig estÃ© inicializado
+    // Asegurarse de que envConfig esté inicializado
     if (!envConfig.isInitialized()) {
       console.log('[Supabase] â³ Waiting for envConfig initialization...');
       await envConfig.initialize();
@@ -89,7 +89,7 @@ export const initializeSupabase = async (): Promise<void> => {
 
 /**
  * Obtiene el cliente de Supabase
- * IMPORTANTE: Debe llamarse despuÃ©s de initializeSupabase()
+ * IMPORTANTE: Debe llamarse después de initializeSupabase()
  */
 export const getSupabaseClient = (): SupabaseClient => {
   const client = getSupabaseClientInstance();
@@ -99,7 +99,7 @@ export const getSupabaseClient = (): SupabaseClient => {
   return client;
 };
 
-// Export para compatibilidad con cÃ³digo existente
+// Export para compatibilidad con código existente
 export const supabaseClient = new Proxy({} as SupabaseClient, {
   get(target, prop) {
     const client = getSupabaseClientInstance();
@@ -112,7 +112,7 @@ export const supabaseClient = new Proxy({} as SupabaseClient, {
 });
 
 /**
- * Configura los listeners de auth despuÃ©s de inicializar Supabase
+ * Configura los listeners de auth después de inicializar Supabase
  */
 export const setupAuthListeners = () => {
   const client = getSupabaseClientInstance();

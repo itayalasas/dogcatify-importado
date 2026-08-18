@@ -44,7 +44,8 @@
       ],
       "expo-updates",
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      "./plugins/withMercadoPagoQueries.js"
     ],
     "experiments": {
       "typedRoutes": true
