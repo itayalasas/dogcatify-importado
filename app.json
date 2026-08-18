@@ -75,7 +75,11 @@
         "NSFaceIDUsageDescription": "Esta aplicación usa Face ID para un acceso rápido y seguro.",
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para mostrar el mapa correctamente.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Usamos tu ubicación para ofrecerte una mejor experiencia con los mapas."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Usamos tu ubicación para ofrecerte una mejor experiencia con los mapas.",
+        "LSApplicationQueriesSchemes": [
+          "mercadopago",
+          "com.mercadopago.wallet"
+        ]
       }
     },
     "android": {

@@ -7,6 +7,7 @@ import PromotionCard from '../components/PromotionCard';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { NotificationPermissionPrompt } from '../components/NotificationPermissionPrompt';
+import { AppLoadingScreen } from '../components/AppLoadingScreen';
 import { supabaseClient } from '../lib/supabase';
 import { envConfig } from '../utils/envConfig';
 
@@ -501,12 +502,11 @@ export default function Home() {
   };
 
   if (!currentUser) {
-    // Si no hay usuario, redirigir al login con delay para evitar errores de navegación
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Redirigiendo...</Text>
-      </View>
-    );
+    // Si no hay usuario, redirigir al login con delay para evitar errores de navegación.
+    // Mismo mensaje por defecto que los gates de app/_layout.tsx: por diseño no debería
+    // llegar a mostrarse (esa pantalla ya espera authInitialized antes de montar esta
+    // ruta), pero si hay una carrera se ve idéntica, sin texto propio que delate el cambio.
+    return <AppLoadingScreen />;
   }
 
   return (
