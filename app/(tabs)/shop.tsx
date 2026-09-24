@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, TextInput } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { Filter, Search, ShoppingCart, Package } from 'lucide-react-native';
 import { FlatGrid } from 'react-native-super-grid';
 import { ProductCard } from '../../components/ProductCard';
@@ -11,7 +10,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import { supabaseClient } from '../../lib/supabase';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { getActivePromotionsForItems, calculateDiscountedPrice, incrementPromotionClicks, type ActivePromotion } from '../../utils/promotions';
 
 

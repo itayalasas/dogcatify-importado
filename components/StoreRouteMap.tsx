@@ -550,7 +550,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   webViewLoadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(249, 250, 251, 0.88)',

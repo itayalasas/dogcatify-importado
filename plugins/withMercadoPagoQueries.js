@@ -1,4 +1,4 @@
-const { withAndroidManifest } = require('@expo/config-plugins');
+const { withAndroidManifest } = require('expo/config-plugins');
 
 // Android 11+ (API 30+) package visibility: without declaring the
 // Mercado Pago package/scheme in <queries>, Linking.canOpenURL() for

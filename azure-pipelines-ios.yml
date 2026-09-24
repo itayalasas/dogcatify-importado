@@ -149,15 +149,17 @@ steps:
   # ============================================================
   # EXPO PREBUILD
   # ============================================================
+  # Siempre regenerar, igual que ya hace azure-pipelines.yml en Android.
+  # El "saltar si ios/ ya existe" que había acá antes es justamente lo que
+  # habría dejado el proyecto nativo de iOS desalineado tras un salto de
+  # versión de Expo SDK: ios/ queda commiteado con la estructura vieja, y
+  # regenerarlo requiere macOS/Xcode (no se puede validar desde Windows),
+  # así que el agente Mac de este pipeline es el único lugar donde esto se
+  # puede confirmar de verdad.
   - script: |
       set -euo pipefail
 
-      if [ ! -d "ios" ]; then
-        echo "No existe ios/. Ejecutando Expo prebuild..."
-        npx expo prebuild -p ios --no-install
-      else
-        echo "Existe ios/. Saltando Expo prebuild."
-      fi
+      npx expo prebuild -p ios --no-install --clean
 
       xattr -cr "$(Build.SourcesDirectory)/ios" || true
 
@@ -165,7 +167,7 @@ steps:
         -name "._*" \
         -type f \
         -delete || true
-    displayName: 'Expo prebuild iOS (si aplica)'
+    displayName: 'Expo prebuild iOS'
     env:
       COPYFILE_DISABLE: '1'
       COPY_EXTENDED_ATTRIBUTES_DISABLE: '1'

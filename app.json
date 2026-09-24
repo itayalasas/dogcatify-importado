@@ -12,11 +12,6 @@
       "android",
       "web"
     ],
-    "splash": {
-      "image": "./assets/images/icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -45,7 +40,20 @@
       "expo-updates",
       "expo-secure-store",
       "expo-web-browser",
-      "./plugins/withMercadoPagoQueries.js"
+      "./plugins/withMercadoPagoQueries.js",
+      "./plugins/withNativePushModules.js",
+      "@react-native-community/datetimepicker",
+      "@sentry/react-native",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true
@@ -66,7 +74,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.dogcatify.app2",
       "buildNumber": "1",
-      "googleServicesFile": "./ios/GoogleService-Info.plist",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "associatedDomains": [
         "applinks:app-dogcatify.netlify.app"
       ],
@@ -86,7 +94,7 @@
     "android": {
       "package": "com.dogcatify.app2",
       "versionCode": 1,
-      "googleServicesFile": "./android/app/google-services.json",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#FFFFFF"

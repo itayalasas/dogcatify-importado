@@ -1530,7 +1530,7 @@ const styles = StyleSheet.create({
     color: '#10B981',
   },
   logoutOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(17, 24, 39, 0.42)',
     justifyContent: 'center',
     alignItems: 'center',

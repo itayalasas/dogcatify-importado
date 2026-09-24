@@ -6,12 +6,10 @@ buildscript {
     mavenCentral()
   }
   dependencies {
+        classpath 'com.google.gms:google-services:4.4.4'
     classpath('com.android.tools.build:gradle')
     classpath('com.facebook.react:react-native-gradle-plugin')
     classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')
-    classpath('com.google.gms:google-services:4.4.0')
-    // Datadog Gradle plugin deshabilitado para evitar error en upload de sourcemaps
-    // classpath('com.datadoghq:dd-sdk-android-gradle-plugin:latest.release')
   }
 }
 

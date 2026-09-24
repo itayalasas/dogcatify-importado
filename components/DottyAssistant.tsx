@@ -290,17 +290,17 @@ export const DottyAssistant: React.FC<DottyAssistantProps> = ({
 
 const styles = StyleSheet.create({
   overlayContainer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 9998,
     elevation: 9998,
   },
   modalContainer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 9999,
     elevation: 9999,
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
   },
   content: {

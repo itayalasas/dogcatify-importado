@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   decorLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   decorOrb: {
     position: 'absolute',
