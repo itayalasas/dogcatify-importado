@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Switch, Alert, Modal, ActivityIndicator } from 'react-native';
 import { Bell, Shield, Globe, Database, LogOut, CreditCard, Crown } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
+import { GamePromotionsAdminCard } from '../../components/admin/GamePromotionsAdminCard';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { router } from 'expo-router';
@@ -778,7 +779,10 @@ export default function AdminSettings() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Notifications Section */}
+        {/* Game Promos Config Section */}
+          <GamePromotionsAdminCard />
+          
+          {/* Notifications Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>🔔 Notificaciones</Text>
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Linking, Modal, Dimensions } from 'react-native';
 import { router } from 'expo-router';
-import { MapPin, Star, Phone, Navigation, X } from 'lucide-react-native';
+import { MapPin, Star, Phone, Navigation, X, Plus } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
@@ -203,7 +203,12 @@ export default function Places() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Lugares Pet-Friendly</Text>
-        <View style={styles.placeholder} />
+        <TouchableOpacity
+          style={styles.addPlaceButton}
+          onPress={() => router.push('/places/register')}
+        >
+          <Plus size={22} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.searchSection}>
@@ -451,6 +456,14 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     width: 36,
+  },
+  addPlaceButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#2D6A6F',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   searchSection: {
     backgroundColor: '#FFFFFF',

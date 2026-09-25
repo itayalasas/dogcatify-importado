@@ -507,7 +507,7 @@ function RootLayout() {
         <Stack.Screen name="cart/index" />
         <Stack.Screen name="orders/index" />
         <Stack.Screen name="orders/[id]" />
-        <Stack.Screen name="places/add" />
+        <Stack.Screen name="places/register" />
         <Stack.Screen name="chat/[id]" />
         <Stack.Screen name="chat/adoption" />
         <Stack.Screen name="partner-register" />
@@ -749,7 +749,7 @@ function RootLayout() {
                   <Stack.Screen name="cart/index" />
                   <Stack.Screen name="orders/index" />
                   <Stack.Screen name="orders/[id]" />
-                  <Stack.Screen name="places/add" />
+                  <Stack.Screen name="places/register" />
                   <Stack.Screen name="chat/[id]" />
                   <Stack.Screen name="chat/adoption" />
                   <Stack.Screen name="partner-register" />

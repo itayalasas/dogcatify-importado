@@ -5,6 +5,7 @@ import { router, useFocusEffect } from 'expo-router';
 import Constants from 'expo-constants';
 import PostCard from '../../components/PostCard';
 import PromotionCard from '../../components/PromotionCard';
+import { FloatingGameWidget } from '../../components/FloatingGameWidget';
 import { DottyAssistant } from '../../components/DottyAssistant';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -908,6 +909,7 @@ export default function Home() {
         ListHeaderComponent={() => (
           <>
             {__DEV__ && <NotificationDebugInfo />}
+            
             {listHeader}
           </>
         )}
@@ -934,6 +936,7 @@ export default function Home() {
         />
       )}
 
+      {!showOnboarding && <FloatingGameWidget />}
     </SafeAreaView>
   );
 }

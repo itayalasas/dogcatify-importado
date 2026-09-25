@@ -4,6 +4,13 @@ import { supabaseClient } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { logger } from '../utils/datadogLogger';
 
+export interface GamePromotion {
+  id: string;
+  discountPercent: number;
+  discountAmount: number;
+  discountCode: string;
+}
+
 export interface CartItem {
   id: string;
   name: string;
@@ -31,6 +38,8 @@ interface CartContextType {
   getCartCount: () => number;
   getCartOriginalTotal: () => number;
   getCartDiscountAmount: () => number;
+  appliedPromo: GamePromotion | null;
+  setAppliedPromo: (promo: GamePromotion | null) => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -45,6 +54,7 @@ export const useCart = () => {
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [appliedPromo, setAppliedPromo] = useState<GamePromotion | null>(null);
   const { currentUser } = useAuth();
 
   // Load cart from Supabase when user logs in
@@ -251,23 +261,40 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const getCartTotal = () => {
-    // Total CON IVA incluido (lo que el usuario paga)
-    return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
+    let total = cart.reduce((total, item) => total + (item.price * item.quantity), 0);
+    if (appliedPromo) {
+      if (appliedPromo.discountPercent) {
+        total = total * (1 - appliedPromo.discountPercent / 100);
+      } else if (appliedPromo.discountAmount) {
+        total = Math.max(0, total - appliedPromo.discountAmount);
+      }
+    }
+    return total;
   };
 
   const getCartSubtotalWithoutTax = () => {
-    // Subtotal SIN IVA (base imponible)
-    // Los precios YA incluyen IVA, así que desglosamos
-    return cart.reduce((subtotal, item) => {
-      const taxRate = (item.iva_rate || 22) / 100; // Default 22%
+    let subtotal = cart.reduce((subtotal, item) => {
+      const taxRate = (item.iva_rate || 22) / 100;
       const priceWithTax = item.price * item.quantity;
       const priceWithoutTax = priceWithTax / (1 + taxRate);
       return subtotal + priceWithoutTax;
     }, 0);
+
+    if (appliedPromo) {
+      if (appliedPromo.discountPercent) {
+        subtotal = subtotal * (1 - appliedPromo.discountPercent / 100);
+      } else if (appliedPromo.discountAmount) {
+        const total = cart.reduce((t, item) => t + (item.price * item.quantity), 0);
+        if (total > 0) {
+          const ratio = subtotal / total;
+          subtotal = Math.max(0, subtotal - (appliedPromo.discountAmount * ratio));
+        }
+      }
+    }
+    return subtotal;
   };
 
   const getCartTaxAmount = () => {
-    // Monto total de IVA
     const total = getCartTotal();
     const subtotal = getCartSubtotalWithoutTax();
     return total - subtotal;
@@ -278,7 +305,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const getCartOriginalTotal = () => {
-    // Total ANTES de descuentos (con IVA incluido)
     return cart.reduce((total, item) => {
       const originalPrice = item.original_price || item.price;
       return total + (originalPrice * item.quantity);
@@ -286,15 +312,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const getCartDiscountAmount = () => {
-    // Monto total de descuentos aplicados
-    return cart.reduce((discount, item) => {
-      if (item.discount_percentage > 0 && item.original_price) {
-        const originalPrice = item.original_price * item.quantity;
-        const discountedPrice = item.price * item.quantity;
-        return discount + (originalPrice - discountedPrice);
-      }
-      return discount;
-    }, 0);
+    const originalTotal = getCartOriginalTotal();
+    const finalTotal = getCartTotal();
+    return originalTotal - finalTotal;
   };
 
   return (
@@ -309,7 +329,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       getCartTaxAmount,
       getCartCount,
       getCartOriginalTotal,
-      getCartDiscountAmount
+      getCartDiscountAmount,
+      appliedPromo,
+      setAppliedPromo
     }}>
       {children}
     </CartContext.Provider>

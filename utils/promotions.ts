@@ -201,3 +201,87 @@ export async function incrementPromotionClicks(promotionId: string): Promise<voi
     console.error('Error in incrementPromotionClicks:', error);
   }
 }
+export interface GamePromotion {
+  id: string;
+  userId: string;
+  title: string;
+  description: string;
+  discountCode: string;
+  discountPercent: number;
+  discountAmount: number;
+  isClaimed: boolean;
+  expiresAt: string | null;
+  sourceMilestone: string | null;
+}
+
+export async function validateGamePromotion(code: string, userId: string, targetType: 'products' | 'services' | 'both' = 'both'): Promise<GamePromotion | null> {
+  try {
+    const { data: promo, error } = await supabaseClient
+      .from('game_promotions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('discount_code', code)
+      .single();
+
+    if (error || !promo) {
+      return null;
+    }
+
+    if (promo.is_claimed) {
+      throw new Error('Este código ya fue utilizado');
+    }
+
+    if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
+      throw new Error('Este código ya expiró');
+    }
+
+    const { data: configData } = await supabaseClient
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'game_promotions_config')
+      .maybeSingle();
+
+    if (configData?.value && promo.source_milestone) {
+      const config = configData.value;
+      const ms = promo.source_milestone;
+      let target = 'both';
+      if (ms === 'level_3_completed') target = config.level3?.target || 'products';
+      if (ms === 'level_5_completed') target = config.level5?.target || 'products';
+      if (ms === 'level_10_completed') target = config.level10?.target || 'services';
+
+      if (target !== 'both' && target !== targetType) {
+        throw new Error('Este código solo es válido para ' + (target === 'services' ? 'servicios' : 'la tienda'));
+      }
+    }
+
+    return {
+      id: promo.id,
+      userId: promo.user_id,
+      title: promo.title,
+      description: promo.description,
+      discountCode: promo.discount_code,
+      discountPercent: promo.discount_percent,
+      discountAmount: promo.discount_amount,
+      isClaimed: promo.is_claimed,
+      expiresAt: promo.expires_at,
+      sourceMilestone: promo.source_milestone
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    console.error('Error al validar c�digo de promoci�n:', error);
+    return null;
+  }
+}
+
+export async function redeemGamePromotion(promoId: string): Promise<void> {
+  try {
+    await supabaseClient
+      .from('game_promotions')
+      .update({ is_claimed: true, claimed_at: new Date().toISOString() })
+      .eq('id', promoId);
+  } catch (error) {
+    console.error('Error al redimir el c�digo:', error);
+  }
+}

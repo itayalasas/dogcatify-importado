@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Image, StyleSheet, Animated, Dimensions, Text } from 'react-native';
 
 interface LoadingScreenProps {
@@ -8,11 +8,11 @@ interface LoadingScreenProps {
 const { width } = Dimensions.get('window');
 
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({ message }) => {
-  const opacity = new Animated.Value(0);
-  const scale = new Animated.Value(0.8);
+  const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0.8)).current;
 
   useEffect(() => {
-    Animated.loop(
+    const loop = Animated.loop(
       Animated.sequence([
         Animated.parallel([
           Animated.timing(opacity, {
@@ -39,8 +39,14 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ message }) => {
           }),
         ]),
       ])
-    ).start();
-  }, []);
+    );
+
+    loop.start();
+
+    return () => {
+      loop.stop();
+    };
+  }, [opacity, scale]);
 
   return (
     <View style={styles.container}>

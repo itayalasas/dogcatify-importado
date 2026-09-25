@@ -21,6 +21,7 @@ interface EnvironmentVariables {
   EXPO_PUBLIC_EMAIL_API_KEY: string;
   EXPO_PUBLIC_CONFIRM_EMAIL_API_URL: string;
   EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID: string;
+  EXPO_PUBLIC_GAME_URL: string;
   [key: string]: string;
 }
 
@@ -382,6 +383,7 @@ class EnvConfigService {
           EXPO_PUBLIC_EMAIL_API_KEY: process.env.EXPO_PUBLIC_EMAIL_API_KEY || '',
           EXPO_PUBLIC_CONFIRM_EMAIL_API_URL: process.env.EXPO_PUBLIC_CONFIRM_EMAIL_API_URL || '',
           EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID: process.env.EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID || '',
+          EXPO_PUBLIC_GAME_URL: process.env.EXPO_PUBLIC_GAME_URL || 'https://game-patitas-al-rescate.netlify.app',
         };
       }
     } catch (error) {

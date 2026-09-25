@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, TextInput, ActivityIndicator, Linking, Image, Animated, AppState, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, TextInput, ActivityIndicator, Linking, Image, Animated, AppState, Platform, KeyboardAvoidingView } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Calendar, Clock, CreditCard, X, Lock, User, FileText, CircleCheck as CheckCircle } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
@@ -12,7 +12,8 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 import { createServiceBookingOrder, openMercadoPagoPayment } from '../../../utils/mercadoPago';
 import { envConfig } from '../../../utils/envConfig';
-import { getActivePromotionForItem } from '@/utils/promotions';
+import { getActivePromotionForItem, validateGamePromotion } from '@/utils/promotions';
+import { GamePromoInput } from '../../../components/GamePromoInput';
 import {
   generateAvailableTimeOptions,
   isTimeSlotAvailable,
@@ -87,6 +88,29 @@ export default function ServiceBooking() {
   const [showDocumentTypes, setShowDocumentTypes] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
+  const [appliedPromo, setAppliedPromo] = useState<any>(null);
+  const [promoCodeInput, setPromoCodeInput] = useState('');
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+  const [promoError, setPromoError] = useState('');
+
+  const handleApplyPromo = async () => {
+    if (!promoCodeInput.trim() || !currentUser) return;
+    setIsApplyingPromo(true);
+    setPromoError('');
+    try {
+      const promo = await validateGamePromotion(promoCodeInput.trim(), currentUser.id, 'services');
+      if (promo) {
+        setAppliedPromo(promo);
+        setPromoCodeInput('');
+      } else {
+        setPromoError('Código inválido o ya utilizado');
+      }
+    } catch (e: any) {
+      setPromoError(e.message || 'Error al validar el código');
+    } finally {
+      setIsApplyingPromo(false);
+    }
+  };
 
   const handleBackPress = () => {
     if (router.canGoBack()) {
@@ -478,10 +502,21 @@ export default function ServiceBooking() {
 
   const getServicePrice = () => {
     const basePrice = getBaseServicePrice();
+    let finalPrice = basePrice;
+    
     if (appliedDiscount > 0) {
-      return basePrice * (1 - appliedDiscount / 100);
+      finalPrice = finalPrice * (1 - appliedDiscount / 100);
     }
-    return basePrice;
+
+    if (appliedPromo) {
+      if (appliedPromo.discountPercent) {
+        finalPrice = finalPrice * (1 - appliedPromo.discountPercent / 100);
+      } else if (appliedPromo.discountAmount) {
+        finalPrice = Math.max(0, finalPrice - appliedPromo.discountAmount);
+      }
+    }
+    
+    return finalPrice;
   };
 
   // Card formatting functions
@@ -958,8 +993,9 @@ export default function ServiceBooking() {
           displayName: currentUser!.displayName || 'Usuario',
           phone: currentUser!.phone || null
         },
-        discountPercentage: appliedDiscount || 0,
-        originalPrice: originalPrice
+        discountPercentage: appliedPromo?.discountPercent || appliedDiscount || 0,
+        originalPrice: originalPrice,
+        game_promotion_id: appliedPromo?.id
       };
 
       setPaymentMessage('Creando orden de reserva...');
@@ -1122,6 +1158,7 @@ export default function ServiceBooking() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
@@ -1303,8 +1340,24 @@ export default function ServiceBooking() {
             textAlignVertical="top"
           />
         </Card> */}
-      </ScrollView>
 
+        {/* Secci�n promociones globales del juego */}
+          {/* Sección promociones globales del juego */}
+          <View style={{ marginBottom: 16, marginHorizontal: 16 }}>
+            <GamePromoInput
+              promoCode={promoCodeInput}
+              onChangeCode={text => { setPromoCodeInput(text); setPromoError(''); }}
+              isApplying={isApplyingPromo}
+              errorMessage={promoError}
+              appliedPromo={appliedPromo}
+              onApply={handleApplyPromo}
+              onRemove={() => setAppliedPromo(null)}
+              formatCurrency={formatCurrency}
+            />
+          </View>
+        </ScrollView>
+
+      </KeyboardAvoidingView>
       {/* Fixed Confirm Button */}
       {selectedDate && (boardingCategory || selectedTime) && (
         <View style={styles.confirmContainer}>

@@ -10,14 +10,19 @@ import { MercadoPagoRedirectModal } from '../../components/MercadoPagoRedirectMo
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import { createMultiPartnerOrder, openMercadoPagoPayment } from '../../utils/mercadoPago';
+import { validateGamePromotion } from '../../utils/promotions';
+import { GamePromoInput } from '../../components/GamePromoInput';
 import { supabaseClient } from '../../lib/supabase';
 
 export default function Cart() {
   const { currentUser } = useAuth();
-  const { cart, updateQuantity, removeFromCart, clearCart, getCartTotal, getCartSubtotalWithoutTax, getCartTaxAmount, getCartOriginalTotal, getCartDiscountAmount } = useCart();
+  const { cart, updateQuantity, removeFromCart, clearCart, getCartTotal, getCartSubtotalWithoutTax, getCartTaxAmount, getCartOriginalTotal, getCartDiscountAmount, appliedPromo, setAppliedPromo } = useCart();
   const [loading, setLoading] = useState(false);
   const [loadingAddress, setLoadingAddress] = useState(true);
   const [useNewAddress, setUseNewAddress] = useState(false);
+  const [promoCodeInput, setPromoCodeInput] = useState('');
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+  const [promoError, setPromoError] = useState('');
   const [isAddressExpanded, setIsAddressExpanded] = useState(false);
   const [productStocks, setProductStocks] = useState<Record<string, number>>({});
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
@@ -296,6 +301,25 @@ export default function Cart() {
     }
   };
 
+  const handleApplyPromo = async () => {
+    if (!promoCodeInput.trim() || !currentUser) return;
+    setIsApplyingPromo(true);
+    setPromoError('');
+    try {
+      const promo = await validateGamePromotion(promoCodeInput.trim(), currentUser.id, 'products');
+      if (promo) {
+        setAppliedPromo(promo);
+        setPromoCodeInput('');
+      } else {
+        setPromoError('Código inválido o ya utilizado');
+      }
+    } catch (e: any) {
+      setPromoError(e.message || 'Error al validar el código');
+    } finally {
+      setIsApplyingPromo(false);
+    }
+  };
+
   const handleUpdateQuantity = (itemId: string, newQuantity: number) => {
     if (newQuantity <= 0) {
       removeFromCart(itemId);
@@ -406,8 +430,32 @@ export default function Cart() {
       await new Promise(resolve => setTimeout(resolve, 800));
 
       setPaymentMessage('Creando orden de compra...');
+
+      const itemsWithPromoApplied = cart.map(item => {
+        let newPrice = item.price;
+        if (appliedPromo) {
+          if (appliedPromo.discountPercent) {
+            newPrice = item.price * (1 - appliedPromo.discountPercent / 100);
+          } else if (appliedPromo.discountAmount) {
+            const total = cart.reduce((t, i) => t + (i.price * i.quantity), 0);
+            if (total > 0) {
+              const ratio = (item.price * item.quantity) / total;
+              const itemDiscount = appliedPromo.discountAmount * ratio;
+              newPrice = Math.max(0, item.price - (itemDiscount / item.quantity));
+            }
+          }
+        }
+        return {
+          ...item,
+          price: newPrice,
+          original_price: item.original_price || item.price,
+          discount_percentage: appliedPromo?.discountPercent ? item.discount_percentage + appliedPromo.discountPercent : item.discount_percentage,
+          game_promotion_id: appliedPromo?.id
+        };
+      });
+
       const { orders, paymentPreferences, isTestMode } = await createMultiPartnerOrder(
-        cart,
+        itemsWithPromoApplied,
         currentUser,
         fullAddress,
         totalShippingCost
@@ -703,6 +751,20 @@ export default function Cart() {
 
             <Card style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Resumen del Pedido</Text>
+              
+              {/* Sección promociones globales del juego */}
+              {/* Sección promociones globales del juego */}
+              <GamePromoInput
+                promoCode={promoCodeInput}
+                onChangeCode={text => { setPromoCodeInput(text); setPromoError(''); }}
+                isApplying={isApplyingPromo}
+                errorMessage={promoError}
+                appliedPromo={appliedPromo}
+                onApply={handleApplyPromo}
+                onRemove={() => setAppliedPromo(null)}
+                formatCurrency={formatCurrency}
+              />
+              <View style={styles.divider} />
               
               {/* Mostrar descuento si existe alguno en el carrito */}
               {getCartDiscountAmount() > 0 && (
