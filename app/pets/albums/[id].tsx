@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Modal, ActivityIndicator, Dimensions, StatusBar } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Camera, Trash2, Share, X, CreditCard as Edit, Video as VideoIcon, Play, ChevronLeft, ChevronRight } from 'lucide-react-native';
@@ -12,9 +12,23 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { detectPetInVideo, validateVideoDuration } from '../../../utils/petDetection';
 import { envConfig } from '../../../utils/envConfig';
 import { resolveSubscriptionPlanLimits } from '../../../utils/subscriptionPlanLimits';
-import { Video, ResizeMode } from 'expo-av';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
+
+// Keyed by the caller on the media index/url so React fully unmounts the
+// old player and mounts a fresh one when navigating between media items —
+// useVideoPlayer releases its player automatically on unmount, so no
+// manual pause-before-navigating call is needed the way the old expo-av
+// <Video> ref required.
+const FullscreenVideoView = ({ uri, style }: { uri: string; style: any }) => {
+  const player = useVideoPlayer(uri, (player) => {
+    player.loop = true;
+    player.play();
+  });
+
+  return <VideoView player={player} style={style} contentFit="contain" nativeControls />;
+};
 
 const ZoomableImage = ({ uri, onSwipeLeft, onSwipeRight }: { uri: string; onSwipeLeft?: () => void; onSwipeRight?: () => void }) => {
   const scale = useSharedValue(1);
@@ -133,7 +147,6 @@ export default function AlbumDetail() {
   const [showMediaTypeModal, setShowMediaTypeModal] = useState(false);
   const [showMediaViewer, setShowMediaViewer] = useState(false);
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
-  const videoRef = useRef<Video>(null);
 
   const ensureDailyPostLimit = async () => {
     if (!currentUser) {
@@ -1108,9 +1121,6 @@ export default function AlbumDetail() {
         animationType="fade"
         onRequestClose={() => {
           setShowMediaViewer(false);
-          if (videoRef.current) {
-            videoRef.current.pauseAsync();
-          }
         }}
       >
         <StatusBar hidden />
@@ -1120,9 +1130,6 @@ export default function AlbumDetail() {
             style={styles.closeViewerButton}
             onPress={() => {
               setShowMediaViewer(false);
-              if (videoRef.current) {
-                videoRef.current.pauseAsync();
-              }
             }}
           >
             <X size={28} color="#FFFFFF" />
@@ -1143,18 +1150,12 @@ export default function AlbumDetail() {
 
             const handleSwipeLeft = () => {
               if (currentMediaIndex < album.images.length - 1) {
-                if (videoRef.current) {
-                  videoRef.current.pauseAsync();
-                }
                 setCurrentMediaIndex(currentMediaIndex + 1);
               }
             };
 
             const handleSwipeRight = () => {
               if (currentMediaIndex > 0) {
-                if (videoRef.current) {
-                  videoRef.current.pauseAsync();
-                }
                 setCurrentMediaIndex(currentMediaIndex - 1);
               }
             };
@@ -1162,14 +1163,10 @@ export default function AlbumDetail() {
             return (
               <View style={styles.mediaContent}>
                 {isVideo ? (
-                  <Video
-                    ref={videoRef}
-                    source={{ uri: actualUrl }}
+                  <FullscreenVideoView
+                    key={currentMediaIndex}
+                    uri={actualUrl}
                     style={styles.fullscreenMedia}
-                    resizeMode={ResizeMode.CONTAIN}
-                    shouldPlay
-                    isLooping
-                    useNativeControls
                   />
                 ) : (
                   <ZoomableImage
@@ -1188,12 +1185,7 @@ export default function AlbumDetail() {
               {currentMediaIndex > 0 && (
                 <TouchableOpacity
                   style={[styles.navButton, styles.navButtonLeft]}
-                  onPress={() => {
-                    if (videoRef.current) {
-                      videoRef.current.pauseAsync();
-                    }
-                    setCurrentMediaIndex(currentMediaIndex - 1);
-                  }}
+                  onPress={() => setCurrentMediaIndex(currentMediaIndex - 1)}
                 >
                   <ChevronLeft size={32} color="#FFFFFF" />
                 </TouchableOpacity>
@@ -1202,12 +1194,7 @@ export default function AlbumDetail() {
               {currentMediaIndex < album.images.length - 1 && (
                 <TouchableOpacity
                   style={[styles.navButton, styles.navButtonRight]}
-                  onPress={() => {
-                    if (videoRef.current) {
-                      videoRef.current.pauseAsync();
-                    }
-                    setCurrentMediaIndex(currentMediaIndex + 1);
-                  }}
+                  onPress={() => setCurrentMediaIndex(currentMediaIndex + 1)}
                 >
                   <ChevronRight size={32} color="#FFFFFF" />
                 </TouchableOpacity>

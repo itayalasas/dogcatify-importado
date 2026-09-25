@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions, Modal, TextInput, FlatList, ActivityIndicator, ScrollView, Image, Share, Platform, KeyboardAvoidingView, StatusBar } from 'react-native';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { useVideoPlayer, VideoView, VideoPlayer as ExpoVideoPlayer } from 'expo-video';
 import { Heart, MessageCircle, Share2, MoveHorizontal as MoreHorizontal, ArrowLeft, Send, Play, Pause, TriangleAlert as AlertTriangle, MapPin, Phone } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { supabaseClient } from '../lib/supabase';
@@ -99,7 +99,13 @@ const ZoomableImage = ({ uri, style, onDoubleTap }: { uri: string; style?: any; 
   );
 };
 
-// Memoized video component to prevent unnecessary re-renders
+// Memoized video component to prevent unnecessary re-renders.
+//
+// Only one of these is ever mounted at a time per post (the carousel below
+// renders a placeholder for every slide except the current one), so
+// useVideoPlayer's automatic release-on-unmount already handles cleanup
+// when switching slides — no manual pause/unload needed the way the old
+// expo-av <Video> ref required.
 const VideoPlayer = memo(({
   videoRef,
   source,
@@ -111,7 +117,7 @@ const VideoPlayer = memo(({
   isInViewport,
   index
 }: {
-  videoRef: (ref: Video | null) => void;
+  videoRef: (player: ExpoVideoPlayer | null) => void;
   source: { uri: string };
   style: any;
   onTogglePlay: () => void;
@@ -121,54 +127,45 @@ const VideoPlayer = memo(({
   isInViewport: boolean;
   index: number;
 }) => {
-  const internalRef = useRef<Video | null>(null);
-  const isMounted = useRef(true);
-  const hasUnloaded = useRef(false);
+  const player = useVideoPlayer(source.uri, (player) => {
+    player.loop = false;
+    player.muted = false;
+  });
 
-  // Cleanup when component unmounts
+  // Mirrors the old shouldPlay={isInViewport && isPlaying} declarative prop,
+  // which expo-video's VideoView doesn't have — play/pause are now
+  // imperative calls on the player instead.
   useEffect(() => {
-    isMounted.current = true;
-    hasUnloaded.current = false;
-
-    return () => {
-      isMounted.current = false;
-      if (internalRef.current && !hasUnloaded.current) {
-        hasUnloaded.current = true;
-        internalRef.current.pauseAsync()
-          .then(() => internalRef.current?.unloadAsync())
-          .catch(() => {});
-      }
-    };
-  }, []);
-
-  const handleRef = (ref: Video | null) => {
-    internalRef.current = ref;
-    videoRef(ref);
-  };
-
-  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (status.isLoaded && status.didJustFinish && !status.isLooping) {
-      onTogglePlay();
+    if (isInViewport && isPlaying) {
+      player.play();
+    } else {
+      player.pause();
     }
-  };
+  }, [isInViewport, isPlaying, player]);
+
+  useEffect(() => {
+    player.playbackRate = playbackRate;
+  }, [playbackRate, player]);
+
+  useEffect(() => {
+    videoRef(player);
+    return () => videoRef(null);
+  }, [player, videoRef]);
+
+  useEffect(() => {
+    const subscription = player.addListener('playToEnd', () => {
+      onTogglePlay();
+    });
+    return () => subscription.remove();
+  }, [player, onTogglePlay]);
 
   return (
     <View style={styles.videoContainer}>
-      <Video
-        ref={handleRef}
-        source={source}
+      <VideoView
+        player={player}
         style={style}
-        resizeMode={ResizeMode.COVER}
-        isLooping={false}
-        shouldPlay={isInViewport && isPlaying}
-        isMuted={false}
-        useNativeControls={false}
-        progressUpdateIntervalMillis={500}
-        onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-        onReadyForDisplay={() => {}}
-        onError={(error) => {
-          console.log('Video error:', error);
-        }}
+        contentFit="cover"
+        nativeControls={false}
       />
       <View style={styles.videoControlsOverlay}>
         <TouchableOpacity
@@ -235,7 +232,7 @@ const PostCard: React.FC<PostCardProps> = ({
   const [videoSpeeds, setVideoSpeeds] = useState<{[key: number]: number}>({});
   const [videosInitialized, setVideosInitialized] = useState<{[key: number]: boolean}>({});
   const commentInputRef = useRef<TextInput>(null);
-  const videoRefs = useRef<{[key: number]: Video | null}>({});
+  const videoRefs = useRef<{[key: number]: ExpoVideoPlayer | null}>({});
 
   useEffect(() => {
     // Reset carousel state when the card starts representing a different post.
@@ -263,22 +260,13 @@ const PostCard: React.FC<PostCardProps> = ({
     fetchCommentsCount();
   }, [post.likes, currentUser]);
 
-  // Unload videos when changing slides to free memory
+  // Reset play/speed UI state when changing slides. Freeing the previous
+  // slide's video resources no longer needs explicit handling here: only
+  // the current carousel slide ever mounts a <VideoPlayer>, so switching
+  // slides unmounts the old one and useVideoPlayer releases it
+  // automatically (that unmount also clears its videoRefs.current entry
+  // via the ref-callback cleanup in VideoPlayer itself).
   useEffect(() => {
-    Object.keys(videoRefs.current).forEach((indexStr) => {
-      const index = parseInt(indexStr);
-      if (index !== currentImageIndex) {
-        const ref = videoRefs.current[index];
-        if (ref) {
-          // First pause, then unload to free memory
-          ref.pauseAsync()
-            .then(() => ref.unloadAsync())
-            .catch(() => {});
-          // Remove ref from collection since it's unloaded
-          delete videoRefs.current[index];
-        }
-      }
-    });
     setPlayingVideos({});
     setVideoSpeeds({});
   }, [currentImageIndex]);
@@ -303,21 +291,20 @@ const PostCard: React.FC<PostCardProps> = ({
     if (!isInViewport) {
       Object.values(videoRefs.current).forEach((ref) => {
         if (ref) {
-          ref.pauseAsync().catch(() => {});
+          try {
+            ref.pause();
+          } catch {}
         }
       });
       setPlayingVideos({});
     }
   }, [isInViewport]);
 
-  // Cleanup all videos when component unmounts
+  // Cleanup when component unmounts. The mounted <VideoPlayer> (if any)
+  // releases its own player automatically via useVideoPlayer; this just
+  // clears the ref map for hygiene.
   useEffect(() => {
     return () => {
-      Object.values(videoRefs.current).forEach((ref) => {
-        if (ref) {
-          ref.unloadAsync().catch(() => {});
-        }
-      });
       videoRefs.current = {};
     };
   }, []);
@@ -774,25 +761,22 @@ const PostCard: React.FC<PostCardProps> = ({
     return url.replace('VIDEO:', '');
   };
 
-  const toggleVideoPlayback = useCallback(async (index: number) => {
+  const toggleVideoPlayback = useCallback((index: number) => {
     const videoRef = videoRefs.current[index];
     if (videoRef) {
       try {
-        const status = await videoRef.getStatusAsync();
-        if (status.isLoaded) {
-          if (status.isPlaying) {
-            await videoRef.pauseAsync();
-            setPlayingVideos(prev => ({ ...prev, [index]: false }));
-          } else {
-            await videoRef.playAsync();
-            setPlayingVideos(prev => ({ ...prev, [index]: true }));
-          }
+        if (videoRef.playing) {
+          videoRef.pause();
+          setPlayingVideos(prev => ({ ...prev, [index]: false }));
+        } else {
+          videoRef.play();
+          setPlayingVideos(prev => ({ ...prev, [index]: true }));
         }
       } catch (error) {}
     }
   }, []);
 
-  const changeVideoSpeed = useCallback(async (index: number) => {
+  const changeVideoSpeed = useCallback((index: number) => {
     const videoRef = videoRefs.current[index];
     if (videoRef) {
       try {
@@ -800,7 +784,7 @@ const PostCard: React.FC<PostCardProps> = ({
         const speeds = [1, 1.5, 2, 0.5];
         const currentIndex = speeds.indexOf(currentSpeed);
         const nextSpeed = speeds[(currentIndex + 1) % speeds.length];
-        await videoRef.setRateAsync(nextSpeed, true);
+        videoRef.playbackRate = nextSpeed;
         setVideoSpeeds(prev => ({ ...prev, [index]: nextSpeed }));
       } catch (error) {}
     }
@@ -959,7 +943,9 @@ const PostCard: React.FC<PostCardProps> = ({
                 // Pause all videos when user starts scrolling
                 Object.values(videoRefs.current).forEach((ref) => {
                   if (ref) {
-                    ref.pauseAsync();
+                    try {
+                      ref.pause();
+                    } catch {}
                   }
                 });
                 setPlayingVideos({});

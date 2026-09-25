@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Modal, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Calendar, Scale, Syringe, Heart, TriangleAlert as AlertTriangle, Pill, Camera, Plus, CreditCard as Edit, Trash2, Play, Image as ImageIcon, X, MapPin, Phone } from 'lucide-react-native';
-import { Video, ResizeMode } from 'expo-av';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -11,6 +11,17 @@ import { supabaseClient } from '../../lib/supabase';
 import { extractMedicalRecordsFromImage, ExtractedMedicalRecord } from '../../utils/medicalCardOCR';
 import { envConfig } from '../../utils/envConfig';
 import { resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
+
+// Static, muted video thumbnail used for an album cover. Extracted into its
+// own component because useVideoPlayer (unlike the old expo-av <Video />)
+// is a hook and can't be called inline inside a .map().
+const AlbumCoverVideoThumbnail = ({ uri, style }: { uri: string; style: any }) => {
+  const player = useVideoPlayer(uri, (player) => {
+    player.muted = true;
+  });
+
+  return <VideoView player={player} style={style} contentFit="cover" nativeControls={false} />;
+};
 
 export default function PetDetail() {
   const { id, refresh, activeTab: initialTab, permissionLevel } = useLocalSearchParams<{
@@ -1770,13 +1781,7 @@ export default function PetDetail() {
                   <View style={styles.albumCoverContainer}>
                     {isVideo ? (
                       <>
-                        <Video
-                          source={{ uri: cleanUrl }}
-                          style={styles.albumCover}
-                          resizeMode={ResizeMode.COVER}
-                          shouldPlay={false}
-                          isMuted
-                        />
+                        <AlbumCoverVideoThumbnail uri={cleanUrl} style={styles.albumCover} />
                         <View style={styles.videoIndicator}>
                           <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
                         </View>
