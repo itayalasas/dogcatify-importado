@@ -154,6 +154,27 @@ steps:
   displayName: Restaurar Firebase Messaging tras Expo prebuild
 - script: |
     set -euo pipefail
+    python3 - <<'PYTHON'
+    from pathlib import Path
+
+    headers = list(Path("ios").glob("**/*-Bridging-Header.h"))
+    if len(headers) != 1:
+        raise SystemExit(
+            f"ERROR: se esperaba un bridging header de la app; encontrados: {headers}"
+        )
+
+    header = headers[0]
+    content = header.read_text()
+    import_line = "#import <React/RCTBridgeModule.h>"
+    if import_line not in content:
+        header.write_text(content.rstrip() + "\n" + import_line + "\n")
+
+    print(f"Bridging header configurado: {header}")
+    print(header.read_text())
+    PYTHON
+  displayName: Exponer tipos de React Native al modulo Swift
+- script: |
+    set -euo pipefail
     echo "Versión de CocoaPods:"
     pod --version
     cd ios
