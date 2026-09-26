@@ -131,10 +131,39 @@ steps:
     COPY_EXTENDED_ATTRIBUTES_DISABLE: '1'
 - script: |
     set -euo pipefail
+    python3 - <<'PYTHON'
+    from pathlib import Path
+    import re
+    podfile = Path("ios/Podfile")
+    if not podfile.is_file():
+        raise SystemExit("ERROR: expo prebuild no generó ios/Podfile")
+    content = podfile.read_text()
+    target = "target 'DogCatiFy' do\n"
+    if content.count(target) != 1:
+        raise SystemExit("ERROR: no se encontró un único target DogCatiFy en ios/Podfile")
+    pods = ["FirebaseCore", "FirebaseMessaging", "GoogleUtilities"]
+    missing = [pod for pod in pods if not re.search(r"^\s*pod ['\"]" + pod + r"['\"]", content, re.MULTILINE)]
+    if missing:
+        additions = "".join(f"  pod '{pod}', :modular_headers => true\n" for pod in missing)
+        podfile.write_text(content.replace(target, target + additions, 1))
+    print("Dependencias Firebase en ios/Podfile:")
+    for number, line in enumerate(podfile.read_text().splitlines(), start=1):
+        if any(pod in line for pod in pods):
+            print(f"{number}: {line}")
+    PYTHON
+  displayName: Restaurar Firebase Messaging tras Expo prebuild
+- script: |
+    set -euo pipefail
     echo "Versión de CocoaPods:"
     pod --version
     cd ios
     pod install
+    if ! grep -q 'FirebaseMessaging' Podfile.lock; then
+      echo "ERROR: FirebaseMessaging no quedó instalado en Podfile.lock"
+      exit 1
+    fi
+    echo "FirebaseMessaging instalado correctamente:"
+    grep -n 'FirebaseMessaging' Podfile.lock | head -n 10
     echo "Limpiando atributos de Pods..."
     xattr -cr "$(Build.SourcesDirectory)/ios/Pods" || true
     find "$(Build.SourcesDirectory)/ios/Pods" \
