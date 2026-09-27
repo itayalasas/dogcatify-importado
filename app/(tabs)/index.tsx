@@ -6,6 +6,7 @@ import Constants from 'expo-constants';
 import PostCard from '../../components/PostCard';
 import PromotionCard from '../../components/PromotionCard';
 import { FloatingGameWidget } from '../../components/FloatingGameWidget';
+import { GamePetCareAlert } from '../../components/GamePetCareAlert';
 import { DottyAssistant } from '../../components/DottyAssistant';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -937,6 +938,7 @@ export default function Home() {
       )}
 
       {!showOnboarding && <FloatingGameWidget />}
+      {!showOnboarding && <GamePetCareAlert />}
     </SafeAreaView>
   );
 }

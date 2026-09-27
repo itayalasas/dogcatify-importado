@@ -25,6 +25,7 @@ module.exports = defineConfig([
       "react-hooks/refs": "warn",
       "react-hooks/purity": "warn",
       "react-hooks/static-components": "warn",
+      "react-hooks/preserve-manual-memoization": "warn",
     },
   },
 ]);

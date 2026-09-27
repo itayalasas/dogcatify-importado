@@ -31,9 +31,15 @@ steps:
     displayName: 'Instalar Node.js'
 
   # 2. Instalar dependencias del proyecto
+  # npm ci en vez de npm install: en este agente self-hosted node_modules
+  # persiste entre corridas, y "npm install" solo reconcilia por encima sin
+  # garantizar un árbol limpio. Esto dejó paquetes desactualizados del
+  # resolver de imports de ESLint tras el upgrade a Expo SDK 57, causando
+  # falsos "import/no-unresolved" en el paso de lint. npm ci siempre borra
+  # node_modules primero e instala exactamente lo que dice package-lock.json.
   - script: |
-      npm install
-    displayName: 'Instalar dependencias (npm install)'
+      npm ci
+    displayName: 'Instalar dependencias (npm ci)'
 
   # 2.5. Verificar tipos y lint antes de gastar tiempo en prebuild/gradle
   - script: |

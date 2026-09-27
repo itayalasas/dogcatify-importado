@@ -412,6 +412,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
     }
 
+    // Juego Patitas al Rescate: aviso de mascota con pocos mimos → abrir el refugio del juego
+    if (notificationKey === 'gameshelter' || notificationKey === 'gamepetcare') {
+      router.push({ pathname: '/game', params: { tab: 'shelter' } } as any);
+      return true;
+    }
+
     if (notificationKey === 'adoptionchat') {
       if (petId && partnerId) {
         openAdoptionChat(petId, partnerId, petName || null, partnerName || null);

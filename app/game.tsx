@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, ActivityIndicator, TouchableOpacity, Text, StatusBar, SafeAreaView, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabaseClient } from '../lib/supabase';
 import { envConfig } from '../utils/envConfig';
@@ -11,6 +11,8 @@ const DEFAULT_GAME_URL = 'https://game-patitas-al-rescate.netlify.app';
 
 export default function GameScreen() {
   const router = useRouter();
+  // ?tab=shelter abre el juego directo en el refugio (aviso de mascota con pocos mimos)
+  const { tab } = useLocalSearchParams<{ tab?: string }>();
   const webViewRef = useRef<WebView>(null);
   const [gameUrl, setGameUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,6 +42,10 @@ export default function GameScreen() {
             url = `${url}${separator}access_token=${encodeURIComponent(session.access_token)}&refresh_token=${encodeURIComponent(session.refresh_token || '')}`;
           }
         }
+        if (tab) {
+          const separator = url.includes('?') ? '&' : '?';
+          url = `${url}${separator}tab=${encodeURIComponent(String(tab))}`;
+        }
         setGameUrl(url);
       } catch (err) {
         console.warn('[GameScreen] Error al obtener sesión para el juego:', err);
@@ -48,7 +54,7 @@ export default function GameScreen() {
     }
 
     prepareGameSession();
-  }, []);
+  }, [tab]);
 
   return (
     <SafeAreaView style={styles.container}>
