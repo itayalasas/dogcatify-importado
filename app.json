@@ -42,6 +42,7 @@
       "expo-web-browser",
       "./plugins/withMercadoPagoQueries.js",
       "./plugins/withNativePushModules.js",
+      "./plugins/withReleaseSigningConfig.js",
       "@react-native-community/datetimepicker",
       "@sentry/react-native",
       "expo-font",
