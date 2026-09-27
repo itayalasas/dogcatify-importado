@@ -3,6 +3,7 @@ const path = require('path');
 const {
   withDangerousMod,
   withAndroidManifest,
+  withAppBuildGradle,
   withXcodeProject,
   IOSConfig,
 } = require('expo/config-plugins');
@@ -77,6 +78,29 @@ function withAndroidFcmService(config) {
   });
 }
 
+// expo-notifications declares firebase-messaging as `implementation` (not
+// `api`) in its own build.gradle, so it's packaged into the app at runtime
+// but never exposed on :app's Kotlin/Java COMPILE classpath. MyFirebaseMessagingService.kt
+// above imports FirebaseMessagingService/RemoteMessage directly, so :app needs
+// its own explicit dependency on the same artifact or compileReleaseKotlin
+// fails with "Unresolved reference". Pinned to the same version
+// expo-notifications resolves (see node_modules/expo-notifications/android/build.gradle)
+// so we don't introduce a second, possibly conflicting Firebase Messaging version.
+const FIREBASE_MESSAGING_DEPENDENCY = "    implementation 'com.google.firebase:firebase-messaging:25.0.1'";
+
+function withFirebaseMessagingDependency(config) {
+  return withAppBuildGradle(config, (config) => {
+    if (config.modResults.contents.includes('com.google.firebase:firebase-messaging')) {
+      return config;
+    }
+    config.modResults.contents = config.modResults.contents.replace(
+      /dependencies\s*\{/,
+      (match) => `${match}\n${FIREBASE_MESSAGING_DEPENDENCY}`
+    );
+    return config;
+  });
+}
+
 function withIosFcmTokenModule(config) {
   return withXcodeProject(config, (config) => {
     const iosDir = config.modRequest.platformProjectRoot;
@@ -108,6 +132,7 @@ function withIosFcmTokenModule(config) {
 
 module.exports = function withNativePushModules(config) {
   config = withAndroidFcmService(config);
+  config = withFirebaseMessagingDependency(config);
   config = withIosFcmTokenModule(config);
   return config;
 };
