@@ -18,6 +18,10 @@
   },
   "jest": {
     "preset": "jest-expo",
+    "setupFiles": [
+      "<rootDir>/jest.mockExpoFetch.js",
+      "jest-expo/src/preset/setup.js"
+    ],
     "testPathIgnorePatterns": [
       "/node_modules/",
       "/supabase/functions/"
