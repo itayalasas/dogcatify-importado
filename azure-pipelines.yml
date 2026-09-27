@@ -125,6 +125,14 @@ steps:
       ANDROID_KEYSTORE_PASSWORD: '$(ANDROID_KEYSTORE_PASSWORD)'
       ANDROID_KEY_ALIAS: '$(ANDROID_KEY_ALIAS)'
       ANDROID_KEY_PASSWORD: '$(ANDROID_KEY_PASSWORD)'
+      # Sentry todavía no tiene org/project/auth token configurados (pendiente,
+      # depende de que el usuario provea el DSN). El plugin de Gradle de Sentry
+      # intenta subir los source maps en cada build release y hace fallar todo
+      # el bundleRelease con "An organization ID or slug is required" mientras
+      # eso no esté configurado. Esta variable le dice al plugin que se salte
+      # ese paso (no afecta al SDK de Sentry embebido en la app, solo el upload
+      # de source maps en build time) hasta que se active Sentry de verdad.
+      SENTRY_DISABLE_AUTO_UPLOAD: 'true'
 
   # 9. Publicar el artefacto (AAB)
   - task: PublishBuildArtifacts@1
