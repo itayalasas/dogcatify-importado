@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Animated, Pressable, Image } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { X } from 'lucide-react-native';
 import { supabaseClient } from '../lib/supabase';
@@ -49,6 +50,7 @@ async function fetchLowestPet(userId: string): Promise<{ worst: LowPet; count: n
 export function GamePetCareAlert() {
   const router = useRouter();
   const { currentUser } = useAuth();
+  const insets = useSafeAreaInsets();
   const [info, setInfo] = useState<{ worst: LowPet; count: number } | null>(null);
   const slide = useRef(new Animated.Value(-160)).current;
   const wiggle = useRef(new Animated.Value(0)).current;
@@ -95,7 +97,13 @@ export function GamePetCareAlert() {
   const { worst, count } = info;
 
   return (
-    <Animated.View style={[styles.wrapper, { transform: [{ translateY: slide }] }]} pointerEvents="box-none">
+    <Animated.View
+      style={[
+        styles.wrapper,
+        { top: insets.top + 8, transform: [{ translateY: slide }] },
+      ]}
+      pointerEvents="box-none"
+    >
       <Pressable onPress={openShelter} style={styles.card}>
         <View style={styles.stripe} />
         <Animated.View style={[styles.avatarWrap, { transform: [{ rotate }] }]}>
@@ -131,7 +139,6 @@ export function GamePetCareAlert() {
 const styles = StyleSheet.create({
   wrapper: {
     position: 'absolute',
-    top: 8,
     left: 12,
     right: 12,
     zIndex: 10000,

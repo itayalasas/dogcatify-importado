@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 
 // Función para mostrar mensaje de depuración con timestamp
 const logDebug = (message: string, data?: any) => {
@@ -343,12 +344,19 @@ export default function PartnerProducts() {
             </View>
           </View>
         </View>
-        <TouchableOpacity 
-          style={styles.addButton} 
-          onPress={handleAddProduct}
+        <OneTimeTooltip
+          hintKey="partner_products_add_button"
+          userId={currentUser?.id}
+          text="Tip: cargá tu primer producto acá para empezar a vender"
+          placement="bottom"
         >
-          <Plus size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={handleAddProduct}
+          >
+            <Plus size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        </OneTimeTooltip>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>

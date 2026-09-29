@@ -7,6 +7,7 @@ import { useAuth } from './AuthContext';
 import { supabaseClient } from '../lib/supabase';
 
 const SAVED_CREDENTIALS_KEY = '@saved_credentials';
+const BIOMETRIC_SETUP_DECLINED_KEY_PREFIX = '@biometric_setup_declined:';
 
 interface BiometricContextType {
   isBiometricAvailable: boolean;
@@ -18,6 +19,8 @@ interface BiometricContextType {
   disableBiometric: () => Promise<void>;
   authenticateWithBiometric: () => Promise<{ email: string; password: string } | null>;
   getStoredCredentials: () => Promise<{ email: string; password: string } | null>;
+  hasDeclinedBiometricSetup: (userId: string) => Promise<boolean>;
+  markBiometricSetupDeclined: (userId: string) => Promise<void>;
 }
 
 const BiometricContext = createContext<BiometricContextType | undefined>(undefined);
@@ -373,6 +376,27 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  // Once a user dismisses the biometric-setup screen with "Ahora no", we stop
+  // asking on every future login — matching how iOS/most apps only prompt
+  // for Face ID/Touch ID once. They can still turn it on later from Profile.
+  const hasDeclinedBiometricSetup = async (userId: string): Promise<boolean> => {
+    try {
+      const value = await AsyncStorage.getItem(`${BIOMETRIC_SETUP_DECLINED_KEY_PREFIX}${userId}`);
+      return value === 'true';
+    } catch (error) {
+      console.error('Error checking biometric setup decline flag:', error);
+      return false;
+    }
+  };
+
+  const markBiometricSetupDeclined = async (userId: string): Promise<void> => {
+    try {
+      await AsyncStorage.setItem(`${BIOMETRIC_SETUP_DECLINED_KEY_PREFIX}${userId}`, 'true');
+    } catch (error) {
+      console.error('Error saving biometric setup decline flag:', error);
+    }
+  };
+
   const getStoredCredentials = async (): Promise<{ email: string; password: string } | null> => {
     try {
       // SecureStore is not available on web
@@ -406,6 +430,8 @@ export const BiometricProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         disableBiometric,
         authenticateWithBiometric,
         getStoredCredentials,
+        hasDeclinedBiometricSetup,
+        markBiometricSetupDeclined,
       }}
     >
       {children}

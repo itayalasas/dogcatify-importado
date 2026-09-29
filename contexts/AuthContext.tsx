@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { Alert, AppState, AppStateStatus } from 'react-native';
 import { router } from 'expo-router';
-import { supabaseClient, getUserProfile, updateUserProfile, signIn as supabaseSignIn, signUp as supabaseSignUp, signOut as supabaseSignOut, setTokenExpirationCallback } from '../lib/supabase';
+import { supabaseClient, getUserProfile, updateUserProfile, signIn as supabaseSignIn, signUp as supabaseSignUp, signOut as supabaseSignOut, setTokenExpirationCallback, setSuppressTokenExpirationAlerts } from '../lib/supabase';
 import { User } from '../types';
 import { logger } from '@/utils/datadogLogger';
 import { logAction, logError } from '../services/auditService';
@@ -30,12 +30,23 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 type AppEmailConfirmationStatus = {
   confirmed: boolean;
-  confirmedBy: 'profile' | 'token' | 'profile+token' | 'auth' | null;
+  confirmedBy: 'profile' | 'token' | 'profile+token' | null;
 };
 
+// `authConfirmed` (Supabase's own auth.users.email_confirmed_at) is
+// intentionally NOT consulted here. This app replaced native Supabase email
+// confirmation with its own token-based flow (see the handle_new_user
+// trigger's comment: "We do not inherit Auth confirmation into the app-level
+// email confirmation flag"). Native confirmation is disabled project-wide,
+// so email_confirmed_at gets auto-set at signUp() time regardless of whether
+// the user ever confirmed anything — trusting it as a fallback here used to
+// mean that any transient failure in createEmailConfirmationToken() (network
+// blip, cold-start timeout) left an account with no token row but a
+// permanently "confirmed" auth state, silently bypassing the block below.
+// profiles.email_confirmed is the single source of truth; it's only ever
+// set true by the real confirm-email flow.
 async function getAppEmailConfirmationStatus(
   userId: string,
-  authConfirmed = false,
 ): Promise<AppEmailConfirmationStatus> {
   try {
     const [{ data: profileData, error: profileError }, { data: tokenData, error: tokenError }] = await Promise.all([
@@ -67,16 +78,14 @@ async function getAppEmailConfirmationStatus(
     const confirmedByToken = tokenData?.is_confirmed === true;
     const confirmed = hasTokenRecord
       ? confirmedByProfile && confirmedByToken
-      : confirmedByProfile || authConfirmed;
+      : confirmedByProfile;
 
     return {
       confirmed,
       confirmedBy: confirmed
         ? hasTokenRecord
           ? 'profile+token'
-          : confirmedByProfile
-            ? 'profile'
-            : 'auth'
+          : 'profile'
         : null,
     };
   } catch (error) {
@@ -186,10 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Only validate email confirmation for SIGNED_IN events (login)
         if (session?.user) {
           try {
-            const confirmationStatus = await getAppEmailConfirmationStatus(
-              session.user.id,
-              session.user.email_confirmed_at !== null,
-            );
+            const confirmationStatus = await getAppEmailConfirmationStatus(session.user.id);
             const isConfirmedInAuth = session.user.email_confirmed_at !== null;
 
             console.log('AuthContext - Confirmation status for signed-in user:', {
@@ -199,11 +205,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               confirmedBy: confirmationStatus.confirmedBy,
               authTableConfirmed: isConfirmedInAuth,
             });
-            
+
             if (!confirmationStatus.confirmed) {
               console.log('=== EMAIL NOT CONFIRMED - BLOCKING ACCESS ===');
               console.log('No confirmation record found in profile or token table');
-              
+
               setIsEmailConfirmed(false);
               setAuthError(`EMAIL_NOT_CONFIRMED:${session.user.email}`);
               await supabaseClient.auth.signOut();
@@ -383,10 +389,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           try {
             // Check email confirmation for initial session
             console.log('AuthContext - Initial session: Checking email confirmation for user:', session.user.email);
-            const confirmationStatus = await getAppEmailConfirmationStatus(
-              session.user.id,
-              session.user.email_confirmed_at !== null,
-            );
+            const confirmationStatus = await getAppEmailConfirmationStatus(session.user.id);
 
             console.log('AuthContext - Initial session confirmation status:', {
               userId: session.user.id,
@@ -679,6 +682,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // confirmation+profile-load pass for the SIGNED_IN event this call is
     // about to trigger, since this function already does that work itself.
     isExplicitLoginRef.current = true;
+    // Clears any suppression a prior account-deletion flow left in place
+    // (see app/profile/delete-account.tsx) so a genuinely expired session
+    // is handled normally from here on.
+    setSuppressTokenExpirationAlerts(false);
     try {
       console.log('AuthContext - Attempting login with Supabase for:', email);
 
@@ -738,10 +745,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('User ID:', data.user.id);
         console.log('User email:', data.user.email);
 
-        const confirmationStatus = await getAppEmailConfirmationStatus(
-          data.user.id,
-          data.user.email_confirmed_at !== null,
-        );
+        const confirmationStatus = await getAppEmailConfirmationStatus(data.user.id);
 
         console.log('Login confirmation status:', {
           userId: data.user.id,

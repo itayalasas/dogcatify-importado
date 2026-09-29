@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Ima
 import { router, useLocalSearchParams } from 'expo-router';
 import { Calendar, DollarSign, Users, Package, TrendingUp, Clock, MessageCircle, ChartBar as BarChart3, Settings, Filter, CreditCard } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
+import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { Button } from '../../components/ui/Button';
@@ -712,7 +713,15 @@ export default function PartnerDashboard() {
 
         {/* Quick Actions */ }
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
+          <OneTimeTooltip
+            hintKey="partner_dashboard_quick_actions"
+            userId={currentUser?.id}
+            text="Tip: desde acá gestionás tu agenda, servicios y clientes en un click"
+            placement="bottom"
+            containerStyle={styles.quickActionsTooltipAnchor}
+          >
+            <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
+          </OneTimeTooltip>
           <View style={styles.quickActions}>
             {shouldShowAgenda() && (
               <TouchableOpacity 
@@ -1102,6 +1111,9 @@ const styles = StyleSheet.create({
   },
   section: {
     marginBottom: 24,
+  },
+  quickActionsTooltipAnchor: {
+    alignSelf: 'flex-start',
   },
   sectionTitle: {
     fontSize: 18,

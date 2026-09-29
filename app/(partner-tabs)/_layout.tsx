@@ -1,4 +1,4 @@
-import { Tabs , router, useLocalSearchParams, usePathname } from 'expo-router';
+import { Tabs , router, useLocalSearchParams, usePathname, useSegments } from 'expo-router';
 import { ChartBar as BarChart3, Building, ShoppingBag, Calendar, User, CreditCard , MessageCircle } from 'lucide-react-native';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -15,6 +15,11 @@ export default function PartnerTabLayout() {
   const { currentUser, authInitialized, activeRole, isPostLoginFlowPending } = useAuth();
   const { businessId } = useLocalSearchParams<{ businessId?: string }>();
   const pathname = usePathname();
+  const segments = useSegments();
+  // See app/(tabs)/_layout.tsx: this layout stays mounted in the background
+  // after navigating away, so its redirect effects below must not act on
+  // app-wide pathname changes while some other, focused screen is active.
+  const isFocusedGroup = segments[0] === '(partner-tabs)';
   const insets = useSafeAreaInsets();
   const [partnerProfile, setPartnerProfile] = useState<any | null>(null);
   const [partnerRows, setPartnerRows] = useState<any[]>([]);
@@ -33,19 +38,19 @@ export default function PartnerTabLayout() {
   const [onboardingRequired, setOnboardingRequired] = useState(false);
 
   useEffect(() => {
-    if (authInitialized && !currentUser) {
+    if (isFocusedGroup && authInitialized && !currentUser) {
       console.log('User not authenticated in partner tabs, redirecting to login');
       if (pathname !== '/auth/login') {
         router.replace('/auth/login');
       }
     }
-  }, [currentUser, authInitialized, pathname]);
+  }, [isFocusedGroup, currentUser, authInitialized, pathname]);
 
   useEffect(() => {
     let mounted = true;
 
     const checkOnboarding = async () => {
-      if (!authInitialized || !currentUser || isPostLoginFlowPending) {
+      if (!isFocusedGroup || !authInitialized || !currentUser || isPostLoginFlowPending) {
         if (mounted) {
           setOnboardingChecked(true);
           setOnboardingRequired(false);
@@ -77,10 +82,10 @@ export default function PartnerTabLayout() {
     return () => {
       mounted = false;
     };
-  }, [authInitialized, currentUser?.id, isPostLoginFlowPending, pathname]);
+  }, [isFocusedGroup, authInitialized, currentUser?.id, isPostLoginFlowPending, pathname]);
 
   useEffect(() => {
-    if (!authInitialized || !currentUser || isPostLoginFlowPending || !onboardingChecked || onboardingRequired) return;
+    if (!isFocusedGroup || !authInitialized || !currentUser || isPostLoginFlowPending || !onboardingChecked || onboardingRequired) return;
 
     if (activeRole === 'owner' || isOwnerOnly) {
       router.replace('/(tabs)');
@@ -95,7 +100,7 @@ export default function PartnerTabLayout() {
     if (!activeRole && hasMultipleRoles) {
       router.replace('/auth/select-role');
     }
-  }, [authInitialized, currentUser?.id, currentUser?.isOwner, currentUser?.isPartner, currentUser?.isAdmin, activeRole, hasMultipleRoles, isPostLoginFlowPending, onboardingChecked, onboardingRequired]);
+  }, [isFocusedGroup, authInitialized, currentUser?.id, currentUser?.isOwner, currentUser?.isPartner, currentUser?.isAdmin, activeRole, hasMultipleRoles, isPostLoginFlowPending, onboardingChecked, onboardingRequired]);
 
   useEffect(() => {
     if (!authInitialized) return;

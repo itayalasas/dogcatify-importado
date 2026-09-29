@@ -1,4 +1,4 @@
-import { Tabs, usePathname , router } from 'expo-router';
+import { Tabs, usePathname, useSegments, router } from 'expo-router';
 import { ChartBar as BarChart3, Users, Volume2, Settings, MapPin, FileText, ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { View, Text, Platform } from 'react-native';
@@ -10,6 +10,11 @@ import { LoadingScreen } from '../../components/ui/LoadingScreen';
 export default function AdminTabLayout() {
   const { currentUser, activeRole, authInitialized, isPostLoginFlowPending } = useAuth();
   const pathname = usePathname();
+  const segments = useSegments();
+  // See app/(tabs)/_layout.tsx: this layout stays mounted in the background
+  // after navigating away, so its redirect effects below must not act on
+  // app-wide pathname changes while some other, focused screen is active.
+  const isFocusedGroup = segments[0] === '(admin-tabs)';
   const insets = useSafeAreaInsets();
   const availableRoles = getAvailableRoles(currentUser);
   const hasMultipleRoles = availableRoles.length > 1;
@@ -30,7 +35,7 @@ export default function AdminTabLayout() {
     let mounted = true;
 
     const checkOnboarding = async () => {
-      if (!authInitialized || !currentUser || isPostLoginFlowPending) {
+      if (!isFocusedGroup || !authInitialized || !currentUser || isPostLoginFlowPending) {
         if (mounted) {
           setOnboardingChecked(true);
           setOnboardingRequired(false);
@@ -62,10 +67,10 @@ export default function AdminTabLayout() {
     return () => {
       mounted = false;
     };
-  }, [authInitialized, currentUser?.id, isPostLoginFlowPending, pathname]);
+  }, [isFocusedGroup, authInitialized, currentUser?.id, isPostLoginFlowPending, pathname]);
 
   useEffect(() => {
-    if (!authInitialized || isPostLoginFlowPending || !onboardingChecked || onboardingRequired) return;
+    if (!isFocusedGroup || !authInitialized || isPostLoginFlowPending || !onboardingChecked || onboardingRequired) return;
 
     if (!currentUser) {
       if (pathname !== '/auth/login') {
@@ -87,7 +92,7 @@ export default function AdminTabLayout() {
     if (!activeRole && hasMultipleRoles) {
       router.replace('/auth/select-role');
     }
-  }, [authInitialized, currentUser?.id, currentUser?.isOwner, currentUser?.isPartner, currentUser?.isAdmin, activeRole, hasMultipleRoles, isPostLoginFlowPending, pathname, onboardingChecked, onboardingRequired]);
+  }, [isFocusedGroup, authInitialized, currentUser?.id, currentUser?.isOwner, currentUser?.isPartner, currentUser?.isAdmin, activeRole, hasMultipleRoles, isPostLoginFlowPending, pathname, onboardingChecked, onboardingRequired]);
   
   if (isPostLoginFlowPending) {
     return <LoadingScreen message="Preparando tu inicio..." />;

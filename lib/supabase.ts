@@ -137,6 +137,22 @@ export const setTokenExpirationCallback = (callback: () => void) => {
   tokenExpirationCallback = callback;
 };
 
+// Flows that deliberately tear down the current session for an account that
+// no longer exists server-side (e.g. self-deletion in app/profile/delete-account.tsx)
+// make authenticated calls — clearing push tokens, auth.signOut() itself —
+// AFTER the underlying user row is already gone. Those calls legitimately
+// get a 401 back, which createAuthAwareFetch/handleSupabaseError below would
+// otherwise read as "your session expired" and fire their own alert + login
+// redirect on top of (and racing with) that flow's own success message and
+// navigation. Call setSuppressTokenExpirationAlerts(true) right before that
+// kind of expected-to-401 cleanup, and reset it to false once a fresh,
+// legitimate session exists again (AuthContext's login() does this).
+let suppressTokenExpirationAlerts = false;
+
+export const setSuppressTokenExpirationAlerts = (value: boolean) => {
+  suppressTokenExpirationAlerts = value;
+};
+
 const isSessionErrorResponse = (status: number, responseText: string): boolean => {
   const text = (responseText || '').toLowerCase();
 
@@ -161,7 +177,7 @@ const createAuthAwareFetch = () => {
         const responseClone = response.clone();
         const responseText = await responseClone.text();
 
-        if (isSessionErrorResponse(response.status, responseText) && tokenExpirationCallback) {
+        if (isSessionErrorResponse(response.status, responseText) && tokenExpirationCallback && !suppressTokenExpirationAlerts) {
           console.log('Session error detected from Supabase HTTP response, triggering expiration callback');
           tokenExpirationCallback();
         }
@@ -189,7 +205,7 @@ export const handleSupabaseError = (error: any) => {
     if (isJWTError) {
       console.log('JWT/Session error detected in API call:', errorMessage);
 
-      if (tokenExpirationCallback) {
+      if (tokenExpirationCallback && !suppressTokenExpirationAlerts) {
         console.log('Triggering token expiration callback');
         tokenExpirationCallback();
       }

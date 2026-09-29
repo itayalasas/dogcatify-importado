@@ -6,6 +6,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { Input } from '../../components/ui/Input';
+import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 
@@ -203,12 +204,19 @@ export default function Places() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Lugares Pet-Friendly</Text>
-        <TouchableOpacity
-          style={styles.addPlaceButton}
-          onPress={() => router.push('/places/register')}
+        <OneTimeTooltip
+          hintKey="places_register_button"
+          userId={currentUser?.id}
+          text="Tip: ¿conocés un lugar pet-friendly? Registralo acá y ayudá a la comunidad"
+          placement="bottom"
         >
-          <Plus size={22} color="#FFFFFF" />
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.addPlaceButton}
+            onPress={() => router.push('/places/register')}
+          >
+            <Plus size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        </OneTimeTooltip>
       </View>
 
       <View style={styles.searchSection}>

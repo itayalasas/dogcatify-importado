@@ -1,4 +1,5 @@
 import { supabaseClient } from '@/lib/supabase';
+import { envConfig } from './envConfig';
 
 let cachedConfig: Record<string, any> | null = null;
 let lastFetchTime = 0;
@@ -6,7 +7,22 @@ const CACHE_DURATION = 5 * 60 * 1000;
 
 const trimTrailingSlash = (value: string) => String(value || '').trim().replace(/\/+$/, '');
 
-const getSupabaseBaseUrl = (): string => trimTrailingSlash(process.env.EXPO_PUBLIC_SUPABASE_URL || '');
+// This app's real Supabase URL/anon key are loaded asynchronously at runtime
+// by envConfig (see utils/envConfig.ts), not via process.env.EXPO_PUBLIC_*
+// (the .env entries for those are commented out on purpose). Reading
+// process.env.EXPO_PUBLIC_SUPABASE_URL directly here — as this file used to
+// — always returned '', which silently disabled the cross-project guard
+// below: it let a stale/wrong email_api_url stored in the app_config table
+// (from a since-abandoned Supabase project) pass through unchecked, because
+// the guard's own "does this even look like our project?" check never had a
+// real base URL to compare against.
+const ensureRuntimeEnvConfig = async (): Promise<void> => {
+  if (!envConfig.isInitialized()) {
+    await envConfig.initialize();
+  }
+};
+
+const getSupabaseBaseUrl = (): string => trimTrailingSlash(envConfig.get('EXPO_PUBLIC_SUPABASE_URL') || '');
 
 const sameSupabaseHost = (candidateUrl: string, baseUrl: string): boolean => {
   try {
@@ -35,7 +51,7 @@ const matchesSupabaseFunctionPath = (candidateUrl: string, functionName: string)
 };
 
 const resolveDefaultEmailApiUrl = (): string => {
-  const explicitEmailUrl = process.env.EXPO_PUBLIC_EMAIL_API_URL?.trim();
+  const explicitEmailUrl = envConfig.get('EXPO_PUBLIC_EMAIL_API_URL')?.trim();
   const supabaseUrl = getSupabaseBaseUrl();
   const fallbackEmailUrl = supabaseUrl ? `${supabaseUrl}/functions/v1/send-email` : '';
 
@@ -62,15 +78,13 @@ const resolveDefaultEmailApiUrl = (): string => {
 
 const resolveDefaultEmailApiKey = (): string => {
   return (
-    process.env.EXPO_PUBLIC_EMAIL_API_KEY?.trim() ||
-    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
+    envConfig.get('EXPO_PUBLIC_EMAIL_API_KEY')?.trim() ||
+    envConfig.get('EXPO_PUBLIC_SUPABASE_ANON_KEY')?.trim() ||
     ''
   );
 };
 
-const DEFAULT_CONFIG = {
-  email_api_url: resolveDefaultEmailApiUrl(),
-  email_api_key: resolveDefaultEmailApiKey(),
+const STATIC_DEFAULTS = {
   mercadopago_public_key: '',
   app_name: 'DogCatify',
   support_email: 'support@dogcatify.com',
@@ -78,17 +92,17 @@ const DEFAULT_CONFIG = {
   enable_notifications: true,
 };
 
-const fallbackConfig = {
-  email_api_url: DEFAULT_CONFIG.email_api_url,
-  email_api_key: DEFAULT_CONFIG.email_api_key,
-  mercadopago_public_key: process.env.EXPO_PUBLIC_MERCADOPAGO_PUBLIC_KEY?.trim() || DEFAULT_CONFIG.mercadopago_public_key,
-  app_name: DEFAULT_CONFIG.app_name,
-  support_email: DEFAULT_CONFIG.support_email,
-  max_file_upload_size: DEFAULT_CONFIG.max_file_upload_size,
-  enable_notifications: DEFAULT_CONFIG.enable_notifications,
-};
+const buildFallbackConfig = () => ({
+  email_api_url: resolveDefaultEmailApiUrl(),
+  email_api_key: resolveDefaultEmailApiKey(),
+  mercadopago_public_key: envConfig.get('EXPO_PUBLIC_MERCADOPAGO_PUBLIC_KEY')?.trim() || STATIC_DEFAULTS.mercadopago_public_key,
+  app_name: STATIC_DEFAULTS.app_name,
+  support_email: STATIC_DEFAULTS.support_email,
+  max_file_upload_size: STATIC_DEFAULTS.max_file_upload_size,
+  enable_notifications: STATIC_DEFAULTS.enable_notifications,
+});
 
-const normalizeEmailApiConfig = (emailApiUrl: string, emailApiKey: string) => {
+const normalizeEmailApiConfig = (emailApiUrl: string, emailApiKey: string, fallbackConfig: ReturnType<typeof buildFallbackConfig>) => {
   const baseUrl = getSupabaseBaseUrl();
   const normalizedUrl = trimTrailingSlash(emailApiUrl);
   const normalizedKey = String(emailApiKey || '').trim();
@@ -124,6 +138,9 @@ export async function getAppConfig(forceRefresh = false): Promise<Record<string,
     return cachedConfig;
   }
 
+  await ensureRuntimeEnvConfig();
+  const fallbackConfig = buildFallbackConfig();
+
   try {
     const { data, error } = await supabaseClient
       .from('app_config')
@@ -152,6 +169,7 @@ export async function getAppConfig(forceRefresh = false): Promise<Record<string,
     const safeEmailConfig = normalizeEmailApiConfig(
       String(mergedConfig.email_api_url || ''),
       String(mergedConfig.email_api_key || ''),
+      fallbackConfig,
     );
 
     cachedConfig = {
@@ -169,7 +187,14 @@ export async function getAppConfig(forceRefresh = false): Promise<Record<string,
 
 export async function getConfigValue<T = any>(key: string, defaultValue?: T): Promise<T> {
   const config = await getAppConfig();
-  return (config[key] as T) ?? defaultValue ?? (fallbackConfig[key as keyof typeof fallbackConfig] as T);
+  if (config[key] !== undefined) {
+    return config[key] as T;
+  }
+  if (defaultValue !== undefined) {
+    return defaultValue;
+  }
+  await ensureRuntimeEnvConfig();
+  return buildFallbackConfig()[key as keyof ReturnType<typeof buildFallbackConfig>] as T;
 }
 
 export function clearConfigCache() {

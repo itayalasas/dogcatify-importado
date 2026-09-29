@@ -111,7 +111,8 @@ export default function Login() {
     isBiometricSupported,
     isBiometricEnabled,
     biometricType,
-    authenticateWithBiometric
+    authenticateWithBiometric,
+    hasDeclinedBiometricSetup
   } = useBiometric();
 
   // Load saved credentials on component mount
@@ -216,8 +217,12 @@ export default function Login() {
           await clearSavedCredentials();
         }
         
-        // Check if should show biometric setup
-        if (isBiometricSupported && !isBiometricEnabled) {
+        // Check if should show biometric setup. Skipped once already
+        // (@biometric_setup_declined:<userId>) means never ask again on
+        // login — they can still enable it later from Profile.
+        const alreadyDeclined = await hasDeclinedBiometricSetup(result.id);
+
+        if (isBiometricSupported && !isBiometricEnabled && !alreadyDeclined) {
           // Navigate to biometric setup screen instead of directly to tabs
           router.replace({
             pathname: '/auth/biometric-setup',

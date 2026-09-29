@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, ActivityIndicator, TouchableOpacity, Text, StatusBar, SafeAreaView, Platform } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, TouchableOpacity, Text, StatusBar, SafeAreaView, Platform, Linking } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,6 +56,59 @@ export default function GameScreen() {
     prepareGameSession();
   }, [tab]);
 
+  /**
+   * Mensajes del juego:
+   * - DOGCATIFY_GO_HOME: botón "Ir a la App DogCatiFy" → home con pestañas.
+   * - DOGCATIFY_OPEN: anuncios del juego → planes de suscripción, una promoción o el home.
+   *   Las promociones siguen la misma lógica de enlaces que el home (dogcatify://services|products|partners/<id>).
+   */
+  const handleGameMessage = (raw: string) => {
+    let msg: any;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      return;
+    }
+
+    if (msg?.type === 'DOGCATIFY_GO_HOME') {
+      router.replace('/(tabs)');
+      return;
+    }
+    if (msg?.type !== 'DOGCATIFY_OPEN') return;
+
+    if (msg.route === 'subscription') {
+      router.push('/profile/subscription');
+      return;
+    }
+
+    if (msg.route === 'promotion') {
+      const url: string | null = typeof msg.ctaUrl === 'string' ? msg.ctaUrl : null;
+      const discount = Number(msg.discountPercent) || 0;
+
+      if (url?.startsWith('dogcatify://')) {
+        const [kind, id] = url.replace('dogcatify://', '').split('/');
+        if (id && kind === 'services') {
+          router.push(discount > 0 ? `/services/${id}?discount=${discount}` : `/services/${id}`);
+          return;
+        }
+        if (id && kind === 'products') {
+          router.push(discount > 0 ? `/products/${id}?discount=${discount}` : `/products/${id}`);
+          return;
+        }
+        if (id && kind === 'partners') {
+          router.push(`/services/partner/${id}`);
+          return;
+        }
+      } else if (url?.startsWith('http')) {
+        Linking.openURL(url).catch(() => {});
+        return;
+      }
+    }
+
+    // Sin enlace específico: al home, donde también está la promoción
+    router.replace('/(tabs)');
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#ea580c" />
@@ -89,6 +142,7 @@ export default function GameScreen() {
             mediaPlaybackRequiresUserAction={false}
             startInLoadingState={true}
             onLoadEnd={() => setLoading(false)}
+            onMessage={event => handleGameMessage(event.nativeEvent.data)}
             renderLoading={() => (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#ea580c" />

@@ -32,8 +32,14 @@ export default function PetDetail() {
   }>();
   const { currentUser } = useAuth();
 
-  // Determine if user has edit permissions
-  const canEdit = !permissionLevel || permissionLevel === 'edit' || permissionLevel === 'full';
+  // Determine if user has edit permissions. `permissionLevel` only arrives as
+  // a route param for pets shared via pet_shares (see handlePetPress in
+  // app/(tabs)/pets.tsx) — an owner opening their own pet never gets this
+  // param, hence the `!permissionLevel` fallback to true. Shared values are
+  // exactly 'view' | 'edit' | 'admin' (see permissionLevels in
+  // app/pets/share-pet.tsx) — 'full' was never a real value and 'admin' was
+  // missing here, which made an admin-level share behave as view-only.
+  const canEdit = !permissionLevel || permissionLevel === 'edit' || permissionLevel === 'admin';
   const [pet, setPet] = useState<any>(null);
   const [vaccines, setVaccines] = useState<any[]>([]);
   const [illnesses, setIllnesses] = useState<any[]>([]);

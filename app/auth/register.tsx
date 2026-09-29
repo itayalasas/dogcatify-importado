@@ -15,6 +15,7 @@ import { ArrowLeft, User, Mail, Lock } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import {
   createEmailConfirmationToken,
@@ -41,6 +42,7 @@ export default function Register() {
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
 
   const { t } = useLanguage();
+  const { clearAuthError } = useAuth();
 
   const passwordValidation = validatePassword(password);
   const passwordRules = passwordValidation.rules.map((rule) => ({
@@ -207,10 +209,24 @@ export default function Register() {
         ? `Tu cuenta ha sido creada exitosamente.\n\nHemos enviado un correo de confirmación a:\n${trimmedEmail}\n\nPor favor revisa tu bandeja de entrada y la carpeta de spam, y haz clic en el enlace de confirmación.\n\nEl enlace expira en 24 horas.`
         : `Tu cuenta ha sido creada, pero no pudimos enviar el correo de confirmación automáticamente.\n\nRevisa tu conexión o intenta reenviar el correo desde la pantalla de inicio de sesión.\n\nCorreo registrado:\n${trimmedEmail}`;
 
+      // signUp() above triggers Supabase's own SIGNED_IN event, which
+      // AuthContext's onAuthStateChange listener treats like a login attempt:
+      // it checks app-level confirmation, finds the brand-new account
+      // unconfirmed, and sets a global EMAIL_NOT_CONFIRMED authError before
+      // signing back out. If that error is still in context when login.tsx
+      // mounts next, its own authError effect pops the "reenviar correo"
+      // modal immediately — even though the user never tried to log in.
+      // Clear it here so login.tsx starts clean; the modal should only ever
+      // appear from a real login attempt.
+      clearAuthError();
+
       Alert.alert(
         confirmationTitle,
         confirmationMessage,
-        [{ text: 'ENTENDIDO', onPress: () => router.replace('/auth/login') }]
+        [{ text: 'ENTENDIDO', onPress: () => {
+          clearAuthError();
+          router.replace('/auth/login');
+        } }]
       );
     } catch (error: any) {
       console.error('Registration error:', error);

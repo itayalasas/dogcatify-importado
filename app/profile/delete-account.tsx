@@ -7,7 +7,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
-import { supabaseClient } from '../../lib/supabase';
+import { supabaseClient, setSuppressTokenExpirationAlerts } from '../../lib/supabase';
 import { envConfig } from '../../utils/envConfig';
 
 const DOGCATIFY_STORAGE_BUCKET = 'dogcatify';
@@ -564,6 +564,15 @@ export default function DeleteAccount() {
         setDeletionProgress(prev => [...prev, `⚠️ Error eliminando de auth: ${getErrorMessage(authError)}`]);
         setDeletionProgress(prev => [...prev, '⚠️ Continuando con logout forzado...']);
       }
+
+      // From here on the account may already be gone from auth.users (the
+      // delete-user call above), so the remaining authenticated calls below
+      // (clearing push tokens, auth.signOut() itself, inside logout()) can
+      // legitimately 401 — that's expected for a just-deleted account, not a
+      // real session expiration, so stop the global interceptor from
+      // showing its own "sesión expirada" alert and redirect on top of the
+      // success message below.
+      setSuppressTokenExpirationAlerts(true);
 
       // Sign out user from current session
       setDeletionProgress(prev => [...prev, 'Cerrando sesión...']);

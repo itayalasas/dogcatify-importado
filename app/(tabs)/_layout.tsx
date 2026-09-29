@@ -1,4 +1,4 @@
-import { Tabs, usePathname , router } from 'expo-router';
+import { Tabs, usePathname, useSegments, router } from 'expo-router';
 import { Chrome as Home, Heart, ShoppingBag, Briefcase, MapPin, User } from 'lucide-react-native';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -12,6 +12,15 @@ export default function TabLayout() {
   const { t } = useLanguage();
   const { currentUser, authInitialized, activeRole, isPostLoginFlowPending } = useAuth();
   const pathname = usePathname();
+  const segments = useSegments();
+  // Expo Router keeps this layout mounted in the background after navigating
+  // away from it (e.g. to /auth/login), so its effects below would otherwise
+  // keep firing on every app-wide pathname change and hijack navigation with
+  // a stale router.replace('/auth/login') even while the user is on a
+  // completely different, focused screen (e.g. tapping "Registrarme" from
+  // login). Only act on these effects while this (tabs) group is the one
+  // actually being navigated.
+  const isFocusedGroup = segments[0] === '(tabs)';
   const insets = useSafeAreaInsets();
   const availableRoles = getAvailableRoles(currentUser);
   const hasMultipleRoles = availableRoles.length > 1;
@@ -25,7 +34,7 @@ export default function TabLayout() {
     let mounted = true;
 
     const checkOnboarding = async () => {
-      if (!authInitialized || !currentUser || isPostLoginFlowPending) {
+      if (!isFocusedGroup || !authInitialized || !currentUser || isPostLoginFlowPending) {
         if (mounted) {
           setOnboardingChecked(true);
           setOnboardingRequired(false);
@@ -57,10 +66,10 @@ export default function TabLayout() {
     return () => {
       mounted = false;
     };
-  }, [authInitialized, currentUser?.id, isPostLoginFlowPending, pathname]);
+  }, [isFocusedGroup, authInitialized, currentUser?.id, isPostLoginFlowPending, pathname]);
 
   useEffect(() => {
-    if (!authInitialized || isPostLoginFlowPending || !onboardingChecked || onboardingRequired) return;
+    if (!isFocusedGroup || !authInitialized || isPostLoginFlowPending || !onboardingChecked || onboardingRequired) return;
 
     if (!currentUser) {
       if (pathname !== '/auth/login') {
@@ -82,7 +91,7 @@ export default function TabLayout() {
     if (!activeRole && hasMultipleRoles) {
       router.replace('/auth/select-role');
     }
-  }, [authInitialized, currentUser?.id, currentUser?.isOwner, currentUser?.isPartner, currentUser?.isAdmin, activeRole, hasMultipleRoles, isPostLoginFlowPending, pathname, onboardingChecked, onboardingRequired]);
+  }, [isFocusedGroup, authInitialized, currentUser?.id, currentUser?.isOwner, currentUser?.isPartner, currentUser?.isAdmin, activeRole, hasMultipleRoles, isPostLoginFlowPending, pathname, onboardingChecked, onboardingRequired]);
 
   if (isPostLoginFlowPending) {
     return <LoadingScreen message="Preparando tu inicio..." />;

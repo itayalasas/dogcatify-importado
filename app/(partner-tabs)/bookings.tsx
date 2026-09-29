@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Calendar, Clock, User, Phone, Check, X, Eye, MapPin, DollarSign } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 
@@ -457,32 +458,39 @@ export default function PartnerBookings() {
         </View>
       </View>
 
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'pending' && styles.activeTab]}
-          onPress={() => setActiveTab('pending')}
-        >
-          <Text style={[styles.tabText, activeTab === 'pending' && styles.activeTabText]}>
-            Pendientes ({bookings.filter(b => b.status === 'pending').length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'confirmed' && styles.activeTab]}
-          onPress={() => setActiveTab('confirmed')}
-        >
-          <Text style={[styles.tabText, activeTab === 'confirmed' && styles.activeTabText]}>
-            Confirmadas ({bookings.filter(b => b.status === 'confirmed').length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'completed' && styles.activeTab]}
-          onPress={() => setActiveTab('completed')}
-        >
-          <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>
-            Completadas ({bookings.filter(b => b.status === 'completed').length})
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <OneTimeTooltip
+        hintKey="partner_bookings_tabs"
+        userId={currentUser?.id}
+        text="Tip: confirmá las reservas pendientes para que tus clientes sepan que las viste"
+        placement="bottom"
+      >
+        <View style={styles.tabBar}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'pending' && styles.activeTab]}
+            onPress={() => setActiveTab('pending')}
+          >
+            <Text style={[styles.tabText, activeTab === 'pending' && styles.activeTabText]}>
+              Pendientes ({bookings.filter(b => b.status === 'pending').length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'confirmed' && styles.activeTab]}
+            onPress={() => setActiveTab('confirmed')}
+          >
+            <Text style={[styles.tabText, activeTab === 'confirmed' && styles.activeTabText]}>
+              Confirmadas ({bookings.filter(b => b.status === 'confirmed').length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'completed' && styles.activeTab]}
+            onPress={() => setActiveTab('completed')}
+          >
+            <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>
+              Completadas ({bookings.filter(b => b.status === 'completed').length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </OneTimeTooltip>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {filteredBookings.length === 0 ? (
