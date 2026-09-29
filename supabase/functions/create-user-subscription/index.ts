@@ -310,12 +310,23 @@ const findMercadoPagoPreapprovalForSubscription = async (
 
   const externalReference = String(subscription?.id || "").trim();
   if (externalReference) {
-    const query = new URLSearchParams({ external_reference: externalReference });
-    const search = await fetchMercadoPagoOptional(accessToken, `/preapproval/search?${query.toString()}`);
-    const match = getSearchResults(search).find((item: any) =>
-      String(item?.external_reference || "") === externalReference
-    );
-    if (match) return match;
+    // The preapproval was created with external_reference: `user:${id}` (see
+    // the preapprovalPayload below), not the bare local id — searching for
+    // the bare id alone here never matched, so every sync (including the
+    // "just returned from Mercado Pago" retry loop below) fell through to
+    // MERCADOPAGO_PREAPPROVAL_NOT_FOUND and the local subscription stayed
+    // stuck on "pending" forever. Try the prefixed form first, matching how
+    // subscription-return's buildExternalReferenceCandidates resolves it.
+    const referenceCandidates = [`user:${externalReference}`, externalReference];
+
+    for (const candidate of referenceCandidates) {
+      const query = new URLSearchParams({ external_reference: candidate });
+      const search = await fetchMercadoPagoOptional(accessToken, `/preapproval/search?${query.toString()}`);
+      const match = getSearchResults(search).find((item: any) =>
+        String(item?.external_reference || "") === candidate
+      );
+      if (match) return match;
+    }
   }
 
   const mpPlanId = String(subscription?.mercadopago_preapproval_plan_id || "").trim();
@@ -459,7 +470,19 @@ const syncExistingSubscriptionStatus = async (supabase: any, user: any, body: an
 
   const subscription = await loadLocalSubscription(supabase, user.id, subscriptionId);
   const mpConfig = await getAdminMercadoPagoConfig(supabase);
-  const preapproval = await findMercadoPagoPreapprovalWithRetry(mpConfig.access_token, subscription);
+  // The 5-attempt/1.2s-apart retry loop exists for the "just came back from
+  // Mercado Pago's checkout" moment, where the preapproval's status can
+  // genuinely still be settling and it's worth a few seconds of polling
+  // while the UI shows that explicitly. A plain visit to the subscription
+  // screen that happens to find a stale "pending" row (e.g. an earlier
+  // rejected attempt) has no such redirect to wait on, so app/profile/
+  // subscription.tsx passes quick:true there — skip the retry loop entirely
+  // so opening the screen doesn't hang for up to ~10s on an unrelated old
+  // subscription.
+  const isQuickSync = Boolean(body?.quick);
+  const preapproval = isQuickSync
+    ? await findMercadoPagoPreapprovalForSubscription(mpConfig.access_token, subscription)
+    : await findMercadoPagoPreapprovalWithRetry(mpConfig.access_token, subscription);
 
   if (!preapproval) {
     return {

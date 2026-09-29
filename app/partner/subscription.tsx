@@ -141,6 +141,24 @@ export default function PartnerSubscriptionScreen() {
   const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
 
+  // See app/profile/subscription.tsx's handleGoBack comment: reaching this
+  // screen with subscription_id means we just got deep-linked back from
+  // Mercado Pago's checkout, where the navigation stack can carry leftover
+  // entries from the app relaunching/resuming (e.g. a stray redirect to
+  // /auth/login) that a plain router.back() would step into despite the
+  // partner being logged in. Go straight to a known-good destination there
+  // instead of trusting stack history.
+  const cameFromPaymentReturn = Boolean(subscription_id);
+
+  const handleGoBack = () => {
+    if (cameFromPaymentReturn) {
+      router.replace('/(tabs)');
+      return;
+    }
+
+    router.back();
+  };
+
   useEffect(() => {
     loadData();
   }, [currentUser?.id, requestedPartnerId, subscription_id]);
@@ -398,7 +416,7 @@ export default function PartnerSubscriptionScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
             <ArrowLeft size={24} color="#111827" />
           </TouchableOpacity>
           <Text style={styles.title}>Planes del aliado</Text>
@@ -407,7 +425,7 @@ export default function PartnerSubscriptionScreen() {
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>No se encontró tu cuenta de aliado</Text>
           <Text style={styles.emptyText}>Necesitamos al menos un negocio verificado para mostrar y contratar planes de aliado.</Text>
-          <Button title="Volver" onPress={() => router.back()} />
+          <Button title="Volver" onPress={handleGoBack} />
         </View>
       </SafeAreaView>
     );
@@ -416,7 +434,7 @@ export default function PartnerSubscriptionScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>

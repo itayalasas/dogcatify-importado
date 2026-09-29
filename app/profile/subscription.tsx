@@ -305,20 +305,33 @@ export default function Subscription() {
       if (error) throw error;
 
       if (data && shouldSyncSubscriptionStatus(data)) {
+        if (!shouldForceSync) {
+          // Just opening the screen and happening to find an old "pending"
+          // row (e.g. from an earlier rejected attempt) is not worth making
+          // the whole screen wait on Mercado Pago — render with what we have
+          // now and let the quick, single-attempt sync below update it once
+          // it resolves. The multi-attempt polling loop below is reserved
+          // for shouldForceSync, when the user just got redirected back from
+          // paying and is actively watching this screen for the result.
+          setUserSubscription(data);
+          void syncSubscriptionStatus(data.id, { quick: true }).then((synced) => {
+            if (synced) setUserSubscription(synced);
+          });
+          return;
+        }
+
         let syncedSubscription = await syncSubscriptionStatus(data.id);
 
-        if (shouldForceSync) {
-          for (let attempt = 0; attempt < 4; attempt += 1) {
-            const currentStatus = String(syncedSubscription?.status || data.status || '').toLowerCase();
-            if (currentStatus !== 'pending') {
-              break;
-            }
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          const currentStatus = String(syncedSubscription?.status || data.status || '').toLowerCase();
+          if (currentStatus !== 'pending') {
+            break;
+          }
 
-            await delay(1200);
-            const retriedSubscription = await syncSubscriptionStatus(data.id);
-            if (retriedSubscription) {
-              syncedSubscription = retriedSubscription;
-            }
+          await delay(1200);
+          const retriedSubscription = await syncSubscriptionStatus(data.id);
+          if (retriedSubscription) {
+            syncedSubscription = retriedSubscription;
           }
         }
 
@@ -341,7 +354,7 @@ export default function Subscription() {
     );
   };
 
-  const syncSubscriptionStatus = async (subscriptionId: string) => {
+  const syncSubscriptionStatus = async (subscriptionId: string, options: { quick?: boolean } = {}) => {
     try {
       setSyncingSubscriptionId(subscriptionId);
 
@@ -349,6 +362,7 @@ export default function Subscription() {
         body: {
           action: 'sync-status',
           subscriptionId,
+          quick: Boolean(options.quick),
         },
       });
 
@@ -364,7 +378,26 @@ export default function Subscription() {
     }
   };
 
+  // Reaching this screen with a subscription_id/target param means we just
+  // got deep-linked back from Mercado Pago's checkout (see
+  // app/subscription/return.tsx and _layout.tsx's handleDeepLink), often
+  // after the OS relaunched or resumed the app from the background. The
+  // navigation stack at that point can carry leftover entries from that
+  // relaunch (e.g. a transient auth-check redirect to /auth/login that fired
+  // before the session finished restoring) that router.canGoBack()/back()
+  // would happily step into, landing an already-logged-in user back on the
+  // login screen. Sidestep that uncertainty entirely for this case and go
+  // straight to a known-good destination instead of trusting stack history.
+  const cameFromPaymentReturn = Boolean(
+    subscription_id || target_param || external_reference_param || subscription_status || subscription_message,
+  );
+
   const handleGoBack = () => {
+    if (cameFromPaymentReturn) {
+      router.replace('/(tabs)');
+      return;
+    }
+
     if (router.canGoBack()) {
       router.back();
       return;
@@ -773,7 +806,7 @@ export default function Subscription() {
                       {tone.audienceLabel}
                     </Text>
                   </View>
-                  {plan.trial_days && plan.trial_days > 0 && (
+                  {Boolean(plan.trial_days && plan.trial_days > 0) && (
                     <View style={[styles.trialBadge, !isTrialAvailable && styles.trialBadgeUsed]}>
                       <Text style={[styles.trialBadgeText, !isTrialAvailable && styles.trialBadgeTextUsed]}>
                         {isTrialAvailable ? `${plan.trial_days} días de prueba` : 'Prueba ya utilizada'}

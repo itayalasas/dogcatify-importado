@@ -1,16 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Linking } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Package, Clock, Truck, CircleCheck as CheckCircle, Circle as XCircle, MapPin, Phone, Star, MessageSquare } from 'lucide-react-native';
+import { ArrowLeft, Package, Clock, Truck, CircleCheck as CheckCircle, Circle as XCircle, MapPin, Phone, Star, MessageSquare, RefreshCw, Trash2 } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { OrderStatusBanner } from '../../components/OrderStatusBanner';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { regeneratePaymentLink } from '../../utils/mercadoPago';
 import { OrderTracking } from '../../components/OrderTracking';
 import { StoreRouteMap } from '../../components/StoreRouteMap';
 import { getOrderFulfillmentMode, getOrderStatusLabel } from '../../utils/orderFulfillment';
 import { isServiceBookingOrder } from '../../utils/orderClassification';
+
+// See app/orders/index.tsx for the matching DB-level restriction (RLS policy)
+// on which statuses a customer can delete — this list must stay in sync.
+const DELETABLE_STATUSES = ['pending', 'payment_failed', 'insufficient_stock'];
+const RETRYABLE_STATUSES = ['pending', 'payment_failed'];
 
 export default function OrderDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -21,6 +27,8 @@ export default function OrderDetail() {
   const [partnerLocation, setPartnerLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [pickupConfirming, setPickupConfirming] = useState(false);
+  const [retryingPayment, setRetryingPayment] = useState(false);
+  const [deletingOrder, setDeletingOrder] = useState(false);
 
   useEffect(() => {
     if (!currentUser) {
@@ -95,7 +103,9 @@ export default function OrderDetail() {
           shippingCost: Number(data.shipping_cost || 0),
           shippingAddress: data.shipping_address || '',
           createdAt: new Date(data.created_at),
-          updatedAt: data.updated_at ? new Date(data.updated_at) : null
+          updatedAt: data.updated_at ? new Date(data.updated_at) : null,
+          lastPaymentUrl: data.last_payment_url,
+          paymentLinkExpiresAt: data.payment_link_expires_at ? new Date(data.payment_link_expires_at) : null,
         });
 
         // 1. Try partner_breakdown first (works for service bookings where trigger stores it)
@@ -259,6 +269,96 @@ export default function OrderDetail() {
     );
   };
 
+  const handleRetryPayment = async () => {
+    if (!order) return;
+
+    try {
+      const isExpired = order.paymentLinkExpiresAt && new Date(order.paymentLinkExpiresAt) < new Date();
+
+      if (!isExpired && order.lastPaymentUrl) {
+        const canOpen = await Linking.canOpenURL(order.lastPaymentUrl);
+        if (canOpen) {
+          await Linking.openURL(order.lastPaymentUrl);
+        } else {
+          Alert.alert('Error', 'No se pudo abrir el link de pago');
+        }
+        return;
+      }
+
+      Alert.alert(
+        'Regenerar link de pago',
+        isExpired
+          ? 'El link de pago ha expirado. Se generará uno nuevo.'
+          : 'Se generará un nuevo link de pago.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Continuar',
+            onPress: async () => {
+              try {
+                setRetryingPayment(true);
+                const result = await regeneratePaymentLink(order.id);
+
+                if (result.success && result.paymentUrl) {
+                  await fetchOrderDetails();
+                  const canOpen = await Linking.canOpenURL(result.paymentUrl);
+                  if (canOpen) {
+                    await Linking.openURL(result.paymentUrl);
+                  }
+                } else {
+                  Alert.alert('Error', result.error || 'No se pudo generar el link de pago');
+                }
+              } catch (error) {
+                console.error('Error regenerating payment:', error);
+                Alert.alert('Error', 'Hubo un problema al generar el link de pago');
+              } finally {
+                setRetryingPayment(false);
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Error handling retry payment:', error);
+      Alert.alert('Error', 'No se pudo procesar el reintento de pago');
+    }
+  };
+
+  const submitDeleteOrder = async () => {
+    if (!order || !currentUser) return;
+
+    try {
+      setDeletingOrder(true);
+
+      const { error } = await supabaseClient
+        .from('orders')
+        .delete()
+        .eq('id', order.id)
+        .eq('customer_id', currentUser.id);
+
+      if (error) throw error;
+
+      router.back();
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      Alert.alert('Error', 'No se pudo eliminar el pedido');
+      setDeletingOrder(false);
+    }
+  };
+
+  const handleDeleteOrder = () => {
+    if (!order) return;
+
+    Alert.alert(
+      'Eliminar pedido',
+      `¿Seguro que querés eliminar el pedido ${order.orderNumber || `#${order.id.slice(-6)}`}? Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Eliminar', style: 'destructive', onPress: () => { void submitDeleteOrder(); } },
+      ]
+    );
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -414,6 +514,33 @@ export default function OrderDetail() {
 
         {/* Actions */}
         <View style={styles.actionsContainer}>
+          {RETRYABLE_STATUSES.includes(order.status) && (
+            <Button
+              title={
+                order.paymentLinkExpiresAt && new Date(order.paymentLinkExpiresAt) < new Date()
+                  ? 'Generar nuevo link de pago'
+                  : 'Reintentar pago'
+              }
+              onPress={handleRetryPayment}
+              loading={retryingPayment}
+              size="large"
+            />
+          )}
+
+          {DELETABLE_STATUSES.includes(order.status) && (
+            <Button
+              onPress={handleDeleteOrder}
+              loading={deletingOrder}
+              variant="outline"
+              size="large"
+              style={styles.deleteOrderButton}
+            >
+              <Text style={styles.deleteOrderButtonText}>
+                {deletingOrder ? 'Eliminando...' : 'Eliminar pedido'}
+              </Text>
+            </Button>
+          )}
+
           {isStorePickup && order.status === 'ready_for_delivery' && (
             <Button
               title="Confirmar retiro"
@@ -641,5 +768,15 @@ const styles = StyleSheet.create({
   actionsContainer: {
     marginBottom: 24,
     gap: 12,
+  },
+  deleteOrderButton: {
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+  },
+  deleteOrderButtonText: {
+    color: '#991B1B',
+    fontFamily: 'Inter-Medium',
+    fontWeight: '600',
+    fontSize: 16,
   },
 });

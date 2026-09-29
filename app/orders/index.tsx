@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Alert, Linking, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { ArrowLeft, Package, Clock, Truck, CircleCheck as CheckCircle, Circle as XCircle, MapPin, Phone, Star, AlertCircle, RefreshCw } from 'lucide-react-native';
+import { ArrowLeft, Package, Clock, Truck, CircleCheck as CheckCircle, Circle as XCircle, MapPin, Phone, Star, AlertCircle, RefreshCw, Trash2 } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
@@ -21,10 +21,18 @@ export default function MyOrders() {
   const [hasMore, setHasMore] = useState(true);
   const [counts, setCounts] = useState({ active: 0, completed: 0 });
   const [pickupConfirmingOrderId, setPickupConfirmingOrderId] = useState<string | null>(null);
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
 
   const PAGE_SIZE = 20;
   const ACTIVE_STATUSES = ['pending', 'reserved', 'payment_failed', 'insufficient_stock', 'confirmed', 'processing', 'preparing', 'ready_for_delivery', 'shipped'];
   const COMPLETED_STATUSES = ['completed', 'delivered', 'cancelled', 'refunded'];
+  // Orders that never actually went through — nothing to fulfill, nothing to
+  // notify a partner about — so the customer can remove them themselves.
+  // Anything past this (confirmed onward) stays, matching the DB-level
+  // restriction in the "Partners, customers and admins can delete orders"
+  // RLS policy.
+  const DELETABLE_STATUSES = ['pending', 'payment_failed', 'insufficient_stock'];
+  const RETRYABLE_STATUSES = ['pending', 'payment_failed'];
 
   useEffect(() => {
     if (!currentUser) {
@@ -338,6 +346,38 @@ export default function MyOrders() {
     );
   };
 
+  const submitDeleteOrder = async (order: any) => {
+    try {
+      setDeletingOrderId(order.id);
+
+      const { error } = await supabaseClient
+        .from('orders')
+        .delete()
+        .eq('id', order.id)
+        .eq('customer_id', currentUser!.id);
+
+      if (error) throw error;
+
+      await Promise.all([fetchOrders(true), fetchOrderCounts()]);
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      Alert.alert('Error', 'No se pudo eliminar el pedido');
+    } finally {
+      setDeletingOrderId(null);
+    }
+  };
+
+  const handleDeleteOrder = (order: any) => {
+    Alert.alert(
+      'Eliminar pedido',
+      `¿Seguro que querés eliminar el pedido ${order.orderNumber}? Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Eliminar', style: 'destructive', onPress: () => { void submitDeleteOrder(order); } },
+      ]
+    );
+  };
+
   const handleRetryPayment = async (order: any) => {
     try {
       const isExpired = order.paymentLinkExpiresAt && new Date(order.paymentLinkExpiresAt) < new Date();
@@ -456,7 +496,7 @@ export default function MyOrders() {
       </View>
 
       <View style={styles.orderActions}>
-        {order.status === 'payment_failed' && (
+        {RETRYABLE_STATUSES.includes(order.status) && (
           <TouchableOpacity
             style={styles.retryPaymentButton}
             onPress={() => handleRetryPayment(order)}
@@ -467,6 +507,19 @@ export default function MyOrders() {
               {order.paymentLinkExpiresAt && new Date(order.paymentLinkExpiresAt) < new Date()
                 ? 'Generar nuevo link'
                 : 'Reintentar pago'}
+            </Text>
+          </TouchableOpacity>
+        )}
+        {DELETABLE_STATUSES.includes(order.status) && (
+          <TouchableOpacity
+            style={styles.deleteOrderButton}
+            onPress={() => handleDeleteOrder(order)}
+            activeOpacity={0.7}
+            disabled={deletingOrderId === order.id}
+          >
+            <Trash2 size={18} color="#991B1B" strokeWidth={2.5} />
+            <Text style={styles.deleteOrderText}>
+              {deletingOrderId === order.id ? 'Eliminando...' : 'Eliminar pedido'}
             </Text>
           </TouchableOpacity>
         )}
@@ -862,6 +915,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Bold',
     color: '#FFFFFF',
+  },
+  deleteOrderButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  deleteOrderText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Bold',
+    color: '#991B1B',
   },
   quickActionsCard: {
     marginHorizontal: 16,
