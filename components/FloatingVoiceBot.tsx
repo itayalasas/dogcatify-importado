@@ -15,7 +15,8 @@ import {
   PanResponder,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { X, Send, PawPrint, CircleHelp as HelpCircle, ChevronRight, Sparkles, ArrowLeft } from 'lucide-react-native';
+import { X, Send, CircleHelp as HelpCircle, ChevronRight, ArrowLeft } from 'lucide-react-native';
+import { DottyAvatar } from './DottyAvatar';
 import { supabaseClient } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { envConfig } from '@/utils/envConfig';
@@ -256,7 +257,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     petCount: 0,
   });
 
-  const position = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 72, y: SCREEN_HEIGHT - 200 })).current;
+  const position = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 76, y: SCREEN_HEIGHT - 200 })).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const expandAnim = useRef(new Animated.Value(showWelcome ? 1 : 0)).current;
   const scrollViewRef = useRef<ScrollView>(null);
@@ -329,7 +330,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
         let newY = startPosition.current.y + dy;
 
         // Límites de la pantalla (dejando espacio para el botón)
-        const buttonSize = 56;
+        const buttonSize = 60;
         const minX = 0;
         const maxX = SCREEN_WIDTH - buttonSize;
         const minY = 50; // Dejar espacio para el notch/status bar
@@ -790,17 +791,17 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   }, [messages]);
 
   const sendWelcomeMessage = async () => {
-    const userName = currentUser?.displayName || 'Usuario';
-    const firstName = userName.split(' ')[0];
+    const firstName = (currentUser?.displayName || '').trim().split(/\s+/)[0];
+    const hello = firstName ? `¡Hola, ${firstName}!` : '¡Hola!';
     const welcomeContent = (() => {
       if (resolvedRole === 'partner' || resolvedRole === 'admin') {
-        return `¡Hola, ${firstName}! ¿Qué revisamos de tu negocio?`;
+        return `${hello} ¿Qué revisamos de tu negocio?`;
       }
       if (petSummary.hasPets) {
         const petLabel = petSummary.petNames.length === 1 ? petSummary.petNames[0] : 'tus mascotas';
-        return `¡Hola, ${firstName}! ¿En qué te ayudo con ${petLabel} hoy?`;
+        return `${hello} Soy Dotty. Contame qué le pasa a ${petLabel} o qué duda tenés y te oriento.`;
       }
-      return `¡Hola, ${firstName}! Soy Dotty. ¿En qué te ayudo?`;
+      return `${hello} Soy Dotty. Contame qué le pasa a tu mascota o qué duda tenés y te oriento.`;
     })();
 
     const welcomeMessage: Message = {
@@ -1460,8 +1461,8 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
       const { data: { session } } = await supabaseClient.auth.getSession();
 
       // Obtener el perfil del usuario para pasar su nombre
-      let userName = 'Usuario';
-      if (currentUser?.id) {
+      let userName = currentUser?.displayName || '';
+      if (!userName && currentUser?.id) {
         try {
           const { data: profile } = await supabaseClient
             .from('profiles')
@@ -1612,14 +1613,14 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                   </TouchableOpacity>
                 )}
                 <View style={styles.headerIconContainer}>
-                  <PawPrint size={22} color="#2D6A6F" />
+                  <DottyAvatar size={44} />
                 </View>
                 <View>
                   <Text style={styles.chatTitle}>Dotty</Text>
                   <Text style={styles.chatSubtitle}>
                     {resolvedRole === 'partner' || resolvedRole === 'admin'
                       ? 'Tu guía de negocio'
-                      : 'Tu guía personal'}
+                      : 'Te ayudo con el cuidado de tu mascota'}
                   </Text>
                 </View>
               </View>
@@ -1646,7 +1647,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                   >
                     {message.role !== 'user' && (
                       <View style={styles.assistantHeader}>
-                        <Sparkles size={14} color="#2D6A6F" />
+                        <DottyAvatar size={18} />
                         <Text style={styles.assistantLabel}>Dotty</Text>
                       </View>
                     )}
@@ -1788,12 +1789,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
           accessibilityLabel="Abrir a Dotty, tu asistente"
           accessibilityHint="Mantené presionado y arrastrá para moverlo"
         >
-          <PawPrint size={26} color="#FFFFFF" strokeWidth={2.25} />
-          {!isExpanded && (
-            <View style={styles.sparkleBadge}>
-              <Sparkles size={11} color="#2D6A6F" strokeWidth={2.5} />
-            </View>
-          )}
+          <DottyAvatar size={54} />
         </View>
       </Animated.View>
     </>
@@ -1862,7 +1858,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#CCFBF1',
+    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -2145,15 +2141,17 @@ const styles = StyleSheet.create({
   },
   floatingButtonContainer: {
     position: 'absolute',
-    width: 56,
-    height: 56,
+    width: 60,
+    height: 60,
     zIndex: 9999,
   },
   floatingButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#2D6A6F',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#111827',
@@ -2163,19 +2161,6 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   floatingButtonActive: {
-    backgroundColor: '#24565A',
-  },
-  sparkleBadge: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#FBBF24',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#2D6A6F',
+    borderColor: '#CCFBF1',
   },
 });

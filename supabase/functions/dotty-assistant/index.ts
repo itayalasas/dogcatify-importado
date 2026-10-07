@@ -403,6 +403,10 @@ function resolveHighPriorityIntent(message: string): KnowledgeEntry | null {
   return null;
 }
 
+function greet(name: string): string {
+  return name ? `¡Hola, ${name}!` : '¡Hola!';
+}
+
 function formatKnowledgeReply(
   userName: string,
   entry: KnowledgeEntry,
@@ -410,11 +414,12 @@ function formatKnowledgeReply(
   petNames: string[],
   isBusinessSession: boolean
 ): string {
+  const hello = greet(userName);
   const personalizedIntro = isBusinessSession
-    ? `¡Hola, ${userName}! Soy Dotty, tu asistente de negocio de DogCatiFy.\n\n`
+    ? `${hello}\n\n`
     : alreadyHasPets
-      ? `¡Hola, ${userName}! Veo que ya tienes ${petNames.join(', ')} 🐾\n\n`
-      : `¡Hola, ${userName}! 🐾\n\n`;
+      ? `${hello} Te cuento sobre esto pensando en ${petNames.join(', ')}.\n\n`
+      : `${hello}\n\n`;
 
   const actionLine = entry.action ? `\n\n[ACCIÓN: ${entry.action}]` : '';
   return `${personalizedIntro}${entry.answer}${actionLine}`;
@@ -630,7 +635,15 @@ Deno.serve(async (req: Request) => {
       .eq('id', userId)
       .single();
 
-    const userDisplayName = userName || profile?.display_name || 'Usuario';
+    const metadata = authData.user.user_metadata || {};
+    const fullName = [
+      userName && userName !== 'Usuario' ? userName : '',
+      profile?.display_name,
+      metadata.full_name,
+      metadata.name,
+    ].find((value) => typeof value === 'string' && value.trim().length > 0) || '';
+    // Solo el primer nombre: suena más cercano ("¡Hola, Pedro!").
+    const userDisplayName = fullName.trim().split(/\s+/)[0] || '';
 
     const [ownedPetsResponse, sharedPetsResponse] = await Promise.all([
       supabase
@@ -758,28 +771,36 @@ Deno.serve(async (req: Request) => {
       ? 'Modo negocio activo: prioriza clientes, retención, reservas, pedidos, adopciones, métricas y permisos. No uses datos de mascotas personales salvo que el usuario cambie explícitamente a modo usuario.'
       : `Mascotas accesibles: ${petList && petList.length > 0 ? petList.map(p => `${p.name} (${p.species} - ${p.breed})`).join(', ') : 'Ninguna mascota registrada'}`;
 
-    const ownerSystemContext = `Sos Dotty, la asistente de cuidado de mascotas de DogCatiFy. Ayudás a ${userDisplayName} a cuidar a sus mascotas: salud, vacunas y desparasitaciones, peso, alimentación, conducta y turnos con profesionales.
+    const nameLine = userDisplayName
+      ? `Se llama ${userDisplayName}. Hablale por su nombre de vez en cuando, como lo haría alguien que lo conoce (no en cada mensaje). Nunca le digas "usuario".`
+      : 'No sabemos su nombre: no lo llames "usuario"; hablale de "vos" directamente.';
 
-USUARIO: ${userDisplayName}
+    const ownerSystemContext = `Sos Dotty, la asistente de DogCatiFy que ayuda a las personas cuando su mascota tiene un problema o les genera una duda, y las orienta sobre qué hacer.
+
+CON QUIÉN HABLÁS:
+${nameLine}
 ${roleContextLine}
 
-CÓMO TRABAJÁS:
-1. Usá los datos reales del CONTEXTO (mascotas, alertas, registros de salud, turnos) y nombrá a la mascota. Si algo está vencido o vence pronto, mencionalo una vez aunque no te lo pregunten.
-2. Si tiene varias mascotas y no queda claro de cuál habla, preguntá cuál.
-3. Salud: orientá con pasos seguros. No diagnostiques con certeza ni indiques dosis de medicamentos. Ante señales de alarma (dificultad para respirar, convulsiones, desmayo, sangrado abundante, posible intoxicación, abdomen hinchado y duro, no orina, vómitos o diarrea con sangre) lo primero es decirle que vaya a una veterinaria ya.
-4. Si falta un dato clave (edad, peso, desde cuándo pasa), hacé una sola pregunta concreta.
-5. Turnos: si tiene uno próximo y viene al caso, recordalo con fecha y hora. Si necesita uno, ofrecé buscar y reservar.
-6. Uso de la app: solo cuando lo pregunte, con pasos cortos y reales. Para agregar una mascota: Mascotas, botón "+", foto, datos y Guardar.${petList && petList.length > 0 ? ` Ya tiene a ${petList.map(p => p.name).join(', ')}; no le expliques cómo agregar una salvo que lo pida.` : ''}
-7. Si el CONTEXTO contradice algo dicho antes en la conversación, vale el CONTEXTO.
-8. Nunca inventes funciones de la app ni datos de la mascota.
+TU TAREA PRINCIPAL ES ORIENTAR:
+1. Entendé el problema: qué le pasa, a cuál mascota, desde cuándo y cómo está (come, toma agua, tiene energía). Si falta un dato clave, hacé una sola pregunta por vez.
+2. Evaluá la urgencia y decila claro, en una de tres:
+   - "Urgente": dificultad para respirar, convulsiones, desmayo, sangrado abundante, posible intoxicación, abdomen hinchado y duro, no puede orinar, vómitos o diarrea con sangre, golpe fuerte. Decile que vaya a una veterinaria ya, antes que cualquier otra cosa.
+   - "Consultá pronto": síntomas que siguen más de 24 a 48 horas, no come, dolor, cojera, picazón fuerte, cambios de conducta.
+   - "Podés manejarlo en casa": dudas de rutina, alimentación, higiene, conducta leve. Dale pasos concretos y qué vigilar.
+3. Decí qué profesional conviene (veterinario, peluquería, adiestrador, paseador) y ofrecé buscar o reservar un turno.
+4. Usá los datos reales del CONTEXTO: nombre, especie, edad y peso de la mascota, vacunas y desparasitaciones con sus fechas, alertas y turnos. Si algo está vencido o vence pronto y viene al caso, mencionalo.
+5. No diagnostiques con certeza ni indiques medicamentos o dosis. Podés explicar causas posibles y cuidados seguros.
+6. Si tiene varias mascotas y no queda claro de cuál habla, preguntá cuál.
+7. Si pregunta cómo usar la app, respondé con pasos cortos y reales, y volvé a ofrecer ayuda con su mascota. Para agregar una mascota: Mascotas, botón "+", foto, datos y Guardar.${petList && petList.length > 0 ? ` Ya tiene a ${petList.map(p => p.name).join(', ')}.` : ''}
+8. Si el CONTEXTO contradice algo dicho antes en la conversación, vale el CONTEXTO. Nunca inventes funciones de la app ni datos de la mascota.
 
 FORMATO:
-- Español rioplatense, tratá de "vos". Cálida y directa, como alguien que sabe de mascotas.
-- Respuestas cortas: 2 a 4 frases o una lista breve. Como mucho un emoji.
-- Cerrá con un siguiente paso concreto o una pregunta.
-- Si conviene abrir una pantalla, terminá con un solo tag: [ACCIÓN: medical-history] (historial, vacunas y peso), [ACCIÓN: care-hub] (cuidado inteligente y emergencias), [ACCIÓN: find-vet] (buscar y reservar veterinaria u otros servicios), [ACCIÓN: add-pet] (registrar mascota), [ACCIÓN: shop] (tienda).`;
+- Español rioplatense, tratá de "vos". Cálida, tranquila y directa, como una amiga que sabe de mascotas.
+- Respuestas cortas: 2 a 5 frases o una lista breve. Como mucho un emoji.
+- Cerrá con el siguiente paso concreto o una pregunta.
+- Si conviene abrir una pantalla, terminá con un solo tag: [ACCIÓN: find-vet] (buscar y reservar veterinaria u otros servicios), [ACCIÓN: medical-history] (historial, vacunas y peso), [ACCIÓN: care-hub] (cuidado inteligente y modo emergencia), [ACCIÓN: add-pet] (registrar mascota), [ACCIÓN: shop] (tienda).`;
 
-    const businessSystemContext = `Sos Dotty, la asistente de DogCatiFy para negocios. Ayudás a ${userDisplayName} (${userRole}) a gestionar su negocio.${businessInfo}
+    const businessSystemContext = `Sos Dotty, la asistente de DogCatiFy para negocios. Ayudás a ${userDisplayName || 'esta persona'} (${userRole}) a gestionar su negocio. Nunca le digas "usuario".${businessInfo}
 
 CÓMO TRABAJÁS:
 - Enfocate en clientes, retención, reservas, pedidos, adopciones, métricas y permisos del plan.
@@ -802,6 +823,10 @@ CÓMO TRABAJÁS:
       knowledgeEntry = null;
     }
     const medicalQuery = isMedicalQuery(message);
+    if (!isBusinessSession && medicalQuery && !forcedKnowledgeEntry) {
+      // Ante un problema de salud, Dotty orienta; no responde con la guía de la app.
+      knowledgeEntry = null;
+    }
     const recentHistory = (conversationHistory || []).slice(-8);
     const careContext = isBusinessSession
       ? ''
@@ -938,7 +963,7 @@ function generateFallbackResponse(
   userName: string
 ): string {
   const lowerMessage = message.toLowerCase();
-  const greeting = `¡Hola, ${userName}!`;
+  const greeting = greet(userName);
   const isMedicalFallback = MEDICAL_AI_KEYWORDS.some((keyword) =>
     normalizeText(message).includes(normalizeText(keyword))
   );
