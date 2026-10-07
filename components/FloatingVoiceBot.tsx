@@ -273,7 +273,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
     petCount: 0,
   });
 
-  const position = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 90, y: SCREEN_HEIGHT - 300 })).current;
+  const position = useRef(new Animated.ValueXY({ x: SCREEN_WIDTH - 72, y: SCREEN_HEIGHT - 200 })).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const expandAnim = useRef(new Animated.Value(showWelcome ? 1 : 0)).current;
   const scrollViewRef = useRef<ScrollView>(null);
@@ -346,7 +346,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
         let newY = startPosition.current.y + dy;
 
         // Límites de la pantalla (dejando espacio para el botón)
-        const buttonSize = 70;
+        const buttonSize = 56;
         const minX = 0;
         const maxX = SCREEN_WIDTH - buttonSize;
         const minY = 50; // Dejar espacio para el notch/status bar
@@ -456,8 +456,6 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
   useEffect(() => {
     loadPosition(); // Cargar posición guardada
     checkDottyStatus();
-    startPulseAnimation();
-    startPawRotation();
 
     // Listeners para el teclado
     const keyboardWillShow = Keyboard.addListener(
@@ -810,20 +808,16 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
   const sendWelcomeMessage = async () => {
     const userName = currentUser?.displayName || 'Usuario';
+    const firstName = userName.split(' ')[0];
     const welcomeContent = (() => {
       if (resolvedRole === 'partner' || resolvedRole === 'admin') {
-        return `¡Hola, ${userName}! Soy Dotty, tu asistente para negocio.\n\nPuedo ayudarte con clientes, retención, reservas, pedidos, adopciones, métricas y con lo que tu plan permite hacer o no.\n\n¿Qué quieres revisar primero?`;
+        return `¡Hola, ${firstName}! ¿Qué revisamos de tu negocio?`;
       }
-
-      if (petSummary.loading) {
-        return `¡Hola, ${userName}! Soy Dotty, tu asistente personal.\n\nEstoy cargando tu contexto para darte recomendaciones personalizadas, alertas y próximos pasos. Dame un segundo y empezamos.`;
-      }
-
       if (petSummary.hasPets) {
-        return `¡Hola, ${userName}! Veo ${petSummary.petCount} mascota(s) registrada(s): ${petSummary.petNames.join(', ')} 🐾\n\nPuedo ayudarte con recomendaciones de hoy, vacunas, peso, alertas, historial médico y cuidado inteligente.\n\n¿Qué necesitas revisar primero?`;
+        const petLabel = petSummary.petNames.length === 1 ? petSummary.petNames[0] : 'tus mascotas';
+        return `¡Hola, ${firstName}! ¿En qué te ayudo con ${petLabel} hoy?`;
       }
-
-      return `¡Hola, ${userName}! Soy Dotty, tu asistente personal.\n\nAún no veo mascotas registradas en tu cuenta. Si quieres, te guío para crear tu primera mascota o puedo mostrarte las funciones principales de la app.`;
+      return `¡Hola, ${firstName}! Soy Dotty. ¿En qué te ayudo?`;
     })();
 
     const welcomeMessage: Message = {
@@ -927,6 +921,9 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
 
       if (!currentSessionId) {
         createNewSession();
+      }
+      if (messages.length === 0) {
+        sendWelcomeMessage();
       }
     }
   };
@@ -1627,7 +1624,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
             <View style={styles.chatHeader}>
               <View style={styles.headerLeft}>
                 {!showQuickActions && (
-                  <TouchableOpacity onPress={handleBackToMenu} style={styles.backButton}>
+                  <TouchableOpacity onPress={handleBackToMenu} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Volver a las sugerencias">
                     <ArrowLeft size={20} color="#2D6A6F" />
                   </TouchableOpacity>
                 )}
@@ -1635,7 +1632,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                   <PawPrint size={22} color="#2D6A6F" />
                 </View>
                 <View>
-                  <Text style={styles.chatTitle}>Dotty Assistant</Text>
+                  <Text style={styles.chatTitle}>Dotty</Text>
                   <Text style={styles.chatSubtitle}>
                     {resolvedRole === 'partner' || resolvedRole === 'admin'
                       ? 'Tu guía de negocio'
@@ -1643,7 +1640,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                   </Text>
                 </View>
               </View>
-              <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+              <TouchableOpacity onPress={handleClose} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Cerrar a Dotty">
                 <X size={20} color="#6B7280" />
               </TouchableOpacity>
             </View>
@@ -1720,42 +1717,30 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                   <Text style={styles.processingText}>Dotty está pensando...</Text>
                 </View>
               )}
-              {showQuickActions && (
-                <View style={styles.quickActionsContainer}>
-                  <Text style={styles.quickActionsTitle}>
-                    {resolvedRole === 'partner' || resolvedRole === 'admin'
-                      ? '¿Qué quieres revisar sobre tu negocio?'
-                      : '¿Qué te gustaría preguntarme o hacer?'}
-                  </Text>
-                  {visibleQuickActions.map((action) => (
-                    <TouchableOpacity
-                      key={action.id}
-                      onPress={() => handleQuickAction(action.id)}
-                      style={styles.quickActionCard}
-                    >
-                      <View style={styles.quickActionContent}>
-                        <Text style={styles.quickActionLabel}>{action.label}</Text>
-                        <Text style={styles.quickActionDescription}>{action.description}</Text>
-                      </View>
-                      <ChevronRight size={20} color="#9CA3AF" />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-              {showQuickActions && (
-                <View style={styles.promptContainer}>
-                  <Text style={styles.promptTitle}>
-                    {resolvedRole === 'partner' || resolvedRole === 'admin'
-                      ? 'Preguntas para aliados'
-                      : 'Prueba con una pregunta'}
-                  </Text>
+              {showQuickActions && !isProcessing && (
+                <View style={styles.suggestionsContainer}>
+                  <Text style={styles.promptTitle}>Sugerencias</Text>
                   <View style={styles.promptWrap}>
-                    {visibleStarterPrompts.map((prompt) => (
+                    {visibleQuickActions.slice(0, 3).map((action) => (
+                      <TouchableOpacity
+                        key={action.id}
+                        onPress={() => handleQuickAction(action.id)}
+                        style={styles.actionChip}
+                        activeOpacity={0.86}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${action.label.replace(/^[^\p{L}]+/u, '')}. ${action.description}`}
+                      >
+                        <Text style={styles.actionChipText}>{action.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                    {visibleStarterPrompts.slice(0, 3).map((prompt) => (
                       <TouchableOpacity
                         key={prompt}
                         style={styles.promptChip}
                         onPress={() => handleUserMessage(prompt, false)}
                         activeOpacity={0.86}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Preguntar: ${prompt}`}
                       >
                         <Text style={styles.promptChipText}>{prompt}</Text>
                       </TouchableOpacity>
@@ -1813,23 +1798,17 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
         ]}
         {...panResponder.panHandlers}
       >
-        <View style={styles.floatingButton}>
-          <Animated.View
-            style={[
-              styles.buttonContent,
-              {
-                transform: [
-                  { scale: pulseAnim },
-                  { rotate: rotation }
-                ],
-              },
-            ]}
-          >
-            <PawPrint size={30} color="#FFFFFF" strokeWidth={2.5} />
-          </Animated.View>
+        <View
+          style={[styles.floatingButton, isExpanded && styles.floatingButtonActive]}
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel="Abrir a Dotty, tu asistente"
+          accessibilityHint="Mantené presionado y arrastrá para moverlo"
+        >
+          <PawPrint size={26} color="#FFFFFF" strokeWidth={2.25} />
           {!isExpanded && (
-            <View style={styles.badge}>
-              <HelpCircle size={16} color="#FFFFFF" />
+            <View style={styles.sparkleBadge}>
+              <Sparkles size={11} color="#2D6A6F" strokeWidth={2.5} />
             </View>
           )}
         </View>
@@ -2049,6 +2028,25 @@ const styles = StyleSheet.create({
   promptContainer: {
     marginBottom: 16,
   },
+  suggestionsContainer: {
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  actionChip: {
+    borderRadius: 999,
+    backgroundColor: '#2D6A6F',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minHeight: 40,
+    justifyContent: 'center',
+    maxWidth: '100%',
+  },
+  actionChipText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    lineHeight: 18,
+  },
   promptTitle: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
@@ -2064,17 +2062,19 @@ const styles = StyleSheet.create({
   },
   promptChip: {
     borderRadius: 999,
-    backgroundColor: '#ECFDF5',
+    backgroundColor: '#EEF6F6',
     borderWidth: 1,
-    borderColor: '#A7F3D0',
+    borderColor: '#AACFD1',
     paddingHorizontal: 12,
     paddingVertical: 10,
+    minHeight: 40,
+    justifyContent: 'center',
     maxWidth: '100%',
   },
   promptChipText: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#065F46',
+    color: '#1C4245',
     lineHeight: 18,
   },
   quickActionsTitle: {
@@ -2162,45 +2162,37 @@ const styles = StyleSheet.create({
   },
   floatingButtonContainer: {
     position: 'absolute',
-    width: 68,
-    height: 68,
+    width: 56,
+    height: 56,
     zIndex: 9999,
   },
   floatingButton: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#2D6A6F',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 10,
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
+    shadowColor: '#111827',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 6,
   },
-  buttonContent: {
-    justifyContent: 'center',
-    alignItems: 'center',
+  floatingButtonActive: {
+    backgroundColor: '#24565A',
   },
-  badge: {
+  sparkleBadge: {
     position: 'absolute',
-    top: -2,
-    right: -2,
-    backgroundColor: '#F59E0B',
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    top: 2,
+    right: 2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FBBF24',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
+    borderWidth: 2,
+    borderColor: '#2D6A6F',
   },
 });
