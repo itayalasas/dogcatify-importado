@@ -49,7 +49,6 @@ export const initializeSupabase = async (): Promise<void> => {
     console.log('[Supabase] ðŸš€ Initializing Supabase client...');
 
     console.log('[Supabase] ðŸ”— Raw Supabase URL from config:', supabaseUrl);
-    console.log('[Supabase] ðŸ”‘ Raw Anon Key from config:', supabaseAnonKey);
     console.log('[Supabase] ðŸ“Š URL type:', typeof supabaseUrl, 'length:', supabaseUrl?.length);
     console.log('[Supabase] ðŸ“Š Key type:', typeof supabaseAnonKey, 'length:', supabaseAnonKey?.length);
 
@@ -61,7 +60,6 @@ export const initializeSupabase = async (): Promise<void> => {
     }
 
     console.log('[Supabase] ðŸ”— Supabase URL:', supabaseUrl);
-    console.log('[Supabase] ðŸ”‘ Anon Key (first 50 chars):', supabaseAnonKey.substring(0, 50) + '...');
 
     // Crear cliente de Supabase
     const newClient = createClient(supabaseUrl, supabaseAnonKey, {
