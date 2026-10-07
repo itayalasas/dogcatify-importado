@@ -304,8 +304,6 @@ export default function AdminAnalytics() {
         ordersResult,
         promotionsResult,
         webhookLogsResult,
-        crmWebhookLogsResult,
-        accountingWebhookLogsResult,
       ] = await Promise.all([
         supabaseClient.from('admin_settings').select('value').eq('key', SYSTEM_CONFIG_KEY).maybeSingle(),
         supabaseClient.from('profiles').select('*', { count: 'exact', head: true }),
@@ -323,8 +321,6 @@ export default function AdminAnalytics() {
         supabaseClient.from('orders').select('id, status, total_amount, commission_amount, partner_amount, created_at').eq('is_split_master', false),
         supabaseClient.from('promotions').select('id, views, is_active, start_date, end_date, approval_status'),
         supabaseClient.from('webhook_logs').select('id, success').gte('created_at', sevenDaysAgo),
-        supabaseClient.from('crm_webhook_logs').select('id, success').gte('created_at', sevenDaysAgo),
-        supabaseClient.from('accounting_webhook_logs').select('id, success').gte('created_at', sevenDaysAgo),
       ]);
 
       const failedQuery = [
@@ -343,8 +339,6 @@ export default function AdminAnalytics() {
         ordersResult,
         promotionsResult,
         webhookLogsResult,
-        crmWebhookLogsResult,
-        accountingWebhookLogsResult,
       ].find((result) => result.error);
 
       if (failedQuery?.error) {
@@ -509,11 +503,7 @@ export default function AdminAnalytics() {
         normalizeUserPlanTier(row.subscription_plans?.tier || row.subscription_plans?.name) === 'premium'
       ).length;
 
-      const recentWebhookLogs = [
-        ...(webhookLogsResult.data || []),
-        ...(crmWebhookLogsResult.data || []),
-        ...(accountingWebhookLogsResult.data || []),
-      ];
+      const recentWebhookLogs = webhookLogsResult.data || [];
       const webhookFailureCount = recentWebhookLogs.filter((log) => log.success === false).length;
       const webhookDeliveryRate = safePercent(
         recentWebhookLogs.filter((log) => log.success === true).length,

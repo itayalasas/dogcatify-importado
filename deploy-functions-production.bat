@@ -226,7 +226,6 @@ echo    - send-notification-fcm-v1
 echo.
 echo 2. Configurar webhooks externos:
 echo    - MercadoPago: https://gfazxronwllqcswdaimh.supabase.co/functions/v1/mercadopago-webhook
-echo    - CRM: https://gfazxronwllqcswdaimh.supabase.co/functions/v1/dogcatify-order-webhook
 echo.
 echo 3. Actualizar variables de entorno en la app:
 echo    - EXPO_PUBLIC_SUPABASE_URL

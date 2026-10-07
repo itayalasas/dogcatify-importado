@@ -53,9 +53,6 @@ echo      * FIREBASE_CLIENT_ID = campo "client_id"
 echo      * FIREBASE_CLIENT_CERT_URL = campo "client_x509_cert_url"
 echo      * FIREBASE_PRIVATE_KEY = campo "private_key"
 echo.
-echo 5. CRM_WEBHOOK_URL y CRM_API_KEY (OPCIONAL)
-echo    - Solo si usas integración con CRM externo
-echo.
 echo ====================================================
 echo  INSTRUCCIONES PARA AGREGAR EN SUPABASE
 echo ====================================================

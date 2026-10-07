@@ -1032,41 +1032,6 @@ async function processPaymentNotification(supabase: any, notification: WebhookNo
         await updateBookingStatus(supabase, orderData.booking_id, 'confirmed', paymentId);
       }
 
-      if (isSplitMasterOrder) {
-        console.log('🧾 Skipping accounting fallback for split master order');
-        console.log('✅ All post-payment actions completed');
-        return;
-      }
-
-      // Fallback robusto: disparar envío contable explícitamente al confirmar pago
-      // (evita pérdida de envíos si el trigger de BD falla en algún escenario)
-      try {
-        const supabaseUrl = Deno.env.get('SUPABASE_URL');
-        const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-
-        if (!supabaseUrl || !serviceRoleKey) {
-          console.warn('⚠️ Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY, skipping accounting fallback call');
-        } else {
-          const accountingResponse = await fetch(`${supabaseUrl}/functions/v1/send-order-to-accounting`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${serviceRoleKey}`,
-            },
-            body: JSON.stringify({ order_id: orderId }),
-          });
-
-          const accountingBody = await accountingResponse.text();
-          console.log('📨 Accounting fallback response:', {
-            status: accountingResponse.status,
-            ok: accountingResponse.ok,
-            body: accountingBody.slice(0, 500),
-          });
-        }
-      } catch (accountingError) {
-        console.error('❌ Error triggering accounting fallback from MP webhook:', accountingError);
-      }
-
       console.log('✅ All post-payment actions completed');
     } else {
       console.log(`⏸️ Payment not approved yet. Status: ${paymentStatus}, Detail: ${statusDetail}`);

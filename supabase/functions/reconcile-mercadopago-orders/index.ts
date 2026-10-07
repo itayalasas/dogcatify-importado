@@ -117,8 +117,6 @@ Deno.serve(async (req: Request) => {
       scanned: (orders || []).length,
       candidates: candidates.length,
       paymentSynced: 0,
-      accountingSent: 0,
-      skippedAccounting: 0,
       errors: 0,
       dryRun,
       details: [] as Array<Record<string, unknown>>,
@@ -154,63 +152,6 @@ Deno.serve(async (req: Request) => {
           }
         } else {
           itemResult.sync_response = "dry_run";
-        }
-
-        const { data: refreshedOrder, error: refreshedError } = await supabase
-          .from("orders")
-          .select("id, status, payment_status, payment_method, payment_id, payment_data, total_amount")
-          .eq("id", order.id)
-          .maybeSingle();
-
-        if (refreshedError) {
-          throw refreshedError;
-        }
-
-        const refreshedPaymentStatus = (refreshedOrder?.payment_status || "").toLowerCase();
-        const isPaidAfterSync = refreshedPaymentStatus === "approved" || refreshedPaymentStatus === "paid";
-
-        if (!isPaidAfterSync) {
-          summary.skippedAccounting += 1;
-          itemResult.accounting = "skipped_not_paid";
-          summary.details.push(itemResult);
-          continue;
-        }
-
-        const { count: accountingSuccessCount, error: accountingCountError } = await supabase
-          .from("accounting_webhook_logs")
-          .select("id", { head: true, count: "exact" })
-          .eq("order_id", order.id)
-          .eq("success", true);
-
-        if (accountingCountError) {
-          throw accountingCountError;
-        }
-
-        if ((accountingSuccessCount || 0) > 0) {
-          summary.skippedAccounting += 1;
-          itemResult.accounting = "already_sent";
-          summary.details.push(itemResult);
-          continue;
-        }
-
-        if (!dryRun) {
-          const accountingResponse = await fetch(`${supabaseUrl}/functions/v1/send-order-to-accounting`, {
-            method: "POST",
-            headers: authHeaders,
-            body: JSON.stringify({ order_id: order.id }),
-          });
-
-          const accountingBody = await accountingResponse.text();
-          itemResult.accounting_status_code = accountingResponse.status;
-          itemResult.accounting_response = accountingBody;
-
-          if (accountingResponse.ok) {
-            summary.accountingSent += 1;
-          } else {
-            summary.errors += 1;
-          }
-        } else {
-          itemResult.accounting = "dry_run_pending_send";
         }
 
         summary.details.push(itemResult);
