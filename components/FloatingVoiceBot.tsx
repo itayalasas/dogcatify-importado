@@ -69,20 +69,19 @@ const OWNER_PROMPTS_WITH_PETS = (petNames: string[]) => {
   const firstPet = petNames[0] || 'mi mascota';
 
   return [
-    `¿Qué le recomendarías hoy a ${firstPet}?`,
-    `¿Qué vacunas o controles faltan para ${firstPet}?`,
+    `¿Qué vacunas le tocan a ${firstPet}?`,
+    `${firstPet} está sin energía, ¿qué hago?`,
     `¿Está bien el peso de ${firstPet}?`,
-    `¿Qué hago si ${firstPet} tiene vómitos o decaimiento?`,
-    '¿Cómo comparto el historial con un veterinario?',
+    `¿Cuánto debería comer ${firstPet}?`,
+    `¿Cada cuánto desparasito a ${firstPet}?`,
   ];
 };
 
 const OWNER_PROMPTS_WITHOUT_PETS = [
-  '¿Cómo registro mi primera mascota?',
-  '¿Qué puedo hacer en Mascotas?',
-  '¿Cómo empiezo con el historial médico?',
-  '¿Qué servicios me recomienda la app?',
-  '¿Cómo funciona el cuidado inteligente?',
+  '¿Cómo registro a mi mascota?',
+  '¿Qué vacunas necesita un cachorro?',
+  '¿Cada cuánto hay que desparasitar?',
+  '¿Qué necesito para adoptar?',
 ];
 
 const PARTNER_PROMPTS = [
@@ -134,19 +133,14 @@ const getQuickActions = (role: AppRole | null, hasPets: boolean, loading = false
         ]
       : [
           {
-            id: 'care-hub',
-            label: '🧠 Cuidado inteligente',
-            description: 'IA, recomendaciones, alertas y modo emergencia',
-          },
-          {
             id: 'find-vet',
-            label: '🏥 Encontrar veterinario',
-            description: 'Servicios veterinarios cerca de ti',
+            label: '🏥 Reservar veterinaria',
+            description: 'Buscá un profesional y pedí turno',
           },
           {
-            id: 'explore-app',
-            label: '🎯 Explorar funcionalidades',
-            description: 'Tour completo de DogCatiFy',
+            id: 'care-hub',
+            label: '🚨 Síntomas o urgencia',
+            description: 'Recomendaciones, alertas y modo emergencia',
           },
         ];
   }
@@ -180,45 +174,35 @@ const getQuickActions = (role: AppRole | null, hasPets: boolean, loading = false
     ? [
         {
           id: 'medical-history',
-          label: '📋 Historial médico',
-          description: 'Gestiona salud, vacunas y seguimiento',
-        },
-        {
-          id: 'care-hub',
-          label: '🧠 Cuidado inteligente',
-          description: 'IA, recomendaciones, alertas y modo emergencia',
+          label: '💉 Vacunas y salud',
+          description: 'Historial, vacunas, desparasitaciones y peso',
         },
         {
           id: 'find-vet',
-          label: '🏥 Encontrar veterinario',
-          description: 'Servicios veterinarios cerca de ti',
+          label: '🏥 Reservar veterinaria',
+          description: 'Buscá un profesional y pedí turno',
         },
         {
-          id: 'explore-app',
-          label: '🎯 Explorar funcionalidades',
-          description: 'Tour completo de DogCatiFy',
+          id: 'care-hub',
+          label: '🚨 Síntomas o urgencia',
+          description: 'Recomendaciones, alertas y modo emergencia',
         },
       ]
     : [
         {
           id: 'add-pet',
-          label: '🐕 Registrar mi primera mascota',
-          description: 'Guía paso a paso para agregar tu mascota',
-        },
-        {
-          id: 'care-hub',
-          label: '🧠 Cuidado inteligente',
-          description: 'IA, recomendaciones, alertas y modo emergencia',
+          label: '🐕 Registrar mi mascota',
+          description: 'Creá su perfil para llevar vacunas y controles',
         },
         {
           id: 'find-vet',
-          label: '🏥 Encontrar veterinario',
-          description: 'Servicios veterinarios cerca de ti',
+          label: '🏥 Reservar veterinaria',
+          description: 'Buscá un profesional y pedí turno',
         },
         {
-          id: 'explore-app',
-          label: '🎯 Explorar funcionalidades',
-          description: 'Tour completo de DogCatiFy',
+          id: 'care-hub',
+          label: '🚨 Síntomas o urgencia',
+          description: 'Recomendaciones, alertas y modo emergencia',
         },
       ];
 };
@@ -233,10 +217,9 @@ const getStarterPrompts = (role: AppRole | null, hasPets: boolean, petNames: str
           '¿Qué puedo hacer con mi plan actual?',
         ]
       : [
-          '¿Qué puede hacer Dotty por mí?',
-          '¿Cómo veo mis mascotas?',
-          '¿Cómo reviso alertas y recordatorios?',
-          '¿Cómo comparto el historial con un veterinario?',
+          '¿Qué vacunas le tocan a mi mascota?',
+          '¿Qué hago si mi mascota vomita?',
+          '¿Cada cuánto hay que desparasitar?',
         ];
   }
 
