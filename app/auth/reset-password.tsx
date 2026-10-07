@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, Alert, ActivityIndicator, Platform, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { CircleCheck as CheckCircle, Lock, ArrowLeft } from 'lucide-react-native';
+import { CircleCheck as CheckCircle, Lock, ShieldCheck, Circle } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { toast } from '../../components/ui/Toast';
+import { colors, typography, spacing, radius } from '../../constants/theme';
 import { supabaseClient } from '../../lib/supabase';
 import { envConfig } from '../../utils/envConfig';
 import { validatePassword, getPasswordStrengthKey, PASSWORD_MIN_LENGTH_EXCLUSIVE } from '../../utils/passwordValidation';
@@ -58,7 +60,7 @@ export default function ResetPasswordScreen() {
       const { token } = params;
       
       if (!token) {
-        setError('Token de recuperación no encontrado');
+        setError('No encontramos el enlace de recuperación. Pedí uno nuevo.');
         setLoading(false);
         return;
       }
@@ -78,13 +80,13 @@ export default function ResetPasswordScreen() {
 
         if (error || !tokenData || tokenData.is_confirmed) {
           console.error('Token validation error:', error);
-          setError('Token no válido o ya utilizado');
+          setError('Este enlace no es válido o ya se usó.');
           setLoading(false);
           return;
         }
 
         if (!tokenData.is_valid) {
-          setError('El token ha expirado. Solicita un nuevo enlace de recuperación.');
+          setError('El enlace venció. Pedí un nuevo enlace de recuperación.');
           setLoading(false);
           return;
         }
@@ -97,7 +99,7 @@ export default function ResetPasswordScreen() {
         setError(null);
       } catch (error) {
         console.error('Error validating reset token:', error);
-        setError('Error al validar el token de recuperación');
+        setError('No pudimos validar el enlace de recuperación.');
       } finally {
         setLoading(false);
       }
@@ -110,7 +112,7 @@ export default function ResetPasswordScreen() {
     console.log('handlePasswordReset called');
     
     if (!newPassword || !confirmPassword) {
-      Alert.alert('Error', 'Por favor completa ambos campos de contraseña');
+      Alert.alert('Error', 'Completá los dos campos de contraseña');
       return;
     }
 
@@ -131,7 +133,7 @@ export default function ResetPasswordScreen() {
 
     if (!userId || !resetToken) {
       console.log('Missing userId or token:', { userId, token: resetToken });
-      Alert.alert('Error', 'Información de reset inválida');
+      Alert.alert('Error', 'El enlace de recuperación no es válido');
       return;
     }
 
@@ -177,11 +179,8 @@ export default function ResetPasswordScreen() {
       
       // Don't show alert immediately, let the UI update first
       setTimeout(() => {
-        Alert.alert(
-          'Contraseña actualizada',
-          'Tu contraseña ha sido cambiada exitosamente. Ya puedes iniciar sesión con tu nueva contraseña.',
-          [{ text: 'OK', onPress: () => handleGoToLogin() }]
-        );
+        toast.success('Contraseña actualizada', 'Ya podés ingresar con tu nueva contraseña.');
+        handleGoToLogin();
       }, 500);
       
     } catch (error: any) {
@@ -208,8 +207,8 @@ export default function ResetPasswordScreen() {
     return (
       <View style={styles.container}>
         <Card style={styles.loadingCard}>
-          <ActivityIndicator size="large" color="#2D6A6F" />
-          <Text style={styles.loadingText}>Validando token de recuperación...</Text>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Validando el enlace de recuperación...</Text>
         </Card>
       </View>
     );
@@ -219,20 +218,22 @@ export default function ResetPasswordScreen() {
     return (
       <View style={styles.container}>
         <Card style={styles.errorCard}>
-          <Lock size={64} color="#EF4444" />
-          <Text style={styles.errorTitle}>Token Inválido</Text>
+          <View style={[styles.iconCircle, styles.iconCircleDanger]}>
+            <Lock size={36} color={colors.danger} />
+          </View>
+          <Text style={styles.errorTitle} accessibilityRole="header">Enlace no válido</Text>
           <Text style={styles.errorText}>{error}</Text>
           
           <View style={styles.errorActions}>
             <Button
-              title="Solicitar Nuevo Enlace"
+              title="Pedir un enlace nuevo"
               onPress={handleRequestNewToken}
               size="large"
             />
             <Button
-              title="Ir al Login"
+              title="Volver a ingresar"
               onPress={handleGoToLogin}
-              variant="outline"
+              variant="ghost"
               size="large"
             />
           </View>
@@ -245,10 +246,12 @@ export default function ResetPasswordScreen() {
     return (
       <View style={styles.container}>
         <Card style={styles.successCard}>
-          <CheckCircle size={64} color="#10B981" />
-          <Text style={styles.successTitle}>¡Contraseña Actualizada!</Text>
+          <View style={[styles.iconCircle, styles.iconCircleSuccess]}>
+            <CheckCircle size={36} color={colors.success} />
+          </View>
+          <Text style={styles.successTitle} accessibilityRole="header">¡Contraseña actualizada!</Text>
           <Text style={styles.successText}>
-            Tu contraseña ha sido cambiada exitosamente. Ya puedes iniciar sesión con tu nueva contraseña.
+            Tu contraseña se cambió correctamente. Ya podés ingresar con tu nueva contraseña.
           </Text>
           {userEmail && (
             <Text style={styles.emailText}>
@@ -256,7 +259,7 @@ export default function ResetPasswordScreen() {
             </Text>
           )}
           <Button
-            title="Ir a Iniciar Sesión"
+            title="Ingresar"
             onPress={handleGoToLogin}
             size="large"
           />
@@ -267,15 +270,19 @@ export default function ResetPasswordScreen() {
 
   if (validToken) {
     return (
-      <View style={styles.container}>
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         <Card style={styles.passwordCard}>
-          <View style={styles.iconContainer}>
-            <Lock size={64} color="#2D6A6F" />
+          <View style={[styles.iconCircle, styles.iconCirclePrimary]}>
+            <Lock size={36} color={colors.primary} />
           </View>
-          
-          <Text style={styles.passwordTitle}>Restablecer Contraseña</Text>
+
+          <Text style={styles.passwordTitle} accessibilityRole="header">Creá una contraseña nueva</Text>
           <Text style={styles.passwordText}>
-            Ingresa tu nueva contraseña para la cuenta: {userEmail}
+            Para la cuenta <Text style={styles.emailStrong}>{userEmail}</Text>
           </Text>
 
           <View style={styles.passwordForm}>
@@ -285,12 +292,15 @@ export default function ResetPasswordScreen() {
               value={newPassword}
               onChangeText={setNewPassword}
               secureTextEntry
+              autoCapitalize="none"
+              textContentType="newPassword"
+              leftIcon={<Lock size={20} color={colors.icon} />}
             />
 
             {newPassword.length > 0 && (
               <View style={styles.passwordFeedbackContainer}>
                 <View style={styles.passwordStrengthHeader}>
-                  <Text style={styles.passwordStrengthLabel}>Fortaleza</Text>
+                  <Text style={styles.passwordStrengthLabel}>Seguridad de la contraseña</Text>
                   <Text style={styles.passwordStrengthValue}>{getPasswordStrength()}</Text>
                 </View>
                 <View style={styles.passwordStrengthBarBackground}>
@@ -304,15 +314,21 @@ export default function ResetPasswordScreen() {
 
                 <View style={styles.passwordRulesList}>
                   {passwordRules.map((rule) => (
-                    <Text
-                      key={rule.label}
-                      style={[
-                        styles.passwordRuleText,
-                        rule.valid ? styles.passwordRuleValid : styles.passwordRulePending,
-                      ]}
-                    >
-                      {rule.valid ? '✓' : '○'} {rule.label}
-                    </Text>
+                    <View key={rule.label} style={styles.passwordRuleRow}>
+                      {rule.valid ? (
+                        <CheckCircle size={16} color={colors.success} />
+                      ) : (
+                        <Circle size={16} color={colors.textTertiary} />
+                      )}
+                      <Text
+                        style={[
+                          styles.passwordRuleText,
+                          rule.valid ? styles.passwordRuleValid : styles.passwordRulePending,
+                        ]}
+                      >
+                        {rule.label}
+                      </Text>
+                    </View>
                   ))}
                 </View>
               </View>
@@ -320,25 +336,19 @@ export default function ResetPasswordScreen() {
 
             <Input
               label="Confirmar contraseña"
-              placeholder="Repite la nueva contraseña"
+              placeholder="Repetí la nueva contraseña"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
+              autoCapitalize="none"
+              textContentType="newPassword"
+              leftIcon={<Lock size={20} color={colors.icon} />}
+              error={confirmPassword.length > 0 && !passwordsMatch ? 'Las contraseñas no coinciden' : undefined}
+              helperText={passwordsMatch ? 'Las contraseñas coinciden' : undefined}
             />
 
-            {confirmPassword.length > 0 && (
-              <Text
-                style={[
-                  styles.confirmPasswordStatus,
-                  passwordsMatch ? styles.passwordRuleValid : styles.confirmPasswordError,
-                ]}
-              >
-                {passwordsMatch ? 'Las contraseñas coinciden' : 'Las contraseñas no coinciden'}
-              </Text>
-            )}
-
             <Button
-              title={updatingPassword ? "Actualizando..." : "Cambiar Contraseña"}
+              title={updatingPassword ? "Actualizando..." : "Cambiar contraseña"}
               onPress={handlePasswordReset}
               loading={updatingPassword}
               disabled={!newPassword || !confirmPassword || !isPasswordValid || !passwordsMatch || updatingPassword}
@@ -346,11 +356,14 @@ export default function ResetPasswordScreen() {
             />
           </View>
 
-          <Text style={styles.securityNote}>
-            🔒 Tu nueva contraseña será encriptada y almacenada de forma segura.
-          </Text>
+          <View style={styles.securityNoteRow}>
+            <ShieldCheck size={14} color={colors.textTertiary} />
+            <Text style={styles.securityNote}>
+              Tu nueva contraseña se guarda cifrada y de forma segura.
+            </Text>
+          </View>
         </Card>
-      </View>
+      </ScrollView>
     );
   }
 
@@ -362,168 +375,185 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
+    padding: spacing.xl,
+    backgroundColor: colors.background,
+  },
+  scrollContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+    paddingTop: spacing.huge,
   },
   loadingCard: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: spacing.huge,
+    width: '100%',
+    maxWidth: 400,
   },
   loadingText: {
-    marginTop: 20,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    marginTop: spacing.xl,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  iconCircleDanger: {
+    backgroundColor: colors.dangerSoft,
+  },
+  iconCircleSuccess: {
+    backgroundColor: colors.successSoft,
+  },
+  iconCirclePrimary: {
+    backgroundColor: colors.primarySoft,
   },
   errorCard: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: spacing.xxxl,
     width: '100%',
     maxWidth: 400,
   },
   errorTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#EF4444',
-    marginTop: 16,
-    marginBottom: 8,
+    ...typography.title,
+    color: colors.text,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   errorText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 24,
+    marginBottom: spacing.xxl,
   },
   errorActions: {
     width: '100%',
-    gap: 12,
+    gap: spacing.sm,
   },
   passwordCard: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: spacing.xxxl,
     width: '100%',
     maxWidth: 400,
   },
-  iconContainer: {
-    marginBottom: 16,
-  },
   passwordTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
-    marginTop: 16,
-    marginBottom: 8,
+    ...typography.title,
+    color: colors.text,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   passwordText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 24,
+    marginBottom: spacing.xxl,
+  },
+  emailStrong: {
+    fontFamily: typography.bodyStrong.fontFamily,
+    fontWeight: '600',
+    color: colors.text,
   },
   passwordForm: {
     width: '100%',
-    gap: 16,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   passwordFeedbackContainer: {
-    marginTop: -8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
+    marginTop: -spacing.xs,
+    marginBottom: spacing.lg,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.background,
   },
   passwordStrengthHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   passwordStrengthLabel: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
+    ...typography.label,
+    color: colors.textSecondary,
   },
   passwordStrengthValue: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#2D6A6F',
+    ...typography.label,
+    fontFamily: typography.bodyStrong.fontFamily,
+    fontWeight: '600',
+    color: colors.primary,
   },
   passwordStrengthBarBackground: {
     height: 6,
-    borderRadius: 99,
-    backgroundColor: '#D1D5DB',
+    borderRadius: radius.pill,
+    backgroundColor: colors.border,
     overflow: 'hidden',
-    marginBottom: 10,
+    marginBottom: spacing.md,
   },
   passwordStrengthBarFill: {
     height: '100%',
-    borderRadius: 99,
-    backgroundColor: '#2D6A6F',
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
   },
   passwordRulesList: {
-    gap: 6,
+    gap: spacing.xs,
+  },
+  passwordRuleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   passwordRuleText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    ...typography.bodySmall,
+    flex: 1,
   },
   passwordRuleValid: {
-    color: '#2D6A6F',
+    color: colors.success,
   },
   passwordRulePending: {
-    color: '#6B7280',
-  },
-  confirmPasswordStatus: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    marginTop: -8,
-    marginBottom: 8,
-  },
-  confirmPasswordError: {
-    color: '#374151',
+    color: colors.textSecondary,
   },
   successCard: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: spacing.xxxl,
     width: '100%',
     maxWidth: 400,
   },
   successTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
-    marginTop: 16,
-    marginBottom: 8,
+    ...typography.title,
+    color: colors.text,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   successText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 24,
+    marginBottom: spacing.lg,
   },
   emailText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
+  },
+  securityNoteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
   },
   securityNote: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
-    fontStyle: 'italic',
+    flexShrink: 1,
   },
 });

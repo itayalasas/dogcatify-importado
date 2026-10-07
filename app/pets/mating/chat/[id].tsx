@@ -12,11 +12,13 @@ import {
   Alert,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Send } from 'lucide-react-native';
+import { Send } from 'lucide-react-native';
+import { ScreenHeader, Skeleton } from '../../../../components/ui';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabaseClient } from '../../../../lib/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
 
+import { colors, spacing, typography } from '../../../../constants/theme';
 interface MatchMessage {
   id: string;
   chat_id: string;
@@ -199,9 +201,11 @@ export default function PetMatchChatScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#7C3AED" />
-          <Text style={styles.loadingText}>Cargando conversación...</Text>
+        <ScreenHeader title="Chat" onBack={() => router.back()} />
+        <View style={styles.messagesContent} accessibilityLabel="Cargando conversación">
+          <Skeleton width="60%" height={44} borderRadius={16} />
+          <Skeleton width="50%" height={44} borderRadius={16} style={styles.skeletonMine} />
+          <Skeleton width="70%" height={44} borderRadius={16} style={styles.skeletonOther} />
         </View>
       </SafeAreaView>
     );
@@ -209,13 +213,7 @@ export default function PetMatchChatScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <View style={[styles.header, { paddingTop: Math.max(insets.top, 8) }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{title}</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <ScreenHeader title={title} onBack={() => router.back()} />
 
       <KeyboardAvoidingView
         style={styles.chatContainer}
@@ -230,13 +228,15 @@ export default function PetMatchChatScreen() {
           contentContainerStyle={styles.messagesContent}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
-          ListEmptyComponent={<Text style={styles.emptyText}>Aún no hay mensajes. ¡Inicia la conversación!</Text>}
+          ListEmptyComponent={<Text style={styles.emptyText}>Aún no hay mensajes. ¡Iniciá la conversación! 💬</Text>}
         />
 
         <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 8) }]}>
           <TextInput
             style={styles.input}
-            placeholder="Escribe un mensaje..."
+            placeholder="Escribí un mensaje..."
+            placeholderTextColor={colors.placeholder}
+            accessibilityLabel="Mensaje"
             value={newMessage}
             onChangeText={setNewMessage}
             multiline
@@ -246,11 +246,13 @@ export default function PetMatchChatScreen() {
             style={[styles.sendButton, (!newMessage.trim() || sending) && styles.sendButtonDisabled]}
             onPress={sendMessage}
             disabled={!newMessage.trim() || sending}
+            accessibilityRole="button"
+            accessibilityLabel="Enviar mensaje"
           >
             {sending ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator size="small" color={colors.white} />
             ) : (
-              <Send size={18} color="#FFFFFF" />
+              <Send size={18} color={colors.white} />
             )}
           </TouchableOpacity>
         </View>
@@ -260,56 +262,30 @@ export default function PetMatchChatScreen() {
 }
 
 const styles = StyleSheet.create({
+  skeletonMine: {
+    alignSelf: 'flex-end',
+    marginTop: spacing.md,
+  },
+  skeletonOther: {
+    marginTop: spacing.md,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  backButton: {
-    padding: 6,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  headerSpacer: {
-    width: 30,
+    backgroundColor: colors.background,
   },
   chatContainer: {
     flex: 1,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 8,
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
   messagesContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 16,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.lg,
     flexGrow: 1,
   },
   emptyText: {
     textAlign: 'center',
-    marginTop: 24,
-    color: '#9CA3AF',
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    marginTop: spacing.xxl,
+    color: colors.textSecondary,
+    ...typography.bodySmall,
   },
   messageRow: {
     marginBottom: 10,
@@ -324,74 +300,72 @@ const styles = StyleSheet.create({
   messageBubble: {
     maxWidth: '78%',
     borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   myBubble: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: colors.primary,
     borderBottomRightRadius: 4,
   },
   otherBubble: {
-    backgroundColor: '#E5E7EB',
+    backgroundColor: colors.border,
     borderBottomLeftRadius: 4,
   },
   messageText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    ...typography.bodySmall,
     lineHeight: 19,
   },
   myText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   otherText: {
-    color: '#111827',
+    color: colors.text,
   },
   messageTime: {
-    marginTop: 4,
+    marginTop: spacing.xs,
     fontSize: 11,
     fontFamily: 'Inter-Regular',
     textAlign: 'right',
   },
   myTime: {
-    color: '#EDE9FE',
+    color: colors.primarySoft,
   },
   otherTime: {
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
-    gap: 8,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
+    gap: spacing.sm,
   },
   input: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: colors.borderStrong,
     borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     maxHeight: 110,
     minHeight: 40,
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    backgroundColor: '#FFFFFF',
+    ...typography.bodySmall,
+    color: colors.text,
+    backgroundColor: colors.surface,
   },
   sendButton: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#7C3AED',
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 1,
   },
   sendButtonDisabled: {
-    backgroundColor: '#C4B5FD',
+    backgroundColor: colors.primaryBorder,
   },
 });

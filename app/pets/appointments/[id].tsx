@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, TextInput, Platform, Keyboard, Pressable, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, TextInput, Platform, Keyboard, Pressable, Dimensions, RefreshControl } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Calendar, Clock, CircleAlert as AlertCircle, CircleCheck as CheckCircle, Star, MessageSquare, Send } from 'lucide-react-native';
+import { X, Calendar, Clock, CircleAlert as AlertCircle, CircleCheck as CheckCircle, Star, MessageSquare, Send } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient, getPet } from '@/lib/supabase';
+import { colors, spacing, radius, fontSize } from '../../../constants/theme';
+import { HealthHeader } from '../../../components/health';
+import { toast } from '../../../components/ui/Toast';
+import { Badge, BadgeTone, EmptyState, IconButton, SegmentedControl, SkeletonList } from '../../../components/ui';
 
 export default function PetAppointments() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -21,6 +25,16 @@ export default function PetAppointments() {
   const [submittingReview, setSubmittingReview] = useState(false);
   const [existingReviews, setExistingReviews] = useState<{[key: string]: any}>({});
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([fetchPetDetails(), fetchAppointments()]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -213,7 +227,7 @@ export default function PetAppointments() {
 
   const handleSubmitReview = async () => {
     if (!selectedAppointment || rating === 0) {
-      Alert.alert('Error', 'Por favor selecciona una calificación');
+      Alert.alert('Error', 'Elegí una calificación');
       return;
     }
 
@@ -246,7 +260,7 @@ export default function PetAppointments() {
       }));
 
       setShowReviewModal(false);
-      Alert.alert('Éxito', 'Reseña enviada correctamente');
+      toast.success('¡Gracias por tu reseña!');
     } catch (error) {
       console.error('Error submitting review:', error);
       Alert.alert('Error', 'No se pudo enviar la reseña');
@@ -263,11 +277,15 @@ export default function PetAppointments() {
             key={star}
             onPress={() => onPress && onPress(star)}
             disabled={!onPress}
+            style={onPress ? styles.starButton : undefined}
+            accessibilityRole={onPress ? 'button' : 'image'}
+            accessibilityLabel={onPress ? `${star} ${star === 1 ? 'estrella' : 'estrellas'}` : undefined}
+            accessibilityState={onPress ? { selected: star <= currentRating } : undefined}
           >
             <Star
               size={size}
-              color={star <= currentRating ? '#F59E0B' : '#E5E7EB'}
-              fill={star <= currentRating ? '#F59E0B' : 'none'}
+              color={star <= currentRating ? colors.warning : colors.border}
+              fill={star <= currentRating ? colors.warning : 'none'}
             />
           </TouchableOpacity>
         ))}
@@ -277,21 +295,31 @@ export default function PetAppointments() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return '#FEF3C7';
-      case 'confirmed': return '#D1FAE5';
-      case 'completed': return '#DBEAFE';
-      case 'cancelled': return '#FEE2E2';
-      default: return '#F3F4F6';
+      case 'pending': return colors.warningSoft;
+      case 'confirmed': return colors.successSoft;
+      case 'completed': return colors.primaryMuted;
+      case 'cancelled': return colors.dangerSoft;
+      default: return colors.surfaceAlt;
     }
   };
 
   const getStatusTextColor = (status: string) => {
     switch (status) {
-      case 'pending': return '#92400E';
-      case 'confirmed': return '#065F46';
-      case 'completed': return '#1E40AF';
-      case 'cancelled': return '#991B1B';
-      default: return '#374151';
+      case 'pending': return colors.warning;
+      case 'confirmed': return colors.success;
+      case 'completed': return colors.primaryStrong;
+      case 'cancelled': return colors.danger;
+      default: return colors.textSecondary;
+    }
+  };
+
+  const getStatusTone = (status: string): BadgeTone => {
+    switch (status) {
+      case 'pending': return 'warning';
+      case 'confirmed': return 'success';
+      case 'completed': return 'primary';
+      case 'cancelled': return 'danger';
+      default: return 'neutral';
     }
   };
 
@@ -307,11 +335,11 @@ export default function PetAppointments() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'pending': return <AlertCircle size={16} color="#92400E" />;
-      case 'confirmed': return <CheckCircle size={16} color="#065F46" />;
-      case 'completed': return <CheckCircle size={16} color="#1E40AF" />;
-      case 'cancelled': return <AlertCircle size={16} color="#991B1B" />;
-      default: return <Clock size={16} color="#374151" />;
+      case 'pending': return <AlertCircle size={14} color={colors.warning} />;
+      case 'confirmed': return <CheckCircle size={14} color={colors.success} />;
+      case 'completed': return <CheckCircle size={14} color={colors.primary} />;
+      case 'cancelled': return <AlertCircle size={14} color={colors.danger} />;
+      default: return <Clock size={14} color={colors.textSecondary} />;
     }
   };
 
@@ -333,113 +361,81 @@ export default function PetAppointments() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Citas</Text>
-          <View style={styles.placeholder} />
-        </View>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando citas...</Text>
-        </View>
+        <HealthHeader title="Citas" />
+        <SkeletonList kind="cards" count={3} />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Citas</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <HealthHeader title="Citas" />
 
       <View style={styles.petInfo}>
         <Text style={styles.petName}>{pet?.name || 'Mascota'}</Text>
         <Text style={styles.petBreed}>{pet?.breed || 'Raza no especificada'}</Text>
       </View>
 
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'upcoming' && styles.activeTab]}
-          onPress={() => setActiveTab('upcoming')}
-        >
-          <Text style={[styles.tabText, activeTab === 'upcoming' && styles.activeTabText]}>
-            Próximas Citas
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'past' && styles.activeTab]}
-          onPress={() => setActiveTab('past')}
-        >
-          <Text style={[styles.tabText, activeTab === 'past' && styles.activeTabText]}>
-            Historial
-          </Text>
-        </TouchableOpacity>
+      <View style={styles.segmentWrapper}>
+        <SegmentedControl
+          options={[
+            { value: 'upcoming', label: 'Próximas' },
+            { value: 'past', label: 'Historial' },
+          ]}
+          value={activeTab}
+          onChange={setActiveTab}
+        />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
+      >
         <Card style={styles.appointmentsCard}>
           <View style={styles.calendarHeader}>
-            <Calendar size={20} color="#3B82F6" />
+            <Calendar size={20} color={colors.primary} />
             <Text style={styles.calendarTitle}>
-              {activeTab === 'upcoming' ? 'Próximas Citas' : 'Historial de Citas'}
+              {activeTab === 'upcoming' ? 'Próximas citas' : 'Historial de citas'}
             </Text>
           </View>
 
           {filteredAppointments.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>
-                No hay {activeTab === 'upcoming' ? 'próximas citas' : 'historial de citas'}
-              </Text>
-              <Text style={styles.emptySubtitle}>
-                {activeTab === 'upcoming' 
-                  ? 'Programa una cita para tu mascota' 
-                  : 'Las citas completadas aparecerán aquí'}
-              </Text>
-              {activeTab === 'upcoming' && (
-                <Button
-                  title="Reservar Cita"
-                  onPress={handleBookAppointment}
-                  size="medium"
-                />
-              )}
-            </View>
+            <EmptyState
+              icon={<Calendar size={32} color={colors.primary} />}
+              title={activeTab === 'upcoming' ? 'No hay próximas citas' : 'Todavía no hay historial'}
+              description={activeTab === 'upcoming'
+                ? 'Reservá una cita para tu mascota con un profesional de confianza.'
+                : 'Las citas completadas van a aparecer acá.'}
+              actionLabel={activeTab === 'upcoming' ? 'Reservar cita' : undefined}
+              onAction={activeTab === 'upcoming' ? handleBookAppointment : undefined}
+            />
           ) : (
             <View>
               {filteredAppointments.map((appointment) => (
                 <View key={appointment.id} style={styles.appointmentItem}>
                   <View style={styles.appointmentHeader}>
                     <Text style={styles.appointmentService}>{appointment.serviceName}</Text>
-                    <View style={[
-                      styles.statusBadge,
-                      { backgroundColor: getStatusColor(appointment.status) }
-                    ]}>
-                      {getStatusIcon(appointment.status)}
-                      <Text style={[
-                        styles.statusText,
-                        { color: getStatusTextColor(appointment.status) }
-                      ]}>
-                        {getStatusText(appointment.status)}
-                      </Text>
-                    </View>
+                    <Badge
+                      label={getStatusText(appointment.status)}
+                      tone={getStatusTone(appointment.status)}
+                      icon={getStatusIcon(appointment.status)}
+                      size="small"
+                    />
                   </View>
                   
                   <Text style={styles.appointmentProvider}>{appointment.partnerName}</Text>
                   
                   <View style={styles.appointmentDetails}>
                     <View style={styles.appointmentDetail}>
-                      <Calendar size={16} color="#6B7280" />
+                      <Calendar size={16} color={colors.textSecondary} />
                       <Text style={styles.appointmentDetailText}>
-                        {appointment.date.toLocaleDateString()}
+                        {appointment.date.toLocaleDateString('es-UY', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
                       </Text>
                     </View>
                     
                     <View style={styles.appointmentDetail}>
-                      <Clock size={16} color="#6B7280" />
+                      <Clock size={16} color={colors.textSecondary} />
                       <Text style={styles.appointmentDetailText}>
                         {appointment.time}
                       </Text>
@@ -472,8 +468,9 @@ export default function PetAppointments() {
                         <TouchableOpacity 
                           style={styles.addReviewButton}
                           onPress={() => handleAddReview(appointment)}
+                          accessibilityRole="button"
                         >
-                          <Star size={16} color="#F59E0B" />
+                          <Star size={16} color={colors.warning} />
                           <Text style={styles.addReviewText}>Agregar reseña</Text>
                         </TouchableOpacity>
                       )}
@@ -488,7 +485,7 @@ export default function PetAppointments() {
         {activeTab === 'upcoming' && (
           <View style={styles.bookButtonContainer}>
             <Button
-              title="Reservar Nueva Cita"
+              title="Reservar nueva cita"
               onPress={handleBookAppointment}
               size="large"
             />
@@ -526,10 +523,12 @@ export default function PetAppointments() {
                 showsVerticalScrollIndicator={false}
               >
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Calificar Servicio</Text>
-              <TouchableOpacity onPress={() => setShowReviewModal(false)}>
-                <Text style={styles.modalCloseText}>✕</Text>
-              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Calificar servicio</Text>
+              <IconButton
+                icon={<X size={22} color={colors.textSecondary} />}
+                onPress={() => setShowReviewModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
 
             {selectedAppointment && (
@@ -552,7 +551,8 @@ export default function PetAppointments() {
               <Text style={styles.commentLabel}>Comentario (opcional)</Text>
               <TextInput
                 style={styles.commentInput}
-                placeholder="Comparte tu experiencia con este servicio..."
+                placeholder="Contá tu experiencia con este servicio..."
+                placeholderTextColor={colors.placeholder}
                 value={reviewComment}
                 onChangeText={setReviewComment}
                 multiline
@@ -566,28 +566,21 @@ export default function PetAppointments() {
 
             <View style={styles.modalActions}>
               <View style={styles.modalButtonsContainer}>
-                <TouchableOpacity
-                  style={styles.cancelButton}
+                <Button
+                  title="Cancelar"
+                  variant="outline"
                   onPress={() => setShowReviewModal(false)}
-                >
-                  <Text style={styles.cancelButtonText}>Cancelar</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[
-                    styles.submitButton,
-                    rating === 0 && styles.disabledSubmitButton
-                  ]}
+                  fullWidth={false}
+                  style={styles.modalButton}
+                />
+                <Button
+                  title="Enviar reseña"
                   onPress={handleSubmitReview}
-                  disabled={rating === 0 || submittingReview}
-                >
-                  <Text style={[
-                    styles.submitButtonText,
-                    rating === 0 && styles.disabledSubmitButtonText
-                  ]}>
-                    {submittingReview ? 'Enviando...' : 'Enviar Reseña'}
-                  </Text>
-                </TouchableOpacity>
+                  disabled={rating === 0}
+                  loading={submittingReview}
+                  fullWidth={false}
+                  style={styles.modalButton}
+                />
               </View>
             </View>
               </ScrollView>
@@ -599,76 +592,89 @@ export default function PetAppointments() {
 }
 
 const styles = StyleSheet.create({
+  segmentWrapper: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+  },
+  starButton: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalButton: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   title: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 32,
   },
   petInfo: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 0,
+    borderBottomColor: colors.border,
   },
   petName: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
   },
   petBreed: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   tab: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
   activeTab: {
-    borderBottomColor: '#3B82F6',
+    borderBottomColor: colors.primary,
   },
   tabText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   activeTabText: {
-    color: '#3B82F6',
+    color: colors.primary,
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
   },
   loadingContainer: {
     flex: 1,
@@ -676,277 +682,279 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   appointmentsCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   calendarHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   calendarTitle: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginLeft: 8,
+    color: colors.text,
+    marginLeft: spacing.sm,
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 32,
+    paddingVertical: spacing.xxxl,
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   appointmentItem: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   appointmentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   appointmentService: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   statusText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    marginLeft: 4,
+    marginLeft: spacing.xs,
   },
   appointmentProvider: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 8,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   appointmentDetails: {
     flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   appointmentDetail: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: spacing.lg,
   },
   appointmentDetailText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginLeft: 6,
   },
   appointmentNotes: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     fontStyle: 'italic',
   },
   bookButtonContainer: {
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   reviewSection: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: colors.surfaceAlt,
   },
   existingReview: {
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    borderRadius: radius.sm,
   },
   reviewTitle: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   reviewComment: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
+    color: colors.textSecondary,
     fontStyle: 'italic',
-    marginTop: 8,
-    marginBottom: 4,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
   reviewDate: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    color: colors.textSecondary,
   },
   addReviewButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: colors.warningSoft,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
     alignSelf: 'flex-start',
   },
   addReviewText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Medium',
-    color: '#92400E',
+    color: colors.warning,
     marginLeft: 6,
   },
   starRating: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: spacing.xs,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   modalOverlayCentered: {
     justifyContent: 'center',
   },
   modalOverlayKeyboardVisible: {
     justifyContent: 'flex-start',
-    paddingTop: 32,
-    paddingBottom: 12,
+    paddingTop: spacing.xxxl,
+    paddingBottom: spacing.md,
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.xxl,
     width: '100%',
     maxWidth: 400,
     maxHeight: '85%',
   },
   modalScrollContent: {
-    paddingBottom: 8,
+    paddingBottom: spacing.sm,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
   },
   modalCloseText: {
-    fontSize: 18,
-    color: '#6B7280',
+    fontSize: fontSize.lg,
+    color: colors.textSecondary,
   },
   appointmentInfo: {
-    backgroundColor: '#F8FAFC',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    marginBottom: spacing.xl,
   },
   appointmentServiceName: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   appointmentPartnerName: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   ratingSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   ratingLabel: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 12,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
   },
   commentSection: {
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   commentLabel: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   commentInput: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 14,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
+    color: colors.text,
     minHeight: 100,
   },
   modalActions: {
-    marginTop: 24,
+    marginTop: spacing.xxl,
   },
   modalButtonsContainer: {
-    flexDirection: 'column',
-    gap: 12,
+    flexDirection: 'row',
+    gap: spacing.md,
     width: '100%',
   },
   cancelButton: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 2,
-    borderColor: '#2D6A6F',
-    borderRadius: 12,
+    borderColor: colors.primary,
+    borderRadius: radius.md,
     paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
   },
   cancelButtonText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Medium',
-    color: '#2D6A6F',
+    color: colors.primary,
   },
   submitButton: {
-    backgroundColor: '#2D6A6F',
-    borderRadius: 12,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
     paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
   },
   disabledSubmitButton: {
-    backgroundColor: '#9CA3AF',
+    backgroundColor: colors.textTertiary,
   },
   submitButtonText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   disabledSubmitButtonText: {
-    color: '#D1D5DB',
+    color: colors.borderStrong,
   },
 });

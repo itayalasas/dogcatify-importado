@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { CircleCheck as CheckCircle, CircleX as XCircle, Mail } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { colors, typography, spacing, radius } from '../../constants/theme';
 import { confirmEmailCustom } from '../../utils/emailConfirmation';
 import { envConfig } from '../../utils/envConfig';
 import { supabaseClient } from '../../lib/supabase';
@@ -130,7 +131,7 @@ export default function EmailConfirmationScreen() {
           }
 
           // Mejorar mensajes de error
-          let errorMessage = 'Error al confirmar el email';
+          let errorMessage = 'Error al confirmar el correo';
           if (result.error === 'TOKEN_ALREADY_USED') {
             errorMessage = 'ALREADY_USED';
           } else if (result.error === 'TOKEN_EXPIRED') {
@@ -221,8 +222,8 @@ export default function EmailConfirmationScreen() {
     return (
       <View style={styles.container}>
         <Card style={styles.loadingCard}>
-          <ActivityIndicator size="large" color="#2D6A6F" />
-          <Text style={styles.loadingText}>Confirmando tu email...</Text>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Confirmando tu correo...</Text>
         </Card>
       </View>
     );
@@ -230,84 +231,84 @@ export default function EmailConfirmationScreen() {
 
   if (error) {
     // Determinar el contenido basado en el tipo de error
-    let title = 'Error de Confirmación';
-    let message = 'El enlace de confirmación no es válido o ha ocurrido un error.';
+    let title = 'No pudimos confirmar tu correo';
+    let message = 'El enlace de confirmación no es válido o hubo un error.';
     let showResendButton = false;
     let buttonText = '';
     let showLoginButton = true;
-    
+
     if (error === 'ALREADY_USED') {
-      title = 'Enlace Ya Utilizado';
-      message = 'Este enlace de confirmación ya fue utilizado anteriormente. Si aún no puedes iniciar sesión, puedes solicitar un nuevo enlace.';
+      title = 'Este enlace ya se usó';
+      message = 'Este enlace de confirmación ya se usó antes. Si todavía no podés ingresar, pedí un enlace nuevo.';
       showResendButton = true;
       showLoginButton = true;
-      buttonText = resendingEmail ? 'Enviando...' : 'Enviar Nuevo Enlace';
+      buttonText = resendingEmail ? 'Enviando...' : 'Enviar enlace nuevo';
     } else if (error === 'ALREADY_CONFIRMED') {
-      title = '✅ Email Ya Confirmado';
-      message = 'Tu correo electrónico ya está confirmado. Puedes iniciar sesión normalmente en la aplicación.';
+      title = 'Tu correo ya está confirmado';
+      message = 'Tu correo electrónico ya está confirmado. Podés ingresar normalmente a la aplicación.';
       showResendButton = false;
       showLoginButton = true;
       buttonText = '';
     } else if (error === 'EXPIRED') {
-      title = 'Enlace Expirado';
-      message = 'Este enlace de confirmación ha expirado. Los enlaces son válidos por 24 horas por seguridad.';
+      title = 'El enlace venció';
+      message = 'Este enlace de confirmación venció. Por seguridad, los enlaces duran 24 horas.';
       showResendButton = true;
       showLoginButton = true;
-      buttonText = resendingEmail ? 'Enviando...' : 'Enviar Nuevo Enlace';
+      buttonText = resendingEmail ? 'Enviando...' : 'Enviar enlace nuevo';
     } else if (error === 'EMAIL_SENT') {
-      title = '¡Nuevo Enlace Enviado!';
-      message = `Se ha enviado un nuevo enlace de confirmación a tu correo electrónico. Por favor revisa tu bandeja de entrada y haz clic en el nuevo enlace.`;
+      title = '¡Te enviamos un enlace nuevo!';
+      message = 'Revisá tu bandeja de entrada (y la carpeta de spam) y tocá el enlace nuevo para confirmar tu correo.';
       showResendButton = false;
       showLoginButton = true;
       buttonText = '';
     } else if (error === 'CONFIRMATION_FAILED') {
       title = 'No pudimos confirmar tu correo';
-      message = 'El enlace se detecto correctamente, pero no pudimos completar la validacion en este momento. Puedes intentarlo otra vez o pedir un nuevo enlace.';
+      message = 'Detectamos el enlace, pero no pudimos completar la validación en este momento. Podés intentarlo otra vez o pedir un enlace nuevo.';
       showResendButton = true;
       showLoginButton = true;
-      buttonText = resendingEmail ? 'Enviando...' : 'Enviar Nuevo Enlace';
+      buttonText = resendingEmail ? 'Enviando...' : 'Enviar enlace nuevo';
     } else if (error === 'NOT_FOUND') {
       title = 'Enlace no válido';
-      message = 'Ese enlace de confirmación ya no existe o fue reemplazado por uno nuevo. Vuelve a iniciar sesión y solicita un nuevo correo de confirmación.';
+      message = 'Ese enlace de confirmación ya no existe o fue reemplazado por uno nuevo. Volvé a ingresar y pedí un nuevo correo de confirmación.';
       showResendButton = false;
       showLoginButton = true;
       buttonText = '';
     } else if (error === 'RESEND_ERROR') {
-      title = 'Error al Reenviar';
-      message = 'No se pudo reenviar el correo de confirmación. Por favor intenta nuevamente más tarde.';
+      title = 'No pudimos reenviar el correo';
+      message = 'No se pudo reenviar el correo de confirmación. Intentá de nuevo más tarde.';
       showResendButton = true;
       showLoginButton = true;
-      buttonText = resendingEmail ? 'Enviando...' : 'Intentar Nuevamente';
+      buttonText = resendingEmail ? 'Enviando...' : 'Intentar de nuevo';
     }
-    
+
+    const isPositive = error === 'EMAIL_SENT' || error === 'ALREADY_CONFIRMED';
+
     return (
       <View style={styles.container}>
         <Card style={styles.errorCard}>
-          {error === 'EMAIL_SENT' ? (
-            <CheckCircle size={64} color="#10B981" />
-          ) : (
-            <XCircle size={64} color="#EF4444" />
-          )}
-          <Text style={[
-            styles.errorTitle,
-            error === 'EMAIL_SENT' && styles.successTitle
-          ]}>
+          <View style={[styles.iconCircle, isPositive ? styles.iconCircleSuccess : styles.iconCircleDanger]}>
+            {error === 'EMAIL_SENT' ? (
+              <Mail size={36} color={colors.success} />
+            ) : isPositive ? (
+              <CheckCircle size={36} color={colors.success} />
+            ) : (
+              <XCircle size={36} color={colors.danger} />
+            )}
+          </View>
+          <Text style={styles.errorTitle} accessibilityRole="header">
             {title}
           </Text>
-          <Text style={[
-            styles.errorMessage,
-            error === 'EMAIL_SENT' && styles.successMessage
-          ]}>
+          <Text style={styles.errorMessage}>
             {message}
           </Text>
-          
+
           {userEmail && (
             <View style={styles.emailInfo}>
-              <Text style={styles.emailLabel}>Correo:</Text>
+              <Text style={styles.emailLabel}>Correo</Text>
               <Text style={styles.emailValue}>{userEmail}</Text>
             </View>
           )}
-          
+
           <View style={styles.errorActions}>
             {showResendButton && (
               <Button
@@ -320,10 +321,10 @@ export default function EmailConfirmationScreen() {
             )}
             {showLoginButton && (
               <Button
-                title="Ir a Iniciar Sesión"
+                title="Ir a ingresar"
                 onPress={handleGoToLogin}
                 size="large"
-                variant="outline"
+                variant={showResendButton ? 'ghost' : 'primary'}
               />
             )}
           </View>
@@ -336,10 +337,12 @@ export default function EmailConfirmationScreen() {
     return (
       <View style={styles.container}>
         <Card style={styles.successCard}>
-          <CheckCircle size={64} color="#10B981" />
-          <Text style={styles.successTitle}>¡Email Confirmado!</Text>
+          <View style={[styles.iconCircle, styles.iconCircleSuccess]}>
+            <CheckCircle size={36} color={colors.success} />
+          </View>
+          <Text style={styles.successTitle} accessibilityRole="header">¡Correo confirmado!</Text>
           <Text style={styles.successMessage}>
-            Tu correo electrónico ha sido confirmado exitosamente. Ya puedes iniciar sesión en DogCatiFy.
+            Tu correo electrónico se confirmó correctamente. Ya podés ingresar a DogCatiFy.
           </Text>
           {userEmail && (
             <Text style={styles.emailText}>
@@ -348,7 +351,7 @@ export default function EmailConfirmationScreen() {
           )}
           <View style={styles.errorActions}>
             <Button
-              title="Ir a Iniciar Sesión"
+              title="Ingresar"
               onPress={handleGoToLogin}
               size="large"
             />
@@ -366,94 +369,97 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
+    padding: spacing.xl,
+    backgroundColor: colors.background,
   },
   loadingCard: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: spacing.huge,
+    width: '100%',
+    maxWidth: 400,
   },
   loadingText: {
-    marginTop: 20,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    marginTop: spacing.xl,
+    color: colors.textSecondary,
+  },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  iconCircleSuccess: {
+    backgroundColor: colors.successSoft,
+  },
+  iconCircleDanger: {
+    backgroundColor: colors.dangerSoft,
   },
   errorCard: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: spacing.xxxl,
     width: '100%',
     maxWidth: 400,
   },
   errorTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#EF4444',
-    marginTop: 16,
-    marginBottom: 8,
+    ...typography.title,
+    color: colors.text,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   errorMessage: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 24,
+    marginBottom: spacing.xxl,
   },
   errorActions: {
     width: '100%',
-    gap: 12,
+    gap: spacing.sm,
   },
   successCard: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: spacing.xxxl,
     width: '100%',
     maxWidth: 400,
   },
   successTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
-    marginTop: 16,
-    marginBottom: 8,
+    ...typography.title,
+    color: colors.text,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   successMessage: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 24,
+    marginBottom: spacing.lg,
   },
   emailText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
- 
   emailInfo: {
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 20,
+    alignSelf: 'stretch',
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    marginBottom: spacing.xl,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.border,
   },
   emailLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#64748B',
-    marginBottom: 4,
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.xxs,
   },
   emailValue: {
+    ...typography.bodyStrong,
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#334155',
+    color: colors.text,
   },
-  
 });

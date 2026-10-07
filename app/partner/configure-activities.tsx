@@ -1,12 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, Image } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Plus, Clock, DollarSign, X, Edit, Package } from 'lucide-react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, Image, Switch, RefreshControl } from 'react-native';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { ArrowLeft, Plus, Clock, DollarSign, X, Edit, Package, Trash2 } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { IconButton } from '../../components/ui/IconButton';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { toast } from '../../components/ui/Toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 
 interface Activity {
   id: string;
@@ -19,6 +24,8 @@ interface Activity {
   images?: string[];
   stock?: number; // Para productos
   brand?: string; // Para productos
+  weight?: string; // Presentación (ej: 2kg)
+  variantGroupId?: string | null; // Presentaciones del mismo producto
 }
 
 export default function ConfigureActivities() {
@@ -28,6 +35,7 @@ export default function ConfigureActivities() {
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   
   // Form state
   const [activityName, setActivityName] = useState('');
@@ -87,6 +95,15 @@ export default function ConfigureActivities() {
     };
   }, [partnerId]);
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await fetchActivities();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const fetchActivities = async () => {
     try {
       console.log('Fetching activities for partner:', partnerId);
@@ -98,7 +115,8 @@ export default function ConfigureActivities() {
       const { data, error } = await supabaseClient
         .from(tableName)
         .select('*')
-        .eq('partner_id', partnerId);
+        .eq('partner_id', partnerId)
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
@@ -119,6 +137,8 @@ export default function ConfigureActivities() {
             images: item.images || [],
             stock: item.stock || 0, // Agregar stock para productos
             brand: item.brand || '',
+            weight: item.weight || '',
+            variantGroupId: item.variant_group_id || null,
           };
         } else {
           // Mapeo para servicios
@@ -141,10 +161,26 @@ export default function ConfigureActivities() {
       console.error('Error fetching activities:', error);
     }
 
-    // Set up real-time subscription
+  };
+
+  // Re-read the list every time this screen regains focus (e.g. coming back
+  // from adding/editing a product), and keep it live while it is open. The
+  // subscription used to be created inside fetchActivities itself, so it was
+  // never cleaned up and a new channel piled up on every refresh.
+  useFocusEffect(
+    useCallback(() => {
+      if (partnerId) {
+        fetchActivities();
+      }
+    }, [partnerId, businessType]),
+  );
+
+  useEffect(() => {
+    if (!partnerId) return;
+
     const tableName = businessType === 'shop' ? 'partner_products' : 'partner_services';
     const subscription = supabaseClient
-      .channel('activities-changes')
+      .channel(`activities-changes-${partnerId}`)
       .on('postgres_changes',
         {
           event: '*',
@@ -161,7 +197,7 @@ export default function ConfigureActivities() {
     return () => {
       subscription.unsubscribe();
     };
-  };
+  }, [partnerId, businessType]);
 
   const getBusinessTypeConfig = (type: string) => {
     switch (type) {
@@ -260,6 +296,7 @@ export default function ConfigureActivities() {
         .eq('id', activityId);
 
       if (error) throw error;
+      await fetchActivities();
     } catch (error) {
       console.error('Error toggling activity:', error);
       Alert.alert('Error', `No se pudo actualizar ${businessType === 'shop' ? 'el producto' : isShelterBusiness ? 'la mascota' : 'el servicio'}`);
@@ -290,7 +327,7 @@ export default function ConfigureActivities() {
     const isProduct = businessType === 'shop';
     Alert.alert(
       `Eliminar ${entityLabelCapitalized}`,
-      `¿Estás seguro de que quieres eliminar ${isProduct ? 'este producto' : isShelterBusiness ? 'esta mascota' : 'este servicio'}?`,
+      `¿Seguro que querés eliminar ${isProduct ? 'este producto' : isShelterBusiness ? 'esta mascota' : 'este servicio'}?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -306,7 +343,8 @@ export default function ConfigureActivities() {
 
               if (error) throw error;
 
-              Alert.alert('Éxito', `${entityLabelCapitalized} eliminado correctamente`);
+              await fetchActivities();
+              toast.success(`${entityLabelCapitalized} eliminado`);
             } catch (error) {
               console.error('Error deleting activity:', error);
               Alert.alert('Error', `No se pudo eliminar ${isProduct ? 'el producto' : isShelterBusiness ? 'la mascota' : 'el servicio'}`);
@@ -334,47 +372,47 @@ export default function ConfigureActivities() {
   const isShelterBusiness = businessType === 'shelter';
   const isServiceBusiness = !isShopBusiness && !isShelterBusiness;
   const screenTitle = isShopBusiness
-    ? 'Configurar Productos'
+    ? 'Productos'
     : isShelterBusiness
-      ? 'Configurar Adopciones'
+      ? 'Adopciones'
       : businessType === 'veterinary'
-        ? 'Configurar Servicios Veterinarios'
+        ? 'Servicios veterinarios'
         : businessType === 'grooming'
-          ? 'Configurar Servicios de Peluquería'
+          ? 'Servicios de peluquería'
           : businessType === 'walking'
-            ? 'Configurar Servicios de Paseo'
+            ? 'Servicios de paseo'
             : businessType === 'boarding'
-              ? 'Configurar Servicios de Pensión'
-              : 'Configurar Servicios';
+              ? 'Servicios de pensión'
+              : 'Servicios';
   const infoTitle = isShopBusiness
-    ? 'Productos de la Tienda'
+    ? 'Productos de la tienda'
     : isShelterBusiness
-      ? 'Mascotas en Adopción'
+      ? 'Mascotas en adopción'
       : config.title;
   const infoDescription = isShopBusiness
-    ? 'Administra los productos de tu tienda para que los clientes puedan comprar'
+    ? 'Administrá los productos de tu tienda para que los clientes puedan comprar'
     : isShelterBusiness
-      ? 'Publica las mascotas disponibles para adopción y administra sus fichas'
+      ? 'Publicá las mascotas disponibles para adopción y administrá sus fichas'
       : businessType === 'boarding'
-        ? 'Gestiona reservas, estadías y cupos de hospedaje'
+        ? 'Gestioná reservas, estadías y cupos de hospedaje'
         : isServiceBusiness
-          ? 'Define los servicios que ofreces para que los clientes puedan hacer reservas'
-          : 'Define las actividades que ofreces para que los clientes puedan hacer reservas';
+          ? 'Definí los servicios que ofrecés para que los clientes puedan hacer reservas'
+          : 'Definí las actividades que ofrecés para que los clientes puedan hacer reservas';
   const emptyTitle = isShopBusiness
     ? 'No hay productos configurados'
     : isShelterBusiness
       ? 'No hay mascotas en adopción'
       : 'No hay servicios configurados';
   const emptySubtitle = isShopBusiness
-    ? 'Agrega tu primer producto para comenzar a vender'
+    ? 'Agregá tu primer producto para comenzar a vender'
     : isShelterBusiness
-      ? 'Agrega tu primera mascota para comenzar a recibir consultas'
-      : 'Agrega tu primer servicio para comenzar a recibir reservas';
+      ? 'Agregá tu primera mascota para comenzar a recibir consultas'
+      : 'Agregá tu primer servicio para comenzar a recibir reservas';
   const addButtonTitle = isShopBusiness
-    ? 'Agregar Producto'
+    ? 'Agregar producto'
     : isShelterBusiness
-      ? 'Agregar Mascota'
-      : 'Agregar Servicio';
+      ? 'Agregar mascota'
+      : 'Agregar servicio';
   const nameLabel = isShopBusiness
     ? 'Nombre del producto *'
     : isShelterBusiness
@@ -391,10 +429,10 @@ export default function ConfigureActivities() {
       ? 'Descripción de la mascota *'
       : 'Descripción del servicio *';
   const descriptionPlaceholder = isShopBusiness
-    ? 'Describe características, presentaciones y beneficios...'
+    ? 'Describí características, presentaciones y beneficios...'
     : isShelterBusiness
-      ? 'Describe su personalidad, cuidados y requisitos...'
-      : 'Describe brevemente el servicio...';
+      ? 'Describí su personalidad, cuidados y requisitos...'
+      : 'Describí brevemente el servicio...';
   const entityLabel = isShopBusiness
     ? 'producto'
     : isShelterBusiness
@@ -406,57 +444,141 @@ export default function ConfigureActivities() {
       ? 'Mascota'
       : 'Servicio';
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
-          <View style={styles.businessInfo}>
-            {partnerProfile?.logo ? (
-              <Image source={{ uri: partnerProfile.logo }} style={styles.businessLogo} />
-            ) : (
-              <View style={styles.logoPlaceholder}>
-                <Text style={styles.logoPlaceholderText}>
-                  {businessType === 'veterinary' ? '🏥' : 
-                   businessType === 'grooming' ? '✂️' : 
-                   businessType === 'walking' ? '🚶' : 
-                   businessType === 'boarding' ? '🏠' : 
-                   businessType === 'shop' ? '🛍️' : '⚙️'}
-                </Text>
-              </View>
-            )}
-            <View>
-              <Text style={styles.title}>{screenTitle}</Text>
-              <Text style={styles.businessName}>{partnerProfile?.businessName}</Text>
+  // Presentations of one product (same variant_group_id) are shown together
+  // in a single card, cheapest first.
+  const productGroups: Activity[][] = (() => {
+    if (!isShopBusiness) return [];
+
+    const groups = new Map<string, Activity[]>();
+    activities.forEach((item) => {
+      const key = item.variantGroupId || item.id;
+      groups.set(key, [...(groups.get(key) || []), item]);
+    });
+
+    return Array.from(groups.values()).map((group) => [...group].sort((a, b) => a.price - b.price));
+  })();
+
+  const renderProductGroup = (group: Activity[]) => {
+    const first = group[0];
+    const anyActive = group.some((item) => item.isActive);
+    const metaLine = [first.brand, first.category, group.length > 1 ? `${group.length} presentaciones` : '']
+      .filter(Boolean)
+      .join(' · ');
+
+    return (
+      <Card key={first.variantGroupId || first.id} style={styles.productGroupCard}>
+        <View style={styles.productGroupTop}>
+          {first.images && first.images.length > 0 ? (
+            <Image source={{ uri: first.images[0] }} style={styles.productThumb} resizeMode="cover" />
+          ) : (
+            <View style={[styles.productThumb, styles.productThumbPlaceholder]}>
+              <Package size={24} color={colors.textTertiary} />
             </View>
+          )}
+
+          <View style={styles.productGroupInfo}>
+            <Text style={styles.productGroupName} numberOfLines={2}>{first.name}</Text>
+            {!!metaLine && <Text style={styles.productGroupMeta} numberOfLines={1}>{metaLine}</Text>}
+            {!!first.description && (
+              <Text style={styles.productGroupDescription} numberOfLines={2}>{first.description}</Text>
+            )}
+          </View>
+
+          <View style={[styles.activityStatus, { backgroundColor: anyActive ? colors.successSoft : colors.dangerSoft }]}>
+            <Text style={[styles.activityStatusText, { color: anyActive ? colors.success : colors.danger }]}>
+              {anyActive ? 'Activo' : 'Inactivo'}
+            </Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.addButton} onPress={handleAddActivity}>
-          <Plus size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.presentationList}>
+          {group.map((item, index) => (
+            <View
+              key={item.id}
+              style={[
+                styles.presentationRow,
+                index > 0 && styles.presentationRowBorder,
+                !item.isActive && styles.presentationRowInactive,
+              ]}
+            >
+              <View style={styles.presentationMain}>
+                <Text style={styles.presentationWeight}>
+                  {item.weight || (group.length > 1 ? 'Estándar' : 'Presentación única')}
+                </Text>
+                <Text style={styles.presentationMeta}>
+                  ${item.price.toLocaleString('es-UY')} · Stock {item.stock || 0}
+                </Text>
+              </View>
+
+              <Switch
+                value={item.isActive}
+                onValueChange={() => handleToggleActivity(item.id, item.isActive)}
+                trackColor={{ false: colors.borderStrong, true: colors.primary }}
+                thumbColor={colors.white}
+                accessibilityLabel={`${item.weight || first.name} visible para clientes`}
+              />
+              <TouchableOpacity
+                style={styles.presentationIconButton}
+                onPress={() => handleEditActivity(item.id)}
+                accessibilityRole="button"
+                accessibilityLabel={`Editar ${item.weight || first.name}`}
+              >
+                <Edit size={18} color={colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.presentationIconButton}
+                onPress={() => handleDeleteActivity(item.id)}
+                accessibilityRole="button"
+                accessibilityLabel={`Eliminar ${item.weight || first.name}`}
+              >
+                <Trash2 size={18} color={colors.danger} />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      </Card>
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScreenHeader
+        title={screenTitle}
+        subtitle={partnerProfile?.businessName}
+        right={
+          <IconButton
+            icon={<Plus size={22} color={colors.onPrimary} />}
+            onPress={handleAddActivity}
+            accessibilityLabel={addButtonTitle}
+            variant="filled"
+          />
+        }
+      />
+
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+        }
+      >
         <Card style={styles.infoCard}>
           <Text style={styles.infoTitle}>{infoTitle}</Text>
           <Text style={styles.infoDescription}>{infoDescription}</Text>
         </Card>
 
         {activities.length === 0 ? (
-          <Card style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>{emptyTitle}</Text>
-            <Text style={styles.emptySubtitle}>{emptySubtitle}</Text>
-            <Button
-              title={addButtonTitle}
-              onPress={handleAddActivity}
-              size="medium"
-            />
-          </Card>
+          <EmptyState
+            icon={<Package size={32} color={colors.primary} />}
+            title={emptyTitle}
+            description={emptySubtitle}
+            actionLabel={addButtonTitle}
+            onAction={handleAddActivity}
+          />
         ) : (
           <View style={styles.activitiesList}>
-            {activities.map((activity) => (
+            {isShopBusiness ? productGroups.map((group) => renderProductGroup(group)) : activities.map((activity) => (
               <Card key={activity.id} style={styles.activityCard}>
                 {/* Service Image Background */}
                 {activity.images && activity.images.length > 0 && (
@@ -477,16 +599,17 @@ export default function ConfigureActivities() {
                       <Text style={styles.activityDescription}>{activity.description}</Text>
                     )}
                   </View>
-                  <View style={[
-                    styles.activityStatus,
-                    { backgroundColor: activity.isActive ? '#D1FAE5' : '#FEE2E2' }
-                  ]}>
-                    <Text style={[
-                      styles.activityStatusText,
-                      { color: activity.isActive ? '#065F46' : '#991B1B' }
-                    ]}>
+                  <View style={styles.activityToggle}>
+                    <Text style={[styles.activityStatusText, { color: activity.isActive ? colors.success : colors.textTertiary }]}>
                       {activity.isActive ? 'Activa' : 'Inactiva'}
                     </Text>
+                    <Switch
+                      value={activity.isActive}
+                      onValueChange={() => handleToggleActivity(activity.id, activity.isActive)}
+                      trackColor={{ false: colors.borderStrong, true: colors.primary }}
+                      thumbColor={colors.white}
+                      accessibilityLabel={`${activity.name} visible para clientes`}
+                    />
                   </View>
                 </View>
 
@@ -494,30 +617,30 @@ export default function ConfigureActivities() {
                 {businessType === 'shop' ? (
                   <View style={styles.activityDetails}>
                     <View style={styles.activityDetail}>
-                      <Package size={16} color="#6B7280" />
+                      <Package size={16} color={colors.textTertiary} />
                       <Text style={styles.activityDetailText}>
                         Stock: {activity.stock || 0}
                       </Text>
                     </View>
                     <View style={styles.activityDetail}>
-                      <DollarSign size={16} color="#10B981" />
+                      <DollarSign size={16} color={colors.success} />
                       <Text style={styles.activityDetailText}>
-                        ${activity.price.toLocaleString()}
+                        ${activity.price.toLocaleString('es-UY')}
                       </Text>
                     </View>
                   </View>
                 ) : businessType !== 'boarding' && (
                   <View style={styles.activityDetails}>
                     <View style={styles.activityDetail}>
-                      <Clock size={16} color="#6B7280" />
+                      <Clock size={16} color={colors.textTertiary} />
                       <Text style={styles.activityDetailText}>
                         {activity.duration} min
                       </Text>
                     </View>
                     <View style={styles.activityDetail}>
-                      <DollarSign size={16} color="#10B981" />
+                      <DollarSign size={16} color={colors.success} />
                       <Text style={styles.activityDetailText}>
-                        ${activity.price.toLocaleString()}
+                        ${activity.price.toLocaleString('es-UY')}
                       </Text>
                     </View>
                   </View>
@@ -536,22 +659,20 @@ export default function ConfigureActivities() {
                     <TouchableOpacity
                       style={styles.editButton}
                       onPress={() => handleEditActivity(activity.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Editar ${activity.name}`}
                     >
-                      <Edit size={16} color="#3B82F6" />
+                      <Edit size={16} color={colors.primary} />
+                      <Text style={styles.editButtonText}>Editar</Text>
                     </TouchableOpacity>
-                    <View style={{ flex: 2 }}>
-                      <Button
-                        title={activity.isActive ? 'Desactivar' : 'Activar'}
-                        onPress={() => handleToggleActivity(activity.id, activity.isActive)}
-                        variant={activity.isActive ? 'outline' : 'primary'}
-                        size="medium"
-                      />
-                    </View>
                     <TouchableOpacity
                       style={styles.deleteButton}
                       onPress={() => handleDeleteActivity(activity.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Eliminar ${activity.name}`}
                     >
-                      <X size={16} color="#EF4444" />
+                      <Trash2 size={16} color={colors.danger} />
+                      <Text style={styles.deleteButtonText}>Eliminar</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -572,15 +693,17 @@ export default function ConfigureActivities() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{addButtonTitle}</Text>
-              <TouchableOpacity onPress={() => setShowAddModal(false)}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
+              <IconButton
+                icon={<X size={24} color={colors.textSecondary} />}
+                onPress={() => setShowAddModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
 
             <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false}>
               {config.suggestions && config.suggestions.length > 0 && (
                 <View style={styles.suggestionsSection}>
-                  <Text style={styles.suggestionsTitle}>Sugerencias:</Text>
+                  <Text style={styles.suggestionsTitle}>Sugerencias</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     {config.suggestions.map((suggestion, index) => (
                       <TouchableOpacity
@@ -590,7 +713,7 @@ export default function ConfigureActivities() {
                       >
                         <Text style={styles.suggestionName}>{suggestion.name}</Text>
                         <Text style={styles.suggestionDetails}>
-                          {suggestion.duration}min • ${suggestion.price.toLocaleString()}
+                          {suggestion.duration}min • ${suggestion.price.toLocaleString('es-UY')}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -620,7 +743,7 @@ export default function ConfigureActivities() {
                 value={activityDuration}
                 onChangeText={setActivityDuration}
                 keyboardType="numeric"
-                leftIcon={<Clock size={20} color="#6B7280" />}
+                leftIcon={<Clock size={20} color={colors.textTertiary} />}
               />
 
               <Input
@@ -629,7 +752,7 @@ export default function ConfigureActivities() {
                 value={activityPrice}
                 onChangeText={setActivityPrice}
                 keyboardType="numeric"
-                leftIcon={<DollarSign size={20} color="#6B7280" />}
+                leftIcon={<DollarSign size={20} color={colors.textTertiary} />}
               />
             </ScrollView>
 
@@ -655,20 +778,96 @@ export default function ConfigureActivities() {
 }
 
 const styles = StyleSheet.create({
+  productGroupCard: {
+    marginBottom: spacing.md,
+    padding: 14,
+  },
+  productGroupTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  productThumb: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+  },
+  productThumbPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  productGroupInfo: {
+    flex: 1,
+  },
+  productGroupName: {
+    ...typography.bodyStrong,
+    color: colors.text,
+  },
+  productGroupMeta: {
+    ...typography.captionStrong,
+    color: colors.textTertiary,
+    marginTop: spacing.xxs,
+  },
+  productGroupDescription: {
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginTop: spacing.xs,
+  },
+  presentationList: {
+    marginTop: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  presentationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.sm,
+    gap: 6,
+  },
+  presentationRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  presentationRowInactive: {
+    opacity: 0.6,
+  },
+  presentationMain: {
+    flex: 1,
+  },
+  presentationWeight: {
+    ...typography.label,
+    color: colors.text,
+  },
+  presentationMeta: {
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginTop: 1,
+  },
+  presentationIconButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: 6,
@@ -681,84 +880,81 @@ const styles = StyleSheet.create({
   businessInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 8,
+    marginLeft: spacing.sm,
   },
   businessLogo: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   logoPlaceholder: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'flex-end',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   logoPlaceholderText: {
-    fontSize: 20,
+    ...typography.title,
   },
   businessName: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   addButton: {
-    backgroundColor: '#10B981',
-    padding: 8,
-    borderRadius: 20,
+    backgroundColor: colors.success,
+    padding: spacing.sm,
+    borderRadius: radius.xl,
   },
   content: {
     flex: 1,
-    padding: 16,
+  },
+  scrollContent: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xxxl,
+    flexGrow: 1,
   },
   infoCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   infoTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   infoDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    lineHeight: 20,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   emptyCard: {
     alignItems: 'center',
     paddingVertical: 40,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   emptySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 20,
+    marginBottom: spacing.xl,
   },
   activitiesList: {
     justifyContent: 'space-between',
-    marginTop: 16,
+    marginTop: spacing.lg,
   },
   activityCard: {
-    padding: 16,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
     position: 'relative',
     overflow: 'hidden',
   },
@@ -788,43 +984,47 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: spacing.md,
     position: 'relative',
     zIndex: 3,
   },
   activityInfo: {
     flex: 1,
-    marginRight: 12,
+    marginRight: spacing.md,
     position: 'relative',
     zIndex: 3,
   },
   activityName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   activityDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    lineHeight: 18,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+  },
+  activityToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 44,
+    position: 'relative',
+    zIndex: 3,
   },
   activityStatus: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
     position: 'relative',
     zIndex: 3,
   },
   activityStatusText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    ...typography.captionStrong,
   },
   activityDetails: {
     flexDirection: 'row',
-    gap: 16,
-    marginBottom: 16,
+    gap: spacing.lg,
+    marginBottom: spacing.lg,
     position: 'relative',
     zIndex: 3,
   },
@@ -833,15 +1033,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   activityDetailText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginLeft: 4,
+    ...typography.label,
+    color: colors.textSecondary,
+    marginLeft: spacing.xs,
   },
   activityActions: {
     flexDirection: 'column',
-    gap: 8,
-    marginTop: 8,
+    gap: spacing.sm,
+    marginTop: spacing.sm,
     position: 'relative',
     zIndex: 3,
   },
@@ -849,55 +1048,63 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.md,
   },
   editButton: {
     flex: 1,
-    padding: 12,
-    backgroundColor: '#EBF8FF',
-    borderRadius: 8,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: spacing.xs,
+  },
+  editButtonText: {
+    ...typography.label,
+    color: colors.primary,
+  },
+  deleteButtonText: {
+    ...typography.label,
+    color: colors.danger,
   },
   deleteButton: {
     flex: 1,
-    padding: 12,
-    backgroundColor: '#FEE2E2',
-    borderRadius: 8,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.dangerSoft,
+    borderRadius: radius.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: spacing.xs,
   },
   boardingInfo: {
-    backgroundColor: '#F0FDF4',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 12,
+    backgroundColor: colors.successSoft,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginTop: spacing.md,
   },
   boardingInfoText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#065F46',
-    marginBottom: 2,
+    ...typography.label,
+    color: colors.success,
+    marginBottom: spacing.xxs,
   },
   boardingInfoSubtext: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#047857',
+    ...typography.caption,
+    color: colors.success,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
     width: '100%',
     maxWidth: 500,
     alignSelf: 'center',
@@ -906,47 +1113,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   modalTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   modalForm: {
     flex: 1,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   suggestionsSection: {
-    marginVertical: 16,
+    marginVertical: spacing.lg,
   },
   suggestionsTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.label,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   suggestionCard: {
-    backgroundColor: '#F3F4F6',
-    padding: 12,
-    borderRadius: 8,
-    marginRight: 8,
+    backgroundColor: colors.surfaceAlt,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginRight: spacing.sm,
     minWidth: 120,
   },
   suggestionName: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.captionStrong,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   suggestionDetails: {
-    fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   modalActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 20,
+    marginTop: spacing.xl,
   },
 });

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator, ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { CircleCheck as CheckCircle, Package, Calendar } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
@@ -8,11 +8,15 @@ import { supabaseClient } from '@/lib/supabase';
 import { useCart } from '../../contexts/CartContext';
 import { logResourceAction } from '../../services/auditService';
 import { envConfig } from '../../utils/envConfig';
+import { useBackToHome } from '../../hooks/useBackToHome';
+import { colors, radius, spacing, typography } from '../../constants/theme';
+import { formatPrice } from '../../components/shop/format';
 
 const getSingleParam = (value?: string | string[]) =>
   Array.isArray(value) ? value[0] : value;
 
 export default function PaymentSuccess() {
+  useBackToHome();
   const { order_id, external_reference, type, payment_id, collection_id } = useLocalSearchParams<{
     order_id?: string;
     external_reference?: string;
@@ -127,10 +131,7 @@ export default function PaymentSuccess() {
       const formattedOrder = {
         id: order.id,
         displayId: order.order_number || `#${order.id.slice(-6)}`,
-        total: new Intl.NumberFormat('es-UY', {
-          style: 'currency',
-          currency: 'UYU',
-        }).format(order.total_amount),
+        total: formatPrice(order.total_amount),
         status: order.status === 'confirmed' ? 'Confirmado' :
                 order.status === 'pending' ? 'Pendiente' :
                 order.status,
@@ -177,7 +178,7 @@ export default function PaymentSuccess() {
       setOrderDetails({
         id: orderId,
         displayId: `#${orderId.slice(-6)}`,
-        total: '$430.00',
+        total: '—',
         status: 'Confirmado',
         paymentId: paymentId ? `#mp${paymentId}` : 'Procesando...',
         isBooking: paymentType === 'booking',
@@ -188,12 +189,10 @@ export default function PaymentSuccess() {
   };
 
   const handleViewOrders = () => {
-    // Usar push en lugar de replace porque ya limpiamos el historial al llegar aquí
-    if (orderDetails?.isBooking) {
-      router.push('/(tabs)/services');
-    } else {
-      router.push('/orders');
-    }
+    // Service bookings are listed in "Mis Pedidos" too, so both cases go
+    // there. It is flagged as coming from a payment so its back arrow returns
+    // to the home screen instead of whatever is left in the history.
+    router.replace({ pathname: '/orders', params: { from: 'payment' } });
   };
 
   const handleGoHome = () => {
@@ -205,7 +204,7 @@ export default function PaymentSuccess() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#10B981" />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Confirmando pago...</Text>
         </View>
       </SafeAreaView>
@@ -214,49 +213,51 @@ export default function PaymentSuccess() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <View style={styles.iconContainer}>
-          <CheckCircle size={80} color="#10B981" />
+          <View style={styles.iconCircle}>
+            <CheckCircle size={56} color={orderDetails?.isPendingValidation ? colors.warning : colors.success} />
+          </View>
         </View>
 
-        <Text style={styles.title}>{orderDetails?.isPendingValidation ? 'Pago Recibido' : 'Pago Exitoso'}</Text>
+        <Text style={styles.title} accessibilityRole="header">{orderDetails?.isPendingValidation ? 'Pago recibido' : 'Pago exitoso'}</Text>
         <Text style={styles.subtitle}>
           {orderDetails?.isPendingValidation
             ? 'Estamos validando tu pago con Mercado Pago. Esto puede tardar unos segundos.'
             : orderDetails?.isBooking 
-              ? 'Tu reserva ha sido confirmada y el pago procesado correctamente.'
+              ? 'Tu reserva fue confirmada y el pago se procesó correctamente.'
               : orderDetails?.isSplitPurchase
-                ? 'Tu compra ha sido confirmada y se dividió automáticamente por tienda.'
-                : 'Tu pedido ha sido confirmado y el pago procesado correctamente.'
+                ? 'Tu compra fue confirmada y se dividió automáticamente por tienda.'
+                : 'Tu pedido fue confirmado y el pago se procesó correctamente.'
           }
         </Text>
 
         <Card style={styles.detailsCard}>
           <Text style={styles.detailsTitle}>
-            {orderDetails?.isBooking ? 'Detalles de la Reserva' : 'Detalles del Pedido'}
+            {orderDetails?.isBooking ? 'Detalle de la reserva' : 'Detalle del pedido'}
           </Text>
           
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>
-              {orderDetails?.isBooking ? 'Número de reserva:' : 'Número de pedido:'}
+              {orderDetails?.isBooking ? 'Número de reserva' : 'Número de pedido'}
             </Text>
             <Text style={styles.detailValue}>{orderDetails?.displayId || orderDetails?.id}</Text>
           </View>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Total:</Text>
+            <Text style={styles.detailLabel}>Total</Text>
             <Text style={styles.detailValue}>{orderDetails?.total}</Text>
           </View>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Estado:</Text>
+            <Text style={styles.detailLabel}>Estado</Text>
             <Text style={[styles.detailValue, orderDetails?.isPendingValidation ? styles.pendingStatus : styles.successStatus]}>
               {orderDetails?.status}
             </Text>
           </View>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>ID de pago:</Text>
+            <Text style={styles.detailLabel}>ID de pago</Text>
             <Text style={styles.detailValue}>{orderDetails?.paymentId}</Text>
           </View>
         </Card>
@@ -276,7 +277,7 @@ export default function PaymentSuccess() {
                   • El proveedor te contactará para confirmar detalles
                 </Text>
                 <Text style={styles.successItem}>
-                  • Puedes ver tus citas en la sección de servicios
+                  • Podés ver tus citas en la sección de servicios
                 </Text>
               </>
             ) : (
@@ -293,24 +294,24 @@ export default function PaymentSuccess() {
                   • Te notificaremos cuando tu pedido sea enviado
                 </Text>
                 <Text style={styles.successItem}>
-                  • Puedes rastrear tu pedido en &quot;Mis Pedidos&quot;
+                  • Podés seguir tu pedido en &quot;Mis pedidos&quot;
                 </Text>
               </>
             )}
           </View>
         </Card>
-      </View>
+      </ScrollView>
 
       <View style={styles.actionsContainer}>
         <Button
-          title={orderDetails?.isBooking ? "Ver Mis Citas" : "Ver Mis Pedidos"}
+          title={orderDetails?.isBooking ? "Ver mis citas" : "Ver mis pedidos"}
           onPress={handleViewOrders}
           variant="outline"
           size="large"
         />
         
         <Button
-          title="Ir al Inicio"
+          title="Ir al inicio"
           onPress={handleGoHome}
           size="large"
         />
@@ -322,7 +323,7 @@ export default function PaymentSuccess() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   loadingContainer: {
@@ -333,109 +334,114 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 16,
+    color: colors.textSecondary,
+    marginTop: spacing.lg,
+  },
+  scroll: {
+    flex: 1,
   },
   content: {
-    flex: 1,
-    padding: 20,
-    paddingBottom: 20,
+    padding: spacing.xl,
   },
   iconContainer: {
     alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 32,
+    marginTop: spacing.xxl,
+    marginBottom: spacing.xxl,
+  },
+  iconCircle: {
+    width: 96,
+    height: 96,
+    borderRadius: radius.pill,
+    backgroundColor: colors.successSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
-    fontSize: 28,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.display,
+    color: colors.text,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   subtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
-    paddingHorizontal: 20,
+    marginBottom: spacing.xxxl,
+    paddingHorizontal: spacing.xl,
   },
   detailsCard: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   detailsTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.lg,
     textAlign: 'center',
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   detailLabel: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   detailValue: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   successStatus: {
-    color: '#10B981',
+    color: colors.success,
   },
   pendingStatus: {
-    color: '#D97706',
+    color: colors.warning,
   },
   successCard: {
-    backgroundColor: '#F0FDF4',
+    backgroundColor: colors.successSoft,
     borderWidth: 1,
-    borderColor: '#BBF7D0',
-    marginBottom: 20,
+    borderColor: colors.border,
+    marginBottom: spacing.xl,
   },
   pendingCard: {
-    backgroundColor: '#FFFBEB',
-    borderColor: '#FCD34D',
+    backgroundColor: colors.warningSoft,
+    borderColor: colors.warningSoft,
   },
   successTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#166534',
-    marginBottom: 12,
+    color: colors.text,
+    marginBottom: spacing.md,
     textAlign: 'center',
   },
   pendingTitle: {
-    color: '#92400E',
+    color: colors.warning,
   },
   successList: {
-    gap: 8,
+    gap: spacing.sm,
   },
   successItem: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#166534',
+    color: colors.text,
     lineHeight: 20,
   },
   pendingItem: {
-    color: '#92400E',
+    color: colors.warning,
   },
   actionsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 32,
-    paddingTop: 20,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xxxl,
+    paddingTop: spacing.xl,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    gap: 12,
+    borderTopColor: colors.border,
+    gap: spacing.md,
   },
 });
 

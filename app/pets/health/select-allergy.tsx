@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Search, AlertCircle } from 'lucide-react-native';
+import { AlertCircle } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
+import { EmptyState, SkeletonList } from '../../../components/ui';
+import { HealthHeader, HealthSearchBar, SelectionCheck, selectorCardStyles } from '../../../components/health';
 import { supabaseClient } from '../../../lib/supabase';
 import { envConfig } from '../../../utils/envConfig';
+import { colors, spacing, radius, fontSize } from '../../../constants/theme';
 
 export default function SelectAllergy() {
   const { petId, species, breed, ageInMonths, weight, returnPath, currentValue, currentType, currentSymptoms, currentSeverity, currentTreatment, currentVeterinarian, currentNotes, currentDiagnosisDate } = useLocalSearchParams<{
@@ -192,15 +195,15 @@ export default function SelectAllergy() {
 
   const getSeverityColor = (severity: string) => {
     const normalizedSeverity = severity?.toLowerCase() || 'moderate';
-    const colors: Record<string, string> = {
-      mild: '#10B981',
-      leve: '#10B981',
-      moderate: '#F59E0B',
-      moderada: '#F59E0B',
-      severe: '#EF4444',
-      severa: '#EF4444'
+    const toneColors: Record<string, string> = {
+      mild: colors.success,
+      leve: colors.success,
+      moderate: colors.warning,
+      moderada: colors.warning,
+      severe: colors.danger,
+      severa: colors.danger
     };
-    return colors[normalizedSeverity] || '#F59E0B';
+    return toneColors[normalizedSeverity] || colors.warning;
   };
 
   const getSeverityLabel = (severity: string) => {
@@ -218,33 +221,13 @@ export default function SelectAllergy() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>
-          Seleccionar Alergia {species === 'dog' ? '🐕' : '🐱'}
-        </Text>
-        <View style={styles.placeholder} />
-      </View>
+      <HealthHeader title={`Elegí la alergia ${species === 'dog' ? '🐕' : '🐱'}`} />
 
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Search size={20} color="#9CA3AF" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar alergia..."
-            placeholderTextColor="#9CA3AF"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-      </View>
+      <HealthSearchBar value={searchQuery} onChangeText={setSearchQuery} placeholder="Buscar alergia..." />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#10B981" />
             <Text style={styles.loadingText}>
               {breed ? 'Generando recomendaciones con IA...' : 'Cargando alergias...'}
             </Text>
@@ -253,23 +236,37 @@ export default function SelectAllergy() {
                 Analizando predisposiciones para {species === 'dog' ? 'perros' : 'gatos'} {breed}
               </Text>
             )}
+            <SkeletonList kind="cards" count={3} style={styles.skeleton} />
           </View>
         ) : filteredAllergies.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <AlertCircle size={48} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>No se encontraron alergias</Text>
-            <Text style={styles.emptySubtitle}>
-              Intenta con otros términos de búsqueda
-            </Text>
-          </View>
+          <EmptyState
+            icon={<AlertCircle size={32} color={colors.primary} />}
+            title="No se encontraron alergias"
+            description={searchQuery.trim() ? 'Probá con otros términos de búsqueda.' : 'No pudimos cargar la lista. Probá de nuevo en un momento.'}
+            actionLabel={searchQuery.trim() ? 'Limpiar búsqueda' : 'Reintentar'}
+            onAction={() => {
+              if (searchQuery.trim()) {
+                setSearchQuery('');
+              } else {
+                setLoading(true);
+                fetchAllergies();
+              }
+            }}
+          />
         ) : (
           <View style={styles.allergiesList}>
-            {filteredAllergies.map((allergy, index) => (
-              <Card key={allergy.id || `allergy-${index}`} style={styles.allergyCard}>
+            {filteredAllergies.map((allergy, index) => {
+              const isSelected = !!currentValue && allergy.name === currentValue;
+              return (
+              <Card key={allergy.id || `allergy-${index}`} padding={false} style={[styles.allergyCard, isSelected && selectorCardStyles.selected]}>
                 <TouchableOpacity
-                  style={styles.allergyContent}
+                  style={[styles.allergyContent, selectorCardStyles.touchable]}
                   onPress={() => handleSelectAllergy(allergy)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
                 >
+                  <View style={selectorCardStyles.row}>
+                  <View style={selectorCardStyles.body}>
                   <View style={styles.allergyHeader}>
                     <Text style={styles.allergyName}>{allergy.name}</Text>
                     <View style={styles.typeBadge}>
@@ -332,9 +329,15 @@ export default function SelectAllergy() {
                       </Text>
                     </View>
                   )}
+                  </View>
+                  <View style={selectorCardStyles.check}>
+                    <SelectionCheck selected={isSelected} />
+                  </View>
+                </View>
                 </TouchableOpacity>
               </Card>
-            ))}
+            );
+            })}
           </View>
         )}
       </ScrollView>
@@ -343,57 +346,61 @@ export default function SelectAllergy() {
 }
 
 const styles = StyleSheet.create({
+  skeleton: {
+    alignSelf: 'stretch',
+    paddingHorizontal: 0,
+    marginTop: spacing.lg,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   title: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 32,
   },
   searchContainer: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
+    marginLeft: spacing.sm,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
+    color: colors.text,
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
   },
   loadingContainer: {
     flex: 1,
@@ -402,16 +409,16 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   loadingText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 16,
+    color: colors.textSecondary,
+    marginTop: spacing.lg,
   },
   loadingSubtext: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    marginTop: 8,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
     textAlign: 'center',
   },
   emptyContainer: {
@@ -421,138 +428,138 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 8,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   allergiesList: {
-    gap: 12,
+    gap: spacing.md,
   },
   allergyCard: {
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   allergyContent: {
-    padding: 16,
+    padding: spacing.lg,
   },
   allergyHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   allergyName: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   typeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EBF8FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.infoSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   typeIcon: {
-    fontSize: 14,
-    marginRight: 4,
+    fontSize: fontSize.sm,
+    marginRight: spacing.xs,
   },
   typeText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#1E40AF',
+    color: colors.primaryStrong,
   },
   allergyDescription: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     lineHeight: 20,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   allergyDetails: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   severityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   severityText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
   },
   frequencyBadge: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.warningSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   frequencyText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#92400E',
+    color: colors.warning,
   },
   symptomsContainer: {
-    backgroundColor: '#FEE2E2',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
+    backgroundColor: colors.dangerSoft,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginBottom: spacing.sm,
   },
   symptomsTitle: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#991B1B',
-    marginBottom: 4,
+    color: colors.danger,
+    marginBottom: spacing.xs,
   },
   symptomsText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#991B1B',
+    color: colors.danger,
   },
   triggersContainer: {
-    backgroundColor: '#FEF3C7',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
+    backgroundColor: colors.warningSoft,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginBottom: spacing.sm,
   },
   triggersTitle: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#92400E',
-    marginBottom: 4,
+    color: colors.warning,
+    marginBottom: spacing.xs,
   },
   triggersText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#92400E',
+    color: colors.warning,
   },
   tipsContainer: {
-    backgroundColor: '#D1FAE5',
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: colors.successSoft,
+    padding: spacing.md,
+    borderRadius: radius.sm,
   },
   tipsTitle: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#065F46',
-    marginBottom: 4,
+    color: colors.success,
+    marginBottom: spacing.xs,
   },
   tipsText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#065F46',
+    color: colors.success,
   },
 });

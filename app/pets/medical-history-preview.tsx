@@ -6,6 +6,9 @@ import { WebView } from 'react-native-webview';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { envConfig } from '../../utils/envConfig';
+import { colors, spacing, radius, fontSize } from '../../constants/theme';
+import { HealthHeader } from '../../components/health';
+import { EmptyState } from '../../components/ui/EmptyState';
 
 export default function MedicalHistoryPreview() {
   const { petId, petName, htmlContent } = useLocalSearchParams<{
@@ -21,7 +24,7 @@ export default function MedicalHistoryPreview() {
   const handleShare = async () => {
     try {
       const shareContent = {
-        title: `Historia Clínica de ${petName}`,
+        title: `Historia clínica de ${petName}`,
         message: `Historia clínica veterinaria de ${petName}\n\nGenerada por DogCatiFy`,
       };
 
@@ -38,7 +41,7 @@ export default function MedicalHistoryPreview() {
   const handlePrint = () => {
     Alert.alert(
       'Imprimir',
-      'Para imprimir, comparte la historia clínica y ábrela en un navegador.',
+      'Para imprimir, compartí la historia clínica y abrila en un navegador.',
       [
         { text: 'Entendido' },
         { text: 'Compartir', onPress: handleShare }
@@ -61,13 +64,7 @@ export default function MedicalHistoryPreview() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Historia Clínica - {petName}</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <HealthHeader title="Historia clínica" subtitle={petName} />
 
       <View style={styles.content}>
         {decodedHtml ? (
@@ -78,29 +75,35 @@ export default function MedicalHistoryPreview() {
           />
         ) : (
           <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>No se pudo cargar la historia clínica</Text>
+            <EmptyState
+              icon={<FileText size={32} color={colors.danger} />}
+              title="No se pudo cargar la historia clínica"
+              description="Volvé atrás y generala de nuevo."
+              actionLabel="Volver"
+              onAction={() => router.back()}
+            />
           </View>
         )}
       </View>
 
       <View style={styles.actions}>
         <Card style={styles.actionsCard}>
-          <Text style={styles.actionsTitle}>📋 Opciones</Text>
+          <Text style={styles.actionsTitle}>Opciones</Text>
           
           <View style={styles.actionButtons}>
-            <TouchableOpacity style={styles.actionButton} onPress={handlePrint}>
-              <Printer size={24} color="#3B82F6" />
+            <TouchableOpacity style={styles.actionButton} onPress={handlePrint} accessibilityRole="button">
+              <Printer size={24} color={colors.primary} />
               <Text style={styles.actionButtonText}>Imprimir/PDF</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
-              <Share2 size={24} color="#10B981" />
+            <TouchableOpacity style={styles.actionButton} onPress={handleShare} accessibilityRole="button">
+              <Share2 size={24} color={colors.primary} />
               <Text style={styles.actionButtonText}>Compartir</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.actionButton} onPress={handleGenerateQR}>
-              <FileText size={24} color="#F59E0B" />
-              <Text style={styles.actionButtonText}>QR Veterinario</Text>
+            <TouchableOpacity style={styles.actionButton} onPress={handleGenerateQR} accessibilityRole="button">
+              <FileText size={24} color={colors.primary} />
+              <Text style={styles.actionButtonText}>QR para el veterinario</Text>
             </TouchableOpacity>
           </View>
         </Card>
@@ -112,26 +115,25 @@ export default function MedicalHistoryPreview() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   title: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 32,
@@ -141,52 +143,56 @@ const styles = StyleSheet.create({
   },
   webview: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   errorText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#EF4444',
+    color: colors.danger,
     textAlign: 'center',
   },
   actions: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    padding: 16,
+    borderTopColor: colors.border,
+    padding: spacing.lg,
   },
   actionsCard: {
-    padding: 16,
+    padding: spacing.lg,
   },
   actionsTitle: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
-    textAlign: 'center',
+    color: colors.text,
+    marginBottom: spacing.lg,
+    textAlign: 'left',
   },
   actionButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
   },
   actionButton: {
     alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
+    padding: spacing.md,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
     minWidth: 80,
+    flex: 1,
+    minHeight: 72,
+    justifyContent: 'center',
   },
   actionButtonText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginTop: 8,
+    fontSize: fontSize.xs,
+    fontFamily: 'Inter-SemiBold',
+    color: colors.primary,
+    marginTop: spacing.sm,
     textAlign: 'center',
   },
 });

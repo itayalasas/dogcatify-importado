@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Platform, Modal, TextInput } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowLeft, Camera, Upload, User, Phone, MapPin, Mail, ChevronDown, Check, Search } from 'lucide-react-native';
+import { Camera, Upload, User, Phone, MapPin, Mail, ChevronDown, Check, Search, X, LocateFixed } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { IconButton } from '../../components/ui/IconButton';
+import { toast } from '../../components/ui/Toast';
+import { colors, fonts, radius, spacing, touchTarget, typography } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import * as ImagePicker from 'expo-image-picker';
@@ -304,7 +308,7 @@ export default function EditProfile() {
 
   const performGeocoding = async () => {
     if (!calle.trim() || !numero.trim() || !selectedDepartment || !selectedCountry) {
-      Alert.alert('Información incompleta', 'Por favor completa calle, número, departamento y país para buscar la ubicación');
+      Alert.alert('Información incompleta', 'Completá calle, número, departamento y país para buscar la ubicación');
       return;
     }
 
@@ -335,7 +339,7 @@ export default function EditProfile() {
       console.log('Geocoding results:', results);
 
       if (!results || results.length === 0) {
-        Alert.alert('Sin resultados', 'No se encontraron ubicaciones para la dirección ingresada. Verifica los datos e intenta nuevamente.');
+        Alert.alert('Sin resultados', 'No encontramos ubicaciones para esa dirección. Revisá los datos e intentá de nuevo.');
         return;
       }
 
@@ -361,7 +365,7 @@ export default function EditProfile() {
       setShowGeocodingResults(true);
     } catch (error) {
       console.error('Error en geocodificación:', error);
-      Alert.alert('Error', 'No se pudo obtener la ubicación. Verifica tu conexión e intenta nuevamente.');
+      Alert.alert('Error', 'No se pudo obtener la ubicación. Revisá tu conexión e intentá de nuevo.');
     } finally {
       setIsGeocoding(false);
     }
@@ -448,10 +452,9 @@ export default function EditProfile() {
     setSelectedGeocodingResult(result);
     setShowGeocodingResults(false);
     
-    Alert.alert(
+    toast.success(
       'Ubicación encontrada',
-      `Se ha encontrado la ubicación exacta de tu dirección.${barrioFound ? `\n\nBarrio: ${barrioFound}` : ''}\n\nLa información se ha completado automáticamente.`,
-      [{ text: 'Perfecto' }]
+      `Completamos los datos automáticamente.${barrioFound ? ` Barrio: ${barrioFound}.` : ''}`
     );
   };
 
@@ -460,7 +463,7 @@ export default function EditProfile() {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (permissionResult.granted === false) {
-        Alert.alert('Permisos requeridos', 'Se necesitan permisos para acceder a la galería');
+        Alert.alert('Permisos requeridos', 'Necesitamos permiso para acceder a tu galería');
         return;
       }
 
@@ -486,7 +489,7 @@ export default function EditProfile() {
       const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
       
       if (permissionResult.granted === false) {
-        Alert.alert('Permisos requeridos', 'Se necesitan permisos para usar la cámara');
+        Alert.alert('Permisos requeridos', 'Necesitamos permiso para usar la cámara');
         return;
       }
 
@@ -584,7 +587,7 @@ export default function EditProfile() {
         } catch (uploadError) {
           console.error('Error uploading image:', uploadError);
           setLoading(false);
-          Alert.alert('Error', 'No se pudo subir la imagen. ¿Deseas continuar sin cambiar la foto?', [
+          Alert.alert('Error', 'No se pudo subir la imagen. ¿Querés continuar sin cambiar la foto?', [
             { text: 'Cancelar', style: 'cancel' },
             { text: 'Continuar', onPress: () => {
               setLoading(true);
@@ -671,9 +674,8 @@ export default function EditProfile() {
       console.log('Profile save completed successfully');
       
       // Success - navigate immediately
-      Alert.alert('Éxito', 'Perfil actualizado correctamente', [
-        { text: 'OK', onPress: () => router.replace('/(tabs)/profile') }
-      ]);
+      toast.success('Perfil actualizado');
+      router.replace('/(tabs)/profile');
       
     } catch (error) {
       console.error('Error in saveProfileData:', error);
@@ -684,7 +686,7 @@ export default function EditProfile() {
   const showImageOptions = () => {
     Alert.alert(
       'Foto de perfil',
-      'Selecciona una opción',
+      'Elegí una opción',
       [
         { text: 'Cancelar', style: 'cancel' },
         { text: 'Tomar foto', onPress: handleTakePhoto },
@@ -695,46 +697,44 @@ export default function EditProfile() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/profile')} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Editar Perfil</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title="Editar perfil" onBack={() => router.push('/(tabs)/profile')} />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Card style={styles.formCard}>
           {/* Profile Photo Section */}
           <View style={styles.photoSection}>
-            <Text style={styles.sectionTitle}>Foto de Perfil</Text>
             <View style={styles.photoContainer}>
-              <TouchableOpacity onPress={showImageOptions} style={styles.photoButton}>
+              <TouchableOpacity
+                onPress={showImageOptions}
+                style={styles.photoButton}
+                accessibilityRole="button"
+                accessibilityLabel="Cambiar foto de perfil"
+              >
                 {profileImage ? (
                   <Image source={{ uri: profileImage }} style={styles.profilePhoto} />
                 ) : (
                   <View style={styles.placeholderPhoto}>
-                    <User size={40} color="#9CA3AF" />
+                    <User size={40} color={colors.textTertiary} />
                   </View>
                 )}
                 <View style={styles.photoOverlay}>
-                  <Camera size={20} color="#FFFFFF" />
+                  <Camera size={20} color={colors.white} />
                 </View>
               </TouchableOpacity>
-              <Text style={styles.photoHint}>Toca para cambiar la foto</Text>
+              <Text style={styles.photoHint}>Tocá para cambiar la foto</Text>
             </View>
           </View>
 
           {/* Basic Information */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Información Básica</Text>
+            <Text style={styles.sectionTitle} accessibilityRole="header">Información básica</Text>
             
             <Input
               label="Nombre completo *"
               placeholder="Tu nombre completo"
               value={displayName}
               onChangeText={setDisplayName}
-              leftIcon={<User size={20} color="#6B7280" />}
+              leftIcon={<User size={20} color={colors.textTertiary} />}
             />
 
             <Input
@@ -745,7 +745,7 @@ export default function EditProfile() {
               keyboardType="email-address"
               autoCapitalize="none"
               editable={false}
-              leftIcon={<Mail size={20} color="#6B7280" />}
+              leftIcon={<Mail size={20} color={colors.textTertiary} />}
               style={styles.disabledInput}
             />
 
@@ -759,6 +759,8 @@ export default function EditProfile() {
                     setShowPhoneCountryModal(true);
                   }}
                   activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Código de país ${selectedPhoneCountry?.phoneCode || '+598'}. Cambiar`}
                 >
                   <View style={styles.phoneCountryFlagWrap}>
                     {selectedPhoneCountry?.flagPng ? (
@@ -773,46 +775,49 @@ export default function EditProfile() {
                   <Text style={styles.phoneCountryCode}>
                     {selectedPhoneCountry?.phoneCode || '+598'}
                   </Text>
-                  <ChevronDown size={16} color="#6B7280" />
+                  <ChevronDown size={16} color={colors.textTertiary} />
                 </TouchableOpacity>
 
                 <View style={styles.phoneNumberInputContainer}>
                   <View style={styles.phoneInputIcon}>
-                    <Phone size={20} color="#6B7280" />
+                    <Phone size={20} color={colors.textTertiary} />
                   </View>
                   <TextInput
                     style={styles.phoneNumberInput}
                     placeholder="095148335"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={colors.textTertiary}
                     value={phoneNumber}
                     onChangeText={(text) => setPhoneNumber(sanitizePhoneNumber(text))}
                     keyboardType="phone-pad"
                     returnKeyType="done"
+                    accessibilityLabel="Número de teléfono"
                   />
                 </View>
               </View>
             </View>
 
-            <TouchableOpacity onPress={() => setShowCountryModal(true)}>
+            <TouchableOpacity onPress={() => setShowCountryModal(true)} accessibilityRole="button" accessibilityLabel={`País: ${selectedCountry?.name || 'sin elegir'}`}>
+              <View pointerEvents="none">
               <Input
                 label="País"
-                placeholder="Selecciona tu país"
+                placeholder="Seleccioná tu país"
                 value={selectedCountry?.name || ''}
                 editable={false}
-                leftIcon={<MapPin size={20} color="#6B7280" />}
-                rightIcon={<ChevronDown size={20} color="#6B7280" />}
+                leftIcon={<MapPin size={20} color={colors.textTertiary} />}
+                rightIcon={<ChevronDown size={20} color={colors.icon} />}
               />
+              </View>
             </TouchableOpacity>
 
             <View style={styles.departmentInputGroup}>
               <Input
                 label="Departamento"
-                placeholder={selectedCountry ? "Departamento..." : "Primero selecciona un país"}
+                placeholder={selectedCountry ? "Departamento..." : "Primero seleccioná un país"}
                 value={departmentQuery}
                 onChangeText={handleDepartmentInputChange}
                 onFocus={() => selectedCountry && setShowDepartmentSuggestions(true)}
                 editable={!!selectedCountry}
-                leftIcon={<MapPin size={20} color="#6B7280" />}
+                leftIcon={<MapPin size={20} color={colors.textTertiary} />}
                 style={!selectedCountry ? styles.disabledInput : undefined}
               />
               
@@ -853,7 +858,7 @@ export default function EditProfile() {
               </View>
               <View style={styles.halfWidth}>
                 <Input
-                  label="Código Postal"
+                  label="Código postal"
                   placeholder="11800"
                   value={codigoPostal}
                   onChangeText={setCodigoPostal}
@@ -876,14 +881,15 @@ export default function EditProfile() {
             {calle.trim() && numero.trim() && selectedDepartment && selectedCountry && (
               <View style={styles.geocodingSection}>
                 <Button
-                  title={isGeocoding ? "Buscando ubicación..." : "🌍 Buscar ubicación exacta"}
+                  title={isGeocoding ? "Buscando ubicación..." : "Buscar ubicación exacta"}
+                  icon={<LocateFixed size={18} color={colors.primary} />}
                   onPress={performGeocoding}
                   loading={isGeocoding}
                   variant="outline"
                   size="medium"
                 />
                 <Text style={styles.geocodingHint}>
-                  Esto completará automáticamente el código postal y barrio
+                  Completa automáticamente el código postal y el barrio
                 </Text>
               </View>
             )}
@@ -892,7 +898,7 @@ export default function EditProfile() {
             {showGeocodingResults && geocodingResults.length > 0 && (
               <View style={styles.geocodingResults}>
                 <Text style={styles.geocodingResultsTitle}>
-                  📍 Selecciona la ubicación correcta:
+                  Seleccioná la ubicación correcta
                 </Text>
                 {geocodingResults.map((result, index) => (
                   <TouchableOpacity
@@ -919,7 +925,7 @@ export default function EditProfile() {
 
             <Input
               label="Biografía"
-              placeholder="Cuéntanos sobre ti..."
+              placeholder="Contanos sobre vos..."
               value={bio}
               onChangeText={setBio}
               multiline
@@ -930,7 +936,7 @@ export default function EditProfile() {
           {/* Botón de guardar */}
           <View style={styles.saveButtonContainer}>
             <Button
-              title={loading ? "Guardando..." : "Guardar Cambios"}
+              title={loading ? "Guardando..." : "Guardar cambios"}
               onPress={handleSaveProfile}
               loading={loading || uploadingImage}
               size="large"
@@ -950,10 +956,12 @@ export default function EditProfile() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Seleccionar País</Text>
-              <TouchableOpacity onPress={() => setShowCountryModal(false)}>
-                <Text style={styles.modalCloseText}>✕</Text>
-              </TouchableOpacity>
+              <Text style={styles.modalTitle} accessibilityRole="header">Seleccionar país</Text>
+              <IconButton
+                icon={<X size={22} color={colors.textSecondary} />}
+                onPress={() => setShowCountryModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
             
             <ScrollView style={styles.optionsList}>
@@ -973,7 +981,7 @@ export default function EditProfile() {
                     {country.name}
                   </Text>
                   {selectedCountry?.id === country.id && (
-                    <Check size={16} color="#2D6A6F" />
+                    <Check size={16} color={colors.primary} />
                   )}
                 </TouchableOpacity>
               ))}
@@ -992,10 +1000,12 @@ export default function EditProfile() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Código telefónico</Text>
-              <TouchableOpacity onPress={() => setShowPhoneCountryModal(false)}>
-                <Text style={styles.modalCloseText}>✕</Text>
-              </TouchableOpacity>
+              <Text style={styles.modalTitle} accessibilityRole="header">Código telefónico</Text>
+              <IconButton
+                icon={<X size={22} color={colors.textSecondary} />}
+                onPress={() => setShowPhoneCountryModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
 
             <Input
@@ -1004,7 +1014,7 @@ export default function EditProfile() {
               value={phoneCountryQuery}
               onChangeText={setPhoneCountryQuery}
               autoCapitalize="none"
-              leftIcon={<Search size={20} color="#6B7280" />}
+              leftIcon={<Search size={20} color={colors.textTertiary} />}
             />
 
             <ScrollView style={styles.optionsList} keyboardShouldPersistTaps="handled">
@@ -1046,7 +1056,7 @@ export default function EditProfile() {
                       </View>
                     </View>
 
-                    {isSelected && <Check size={16} color="#2D6A6F" />}
+                    {isSelected && <Check size={16} color={colors.primary} />}
                   </TouchableOpacity>
                 );
               })}
@@ -1063,19 +1073,19 @@ export default function EditProfile() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     paddingTop: 30, // Add padding at the top to show status bar
-    paddingBottom: 20,
+    paddingBottom: spacing.xl,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
     minHeight: 60,
   },
   backButton: {
@@ -1087,8 +1097,8 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    fontFamily: fonts.semibold,
+    color: colors.text,
     flexShrink: 1,
   },
   placeholder: {
@@ -1098,16 +1108,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   formCard: {
-    margin: 16,
+    margin: spacing.lg,
   },
   photoSection: {
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   sectionTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    fontFamily: fonts.semibold,
+    color: colors.text,
+    marginBottom: spacing.lg,
   },
   photoContainer: {
     alignItems: 'center',
@@ -1115,7 +1125,7 @@ const styles = StyleSheet.create({
   },
   photoButton: {
     position: 'relative',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   profilePhoto: {
     width: 120,
@@ -1126,39 +1136,39 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     borderStyle: 'dashed',
   },
   photoOverlay: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    backgroundColor: '#3B82F6',
-    borderRadius: 16,
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
     width: 32,
     height: 32,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderColor: colors.white,
   },
   photoHint: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    fontFamily: fonts.regular,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   section: {
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
     paddingHorizontal: 10,
   },
   disabledInput: {
-    backgroundColor: '#F9FAFB',
-    color: '#9CA3AF',
+    backgroundColor: colors.background,
+    color: colors.textTertiary,
   },
   departmentInputGroup: {
     position: 'relative',
@@ -1169,11 +1179,11 @@ const styles = StyleSheet.create({
     top: '100%',
     left: 0,
     right: 0,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    marginTop: 4,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    marginTop: spacing.xs,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -1183,26 +1193,26 @@ const styles = StyleSheet.create({
     maxHeight: 200,
   },
   departmentSuggestion: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   departmentSuggestionText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
   },
   row: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
   halfWidth: {
     flex: 1,
   },
   saveButtonContainer: {
-    marginTop: 24,
-    marginBottom: 20,
+    marginTop: spacing.xxl,
+    marginBottom: spacing.xl,
   },
   modalOverlay: {
     flex: 1,
@@ -1210,29 +1220,29 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    padding: 20,
+    padding: spacing.xl,
     maxHeight: '70%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   modalTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    fontFamily: fonts.bold,
+    color: colors.text,
   },
   modalCloseText: {
     fontSize: 18,
-    color: '#6B7280',
+    color: colors.textTertiary,
   },
   optionsList: {
     maxHeight: 400,
@@ -1241,51 +1251,51 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 12,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   selectedOptionItem: {
-    backgroundColor: '#F0F9FF',
+    backgroundColor: colors.primarySoft,
   },
   optionText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
     flex: 1,
   },
   selectedOptionText: {
-    color: '#2D6A6F',
-    fontFamily: 'Inter-Medium',
+    color: colors.primary,
+    fontFamily: fonts.medium,
   },
   phoneFieldGroup: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   phoneFieldLabel: {
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
+    fontFamily: fonts.medium,
+    color: colors.textSecondary,
     marginBottom: 6,
   },
   phoneRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    gap: 12,
+    gap: spacing.md,
   },
   phoneCountryButton: {
     minWidth: 128,
     maxWidth: 160,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
     minHeight: 50,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: spacing.sm,
   },
   phoneCountryFlagWrap: {
     width: 24,
@@ -1294,7 +1304,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
   },
   phoneCountryFlag: {
     width: '100%',
@@ -1306,28 +1316,28 @@ const styles = StyleSheet.create({
   phoneCountryCode: {
     flex: 1,
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#111827',
+    fontFamily: fonts.medium,
+    color: colors.text,
   },
   phoneNumberInputContainer: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
     minHeight: 50,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
   },
   phoneInputIcon: {
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   phoneNumberInput: {
     flex: 1,
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
+    fontFamily: fonts.regular,
+    color: colors.text,
     paddingVertical: 0,
   },
   phoneCountryOptionItem: {
@@ -1335,12 +1345,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 14,
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   selectedPhoneCountryOptionItem: {
-    backgroundColor: '#F0F9FF',
+    backgroundColor: colors.primarySoft,
   },
   phoneCountryOptionLeft: {
     flexDirection: 'row',
@@ -1348,46 +1358,46 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   phoneCountryOptionTextGroup: {
-    marginLeft: 12,
+    marginLeft: spacing.md,
     flex: 1,
   },
   phoneCountryOptionName: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
   },
   selectedPhoneCountryOptionName: {
-    color: '#2D6A6F',
-    fontFamily: 'Inter-Medium',
+    color: colors.primary,
+    fontFamily: fonts.medium,
   },
   phoneCountryOptionCode: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    fontFamily: fonts.regular,
+    color: colors.textTertiary,
     marginTop: 2,
   },
   geocodingSection: {
-    marginBottom: 20,
-    padding: 16,
-    backgroundColor: '#F0F9FF',
-    borderRadius: 12,
+    marginBottom: spacing.xl,
+    padding: spacing.lg,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderColor: colors.primaryMuted,
   },
   geocodingHint: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#0369A1',
+    fontFamily: fonts.regular,
+    color: colors.primaryStrong,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
     lineHeight: 16,
   },
   geocodingResults: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginBottom: 16,
+    borderColor: colors.border,
+    marginBottom: spacing.lg,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1396,64 +1406,64 @@ const styles = StyleSheet.create({
   },
   geocodingResultsTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    padding: 16,
-    paddingBottom: 8,
+    fontFamily: fonts.semibold,
+    color: colors.text,
+    padding: spacing.lg,
+    paddingBottom: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   geocodingResultItem: {
-    padding: 16,
+    padding: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   geocodingResultAddress: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#111827',
-    marginBottom: 4,
+    fontFamily: fonts.medium,
+    color: colors.text,
+    marginBottom: spacing.xs,
     lineHeight: 20,
   },
   geocodingResultType: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    fontFamily: fonts.regular,
+    color: colors.textTertiary,
   },
   cancelGeocodingButton: {
-    padding: 16,
+    padding: spacing.lg,
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   cancelGeocodingText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    fontFamily: fonts.medium,
+    color: colors.textTertiary,
   },
   coordinatesDisplay: {
-    backgroundColor: '#F0FDF4',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: colors.successSoft,
+    padding: spacing.lg,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#BBF7D0',
-    marginBottom: 16,
+    borderColor: colors.successSoft,
+    marginBottom: spacing.lg,
   },
   coordinatesTitle: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#166534',
-    marginBottom: 8,
+    fontFamily: fonts.semibold,
+    color: colors.success,
+    marginBottom: spacing.sm,
   },
   coordinatesText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#166534',
+    fontFamily: fonts.regular,
+    color: colors.success,
     marginBottom: 2,
   },
   coordinatesNote: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#059669',
-    marginTop: 8,
+    fontFamily: fonts.medium,
+    color: colors.success,
+    marginTop: spacing.sm,
   },
 });

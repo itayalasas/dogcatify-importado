@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { AlertCircle, Check, Clock, Shield, Sparkles } from 'lucide-react-native';
 import { Card } from './ui/Card';
+import { radius, spacing, typography } from '../constants/theme';
 import {
   getSubscriptionReturnCopy,
   getSubscriptionReturnTone,
@@ -40,8 +41,8 @@ export const SubscriptionReturnBanner = ({
 
   return (
     <Card style={[styles.card, { backgroundColor: tone.backgroundColor, borderColor: tone.borderColor }, style]}>
-      <View style={styles.header}>
-        <View style={[styles.iconWrap, { backgroundColor: tone.iconBackgroundColor }]}>
+      <View style={styles.header} accessible accessibilityRole="summary">
+        <View style={[styles.iconWrap, { backgroundColor: tone.iconBackgroundColor }]} importantForAccessibility="no-hide-descendants">
           <Icon size={18} color={tone.accentColor} />
         </View>
         <View style={styles.headerCopy}>
@@ -55,7 +56,7 @@ export const SubscriptionReturnBanner = ({
 
 const styles = StyleSheet.create({
   card: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
     borderWidth: 1,
   },
   header: {
@@ -65,22 +66,20 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   headerCopy: {
     flex: 1,
   },
   title: {
+    ...typography.bodyStrong,
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
   },
   message: {
-    marginTop: 4,
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 19,
+    marginTop: spacing.xs,
+    ...typography.bodySmall,
   },
 });

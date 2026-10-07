@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { X } from 'lucide-react-native';
 import { supabaseClient } from '../lib/supabase';
+import { colors } from '../constants/theme';
 
 const LOGO = require('../assets/images/patitas-game-logo.png');
 
@@ -271,7 +272,7 @@ export function FloatingGameWidget() {
                   { opacity: tooltipAnim, transform: [{ scale: tooltipScale }] },
                 ]}
               >
-                <Text style={styles.tooltipTitle}>🎁 ¡Juega y gana!</Text>
+                <Text style={styles.tooltipTitle}>🎁 ¡Jugá y ganá!</Text>
                 <Text style={styles.tooltipText}>Hasta {maxDiscount}% OFF en DogCatiFy</Text>
               </Animated.View>
             )}
@@ -282,7 +283,12 @@ export function FloatingGameWidget() {
               style={[styles.ring, { opacity: ringOpacity, transform: [{ scale: ringScale }] }]}
             />
 
-            <Pressable onPress={handleOpenGame} style={styles.bubblePress}>
+            <Pressable
+              onPress={handleOpenGame}
+              style={styles.bubblePress}
+              accessibilityRole="button"
+              accessibilityLabel={`Jugar Patitas al Rescate, hasta ${maxDiscount}% de descuento`}
+            >
               <Animated.View style={[styles.bubble, { transform: [{ rotate }] }]}>
                 <Image source={LOGO} style={styles.logo} />
               </Animated.View>
@@ -297,9 +303,11 @@ export function FloatingGameWidget() {
             <Pressable
               onPress={handleDismiss}
               style={[styles.closeBtn, side === 'right' ? { left: -6 } : { right: -6 }]}
-              hitSlop={10}
+              hitSlop={14}
+              accessibilityRole="button"
+              accessibilityLabel="Ocultar el juego por unos minutos"
             >
-              <X size={10} color="#FFFFFF" strokeWidth={3} />
+              <X size={10} color={colors.white} strokeWidth={3} />
             </Pressable>
           </Animated.View>
         </Animated.View>
@@ -354,7 +362,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -8,
     right: -10,
-    backgroundColor: '#DC2626',
+    backgroundColor: colors.danger,
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -371,7 +379,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: -9,
     alignSelf: 'center',
-    backgroundColor: '#16A34A',
+    backgroundColor: colors.success,
     borderRadius: 8,
     paddingHorizontal: 7,
     paddingVertical: 1,
@@ -388,7 +396,7 @@ const styles = StyleSheet.create({
   closeBtn: {
     position: 'absolute',
     top: -6,
-    backgroundColor: '#6B7280',
+    backgroundColor: colors.textTertiary,
     borderRadius: 10,
     width: 18,
     height: 18,

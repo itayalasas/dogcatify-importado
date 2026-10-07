@@ -5,9 +5,12 @@ import { ArrowLeft, Clock, X } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { toast } from '../../components/ui/Toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { formatDateLabel, generateUruguayHolidayClosures, toLocalDateKey, type ScheduleClosureEntry } from '../../utils/scheduleExceptions';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 
 interface ScheduleItem {
   id: string;
@@ -187,19 +190,19 @@ export default function ConfigureSchedulePage() {
     const requiresAppointmentFields = !isBoarding && !isShop;
 
     if (!startTime || !endTime || selectedDays.length === 0) {
-      Alert.alert('Error', 'Por favor completa todos los campos y selecciona al menos un día');
+      Alert.alert('Error', 'Completá todos los campos y elegí al menos un día');
       return;
     }
 
     // Solo validar estos campos si el negocio maneja citas (NO boarding ni shop)
     if (requiresAppointmentFields && (!maxSlots || !slotDuration)) {
-      Alert.alert('Error', 'Por favor completa todos los campos');
+      Alert.alert('Error', 'Completá todos los campos');
       return;
     }
 
     if (breakEnabled) {
       if (!breakStartTime || !breakEndTime) {
-        Alert.alert('Error', 'Completa la pausa interna para bloquear ese intervalo');
+        Alert.alert('Error', 'Completá la pausa interna para bloquear ese intervalo');
         return;
       }
 
@@ -300,9 +303,8 @@ export default function ConfigureSchedulePage() {
       setMaxSlots('8');
       setSlotDuration('60');
       
-      Alert.alert('Éxito', 'Horario agregado correctamente', [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
+      toast.success('Horario agregado');
+      router.back();
     } catch (error) {
       console.error('Error adding schedule:', error);
       Alert.alert('Error', 'No se pudo agregar el horario');
@@ -332,8 +334,8 @@ export default function ConfigureSchedulePage() {
 
   const handleDeleteSchedule = (scheduleId: string) => {
     Alert.alert(
-      'Eliminar Horario',
-      '¿Estás seguro de que quieres eliminar este horario?',
+      'Eliminar horario',
+      '¿Seguro que querés eliminar este horario?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -348,7 +350,7 @@ export default function ConfigureSchedulePage() {
               
               if (error) throw error;
               
-              Alert.alert('Éxito', 'Horario eliminado correctamente');
+              toast.success('Horario eliminado');
             } catch (error) {
               console.error('Error deleting schedule:', error);
               Alert.alert('Error', 'No se pudo eliminar el horario');
@@ -363,7 +365,7 @@ export default function ConfigureSchedulePage() {
     const normalizedDate = toLocalDateKey(closureDate);
 
     if (!normalizedDate) {
-      Alert.alert('Error', 'Ingresa una fecha válida con formato AAAA-MM-DD');
+      Alert.alert('Error', 'Ingresá una fecha válida con formato AAAA-MM-DD');
       return;
     }
 
@@ -393,7 +395,7 @@ export default function ConfigureSchedulePage() {
       setClosureDate('');
       setClosureReason('');
       await fetchClosures();
-      Alert.alert('Éxito', 'El día quedó bloqueado en la agenda');
+      toast.success('Día bloqueado en la agenda');
     } catch (error) {
       console.error('Error adding closure:', error);
       Alert.alert('Error', 'No se pudo bloquear el día');
@@ -405,7 +407,7 @@ export default function ConfigureSchedulePage() {
   const handleDeleteClosure = (closureId: string) => {
     Alert.alert(
       'Eliminar cierre',
-      '¿Quieres volver a habilitar este día en la agenda?',
+      '¿Querés volver a habilitar este día en la agenda?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -421,7 +423,7 @@ export default function ConfigureSchedulePage() {
               if (error) throw error;
 
               await fetchClosures();
-              Alert.alert('Éxito', 'El día volvió a estar disponible');
+              toast.success('El día volvió a estar disponible');
             } catch (error) {
               console.error('Error deleting closure:', error);
               Alert.alert('Error', 'No se pudo quitar el cierre');
@@ -436,7 +438,7 @@ export default function ConfigureSchedulePage() {
     const year = Math.trunc(Number(holidayYear));
 
     if (!Number.isFinite(year) || year < 2000 || year > 2100) {
-      Alert.alert('Error', 'Ingresa un año válido');
+      Alert.alert('Error', 'Ingresá un año válido');
       return;
     }
 
@@ -468,7 +470,7 @@ export default function ConfigureSchedulePage() {
       if (error) throw error;
 
       await fetchClosures();
-      Alert.alert('Éxito', `Se cargaron los feriados del ${year}`);
+      toast.success(`Feriados de ${year} cargados`);
     } catch (error) {
       console.error('Error loading holiday closures:', error);
       Alert.alert('Error', 'No se pudieron cargar los feriados');
@@ -497,48 +499,28 @@ export default function ConfigureSchedulePage() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
-          <View style={styles.businessInfo}>
-            {partnerProfile?.logo ? (
-              <Image source={{ uri: partnerProfile.logo }} style={styles.businessLogo} />
-            ) : (
-              <View style={styles.logoPlaceholder}>
-                <Text style={styles.logoPlaceholderText}>
-                  {partnerProfile?.businessType === 'veterinary' ? '🏥' : 
-                   partnerProfile?.businessType === 'grooming' ? '✂️' : 
-                   partnerProfile?.businessType === 'walking' ? '🚶' : 
-                   partnerProfile?.businessType === 'boarding' ? '🏠' : 
-                   partnerProfile?.businessType === 'shop' ? '🛍️' : '⏰'}
-                </Text>
-              </View>
-            )}
-            <View>
-              <Text style={styles.title}>Configurar Horarios</Text>
-              <Text style={styles.businessName}>{partnerProfile?.businessName}</Text>
-            </View>
-          </View>
-        </View>
-      </View>
+      <ScreenHeader title="Horarios" subtitle={partnerProfile?.businessName} />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <Card style={styles.infoCard}>
-          <Text style={styles.infoTitle}>⏰ Horarios de Trabajo</Text>
+          <Text style={styles.infoTitle}>Horarios de trabajo</Text>
           <Text style={styles.infoDescription}>
             {isWalkingBusiness
-              ? 'Define tus horarios de paseo y cuántos turnos puedes aceptar en cada franja.'
-              : 'Define tus horarios de trabajo para que los clientes puedan hacer reservas'}
+              ? 'Definí tus horarios de paseo y cuántos turnos podés aceptar en cada franja.'
+              : 'Definí tus horarios de trabajo para que los clientes puedan hacer reservas'}
           </Text>
         </Card>
 
         <Card style={styles.formCard}>
-          <Text style={styles.sectionTitle}>Agregar Nuevo Horario</Text>
+          <Text style={styles.sectionTitle}>Agregar horario</Text>
           
           <View style={styles.daySelector}>
-            <Text style={styles.selectorLabel}>Días de la semana (selecciona uno o varios)</Text>
+            <Text style={styles.selectorLabel}>Días de la semana (elegí uno o varios)</Text>
             <View style={styles.dayOptions}>
               {daysOfWeek.map((day) => {
                 const isAvailable = isDayAvailable(day.value);
@@ -553,6 +535,9 @@ export default function ConfigureSchedulePage() {
                     ]}
                     onPress={() => isAvailable && toggleDaySelection(day.value)}
                     disabled={!isAvailable}
+                    accessibilityRole="checkbox"
+                    accessibilityLabel={isAvailable ? day.label : `${day.label}, ya tiene horario`}
+                    accessibilityState={{ checked: isSelected, disabled: !isAvailable }}
                   >
                     <Text style={[
                       styles.dayOptionText,
@@ -574,7 +559,7 @@ export default function ConfigureSchedulePage() {
                 placeholder="09:00"
                 value={startTime}
                 onChangeText={setStartTime}
-                leftIcon={<Clock size={20} color="#6B7280" />}
+                leftIcon={<Clock size={20} color={colors.textTertiary} />}
               />
             </View>
             <View style={styles.timeInput}>
@@ -583,7 +568,7 @@ export default function ConfigureSchedulePage() {
                 placeholder="17:00"
                 value={endTime}
                 onChangeText={setEndTime}
-                leftIcon={<Clock size={20} color="#6B7280" />}
+                leftIcon={<Clock size={20} color={colors.textTertiary} />}
               />
             </View>
           </View>
@@ -610,22 +595,18 @@ export default function ConfigureSchedulePage() {
           )}
 
           <View style={styles.buttonContainer}>
-            <TouchableOpacity 
-              style={styles.cancelButton}
-              onPress={() => router.back()}
-            >
-              <Text style={styles.cancelButtonText}>Cancelar</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.addButton}
+            <Button
+              title="Agregar horario"
               onPress={handleAddSchedule}
+              loading={loading}
               disabled={loading}
-            >
-              <Text style={styles.addButtonText}>
-                {loading ? "Agregando..." : "Agregar Horario"}
-              </Text>
-            </TouchableOpacity>
+              size="large"
+            />
+            <Button
+              title="Cancelar"
+              onPress={() => router.back()}
+              variant="ghost"
+            />
           </View>
 
           <View style={styles.breakSection}>
@@ -634,8 +615,9 @@ export default function ConfigureSchedulePage() {
               <Switch
                 value={breakEnabled}
                 onValueChange={setBreakEnabled}
-                trackColor={{ false: '#D1D5DB', true: '#60A5FA' }}
-                thumbColor={breakEnabled ? '#2563EB' : '#F9FAFB'}
+                accessibilityLabel="Pausa interna opcional"
+                trackColor={{ false: colors.borderStrong, true: colors.primary }}
+                thumbColor={breakEnabled ? colors.primaryPressed : colors.background}
               />
             </View>
             <Text style={styles.breakHelperText}>
@@ -649,7 +631,7 @@ export default function ConfigureSchedulePage() {
                     placeholder="12:00"
                     value={breakStartTime}
                     onChangeText={setBreakStartTime}
-                    leftIcon={<Clock size={20} color="#6B7280" />}
+                    leftIcon={<Clock size={20} color={colors.textTertiary} />}
                   />
                 </View>
                 <View style={styles.timeInput}>
@@ -658,7 +640,7 @@ export default function ConfigureSchedulePage() {
                     placeholder="13:00"
                     value={breakEndTime}
                     onChangeText={setBreakEndTime}
-                    leftIcon={<Clock size={20} color="#6B7280" />}
+                    leftIcon={<Clock size={20} color={colors.textTertiary} />}
                   />
                 </View>
               </View>
@@ -668,7 +650,7 @@ export default function ConfigureSchedulePage() {
 
         {schedule.length > 0 && (
           <Card style={styles.scheduleListCard}>
-            <Text style={styles.sectionTitle}>Horarios Configurados</Text>
+            <Text style={styles.sectionTitle}>Horarios configurados</Text>
             <View style={styles.scheduleList}>
               {schedule.map((item) => (
                 <View key={item.id} style={styles.scheduleCard}>
@@ -684,16 +666,17 @@ export default function ConfigureSchedulePage() {
                         </Text>
                       )}
                     </View>
-                    <View style={[
-                      styles.scheduleStatus,
-                      { backgroundColor: item.isActive ? '#D1FAE5' : '#FEE2E2' }
-                    ]}>
-                      <Text style={[
-                        styles.scheduleStatusText,
-                        { color: item.isActive ? '#065F46' : '#991B1B' }
-                      ]}>
+                    <View style={styles.scheduleToggle}>
+                      <Text style={[styles.scheduleStatusText, { color: item.isActive ? colors.success : colors.textTertiary }]}>
                         {item.isActive ? 'Activo' : 'Inactivo'}
                       </Text>
+                      <Switch
+                        value={item.isActive}
+                        onValueChange={() => handleToggleSchedule(item.id, item.isActive)}
+                        trackColor={{ false: colors.borderStrong, true: colors.primary }}
+                        thumbColor={colors.white}
+                        accessibilityLabel={`Horario del ${getDayName(item.dayOfWeek)} activo`}
+                      />
                     </View>
                   </View>
 
@@ -709,17 +692,14 @@ export default function ConfigureSchedulePage() {
                   )}
 
                   <View style={styles.scheduleActions}>
-                    <Button
-                      title={item.isActive ? 'Desactivar' : 'Activar'}
-                      onPress={() => handleToggleSchedule(item.id, item.isActive)}
-                      variant={item.isActive ? 'outline' : 'primary'}
-                      size="small"
-                    />
                     <TouchableOpacity
                       style={styles.deleteButton}
                       onPress={() => handleDeleteSchedule(item.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Eliminar horario del ${getDayName(item.dayOfWeek)}`}
                     >
-                      <X size={16} color="#EF4444" />
+                      <X size={16} color={colors.danger} />
+                      <Text style={styles.deleteButtonText}>Eliminar</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -731,7 +711,7 @@ export default function ConfigureSchedulePage() {
         <Card style={styles.closureCard}>
           <Text style={styles.sectionTitle}>Cierres y feriados</Text>
           <Text style={styles.breakHelperText}>
-            Bloquea días completos por feriados, aniversarios, reparaciones o descansos especiales.
+            Bloqueá días completos por feriados, aniversarios, reparaciones o descansos especiales.
           </Text>
 
           <Input
@@ -790,8 +770,10 @@ export default function ConfigureSchedulePage() {
                   <TouchableOpacity
                     style={styles.closureDeleteButton}
                     onPress={() => closure.id && handleDeleteClosure(closure.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Quitar cierre del ${formatDateLabel(closure.closed_date)}`}
                   >
-                    <X size={16} color="#EF4444" />
+                    <X size={16} color={colors.danger} />
                   </TouchableOpacity>
                 </View>
               ))}
@@ -808,18 +790,18 @@ export default function ConfigureSchedulePage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surfaceAlt,
     paddingTop: 50, // Añadir padding superior para el encabezado
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: 6,
@@ -832,300 +814,297 @@ const styles = StyleSheet.create({
   businessInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 8,
+    marginLeft: spacing.sm,
   },
   businessLogo: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   logoPlaceholder: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   logoPlaceholderText: {
-    fontSize: 20,
+    ...typography.title,
   },
   businessName: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   content: {
     flex: 1,
-    padding: 16,
-    paddingTop: 8,
+  },
+  scrollContent: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xxxl,
   },
   infoCard: {
-    marginBottom: 16,
-    padding: 20,
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primaryMuted,
   },
   infoTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   infoDescription: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    lineHeight: 20,
+    ...typography.body,
+    color: colors.textTertiary,
   },
   formCard: {
-    marginBottom: 16,
-    padding: 20,
+    marginBottom: spacing.lg,
+    padding: spacing.xl,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   daySelector: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   selectorLabel: { 
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 12,
+    ...typography.bodyStrong,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
   },
   dayOptions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginHorizontal: -4,
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   dayOption: {
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 8,
-    margin: 4,
-    minWidth: 100,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    margin: spacing.xs,
+    minWidth: 96,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: colors.borderStrong,
   },
   selectedDayOption: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   disabledDayOption: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E5E7EB',
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.border,
     opacity: 0.4,
   },
   dayOptionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textSecondary,
   },
   selectedDayOptionText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   disabledDayOptionText: {
-    color: '#9CA3AF',
+    color: colors.textTertiary,
     textDecorationLine: 'line-through',
   },
   timeInputs: {
     flexDirection: 'row',
     justifyContent: 'space-between', 
-    marginTop: 24,
-    gap: 12,
+    marginTop: spacing.xxl,
+    gap: spacing.md,
   },
   timeInput: { 
     flex: 1,
   },
   breakSection: {
-    marginTop: 20,
-    paddingTop: 16,
+    marginTop: spacing.xl,
+    paddingTop: spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.border,
   },
   breakHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: spacing.md,
   },
   breakHelperText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    lineHeight: 18,
-    marginTop: 8,
-    marginBottom: 12,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
   },
   buttonContainer: {
     flexDirection: 'column',
-    gap: 12,
-    marginTop: 20,
+    gap: spacing.md,
+    marginTop: spacing.xl,
     marginBottom: 10,
   },
   cancelButton: {
     width: '100%',
-    paddingVertical: 16,
-    borderRadius: 8,
+    paddingVertical: spacing.lg,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#2D6A6F',
+    borderColor: colors.primary,
   },
   cancelButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#2D6A6F',
+    ...typography.bodyStrong,
+    color: colors.primary,
   },
   addButton: {
     width: '100%',
-    backgroundColor: '#2D6A6F',
-    paddingVertical: 16,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.lg,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   scheduleListCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   scheduleList: {
-    gap: 12,
+    gap: spacing.md,
   },
   scheduleCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 8,
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+  },
+  scheduleToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 44,
   },
   scheduleHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   scheduleInfo: {
     flex: 1,
   },
   dayName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   timeRange: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   scheduleStatus: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   scheduleStatusText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    ...typography.captionStrong,
   },
   scheduleDetails: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   scheduleDetail: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginBottom: spacing.xs,
   },
   breakSummary: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#0F766E',
-    marginTop: 2,
+    ...typography.label,
+    color: colors.primary,
+    marginTop: spacing.xxs,
   },
   scheduleActions: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 8,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: spacing.xs,
   },
   scheduleActionButton: {
     width: '100%',
     minHeight: 44,
   },
   deleteButton: {
-    width: '100%',
-    padding: 8,
-    backgroundColor: '#FEE2E2',
-    borderRadius: 8, 
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 44,
   },
+  deleteButtonText: {
+    ...typography.label,
+    color: colors.danger,
+  },
   closureCard: {
-    marginBottom: 16,
-    padding: 20,
+    marginBottom: spacing.lg,
+    padding: spacing.xl,
   },
   closureButtonsRow: {
     flexDirection: 'column',
-    gap: 12,
-    marginBottom: 16,
+    gap: spacing.md,
+    marginBottom: spacing.lg,
   },
   closureList: {
-    gap: 12,
+    gap: spacing.md,
   },
   closureItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: '#F9FAFB',
+    borderRadius: radius.md,
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   closureItemInfo: {
     flex: 1,
-    paddingRight: 12,
+    paddingRight: spacing.md,
   },
   closureItemDate: {
-    fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 2,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   closureItemReason: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   closureDeleteButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FEE2E2',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.dangerSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyClosuresText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 8,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginTop: spacing.sm,
   },
   addButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
+    ...typography.bodyStrong,
+    color: colors.white,
   },
 });

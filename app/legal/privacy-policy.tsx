@@ -13,7 +13,10 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { ArrowLeft, Shield, Lock, Eye, FileText, Mail, Phone, MessageSquare } from 'lucide-react-native';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { Button } from '../../components/ui/Button';
 import { setPrivacyAccepted } from '../../utils/legalAcceptance';
+import { colors, fonts, radius, spacing } from '../../constants/theme';
 
 export default function PrivacyPolicy() {
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
@@ -36,15 +39,9 @@ export default function PrivacyPolicy() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#2D6A6F" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Política de Privacidad</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title="Política de privacidad" onBack={() => router.back()} />
 
       {/* Content */}
       <ScrollView
@@ -57,10 +54,10 @@ export default function PrivacyPolicy() {
       >
         {/* Intro Banner */}
         <View style={styles.introBanner}>
-          <Shield size={48} color="#2D6A6F" />
+          <Shield size={48} color={colors.primary} />
           <Text style={styles.introTitle}>Tu privacidad es nuestra prioridad</Text>
           <Text style={styles.introSubtitle}>
-            En DogCatify, tu privacidad y la de tus mascotas es nuestra prioridad. Conoce cómo protegemos y utilizamos tu información.
+            En DogCatify, tu privacidad y la de tus mascotas es nuestra prioridad. Conocé cómo protegemos y utilizamos tu información.
           </Text>
           <Text style={styles.updateDate}>Última actualización: 15/10/2025</Text>
         </View>
@@ -76,11 +73,11 @@ export default function PrivacyPolicy() {
         {/* Información que Recopilamos */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Eye size={24} color="#2D6A6F" />
-            <Text style={styles.sectionTitle}>Información que Recopilamos</Text>
+            <Eye size={24} color={colors.primary} />
+            <Text style={styles.sectionTitle}>Información que recopilamos</Text>
           </View>
 
-          <Text style={styles.subsectionTitle}>Información Personal</Text>
+          <Text style={styles.subsectionTitle}>Información personal</Text>
           <View style={styles.bulletList}>
             <Text style={styles.bulletItem}>• Nombre y apellidos</Text>
             <Text style={styles.bulletItem}>• Correo electrónico</Text>
@@ -89,7 +86,7 @@ export default function PrivacyPolicy() {
             <Text style={styles.bulletItem}>• Fotografía de perfil</Text>
           </View>
 
-          <Text style={styles.subsectionTitle}>Información de Mascotas</Text>
+          <Text style={styles.subsectionTitle}>Información de mascotas</Text>
           <View style={styles.bulletList}>
             <Text style={styles.bulletItem}>• Datos básicos (nombre, raza, edad)</Text>
             <Text style={styles.bulletItem}>• Fotografías de mascotas</Text>
@@ -102,26 +99,26 @@ export default function PrivacyPolicy() {
         {/* Cómo Utilizamos tu Información */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <FileText size={24} color="#2D6A6F" />
-            <Text style={styles.sectionTitle}>Cómo Utilizamos tu Información</Text>
+            <FileText size={24} color={colors.primary} />
+            <Text style={styles.sectionTitle}>Cómo utilizamos tu información</Text>
           </View>
 
-          <Text style={styles.subsectionTitle}>Gestión de Perfil y Mascotas</Text>
+          <Text style={styles.subsectionTitle}>Gestión de perfil y mascotas</Text>
           <Text style={styles.paragraph}>
             Utilizamos tu información para crear y mantener tu perfil de usuario, gestionar los perfiles de tus mascotas, y permitirte agregar, modificar o eliminar información según sea necesario.
           </Text>
 
-          <Text style={styles.subsectionTitle}>Servicios de Salud y Citas</Text>
+          <Text style={styles.subsectionTitle}>Servicios de salud y citas</Text>
           <Text style={styles.paragraph}>
             Procesamos la información de salud de tus mascotas para ayudarte a gestionar citas veterinarias, servicios de peluquería, baño, y mantener un registro completo del bienestar de tus mascotas.
           </Text>
 
-          <Text style={styles.subsectionTitle}>Tienda Online y Servicios</Text>
+          <Text style={styles.subsectionTitle}>Tienda online y servicios</Text>
           <Text style={styles.paragraph}>
             Tu información se utiliza para procesar compras en nuestra tienda online, gestionar contratación de servicios, y proporcionar recomendaciones personalizadas de productos.
           </Text>
 
-          <Text style={styles.subsectionTitle}>Red de Aliados y Lugares Pet-Friendly</Text>
+          <Text style={styles.subsectionTitle}>Red de aliados y lugares pet-friendly</Text>
           <Text style={styles.paragraph}>
             Facilitamos conexiones con negocios aliados y te ayudamos a descubrir lugares pet-friendly basados en tu ubicación y preferencias.
           </Text>
@@ -130,11 +127,11 @@ export default function PrivacyPolicy() {
         {/* Protección de Datos */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Lock size={24} color="#2D6A6F" />
-            <Text style={styles.sectionTitle}>Protección de Datos</Text>
+            <Lock size={24} color={colors.primary} />
+            <Text style={styles.sectionTitle}>Protección de datos</Text>
           </View>
 
-          <Text style={styles.subsectionTitle}>Medidas de Seguridad</Text>
+          <Text style={styles.subsectionTitle}>Medidas de seguridad</Text>
           <View style={styles.bulletList}>
             <Text style={styles.bulletItem}>• Encriptación de datos en tránsito y reposo</Text>
             <Text style={styles.bulletItem}>• Autenticación de dos factores</Text>
@@ -153,7 +150,7 @@ export default function PrivacyPolicy() {
 
         {/* Tus Derechos */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Tus Derechos</Text>
+          <Text style={styles.sectionTitle}>Tus derechos</Text>
 
           <View style={styles.rightCard}>
             <Text style={styles.rightTitle}>Acceso</Text>
@@ -175,12 +172,12 @@ export default function PrivacyPolicy() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Contacto</Text>
           <Text style={styles.paragraph}>
-            Si tienes preguntas sobre esta política de privacidad o deseas ejercer tus derechos, no dudes en contactarnos:
+            Si tenés preguntas sobre esta política de privacidad o querés ejercer tus derechos, escribinos:
           </Text>
 
           <View style={styles.contactCard}>
             <View style={styles.contactItem}>
-              <Mail size={20} color="#2D6A6F" />
+              <Mail size={20} color={colors.primary} />
               <View style={styles.contactInfo}>
                 <Text style={styles.contactLabel}>Email</Text>
                 <Text style={styles.contactValue}>info@dogcatify.com</Text>
@@ -188,7 +185,7 @@ export default function PrivacyPolicy() {
             </View>
 
             <View style={styles.contactItem}>
-              <Phone size={20} color="#2D6A6F" />
+              <Phone size={20} color={colors.primary} />
               <View style={styles.contactInfo}>
                 <Text style={styles.contactLabel}>Teléfono</Text>
                 <Text style={styles.contactValue}>+598 92519111</Text>
@@ -196,7 +193,7 @@ export default function PrivacyPolicy() {
             </View>
 
             <View style={styles.contactItem}>
-              <MessageSquare size={20} color="#2D6A6F" />
+              <MessageSquare size={20} color={colors.primary} />
               <View style={styles.contactInfo}>
                 <Text style={styles.contactLabel}>Soporte</Text>
                 <Text style={styles.contactValue}>Soporte en la app</Text>
@@ -207,7 +204,7 @@ export default function PrivacyPolicy() {
 
         {/* Actualizaciones */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Actualizaciones de la Política</Text>
+          <Text style={styles.sectionTitle}>Actualizaciones de la política</Text>
           <Text style={styles.paragraph}>
             Nos reservamos el derecho de actualizar esta política de privacidad periódicamente. Te notificaremos sobre cambios significativos a través de la aplicación o por correo electrónico. Te recomendamos revisar esta política regularmente para mantenerte informado sobre cómo protegemos tu información.
           </Text>
@@ -217,7 +214,7 @@ export default function PrivacyPolicy() {
         {!hasScrolledToBottom && (
           <View style={styles.scrollIndicator}>
             <Text style={styles.scrollIndicatorText}>
-              Desplázate hasta el final para continuar
+              Deslizá hasta el final para continuar
             </Text>
           </View>
         )}
@@ -225,15 +222,12 @@ export default function PrivacyPolicy() {
 
       {/* Accept Button */}
       <View style={styles.footer}>
-        <TouchableOpacity
-          style={[styles.acceptButton, !hasScrolledToBottom && styles.acceptButtonDisabled]}
+        <Button
+          title={hasScrolledToBottom ? 'Entendido' : 'Leé hasta el final para continuar'}
           onPress={handleAccept}
           disabled={!hasScrolledToBottom}
-        >
-          <Text style={[styles.acceptButtonText, !hasScrolledToBottom && styles.acceptButtonTextDisabled]}>
-            {hasScrolledToBottom ? 'Entendido' : 'Lee hasta el final para continuar'}
-          </Text>
-        </TouchableOpacity>
+          size="large"
+        />
       </View>
     </SafeAreaView>
   );
@@ -242,26 +236,26 @@ export default function PrivacyPolicy() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
     paddingTop: Platform.OS === 'android' ? 16 : 12,
-    paddingBottom: 12,
-    backgroundColor: '#FFFFFF',
+    paddingBottom: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   headerTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1A1A1A',
+    fontFamily: fonts.semibold,
+    color: colors.text,
   },
   placeholder: {
     width: 40,
@@ -270,155 +264,155 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingBottom: 24,
+    paddingBottom: spacing.xxl,
   },
   introBanner: {
-    backgroundColor: '#E8F4F5',
-    padding: 24,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.xxl,
     alignItems: 'center',
   },
   introTitle: {
     fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#1A1A1A',
-    marginTop: 16,
+    fontFamily: fonts.bold,
+    color: colors.text,
+    marginTop: spacing.lg,
     textAlign: 'center',
   },
   introSubtitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666',
-    marginTop: 8,
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
     textAlign: 'center',
     lineHeight: 20,
   },
   updateDate: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#2D6A6F',
-    marginTop: 12,
+    fontFamily: fonts.medium,
+    color: colors.primary,
+    marginTop: spacing.md,
   },
   section: {
-    backgroundColor: '#FFFFFF',
-    padding: 20,
-    marginTop: 12,
+    backgroundColor: colors.surface,
+    padding: spacing.xl,
+    marginTop: spacing.md,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
+    gap: spacing.md,
+    marginBottom: spacing.lg,
   },
   sectionTitle: {
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#1A1A1A',
-    marginBottom: 12,
+    fontFamily: fonts.bold,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   subsectionTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1A1A1A',
-    marginTop: 16,
-    marginBottom: 8,
+    fontFamily: fonts.semibold,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   paragraph: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666',
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
     lineHeight: 22,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   bulletList: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   bulletItem: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666',
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
     lineHeight: 24,
-    paddingLeft: 8,
+    paddingLeft: spacing.sm,
   },
   rightCard: {
-    backgroundColor: '#F9FAFB',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+    borderRadius: radius.sm,
+    marginBottom: spacing.md,
     borderLeftWidth: 3,
-    borderLeftColor: '#2D6A6F',
+    borderLeftColor: colors.primary,
   },
   rightTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1A1A1A',
-    marginBottom: 4,
+    fontFamily: fonts.semibold,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   rightDescription: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666',
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   contactCard: {
-    backgroundColor: '#F9FAFB',
-    padding: 16,
-    borderRadius: 8,
-    marginTop: 12,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+    borderRadius: radius.sm,
+    marginTop: spacing.md,
   },
   contactItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
+    gap: spacing.md,
+    marginBottom: spacing.lg,
   },
   contactInfo: {
     flex: 1,
   },
   contactLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#999',
+    fontFamily: fonts.medium,
+    color: colors.textTertiary,
     marginBottom: 2,
   },
   contactValue: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1A1A1A',
+    fontFamily: fonts.semibold,
+    color: colors.text,
   },
   scrollIndicator: {
-    backgroundColor: '#FFF3CD',
-    padding: 16,
-    margin: 16,
-    borderRadius: 8,
+    backgroundColor: colors.warningSoft,
+    padding: spacing.lg,
+    margin: spacing.lg,
+    borderRadius: radius.sm,
     alignItems: 'center',
   },
   scrollIndicatorText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#856404',
+    fontFamily: fonts.medium,
+    color: colors.warning,
     textAlign: 'center',
   },
   footer: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: colors.border,
   },
   acceptButton: {
-    backgroundColor: '#2D6A6F',
-    paddingVertical: 16,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.lg,
+    borderRadius: radius.sm,
     alignItems: 'center',
   },
   acceptButtonDisabled: {
-    backgroundColor: '#E0E0E0',
+    backgroundColor: colors.border,
   },
   acceptButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    fontFamily: fonts.semibold,
+    color: colors.white,
   },
   acceptButtonTextDisabled: {
-    color: '#999',
+    color: colors.textTertiary,
   },
 });

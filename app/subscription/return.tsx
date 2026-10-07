@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo } from 'react';
-import { ActivityIndicator, Linking, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SubscriptionReturnBanner } from '@/components/SubscriptionReturnBanner';
+import { Button } from '@/components/ui/Button';
+import { colors, spacing, typography } from '@/constants/theme';
 import {
   buildSubscriptionDeepLink,
   getSingleParam,
@@ -64,7 +66,7 @@ export default function SubscriptionReturn() {
     : normalizeSubscriptionScope(params.scope ?? params.subscription_scope ?? params.account_scope);
   const deepLink = useMemo(() => buildDeepLink(params, scope), [params, scope]);
   const internalRoute = useMemo(() => buildInternalRoute(params), [params]);
-  const title = scope === 'partner' ? 'Retorno de aliado' : 'Retorno de suscripcion';
+  const title = scope === 'partner' ? 'Volviendo a tu cuenta de aliado' : 'Volviendo a tu suscripción';
 
   const handleGoToSubscription = () => {
     router.replace(internalRoute as any);
@@ -95,10 +97,10 @@ export default function SubscriptionReturn() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <ActivityIndicator size="large" color="#0F766E" />
-        <Text style={styles.title}>{title}</Text>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.title} accessibilityRole="header">{title}</Text>
         <Text style={styles.text}>
-          Estamos confirmando {scope === 'partner' ? 'tu suscripcion de aliado' : 'tu suscripcion'} y volviendo a la app.
+          Estamos confirmando {scope === 'partner' ? 'tu suscripción de aliado' : 'tu suscripción'} y volviendo a la app.
         </Text>
         <SubscriptionReturnBanner
           scope={scope}
@@ -106,17 +108,17 @@ export default function SubscriptionReturn() {
           message={getSingleParam(params.subscription_message)}
           style={styles.banner}
         />
-        <TouchableOpacity style={styles.button} onPress={openApp}>
-          <Text style={styles.buttonText}>Abrir la app</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.secondaryButton} onPress={handleGoToSubscription}>
-          <Text style={styles.secondaryButtonText}>
-            {scope === 'partner' ? 'Ir a suscripcion de aliado' : 'Ir a mi suscripcion'}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.secondaryButton} onPress={handleGoToHome}>
-          <Text style={styles.secondaryButtonText}>Ir al inicio</Text>
-        </TouchableOpacity>
+        <View style={styles.actions}>
+          <Button title="Abrir la app" onPress={openApp} size="large" />
+          <Button
+            title={scope === 'partner' ? 'Ir a suscripción de aliado' : 'Ir a mi suscripción'}
+            onPress={handleGoToSubscription}
+            variant="outline"
+            size="large"
+            style={styles.actionGap}
+          />
+          <Button title="Ir al inicio" onPress={handleGoToHome} variant="ghost" style={styles.actionGap} />
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -125,63 +127,38 @@ export default function SubscriptionReturn() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   content: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: spacing.xxl,
   },
   title: {
-    marginTop: 20,
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    marginTop: spacing.xl,
+    ...typography.title,
+    color: colors.text,
     textAlign: 'center',
   },
   text: {
-    marginTop: 10,
-    marginBottom: 24,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xxl,
     maxWidth: 340,
-    fontSize: 15,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 22,
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   banner: {
     width: '100%',
     maxWidth: 420,
-    marginBottom: 18,
+    marginBottom: spacing.lg,
   },
-  button: {
-    minWidth: 180,
-    borderRadius: 12,
-    backgroundColor: '#0F766E',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    alignItems: 'center',
+  actions: {
+    width: '100%',
+    maxWidth: 360,
   },
-  buttonText: {
-    fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
-  },
-  secondaryButton: {
-    minWidth: 180,
-    marginTop: 12,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#0F766E',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  secondaryButtonText: {
-    fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#0F766E',
+  actionGap: {
+    marginTop: spacing.md,
   },
 });

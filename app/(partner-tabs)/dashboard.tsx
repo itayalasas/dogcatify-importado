@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Image, Alert, Modal } from 'react-native';
+import { View, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Image, Alert, Modal, RefreshControl } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Calendar, DollarSign, Users, Package, TrendingUp, Clock, MessageCircle, ChartBar as BarChart3, Settings, Filter, CreditCard } from 'lucide-react-native';
-import { Card } from '../../components/ui/Card';
+import { Calendar, DollarSign, Users, Package, TrendingUp, Clock, MessageCircle, ChartBar as BarChart3, Filter, CreditCard, ShoppingBag, Building, BadgeCheck, X } from 'lucide-react-native';
+import { Card, AppText, Badge, EmptyState, IconButton, Skeleton } from '../../components/ui';
+import type { BadgeTone } from '../../components/ui';
+import { MetricCard } from '../../components/partner/MetricCard';
+import { BusinessTypeAvatar } from '../../components/partner/BusinessTypeAvatar';
+import { formatMoney, formatNumber } from '../../components/partner/format';
+import { colors, radius, shadows, spacing, touchTarget } from '../../constants/theme';
 import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
@@ -52,6 +57,7 @@ export default function PartnerDashboard() {
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState<DateFilter>('today');
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (!currentUser?.id || !businessId) {
@@ -367,11 +373,11 @@ export default function PartnerDashboard() {
       case 'today':
         return 'Hoy';
       case 'week':
-        return 'Última Semana';
+        return 'Última semana';
       case 'month':
-        return 'Este Mes';
+        return 'Este mes';
       case 'all':
-        return 'Todo el Tiempo';
+        return 'Todo el tiempo';
       default:
         return 'Hoy';
     }
@@ -539,179 +545,209 @@ export default function PartnerDashboard() {
     );
   };
 
-  const getBusinessTypeIcon = (type: string) => { 
-    switch (type) {
-      case 'veterinary': return '🏥';
-      case 'grooming': return '✂️';
-      case 'walking': return '🚶';
-      case 'boarding': return '🏠';
-      case 'shop': return '🛍️';
-      case 'shelter': return '🐾';
-      default: return '🏢';
+  const formatCurrency = (amount: number) => formatMoney(amount);
+
+  const handleRefresh = async () => {
+    if (!partnerProfile?.id) return;
+    setRefreshing(true);
+    try {
+      await fetchDashboardData(partnerProfile.id);
+    } finally {
+      setRefreshing(false);
     }
   };
 
-  const formatCurrency = (amount: number) => { 
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-    }).format(amount);
-  };
-
   if (loading) {
-    return ( 
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando dashboard...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!partnerProfile) { 
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>No se encontró el perfil de aliado</Text>
+        <View style={styles.header} accessibilityLabel="Cargando panel">
+          <View style={styles.headerLeft}>
+            <Skeleton width={48} height={48} borderRadius={24} />
+            <View style={styles.headerTitles}>
+              <Skeleton width={120} height={12} />
+              <Skeleton width={180} height={18} style={{ marginTop: spacing.sm }} />
+            </View>
+          </View>
+        </View>
+        <View style={styles.skeletonGrid}>
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} width="48%" height={116} borderRadius={radius.lg} style={{ marginBottom: spacing.md }} />
+          ))}
+        </View>
+        <View style={styles.sectionPadded}>
+          <Skeleton height={180} borderRadius={radius.lg} />
         </View>
       </SafeAreaView>
     );
   }
 
+  if (!partnerProfile) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <EmptyState
+          icon={<Building size={32} color={colors.primary} />}
+          title="No encontramos el negocio"
+          description="Elegí un negocio para ver su panel."
+          actionLabel="Ver mis negocios"
+          onAction={() => router.replace('/(partner-tabs)/business-selector')}
+          style={styles.flexCenter}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  const filterOptions: { key: DateFilter; label: string }[] = [
+    { key: 'today', label: 'Hoy' },
+    { key: 'week', label: 'Última semana' },
+    { key: 'month', label: 'Este mes' },
+    { key: 'all', label: 'Todo el tiempo' },
+  ];
+
+  const quickActionIcon = (Icon: typeof Calendar, enabled: boolean = true) => (
+    <View style={[styles.quickActionIcon, !enabled && styles.quickActionIconLocked]}>
+      <Icon size={22} color={enabled ? colors.primary : colors.textTertiary} />
+    </View>
+  );
+
   return (
-    <SafeAreaView style={styles.container}> 
+    <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           {partnerProfile.logo ? (
             <Image source={{ uri: partnerProfile.logo }} style={styles.businessLogo} />
           ) : (
-            <View style={styles.logoPlaceholder}>
-              <Text style={styles.logoPlaceholderText}>
-                {getBusinessTypeIcon(partnerProfile.businessType)}
-              </Text>
-            </View>
+            <BusinessTypeAvatar type={partnerProfile.businessType} size={48} />
           )}
-          <View>
-            <Text style={styles.greeting}>{getGreeting()}</Text>
-            <Text style={styles.businessName}>
+          <View style={styles.headerTitles}>
+            <AppText variant="bodySmall" color="textSecondary" numberOfLines={1}>
+              {getGreeting()}
+            </AppText>
+            <AppText variant="heading" numberOfLines={1} accessibilityRole="header">
               {partnerProfile.businessName}
-            </Text>
+            </AppText>
           </View>
         </View>
         <View style={styles.headerBadges}>
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusText}>
-              {partnerProfile.isVerified ? '✅ Verificado' : '⏳ Pendiente'}
-            </Text>
-          </View>
+          <Badge
+            label={partnerProfile.isVerified ? 'Verificado' : 'Pendiente'}
+            tone={partnerProfile.isVerified ? 'success' : 'warning'}
+            size="small"
+            icon={partnerProfile.isVerified
+              ? <BadgeCheck size={12} color={colors.success} />
+              : <Clock size={12} color={colors.warning} />}
+          />
           <View style={[styles.planBadge, { backgroundColor: partnerPlan.surface, borderColor: partnerPlan.border }]}>
-            <Text style={[styles.planBadgeText, { color: partnerPlan.accent }]}>
+            <AppText variant="captionStrong" style={{ color: partnerPlan.accent }} numberOfLines={1}>
               Plan {partnerPlan.name}
-            </Text>
+            </AppText>
           </View>
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentInner}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+      >
         {/* Date Filter */}
         <View style={styles.filterSection}>
-          <Text style={styles.sectionTitle}>Resumen de {getFilterLabel()}</Text>
+          <AppText variant="heading" style={styles.filterTitle} numberOfLines={1}>
+            Resumen: {getFilterLabel().toLowerCase()}
+          </AppText>
           <TouchableOpacity
             style={styles.filterButton}
             onPress={() => setShowFilterModal(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`Filtrar por fecha. Ahora: ${getFilterLabel()}`}
           >
-            <Filter size={18} color="#3B82F6" />
-            <Text style={styles.filterButtonText}>Filtrar</Text>
+            <Filter size={18} color={colors.primary} />
+            <AppText variant="label" color="primary">Filtrar</AppText>
           </TouchableOpacity>
         </View>
 
-        {/* Stats Overview */}
-        <View style={styles.section}>
-          <View style={styles.statsGrid}>
-            <Card style={styles.statCard}>
-              <View style={styles.statHeader}>
-                <Calendar size={20} color="#3B82F6" />
-                <Text style={styles.statValue}>{stats.bookings}</Text>
-              </View>
-              <Text style={styles.statLabel}>Citas/Reservas</Text>
-            </Card>
-
-            <Card style={styles.statCard}>
-              <View style={styles.statHeader}>
-                <DollarSign size={20} color="#10B981" />
-                <Text style={styles.statValue}>{formatCurrency(stats.revenue)}</Text>
-              </View>
-              <Text style={styles.statLabel}>Ingresos</Text>
-            </Card>
-
-            <TouchableOpacity
-              style={styles.statCardTouchable}
-              onPress={() => handleOpenOrdersByTab('pending')}
-            >
-              <Card style={styles.statCard}>
-                <View style={styles.statHeader}>
-                  <Clock size={20} color="#F59E0B" />
-                  <Text style={styles.statValue}>{stats.pendingBookings + stats.pendingOrders}</Text>
-                </View>
-                <Text style={styles.statLabel}>Pendientes</Text>
-              </Card>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.statCardTouchable}
-              onPress={() => handleOpenOrdersByTab('completed')}
-            >
-              <Card style={styles.statCard}>
-                <View style={styles.statHeader}>
-                  <TrendingUp size={20} color="#8B5CF6" />
-                  <Text style={styles.statValue}>{stats.completedBookings + stats.completedOrders}</Text>
-                </View>
-                <Text style={styles.statLabel}>Completados</Text>
-              </Card>
-            </TouchableOpacity>
-          </View>
+        {/* Stats Overview: grilla de 2 columnas */}
+        <View style={styles.statsGrid}>
+          <MetricCard
+            style={styles.statCell}
+            icon={<Calendar size={20} color={colors.primary} />}
+            value={formatNumber(stats.bookings)}
+            label="Citas y reservas"
+          />
+          <MetricCard
+            style={styles.statCell}
+            icon={<DollarSign size={20} color={colors.success} />}
+            iconBackground={colors.successSoft}
+            value={formatCurrency(stats.revenue)}
+            label="Ingresos"
+          />
+          <MetricCard
+            style={styles.statCell}
+            icon={<Clock size={20} color={colors.warning} />}
+            iconBackground={colors.warningSoft}
+            value={formatNumber(stats.pendingBookings + stats.pendingOrders)}
+            label="Pendientes"
+            onPress={() => handleOpenOrdersByTab('pending')}
+            accessibilityHint="Abre los pedidos pendientes"
+          />
+          <MetricCard
+            style={styles.statCell}
+            icon={<TrendingUp size={20} color={colors.info} />}
+            iconBackground={colors.infoSoft}
+            value={formatNumber(stats.completedBookings + stats.completedOrders)}
+            label="Completados"
+            onPress={() => handleOpenOrdersByTab('completed')}
+            accessibilityHint="Abre los pedidos completados"
+          />
         </View>
 
         <Card style={styles.crmCard}>
           <View style={styles.crmHeader}>
-            <View style={styles.crmHeaderLeft}>
-              <Users size={20} color="#F59E0B" />
-              <View>
-                <Text style={styles.crmTitle}>CRM y retención</Text>
-                <Text style={styles.crmSubtitle}>
-                  Segmenta clientes, reactivá a los que se enfriaron y seguí cada contacto.
-                </Text>
-              </View>
+            <View style={[styles.quickActionIcon, { backgroundColor: colors.accentSoft }]}>
+              <Users size={20} color={colors.warning} />
+            </View>
+            <View style={styles.flex1}>
+              <AppText variant="bodyStrong">CRM y retención</AppText>
+              <AppText variant="bodySmall" color="textSecondary" style={styles.crmSubtitle}>
+                Segmentá clientes, reactivá a los que se enfriaron y seguí cada contacto.
+              </AppText>
             </View>
           </View>
 
           <View style={styles.crmStats}>
             <View style={styles.crmStat}>
-              <Text style={styles.crmStatValue}>{stats.totalCustomers}</Text>
-              <Text style={styles.crmStatLabel}>Clientes</Text>
+              <AppText variant="heading" numberOfLines={1} adjustsFontSizeToFit>{formatNumber(stats.totalCustomers)}</AppText>
+              <AppText variant="caption" color="textSecondary">Clientes</AppText>
             </View>
             <View style={styles.crmStat}>
-              <Text style={styles.crmStatValue}>{stats.pendingBookings + stats.pendingOrders}</Text>
-              <Text style={styles.crmStatLabel}>Pendientes</Text>
+              <AppText variant="heading" numberOfLines={1} adjustsFontSizeToFit>{formatNumber(stats.pendingBookings + stats.pendingOrders)}</AppText>
+              <AppText variant="caption" color="textSecondary">Pendientes</AppText>
             </View>
             <View style={styles.crmStat}>
-              <Text style={styles.crmStatValue}>{stats.completedBookings + stats.completedOrders}</Text>
-              <Text style={styles.crmStatLabel}>Completados</Text>
+              <AppText variant="heading" numberOfLines={1} adjustsFontSizeToFit>{formatNumber(stats.completedBookings + stats.completedOrders)}</AppText>
+              <AppText variant="caption" color="textSecondary">Completados</AppText>
             </View>
           </View>
 
-          <Text style={styles.crmNote}>
+          <AppText variant="bodySmall" color="textSecondary" style={styles.crmNote}>
             Abrí la lista para ver último contacto, datos de contacto y oportunidades de reactivación.
-          </Text>
+          </AppText>
 
           {canViewClients ? (
             <Button title="Abrir CRM" onPress={handleViewClients} size="medium" />
           ) : (
-            <Text style={styles.crmLockedText}>{getPartnerLockedActionLabel('clients')}</Text>
+            <AppText variant="bodySmall" color="textSecondary">{getPartnerLockedActionLabel('clients')}</AppText>
           )}
         </Card>
 
-        {/* Quick Actions */ }
+        {/* Quick Actions */}
         <View style={styles.section}>
           <OneTimeTooltip
             hintKey="partner_dashboard_quick_actions"
@@ -720,25 +756,31 @@ export default function PartnerDashboard() {
             placement="bottom"
             containerStyle={styles.quickActionsTooltipAnchor}
           >
-            <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
+            <AppText variant="heading" style={styles.sectionTitle} accessibilityRole="header">
+              Acciones rápidas
+            </AppText>
           </OneTimeTooltip>
           <View style={styles.quickActions}>
             {shouldShowAgenda() && (
-              <TouchableOpacity 
-                style={styles.quickAction} 
+              <TouchableOpacity
+                style={styles.quickAction}
                 onPress={handleViewAgenda}
+                accessibilityRole="button"
+                accessibilityLabel="Ver agenda"
               >
-                <Calendar size={24} color="#3B82F6" />
-                <Text style={styles.quickActionText}>Ver Agenda</Text>
+                {quickActionIcon(Calendar)}
+                <AppText variant="label" align="center" style={styles.quickActionText}>Ver agenda</AppText>
               </TouchableOpacity>
             )}
-            
-            <TouchableOpacity 
-              style={styles.quickAction} 
+
+            <TouchableOpacity
+              style={styles.quickAction}
               onPress={handleManageServices}
+              accessibilityRole="button"
+              accessibilityLabel={manageServicesLabel}
             >
-              <Package size={24} color="#10B981" />
-              <Text style={styles.quickActionText}>{manageServicesLabel}</Text>
+              {quickActionIcon(Package)}
+              <AppText variant="label" align="center" style={styles.quickActionText}>{manageServicesLabel}</AppText>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -747,19 +789,14 @@ export default function PartnerDashboard() {
                 !canViewClients ? styles.quickActionLocked : null,
               ]}
               onPress={canViewClients ? handleViewClients : () => showPlanUpgradeAlert('clients')}
+              accessibilityRole="button"
+              accessibilityLabel="CRM y clientes"
             >
-              <Users size={24} color={canViewClients ? '#F59E0B' : '#A855F7'} />
-              <Text style={styles.quickActionText}>CRM y clientes</Text>
-              {!canViewClients && (
-                <Text style={styles.quickActionSubtext}>
-                  {getPartnerLockedActionLabel('clients')}
-                </Text>
-              )}
-              {canViewClients && (
-                <Text style={styles.quickActionSubtext}>
-                  Seguimiento y reactivación
-                </Text>
-              )}
+              {quickActionIcon(Users, canViewClients)}
+              <AppText variant="label" align="center" style={styles.quickActionText}>CRM y clientes</AppText>
+              <AppText variant="caption" color="textSecondary" align="center" style={styles.quickActionSubtext}>
+                {canViewClients ? 'Seguimiento y reactivación' : getPartnerLockedActionLabel('clients')}
+              </AppText>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -771,25 +808,27 @@ export default function PartnerDashboard() {
                 pathname: '/partner/business-insights',
                 params: { partnerId: partnerProfile?.id }
               }) : () => showPlanUpgradeAlert('insights')}
+              accessibilityRole="button"
+              accessibilityLabel="Estadísticas del negocio"
             >
-              <BarChart3 size={24} color={canViewInsights ? '#8B5CF6' : '#A855F7'} />
-              <Text style={styles.quickActionText}>Inteligencia de Negocio</Text>
+              {quickActionIcon(BarChart3, canViewInsights)}
+              <AppText variant="label" align="center" style={styles.quickActionText}>Estadísticas</AppText>
               {!canViewInsights && (
-                <Text style={styles.quickActionSubtext}>
+                <AppText variant="caption" color="textSecondary" align="center" style={styles.quickActionSubtext}>
                   {getPartnerLockedActionLabel('insights')}
-                </Text>
+                </AppText>
               )}
             </TouchableOpacity>
 
             {shouldShowProducts() && (
-            <TouchableOpacity 
-              style={styles.quickAction}
-              onPress={handleViewOrders}
-            >
-              <Package size={24} color="#8B5CF6" />
-                <Text style={styles.quickActionText}>
-                  Ver Pedidos
-                </Text>
+              <TouchableOpacity
+                style={styles.quickAction}
+                onPress={handleViewOrders}
+                accessibilityRole="button"
+                accessibilityLabel="Ver pedidos"
+              >
+                {quickActionIcon(ShoppingBag)}
+                <AppText variant="label" align="center" style={styles.quickActionText}>Ver pedidos</AppText>
               </TouchableOpacity>
             )}
 
@@ -799,19 +838,23 @@ export default function PartnerDashboard() {
                 partnerProfile?.mercadopagoIsOAuth ? styles.quickActionSuccess : null,
               ]}
               onPress={() => router.push('/profile/mercadopago-config')}
+              accessibilityRole="button"
+              accessibilityLabel="Cobros con Mercado Pago"
             >
-              <CreditCard
-                size={24}
-                color={partnerProfile?.mercadopagoIsOAuth ? '#10B981' : '#F59E0B'}
-              />
-              <Text style={styles.quickActionText}>Mercado Pago</Text>
-              <Text style={styles.quickActionSubtext}>
+              <View style={[
+                styles.quickActionIcon,
+                { backgroundColor: partnerProfile?.mercadopagoIsOAuth ? colors.successSoft : colors.warningSoft },
+              ]}>
+                <CreditCard size={22} color={partnerProfile?.mercadopagoIsOAuth ? colors.success : colors.warning} />
+              </View>
+              <AppText variant="label" align="center" style={styles.quickActionText}>Mercado Pago</AppText>
+              <AppText variant="caption" color="textSecondary" align="center" style={styles.quickActionSubtext}>
                 {partnerProfile?.mercadopagoIsOAuth
                   ? 'OAuth activo'
                   : partnerProfile?.mercadopago_connected
                     ? 'Conexión pendiente'
                     : 'Conectar cobros'}
-              </Text>
+              </AppText>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -820,17 +863,19 @@ export default function PartnerDashboard() {
                 pathname: '/partner/subscription',
                 params: { businessId: partnerProfile.id },
               })}
+              accessibilityRole="button"
+              accessibilityLabel="Planes"
             >
-              <DollarSign size={24} color="#10B981" />
-              <Text style={styles.quickActionText}>Planes</Text>
-              <Text style={styles.quickActionSubtext}>
-                Gestiona tu plan y tu prueba
-              </Text>
+              {quickActionIcon(DollarSign)}
+              <AppText variant="label" align="center" style={styles.quickActionText}>Planes</AppText>
+              <AppText variant="caption" color="textSecondary" align="center" style={styles.quickActionSubtext}>
+                Gestioná tu plan y tu prueba
+              </AppText>
             </TouchableOpacity>
 
             {/* Mostrar contactos de adopción solo para refugios */}
             {partnerProfile?.businessType === 'shelter' && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[
                   styles.quickAction,
                   !canViewAdoptions ? styles.quickActionLocked : null,
@@ -839,40 +884,44 @@ export default function PartnerDashboard() {
                   pathname: '/(partner-tabs)/chat-contacts',
                   params: { businessId: partnerProfile.id }
                 }) : () => showPlanUpgradeAlert('adoptions')}
+                accessibilityRole="button"
+                accessibilityLabel="Contactos de adopción"
               >
-                <MessageCircle size={24} color={canViewAdoptions ? '#8B5CF6' : '#A855F7'} />
-                <Text style={styles.quickActionText}>Contactos Adopción</Text>
+                {quickActionIcon(MessageCircle, canViewAdoptions)}
+                <AppText variant="label" align="center" style={styles.quickActionText}>Contactos de adopción</AppText>
                 {!canViewAdoptions && (
-                  <Text style={styles.quickActionSubtext}>
+                  <AppText variant="caption" color="textSecondary" align="center" style={styles.quickActionSubtext}>
                     {getPartnerLockedActionLabel('adoptions')}
-                  </Text>
+                  </AppText>
                 )}
               </TouchableOpacity>
             )}
           </View>
         </View>
 
-        {/* Recent Bookings */ }
+        {/* Recent Bookings */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Reservas Recientes</Text>
-          <Card style={styles.bookingsCard}>
+          <AppText variant="heading" style={styles.sectionTitle} accessibilityRole="header">
+            Reservas recientes
+          </AppText>
+          <Card style={styles.listCard}>
             {recentBookings.length === 0 ? (
-              <Text style={styles.emptyText}>No hay reservas recientes</Text>
+              <AppText variant="bodySmall" color="textSecondary" align="center" style={styles.emptyText}>
+                No hay reservas recientes
+              </AppText>
             ) : (
-              recentBookings.map((booking) => (
-                <View key={booking.id} style={styles.bookingItem}>
-                  <View style={styles.bookingInfo}>
-                    <Text style={styles.bookingService}>{booking.serviceName || 'Servicio'}</Text>
-                    <Text style={styles.bookingDate}>
-                      {booking.date ? new Date(booking.date).toLocaleDateString() : 'Fecha no disponible'}
-                    </Text>
+              recentBookings.map((booking, index) => (
+                <View
+                  key={booking.id}
+                  style={[styles.listItem, index === recentBookings.length - 1 && styles.listItemLast]}
+                >
+                  <View style={styles.flex1}>
+                    <AppText variant="label" numberOfLines={1}>{booking.serviceName || 'Servicio'}</AppText>
+                    <AppText variant="caption" color="textSecondary" style={styles.listMeta}>
+                      {booking.date ? new Date(booking.date).toLocaleDateString('es-UY') : 'Fecha no disponible'}
+                    </AppText>
                   </View>
-                  <View style={[
-                    styles.bookingStatus,
-                    { backgroundColor: getStatusColor(booking.status) }
-                  ]}>
-                    <Text style={styles.bookingStatusText}>{getStatusText(booking.status)}</Text>
-                  </View>
+                  <Badge label={getStatusText(booking.status)} tone={getStatusTone(booking.status)} size="small" />
                 </View>
               ))
             )}
@@ -880,27 +929,35 @@ export default function PartnerDashboard() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Pedidos en Proceso</Text>
-          <Card style={styles.bookingsCard}>
+          <AppText variant="heading" style={styles.sectionTitle} accessibilityRole="header">
+            Pedidos en proceso
+          </AppText>
+          <Card style={styles.listCard}>
             {processingOrdersPreview.length === 0 ? (
-              <Text style={styles.emptyText}>No hay pedidos en proceso</Text>
+              <AppText variant="bodySmall" color="textSecondary" align="center" style={styles.emptyText}>
+                No hay pedidos en proceso
+              </AppText>
             ) : (
-              processingOrdersPreview.map((order) => (
-                <View key={order.id} style={styles.processingOrderItem}>
-                  <View style={styles.processingOrderInfo}>
-                    <Text style={styles.processingOrderTitle}>
+              processingOrdersPreview.map((order, index) => (
+                <View
+                  key={order.id}
+                  style={[styles.listItem, index === processingOrdersPreview.length - 1 && styles.listItemLast]}
+                >
+                  <View style={styles.flex1}>
+                    <AppText variant="label" numberOfLines={1}>
                       Pedido {order.orderNumber || `#${order.id.slice(-6)}`}
-                    </Text>
-                    <Text style={styles.processingOrderMeta}>
-                      {new Date(order.createdAt).toLocaleDateString()} · {formatCurrency(order.totalAmount)}
-                    </Text>
+                    </AppText>
+                    <AppText variant="caption" color="textSecondary" style={styles.listMeta}>
+                      {new Date(order.createdAt).toLocaleDateString('es-UY')} · {formatCurrency(order.totalAmount)}
+                    </AppText>
                   </View>
-                  <TouchableOpacity
-                    style={styles.processingOrderButton}
+                  <Button
+                    title="Ver detalle"
                     onPress={() => handleViewProcessingOrderDetail(order.id)}
-                  >
-                    <Text style={styles.processingOrderButtonText}>Ver detalle</Text>
-                  </TouchableOpacity>
+                    variant="secondary"
+                    size="small"
+                    fullWidth={false}
+                  />
                 </View>
               ))
             )}
@@ -918,92 +975,38 @@ export default function PartnerDashboard() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filtrar por Fecha</Text>
-              <TouchableOpacity onPress={() => setShowFilterModal(false)}>
-                <Text style={styles.modalClose}>✕</Text>
-              </TouchableOpacity>
+              <AppText variant="heading" accessibilityRole="header">Filtrar por fecha</AppText>
+              <IconButton
+                icon={<X size={22} color={colors.textSecondary} />}
+                onPress={() => setShowFilterModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
 
             <View style={styles.filterOptions}>
-              <TouchableOpacity
-                style={[
-                  styles.filterOption,
-                  dateFilter === 'today' && styles.filterOptionActive,
-                ]}
-                onPress={() => {
-                  setDateFilter('today');
-                  setShowFilterModal(false);
-                }}
-              >
-                <Text
-                  style={[
-                    styles.filterOptionText,
-                    dateFilter === 'today' && styles.filterOptionTextActive,
-                  ]}
-                >
-                  Hoy
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.filterOption,
-                  dateFilter === 'week' && styles.filterOptionActive,
-                ]}
-                onPress={() => {
-                  setDateFilter('week');
-                  setShowFilterModal(false);
-                }}
-              >
-                <Text
-                  style={[
-                    styles.filterOptionText,
-                    dateFilter === 'week' && styles.filterOptionTextActive,
-                  ]}
-                >
-                  Última Semana
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.filterOption,
-                  dateFilter === 'month' && styles.filterOptionActive,
-                ]}
-                onPress={() => {
-                  setDateFilter('month');
-                  setShowFilterModal(false);
-                }}
-              >
-                <Text
-                  style={[
-                    styles.filterOptionText,
-                    dateFilter === 'month' && styles.filterOptionTextActive,
-                  ]}
-                >
-                  Este Mes
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.filterOption,
-                  dateFilter === 'all' && styles.filterOptionActive,
-                ]}
-                onPress={() => {
-                  setDateFilter('all');
-                  setShowFilterModal(false);
-                }}
-              >
-                <Text
-                  style={[
-                    styles.filterOptionText,
-                    dateFilter === 'all' && styles.filterOptionTextActive,
-                  ]}
-                >
-                  Todo el Tiempo
-                </Text>
-              </TouchableOpacity>
+              {filterOptions.map((option) => {
+                const active = dateFilter === option.key;
+                return (
+                  <TouchableOpacity
+                    key={option.key}
+                    style={[styles.filterOption, active && styles.filterOptionActive]}
+                    onPress={() => {
+                      setDateFilter(option.key);
+                      setShowFilterModal(false);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <AppText
+                      variant={active ? 'bodyStrong' : 'body'}
+                      color={active ? 'primary' : 'text'}
+                      align="center"
+                    >
+                      {option.label}
+                    </AppText>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
         </View>
@@ -1012,13 +1015,13 @@ export default function PartnerDashboard() {
   );
 }
 
-const getStatusColor = (status: string) => {
+const getStatusTone = (status: string): BadgeTone => {
   switch (status) {
-    case 'pending': return '#FEF3C7';
-    case 'confirmed': return '#D1FAE5';
-    case 'completed': return '#DBEAFE';
-    case 'cancelled': return '#FEE2E2';
-    default: return '#F3F4F6';
+    case 'pending': return 'warning';
+    case 'confirmed': return 'success';
+    case 'completed': return 'primary';
+    case 'cancelled': return 'danger';
+    default: return 'neutral';
   }
 };
 
@@ -1035,410 +1038,240 @@ const getStatusText = (status: string) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
+  },
+  flex1: {
+    flex: 1,
+  },
+  flexCenter: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+    backgroundColor: colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+    gap: spacing.md,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+  },
+  headerTitles: {
+    flex: 1,
+    marginLeft: spacing.md,
   },
   businessLogo: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: 12,
-  },
-  logoPlaceholder: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  logoPlaceholderText: {
-    fontSize: 24,
-  },
-  greeting: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  businessName: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginTop: 2,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   headerBadges: {
     alignItems: 'flex-end',
-    gap: 8,
-  },
-  statusBadge: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    gap: spacing.sm,
   },
   planBadge: {
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  planBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-  },
-  statusText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+    borderRadius: radius.pill,
   },
   content: {
     flex: 1,
   },
+  contentInner: {
+    paddingBottom: spacing.xxxl,
+  },
+  skeletonGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xxl,
+  },
+  sectionPadded: {
+    paddingHorizontal: spacing.lg,
+  },
   section: {
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   quickActionsTooltipAnchor: {
     alignSelf: 'flex-start',
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
-    paddingHorizontal: 16,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  statCard: {
-    flex: 1,
-    minWidth: '45%',
-    padding: 16,
-  },
-  statCardTouchable: {
-    flex: 1,
-    minWidth: '45%',
-  },
-  statHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  statValue: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-  },
-  statLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  crmCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
-  },
-  crmHeader: {
-    marginBottom: 12,
-  },
-  crmHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  crmTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  crmSubtitle: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  crmStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginBottom: 12,
-  },
-  crmStat: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-  },
-  crmStatValue: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-  },
-  crmStatLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  crmNote: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#4B5563',
-    lineHeight: 19,
-    marginBottom: 12,
-  },
-  crmLockedText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  quickActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 16,
-    gap: 12,
-    paddingBottom: 4,
-  },
-  quickAction: {
-    width: '48%',
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-    minHeight: 108,
-  },
-  quickActionLocked: {
-    backgroundColor: '#FAF5FF',
-    borderWidth: 1,
-    borderColor: '#E9D5FF',
-  },
-  quickActionText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginTop: 8,
-    textAlign: 'center',
-    lineHeight: 16,
-  },
-  quickActionSubtext: {
-    fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 4,
-    textAlign: 'center',
-    lineHeight: 14,
-  },
-  quickActionSuccess: {
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
-    backgroundColor: '#ECFDF5',
-  },
-  disabledQuickAction: {
-    opacity: 0.5,
-    backgroundColor: '#F9FAFB',
-  },
-  bookingsCard: {
-    marginHorizontal: 16,
-  },
-  bookingItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  bookingInfo: {
-    flex: 1,
-  },
-  bookingService: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  bookingDate: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  bookingStatus: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  bookingStatusText: {
-    fontSize: 11,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-  },
-  processingOrderItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    gap: 12,
-  },
-  processingOrderInfo: {
-    flex: 1,
-  },
-  processingOrderTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  processingOrderMeta: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  processingOrderButton: {
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  processingOrderButtonText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1E40AF',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  errorText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#EF4444',
-    textAlign: 'center',
-  },
-  emptyText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    textAlign: 'center',
-    paddingVertical: 20,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.lg,
   },
   filterSection: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    gap: spacing.md,
+  },
+  filterTitle: {
+    flex: 1,
   },
   filterButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    gap: 6,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: spacing.md,
+    minHeight: touchTarget,
+    borderRadius: radius.md,
+    gap: spacing.xs,
   },
-  filterButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+  // Grilla de 2 columnas con ancho fijo por celda: sin flex ni minWidth
+  // para que cada fila tenga su altura real y nada se superponga con la tarjeta de CRM.
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  statCell: {
+    width: '48%',
+    marginBottom: spacing.md,
+  },
+  crmCard: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.xxl,
+  },
+  crmHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  crmSubtitle: {
+    marginTop: spacing.xxs,
+  },
+  crmStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  crmStat: {
+    flex: 1,
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    alignItems: 'center',
+  },
+  crmNote: {
+    marginBottom: spacing.md,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+  },
+  quickAction: {
+    width: '48%',
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+    minHeight: 116,
+    ...shadows.sm,
+  },
+  quickActionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionIconLocked: {
+    backgroundColor: colors.surfaceAlt,
+  },
+  quickActionLocked: {
+    backgroundColor: colors.background,
+    borderColor: colors.borderStrong,
+    borderStyle: 'dashed',
+  },
+  quickActionSuccess: {
+    borderColor: colors.success,
+    backgroundColor: colors.successSoft,
+  },
+  quickActionText: {
+    marginTop: spacing.sm,
+  },
+  quickActionSubtext: {
+    marginTop: spacing.xxs,
+  },
+  listCard: {
+    marginHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+  },
+  listItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+    gap: spacing.md,
+  },
+  listItemLast: {
+    borderBottomWidth: 0,
+  },
+  listMeta: {
+    marginTop: spacing.xxs,
+  },
+  emptyText: {
+    paddingVertical: spacing.xl,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
     width: '85%',
     maxWidth: 400,
-    padding: 24,
+    padding: spacing.xxl,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-  },
-  modalClose: {
-    fontSize: 24,
-    color: '#6B7280',
-    fontWeight: 'bold',
+    marginBottom: spacing.lg,
   },
   filterOptions: {
-    gap: 12,
+    gap: spacing.md,
   },
   filterOption: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
     borderWidth: 2,
     borderColor: 'transparent',
   },
   filterOptionActive: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#3B82F6',
-  },
-  filterOptionText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    textAlign: 'center',
-  },
-  filterOptionTextActive: {
-    color: '#3B82F6',
-    fontFamily: 'Inter-Bold',
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
   },
 });

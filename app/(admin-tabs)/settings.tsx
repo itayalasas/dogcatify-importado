@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Switch, Alert, Modal, ActivityIndicator } from 'react-native';
-import { Bell, Shield, Globe, Database, LogOut, CreditCard, Crown } from 'lucide-react-native';
+import { Bell, Shield, Globe, Database, LogOut, CreditCard, Crown, X, CircleCheck, Info, Users, Monitor, User } from 'lucide-react-native';
+import { Badge, toast } from '../../components/ui';
 import { Card } from '../../components/ui/Card';
 import { GamePromotionsAdminCard } from '../../components/admin/GamePromotionsAdminCard';
 import { Button } from '../../components/ui/Button';
@@ -10,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Input } from '../../components/ui/Input';
 import { supabaseClient } from '../../lib/supabase';
 import { envConfig } from '../../utils/envConfig';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 
 const SYSTEM_CONFIG_KEY = 'system_config';
 type SystemToggleKey =
@@ -166,11 +168,11 @@ export default function AdminSettings() {
       }
 
       setSubscriptionsEnabled(value);
-      Alert.alert(
-        'Éxito',
+      toast.success(
+        value ? 'Suscripciones habilitadas' : 'Suscripciones deshabilitadas',
         value
-          ? 'Sistema de suscripciones habilitado. Los usuarios ahora pueden ver los planes.'
-          : 'Sistema de suscripciones deshabilitado. Ya no será visible para los usuarios.'
+          ? 'Los usuarios ahora pueden ver los planes.'
+          : 'Ya no serán visibles para los usuarios.'
       );
     } catch (error) {
       console.error('Error toggling subscriptions:', error);
@@ -270,7 +272,7 @@ export default function AdminSettings() {
 
   const handleSaveAdminMpConfig = async () => {
     if (!adminMpConfig.accessToken.trim() || !adminMpConfig.publicKey.trim()) {
-      Alert.alert('Error', 'Por favor completa todos los campos');
+      Alert.alert('Error', 'Completá todos los campos');
       return;
     }
 
@@ -303,7 +305,7 @@ export default function AdminSettings() {
       if (!validation.isValid) {
         Alert.alert(
           'Credenciales inválidas',
-          'Las credenciales ingresadas no son válidas. Verifica que sean correctas.'
+          'Las credenciales ingresadas no son válidas. Verificá que sean correctas.'
         );
         setMpLoading(false);
         return;
@@ -342,14 +344,11 @@ export default function AdminSettings() {
         email: validation.email || ''
       }));
 
-      Alert.alert(
-        '¡Éxito!',
-        'La configuración legacy de Mercado Pago quedó guardada correctamente.',
-        [{ text: 'Continuar', onPress: () => setShowMercadoPagoModal(false) }]
-      );
+      toast.success('Configuración guardada', 'La configuración legacy de Mercado Pago quedó guardada.');
+      setShowMercadoPagoModal(false);
     } catch (error) {
       console.error('Error saving admin MP config:', error);
-      Alert.alert('Error', 'No se pudo guardar la configuración. Intenta nuevamente.');
+      Alert.alert('Error', 'No se pudo guardar la configuración. Intentá nuevamente.');
     } finally {
       setMpLoading(false);
     }
@@ -359,7 +358,7 @@ export default function AdminSettings() {
     const clientId = adminMpConfig.clientId.trim();
 
     if (!clientId) {
-      Alert.alert('Error', 'Por favor completa el Client ID / N° de aplicación');
+      Alert.alert('Error', 'Completá el Client ID / N° de aplicación');
       return;
     }
 
@@ -403,7 +402,7 @@ export default function AdminSettings() {
         clientId,
       }));
 
-      Alert.alert('¡Éxito!', 'El Client ID quedó guardado correctamente.');
+      toast.success('Client ID guardado correctamente');
     } catch (error) {
       console.error('Error saving Mercado Pago client ID:', error);
       Alert.alert('Error', 'No se pudo guardar el Client ID.');
@@ -465,7 +464,7 @@ export default function AdminSettings() {
                 email: ''
               }));
 
-              Alert.alert('Desconectado', 'La cuenta de Mercado Pago ha sido desconectada.');
+              toast.success('Cuenta desconectada', 'La cuenta de Mercado Pago se desconectó.');
             } catch (error) {
               Alert.alert('Error', 'No se pudo desconectar la cuenta.');
             }
@@ -547,7 +546,7 @@ export default function AdminSettings() {
     } catch (error) {
       console.error(`Error saving system setting ${key}:`, error);
       setSettings(previousSettings);
-      Alert.alert('Error', 'No se pudo guardar la configuración. Intenta nuevamente.');
+      Alert.alert('Error', 'No se pudo guardar la configuración. Intentá nuevamente.');
       throw error;
     } finally {
       setSavingSystemSetting(null);
@@ -561,7 +560,7 @@ export default function AdminSettings() {
     } catch (error: any) {
       console.error('Error logging out:', error);
       setIsLoggingOut(false);
-      Alert.alert('Error', error?.message || 'No se pudo cerrar sesion. Intenta nuevamente.');
+      Alert.alert('Error', error?.message || 'No se pudo cerrar sesión. Intentá nuevamente.');
     }
   };
 
@@ -569,12 +568,12 @@ export default function AdminSettings() {
     if (isLoggingOut) return;
 
     Alert.alert(
-      'Cerrar Sesión',
-      '¿Estás seguro que quieres cerrar sesión?',
+      'Cerrar sesión',
+      '¿Seguro que querés cerrar sesión?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Cerrar Sesión',
+          text: 'Cerrar sesión',
           style: 'destructive',
           onPress: performLogout
         }
@@ -584,7 +583,7 @@ export default function AdminSettings() {
 
   const handleSendTestEmail = async () => {
     if (!testEmail) {
-      Alert.alert('Error', 'Por favor ingresa un correo electrónico');
+      Alert.alert('Error', 'Ingresá un correo electrónico');
       return;
     }
     
@@ -595,10 +594,7 @@ export default function AdminSettings() {
       const result = await sendTestEmail(testEmail);
       
       if (result.success) {
-        Alert.alert(
-          'Correo de prueba enviado',
-          `Se ha enviado un correo de prueba a ${testEmail}. Por favor verifica tu bandeja de entrada.`
-        );
+        toast.success('Correo de prueba enviado', `Revisá la bandeja de entrada de ${testEmail}.`);
         setTestEmail('');
         setShowEmailModal(false);
       } else {
@@ -616,7 +612,7 @@ export default function AdminSettings() {
 
   const handleSystemMaintenance = () => {
     Alert.alert(
-      'Modo Mantenimiento',
+      'Modo mantenimiento',
       settings.maintenanceMode
         ? 'Se desactivará el modo mantenimiento y los usuarios podrán acceder normalmente.'
         : 'Se activará el modo mantenimiento y los usuarios no podrán acceder a la aplicación.',
@@ -628,10 +624,7 @@ export default function AdminSettings() {
           onPress: async () => {
             try {
               await handleSystemSettingChange('maintenanceMode', !settings.maintenanceMode);
-              Alert.alert(
-                'Modo Mantenimiento',
-                `Modo mantenimiento ${!settings.maintenanceMode ? 'activado' : 'desactivado'} correctamente.`
-              );
+              toast.success(`Modo mantenimiento ${!settings.maintenanceMode ? 'activado' : 'desactivado'}`);
             } catch (error) {
               // El aviso ya se muestra dentro del guardado.
             }
@@ -645,13 +638,13 @@ export default function AdminSettings() {
     if (!settings.pushNotifications) {
       Alert.alert(
         'Notificaciones push desactivadas',
-        'Activa primero las notificaciones push del sistema para poder programar envíos masivos.'
+        'Activá primero las notificaciones push del sistema para poder programar envíos masivos.'
       );
       return;
     }
 
     if (!broadcastTitle.trim() || !broadcastMessage.trim()) {
-      Alert.alert('Error', 'Por favor completa el título y el mensaje');
+      Alert.alert('Error', 'Completá el título y el mensaje');
       return;
     }
 
@@ -733,10 +726,7 @@ export default function AdminSettings() {
               setBatchSize('20');
               setShowBroadcastModal(false);
 
-              Alert.alert(
-                'Notificaciones programadas',
-                `Se programaron ${inserted} notificaciones. Se enviarán automáticamente en los próximos minutos.`
-              );
+              toast.success('Notificaciones programadas', `Se programaron ${inserted}. Se enviarán en los próximos minutos.`);
             }
           }
         ]
@@ -755,9 +745,9 @@ export default function AdminSettings() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.accessDenied}>
-          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
+          <Text style={styles.accessDeniedTitle}>Acceso denegado</Text>
           <Text style={styles.accessDeniedText}>
-            No tienes permisos para acceder a esta sección
+            No tenés permisos para acceder a esta sección
           </Text>
         </View>
       </SafeAreaView>
@@ -768,7 +758,7 @@ export default function AdminSettings() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <Text style={styles.title}>⚙️ Configuración del Sistema</Text>
+          <Text style={styles.title} accessibilityRole="header">Ajustes del sistema</Text>
           <Text style={styles.subtitle}>Administración y configuraciones globales</Text>
         </View>
       </View>
@@ -784,25 +774,26 @@ export default function AdminSettings() {
           
           {/* Notifications Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🔔 Notificaciones</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">Notificaciones</Text>
 
           <Card style={styles.settingsCard}>
             <View style={styles.settingItem}>
               <View style={styles.settingInfo}>
-                <Bell size={20} color="#6B7280" />
+                <Bell size={20} color={colors.textTertiary} />
                 <View style={styles.settingCopy}>
-                  <Text style={styles.settingLabel}>Notificaciones Push</Text>
+                  <Text style={styles.settingLabel}>Notificaciones push</Text>
                   <Text style={styles.settingDescription}>
                     Se usan para avisos masivos y mensajes operativos en tiempo real.
                   </Text>
                 </View>
               </View>
               <Switch
+                accessibilityLabel="Notificaciones push"
                 value={settings.pushNotifications}
                 onValueChange={(value) => handleSystemSettingChange('pushNotifications', value)}
                 disabled={savingSystemSetting === 'pushNotifications'}
-                trackColor={{ false: '#E5E7EB', true: '#DC2626' }}
-                thumbColor={settings.pushNotifications ? '#FFFFFF' : '#FFFFFF'}
+                trackColor={{ false: colors.borderStrong, true: colors.primary }}
+                thumbColor={colors.white}
               />
             </View>
 
@@ -810,8 +801,9 @@ export default function AdminSettings() {
               <TouchableOpacity
                 style={styles.broadcastButton}
                 onPress={() => setShowBroadcastModal(true)}
+                accessibilityRole="button"
               >
-                <Bell size={16} color="#2D6A6F" />
+                <Bell size={16} color={colors.primary} />
                 <Text style={styles.broadcastButtonText}>Enviar notificación masiva</Text>
               </TouchableOpacity>
             )}
@@ -820,14 +812,14 @@ export default function AdminSettings() {
 
         {/* System Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🖥️ Sistema</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">Sistema</Text>
           
           <Card style={styles.settingsCard}>
             <View style={styles.settingItem}>
               <View style={styles.settingInfo}>
-                <Shield size={20} color="#6B7280" />
+                <Shield size={20} color={colors.textTertiary} />
                 <View style={styles.settingCopy}>
-                  <Text style={styles.settingLabel}>Modo Mantenimiento</Text>
+                  <Text style={styles.settingLabel}>Modo mantenimiento</Text>
                   <Text style={styles.settingDescription}>
                     Bloquea la app para usuarios normales y muestra una pantalla de mantenimiento.
                   </Text>
@@ -836,13 +828,16 @@ export default function AdminSettings() {
               <TouchableOpacity
                 style={[
                   styles.maintenanceButton,
-                  { backgroundColor: settings.maintenanceMode ? '#FEE2E2' : '#F3F4F6' }
+                  { backgroundColor: settings.maintenanceMode ? colors.dangerSoft : colors.surfaceAlt }
                 ]}
                 onPress={handleSystemMaintenance}
+                accessibilityRole="button"
+                accessibilityLabel={`Modo mantenimiento: ${settings.maintenanceMode ? 'activo' : 'inactivo'}. Tocá para cambiarlo`}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Text style={[
                   styles.maintenanceButtonText,
-                  { color: settings.maintenanceMode ? '#991B1B' : '#6B7280' }
+                  { color: settings.maintenanceMode ? colors.danger : colors.textSecondary }
                 ]}>
                   {settings.maintenanceMode ? 'Activo' : 'Inactivo'}
                 </Text>
@@ -851,34 +846,36 @@ export default function AdminSettings() {
 
             <View style={styles.settingItem}>
               <View style={styles.settingInfo}>
-                <Globe size={20} color="#6B7280" />
+                <Globe size={20} color={colors.textTertiary} />
                 <View style={styles.settingCopy}>
-                  <Text style={styles.settingLabel}>Acceso de Invitados</Text>
+                  <Text style={styles.settingLabel}>Acceso de invitados</Text>
                   <Text style={styles.settingDescription}>
-                    Reserva esta opción para navegación sin cuenta. Por ahora se guarda a nivel global.
+                    Pensado para navegar sin cuenta. Por ahora se guarda a nivel global.
                   </Text>
                 </View>
               </View>
               <Switch
+                accessibilityLabel="Acceso de invitados"
                 value={settings.allowGuestAccess}
                 onValueChange={(value) => handleSystemSettingChange('allowGuestAccess', value)}
                 disabled={savingSystemSetting === 'allowGuestAccess'}
-                trackColor={{ false: '#E5E7EB', true: '#DC2626' }}
-                thumbColor={settings.allowGuestAccess ? '#FFFFFF' : '#FFFFFF'}
+                trackColor={{ false: colors.borderStrong, true: colors.primary }}
+                thumbColor={colors.white}
               />
             </View>
 
             <View style={styles.settingItem}>
               <View style={styles.settingInfo}>
-                <Database size={20} color="#6B7280" />
-                <Text style={styles.settingLabel}>Analíticas Avanzadas</Text>
+                <Database size={20} color={colors.textTertiary} />
+                <Text style={styles.settingLabel}>Estadísticas avanzadas</Text>
               </View>
               <Switch
+                accessibilityLabel="Estadísticas avanzadas"
                 value={settings.enableAnalytics}
                 onValueChange={(value) => handleSystemSettingChange('enableAnalytics', value)}
                 disabled={savingSystemSetting === 'enableAnalytics'}
-                trackColor={{ false: '#E5E7EB', true: '#DC2626' }}
-                thumbColor={settings.enableAnalytics ? '#FFFFFF' : '#FFFFFF'}
+                trackColor={{ false: colors.borderStrong, true: colors.primary }}
+                thumbColor={colors.white}
               />
             </View>
           </Card>
@@ -886,49 +883,53 @@ export default function AdminSettings() {
 
         {/* Partners Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🤝 Gestión de Aliados</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">Gestión de aliados</Text>
           
           <Card style={styles.settingsCard}>
             <View style={styles.settingItem}>
               <View style={styles.settingInfo}>
-                <Shield size={20} color="#6B7280" />
+                <Shield size={20} color={colors.textTertiary} />
                 <View style={styles.settingCopy}>
-                  <Text style={styles.settingLabel}>Auto-aprobar Aliados</Text>
+                  <Text style={styles.settingLabel}>Aprobar aliados automáticamente</Text>
                   <Text style={styles.settingDescription}>
                     Las nuevas solicitudes de aliados quedarán aprobadas automáticamente al registrarse.
                   </Text>
                 </View>
               </View>
               <Switch
+                accessibilityLabel="Aprobar aliados automáticamente"
                 value={settings.autoApprovePartners}
                 onValueChange={(value) => handleSystemSettingChange('autoApprovePartners', value)}
                 disabled={savingSystemSetting === 'autoApprovePartners'}
-                trackColor={{ false: '#E5E7EB', true: '#DC2626' }}
-                thumbColor={settings.autoApprovePartners ? '#FFFFFF' : '#FFFFFF'}
+                trackColor={{ false: colors.borderStrong, true: colors.primary }}
+                thumbColor={colors.white}
               />
             </View>
           </Card>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>💳 Configuración de Pagos</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">Pagos</Text>
           
           <Card style={styles.settingsCard}>
             <View style={styles.settingItem}>
               <View style={styles.settingInfo}>
                 <CreditCard size={20} color="#00A650" />
-                <Text style={styles.settingLabel}>Cuenta Mercado Pago Legacy</Text>
+                <Text style={styles.settingLabel}>Cuenta Mercado Pago (legacy)</Text>
               </View>
               <TouchableOpacity
                 style={[
                   styles.mpStatusButton,
-                  { backgroundColor: adminMpConfig.isConnected ? '#D1FAE5' : '#FEE2E2' }
+                  { backgroundColor: adminMpConfig.isConnected ? colors.successSoft : colors.dangerSoft }
                 ]}
                 onPress={() => setShowMercadoPagoModal(true)}
+                accessibilityRole="button"
+                accessibilityLabel={`Mercado Pago: ${adminMpConfig.isConnected ? 'conectado' : 'desconectado'}. Tocá para gestionar`}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Text style={[
                   styles.mpStatusText,
-                  { color: adminMpConfig.isConnected ? '#065F46' : '#991B1B' }
+                  { color: adminMpConfig.isConnected ? colors.success : colors.danger }
                 ]}>
                   {adminMpConfig.isConnected ? 'Conectado' : 'Desconectado'}
                 </Text>
@@ -938,13 +939,13 @@ export default function AdminSettings() {
             {adminMpConfig.isConnected && (
               <View style={styles.mpConnectedInfo}>
                 <Text style={styles.mpConnectedText}>
-                  ✅ Cuenta: {adminMpConfig.email || 'Configurada'}
+                  Cuenta: {adminMpConfig.email || 'Configurada'}
                 </Text>
                 <Text style={styles.mpConnectedText}>
-                  🏦 ID: {adminMpConfig.accountId || 'N/A'}
+                  ID: {adminMpConfig.accountId || 'N/A'}
                 </Text>
                 <Text style={styles.mpConnectedText}>
-                  🧪 Modo: {adminMpConfig.isTestMode ? 'Prueba' : 'Producción'}
+                  Modo: {adminMpConfig.isTestMode ? 'Prueba' : 'Producción'}
                 </Text>
               </View>
             )}
@@ -953,14 +954,14 @@ export default function AdminSettings() {
 
         {/* Subscriptions Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>👑 Sistema de Suscripciones Premium</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">Suscripciones premium</Text>
 
           <Card style={styles.subscriptionCard}>
             <View style={styles.subscriptionHeader}>
               <View style={styles.subscriptionTitleContainer}>
-                <Crown size={24} color="#F59E0B" style={styles.subscriptionIcon} />
+                <Crown size={24} color={colors.warning} style={styles.subscriptionIcon} />
                 <View>
-                  <Text style={styles.subscriptionTitle}>Membresías Premium</Text>
+                  <Text style={styles.subscriptionTitle}>Membresías premium</Text>
                   <Text style={styles.subscriptionDescription}>
                     Permite a los usuarios acceder a funciones premium mediante suscripciones
                   </Text>
@@ -970,7 +971,7 @@ export default function AdminSettings() {
 
             <View style={styles.subscriptionToggleContainer}>
               <View style={styles.subscriptionToggleInfo}>
-                <Text style={styles.subscriptionToggleLabel}>Habilitar Suscripciones</Text>
+                <Text style={styles.subscriptionToggleLabel}>Habilitar suscripciones</Text>
                 <Text style={styles.subscriptionToggleDescription}>
                   {subscriptionsEnabled
                     ? 'Los usuarios pueden ver y gestionar suscripciones desde su perfil'
@@ -978,19 +979,23 @@ export default function AdminSettings() {
                 </Text>
               </View>
               <Switch
+                accessibilityLabel="Habilitar suscripciones"
                 value={subscriptionsEnabled}
                 onValueChange={handleToggleSubscriptions}
                 disabled={loadingSubscriptions}
-                trackColor={{ false: '#E5E7EB', true: '#F59E0B' }}
-                thumbColor={subscriptionsEnabled ? '#FFFFFF' : '#FFFFFF'}
+                trackColor={{ false: colors.borderStrong, true: colors.primary }}
+                thumbColor={colors.white}
               />
             </View>
 
             {subscriptionsEnabled && (
               <View style={styles.subscriptionStatusContainer}>
-                <View style={styles.subscriptionStatusBadge}>
-                  <Text style={styles.subscriptionStatusText}>✅ Sistema Activo</Text>
-                </View>
+                <Badge
+                  tone="success"
+                  label="Sistema activo"
+                  icon={<CircleCheck size={14} color={colors.success} />}
+                  style={styles.subscriptionStatusBadge}
+                />
                 <Text style={styles.subscriptionStatusInfo}>
                   Los usuarios pueden ver los planes de suscripción desde su perfil y gestionar su membresía a través de Mercado Pago.
                 </Text>
@@ -999,7 +1004,7 @@ export default function AdminSettings() {
 
             <View style={styles.subscriptionActionsContainer}>
               <Button
-                title="Gestionar Planes de Suscripción"
+                title="Gestionar planes de suscripción"
                 onPress={handleManageSubscriptionPlans}
                 variant="outline"
                 size="medium"
@@ -1007,10 +1012,10 @@ export default function AdminSettings() {
               />
 
               <View style={styles.subscriptionInfoBox}>
-                <Text style={styles.subscriptionInfoTitle}>ℹ️ Información</Text>
+                <Text style={styles.subscriptionInfoTitle}>Información</Text>
                 <Text style={styles.subscriptionInfoText}>
                   • Los planes pagos se conectan con Mercado Pago{'\n'}
-                  • Los usuarios verán los planes configurados aquí{'\n'}
+                  • Los usuarios verán los planes configurados acá{'\n'}
                   • Los pagos recurrentes se procesan mediante Mercado Pago{'\n'}
                   • Las suscripciones se sincronizan automáticamente
                 </Text>
@@ -1020,7 +1025,7 @@ export default function AdminSettings() {
         </View>
 
         {/* Admin Actions */}
-        <Text style={styles.sectionTitle}>👤 Cuenta de Administrador</Text>
+        <Text style={styles.sectionTitle} accessibilityRole="header">Cuenta de administrador</Text>
           
         <Card style={styles.adminCard}>  
           <View style={styles.adminInfo}>
@@ -1029,11 +1034,12 @@ export default function AdminSettings() {
           </View>
           
           <Button
-            title="Cerrar Sesión"
+            title="Cerrar sesión"
             onPress={handleLogout}
             disabled={isLoggingOut}
             loading={isLoggingOut}
-            variant="primary"
+            variant="outline"
+            icon={<LogOut size={18} color={colors.primary} />}
             size="large"
             style={styles.logoutButton}
           />
@@ -1048,8 +1054,8 @@ export default function AdminSettings() {
       >
         <View style={styles.logoutOverlay}>
           <View style={styles.logoutOverlayCard}>
-            <ActivityIndicator size="large" color="#2D6A6F" />
-            <Text style={styles.logoutOverlayTitle}>Cerrando sesion</Text>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.logoutOverlayTitle}>Cerrando sesión</Text>
             <Text style={styles.logoutOverlayText}>Estamos cerrando tu cuenta de forma segura.</Text>
           </View>
         </View>
@@ -1064,7 +1070,7 @@ export default function AdminSettings() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Configuración de Correo</Text>
+            <Text style={styles.modalTitle}>Configuración de correo</Text>
             
             <Input
               label="Servidor SMTP"
@@ -1125,7 +1131,7 @@ export default function AdminSettings() {
               <Button
                 title="Guardar"
                 onPress={() => {
-                  Alert.alert('Configuración guardada', 'La configuración de correo ha sido guardada correctamente');
+                  toast.success('Configuración de correo guardada');
                   setShowEmailModal(false);
                 }}
                 size="medium"
@@ -1148,15 +1154,20 @@ export default function AdminSettings() {
               <Text style={styles.modalTitle}>
                 {adminMpConfig.isConnected ? 'Gestionar Mercado Pago' : 'Configurar Mercado Pago'}
               </Text>
-              <TouchableOpacity onPress={() => setShowMercadoPagoModal(false)}>
-                <Text style={styles.modalCloseText}>✕</Text>
+              <TouchableOpacity
+                onPress={() => setShowMercadoPagoModal(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Cerrar"
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <X size={22} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             
             {adminMpConfig.isConnected ? (
               <View style={styles.mpConnectedSection}>
                 <View style={styles.mpConnectedHeader}>
-                  <Text style={styles.mpConnectedTitle}>✅ Cuenta Conectada</Text>
+                  <Text style={styles.mpConnectedTitle}>Cuenta conectada</Text>
                 </View>
                 
                 <View style={styles.mpAccountInfo}>
@@ -1175,7 +1186,7 @@ export default function AdminSettings() {
                 </View>
 
                 <Text style={styles.mpInfoText}>
-                  Si el Client ID no aparece aquí, puedes completarlo sin desconectar la cuenta.
+                  Si el Client ID no aparece acá, podés completarlo sin desconectar la cuenta.
                 </Text>
 
                 <Input
@@ -1198,13 +1209,13 @@ export default function AdminSettings() {
                 <View style={styles.mpAccountInfo}>
                   <Text style={styles.mpAccountLabel}>Modo:</Text>
                   <Text style={styles.mpAccountValue}>
-                    {adminMpConfig.isTestMode ? '🧪 Prueba' : '🚀 Producción'}
+                    {adminMpConfig.isTestMode ? 'Prueba' : 'Producción'}
                   </Text>
                 </View>
                 
                 <View style={styles.mpWarning}>
                   <Text style={styles.mpWarningText}>
-                    ⚠️ Esta cuenta quedó como respaldo de compatibilidad y ya no debería usarse para cobrar a clientes.
+                    Esta cuenta quedó como respaldo de compatibilidad y ya no debería usarse para cobrar a clientes.
                   </Text>
                 </View>
                 
@@ -1212,25 +1223,25 @@ export default function AdminSettings() {
                   style={styles.mpDisconnectButton}
                   onPress={handleDisconnectAdminMp}
                 >
-                  <Text style={styles.mpDisconnectText}>Desconectar Cuenta</Text>
+                  <Text style={styles.mpDisconnectText}>Desconectar cuenta</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <View style={styles.mpConfigSection}>
                 <View style={styles.mpInfoSection}>
-                  <Text style={styles.mpInfoTitle}>🏦 Configuración legacy de comisiones</Text>
+                  <Text style={styles.mpInfoTitle}>Configuración legacy de comisiones</Text>
                   <Text style={styles.mpInfoText}>
                     Esta configuración quedó como respaldo de compatibilidad y no es el flujo principal para cobrar a los clientes.
                   </Text>
                 </View>
                 
                 <View style={styles.mpHelpSection}>
-                  <Text style={styles.mpHelpTitle}>💡 ¿Cómo obtener las credenciales legacy?</Text>
-                  <Text style={styles.mpHelpStep}>1. Ve a developers.mercadopago.com</Text>
-                  <Text style={styles.mpHelpStep}>2. Inicia sesión con tu cuenta de Mercado Pago</Text>
-                  <Text style={styles.mpHelpStep}>3. Ve a &quot;Tus integraciones&quot; → &quot;Credenciales&quot;</Text>
-                  <Text style={styles.mpHelpStep}>4. Copia el Access Token y Public Key si necesitas respaldo legacy</Text>
-                  <Text style={styles.mpHelpStep}>5. Completa el N° de aplicación / App ID si vas a usar OAuth para aliados</Text>
+                  <Text style={styles.mpHelpTitle}>¿Cómo obtener las credenciales legacy?</Text>
+                  <Text style={styles.mpHelpStep}>1. Entrá a developers.mercadopago.com</Text>
+                  <Text style={styles.mpHelpStep}>2. Iniciá sesión con tu cuenta de Mercado Pago</Text>
+                  <Text style={styles.mpHelpStep}>3. Andá a &quot;Tus integraciones&quot; → &quot;Credenciales&quot;</Text>
+                  <Text style={styles.mpHelpStep}>4. Copiá el Access Token y la Public Key si necesitás respaldo legacy</Text>
+                  <Text style={styles.mpHelpStep}>5. Completá el N° de aplicación / App ID si vas a usar OAuth para aliados</Text>
                 </View>
 
                 <Input
@@ -1259,16 +1270,17 @@ export default function AdminSettings() {
                   <View style={styles.mpTestModeHeader}>
                     <Text style={styles.mpTestModeTitle}>Modo de prueba</Text>
                     <Switch
+                      accessibilityLabel="Modo de prueba"
                       value={adminMpConfig.isTestMode}
                       onValueChange={(value) => setAdminMpConfig(prev => ({ ...prev, isTestMode: value }))}
-                      trackColor={{ false: '#E5E7EB', true: '#3B82F6' }}
-                      thumbColor={adminMpConfig.isTestMode ? '#FFFFFF' : '#FFFFFF'}
+                      trackColor={{ false: colors.borderStrong, true: colors.primary }}
+                      thumbColor={colors.white}
                     />
                   </View>
                   <Text style={styles.mpTestModeDescription}>
                     {adminMpConfig.isTestMode 
-                      ? '🧪 Modo prueba activo - Usa credenciales TEST-' 
-                      : '🚀 Modo producción - Usa credenciales APP_USR- reales'
+                      ? 'Modo prueba activo: usá credenciales TEST-' 
+                      : 'Modo producción: usá credenciales APP_USR- reales'
                     }
                   </Text>
                 </View>
@@ -1300,15 +1312,20 @@ export default function AdminSettings() {
               <Text style={styles.modalTitle}>
                 {adminMpConfig.isConnected ? 'Gestionar Mercado Pago' : 'Configurar Mercado Pago'}
               </Text>
-              <TouchableOpacity onPress={() => setShowMercadoPagoModal(false)}>
-                <Text style={styles.modalCloseText}>✕</Text>
+              <TouchableOpacity
+                onPress={() => setShowMercadoPagoModal(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Cerrar"
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <X size={22} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             
             {adminMpConfig.isConnected ? (
               <View style={styles.mpConnectedSection}>
                 <View style={styles.mpConnectedHeader}>
-                  <Text style={styles.mpConnectedTitle}>✅ Cuenta Conectada</Text>
+                  <Text style={styles.mpConnectedTitle}>Cuenta conectada</Text>
                 </View>
                 
                 <View style={styles.mpAccountInfo}>
@@ -1324,13 +1341,13 @@ export default function AdminSettings() {
                 <View style={styles.mpAccountInfo}>
                   <Text style={styles.mpAccountLabel}>Modo:</Text>
                   <Text style={styles.mpAccountValue}>
-                    {adminMpConfig.isTestMode ? '🧪 Prueba' : '🚀 Producción'}
+                    {adminMpConfig.isTestMode ? 'Prueba' : 'Producción'}
                   </Text>
                 </View>
                 
                 <View style={styles.mpWarning}>
                   <Text style={styles.mpWarningText}>
-                    ⚠️ Esta cuenta quedó como respaldo de compatibilidad y ya no debería usarse para cobrar a clientes.
+                    Esta cuenta quedó como respaldo de compatibilidad y ya no debería usarse para cobrar a clientes.
                   </Text>
                 </View>
                 
@@ -1338,24 +1355,24 @@ export default function AdminSettings() {
                   style={styles.mpDisconnectButton}
                   onPress={handleDisconnectAdminMp}
                 >
-                  <Text style={styles.mpDisconnectText}>Desconectar Cuenta</Text>
+                  <Text style={styles.mpDisconnectText}>Desconectar cuenta</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <View style={styles.mpConfigSection}>
                 <View style={styles.mpInfoSection}>
-                  <Text style={styles.mpInfoTitle}>🏦 Configuración legacy de comisiones</Text>
+                  <Text style={styles.mpInfoTitle}>Configuración legacy de comisiones</Text>
                   <Text style={styles.mpInfoText}>
                     Esta configuración quedó como respaldo de compatibilidad y no es el flujo principal para cobrar a los clientes.
                   </Text>
                 </View>
                 
                 <View style={styles.mpHelpSection}>
-                  <Text style={styles.mpHelpTitle}>💡 ¿Cómo obtener las credenciales?</Text>
-                  <Text style={styles.mpHelpStep}>1. Ve a developers.mercadopago.com</Text>
-                  <Text style={styles.mpHelpStep}>2. Inicia sesión con tu cuenta de Mercado Pago</Text>
-                  <Text style={styles.mpHelpStep}>3. Ve a &quot;Tus integraciones&quot; → &quot;Credenciales&quot;</Text>
-                  <Text style={styles.mpHelpStep}>4. Copia el Access Token y Public Key si necesitas respaldo legacy</Text>
+                  <Text style={styles.mpHelpTitle}>¿Cómo obtener las credenciales?</Text>
+                  <Text style={styles.mpHelpStep}>1. Entrá a developers.mercadopago.com</Text>
+                  <Text style={styles.mpHelpStep}>2. Iniciá sesión con tu cuenta de Mercado Pago</Text>
+                  <Text style={styles.mpHelpStep}>3. Andá a &quot;Tus integraciones&quot; → &quot;Credenciales&quot;</Text>
+                  <Text style={styles.mpHelpStep}>4. Copiá el Access Token y la Public Key si necesitás respaldo legacy</Text>
                 </View>
 
                 <Input
@@ -1376,16 +1393,17 @@ export default function AdminSettings() {
                   <View style={styles.mpTestModeHeader}>
                     <Text style={styles.mpTestModeTitle}>Modo de prueba</Text>
                     <Switch
+                      accessibilityLabel="Modo de prueba"
                       value={adminMpConfig.isTestMode}
                       onValueChange={(value) => setAdminMpConfig(prev => ({ ...prev, isTestMode: value }))}
-                      trackColor={{ false: '#E5E7EB', true: '#3B82F6' }}
-                      thumbColor={adminMpConfig.isTestMode ? '#FFFFFF' : '#FFFFFF'}
+                      trackColor={{ false: colors.borderStrong, true: colors.primary }}
+                      thumbColor={colors.white}
                     />
                   </View>
                   <Text style={styles.mpTestModeDescription}>
                     {adminMpConfig.isTestMode 
-                      ? '🧪 Modo prueba activo - Usa credenciales TEST-' 
-                      : '🚀 Modo producción - Usa credenciales APP_USR- reales'
+                      ? 'Modo prueba activo: usá credenciales TEST-' 
+                      : 'Modo producción: usá credenciales APP_USR- reales'
                     }
                   </Text>
                 </View>
@@ -1420,16 +1438,21 @@ export default function AdminSettings() {
           >
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Enviar Notificación Masiva</Text>
+                <Text style={styles.modalTitle}>Enviar notificación masiva</Text>
                 {!broadcastLoading && (
-                  <TouchableOpacity onPress={() => setShowBroadcastModal(false)}>
-                    <Text style={styles.modalCloseText}>✕</Text>
+                  <TouchableOpacity
+                    onPress={() => setShowBroadcastModal(false)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cerrar"
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  >
+                    <X size={22} color={colors.textSecondary} />
                   </TouchableOpacity>
                 )}
               </View>
 
               <View style={styles.broadcastInfo}>
-                <Bell size={20} color="#2D6A6F" />
+                <Bell size={20} color={colors.primary} />
                 <Text style={styles.broadcastInfoText}>
                   Esta notificación se enviará a todos los usuarios con notificaciones habilitadas.
                 </Text>
@@ -1445,7 +1468,7 @@ export default function AdminSettings() {
 
               <Input
                 label="Mensaje *"
-                placeholder="Ej: Hemos agregado nuevas funciones..."
+                placeholder="Ej: Sumamos nuevas funciones..."
                 value={broadcastMessage}
                 onChangeText={setBroadcastMessage}
                 multiline
@@ -1465,7 +1488,7 @@ export default function AdminSettings() {
 
               <View style={styles.batchSizeInfo}>
                 <Text style={styles.batchSizeInfoText}>
-                  💡 Se enviarán {batchSize || '20'} notificaciones a la vez. Un número más bajo es más seguro pero más lento.
+                  Se enviarán {batchSize || '20'} notificaciones a la vez. Un número más bajo es más seguro pero más lento.
                 </Text>
               </View>
 
@@ -1519,59 +1542,58 @@ export default function AdminSettings() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
     paddingTop: 50,
-    paddingBottom: 16,
+    paddingBottom: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   headerContent: {
     width: '100%',
   },
   title: {
+    ...typography.title,
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    lineHeight: 27,
+    color: colors.text,
   },
   subtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 2,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginTop: spacing.xxs,
   },
   content: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 16,
+    paddingBottom: spacing.lg,
   },
   section: {
-    marginBottom: 24,
-    paddingHorizontal: 16,
+    marginBottom: spacing.xxl,
+    paddingHorizontal: spacing.lg,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    marginTop: 24,
+    ...typography.heading,
+    color: colors.text,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    marginTop: spacing.xxl,
   },
   settingsCard: {
-    marginHorizontal: 16,
+    marginHorizontal: spacing.lg,
   },
   settingItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.border,
   },
   settingInfo: {
     flexDirection: 'row',
@@ -1580,43 +1602,41 @@ const styles = StyleSheet.create({
   },
   settingCopy: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: spacing.md,
   },
   settingLabel: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
+    ...typography.body,
+    color: colors.text,
   },
   settingDescription: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 4,
+    color: colors.textTertiary,
+    marginTop: spacing.xs,
     lineHeight: 18,
   },
   maintenanceButton: {
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: radius.md,
   },
   maintenanceButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    ...typography.label,
   },
   commissionCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
   },
   commissionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: 12,
+    gap: spacing.md,
     marginBottom: 18,
     paddingBottom: 18,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.border,
   },
   commissionTitleContainer: {
     flexDirection: 'row',
@@ -1625,94 +1645,93 @@ const styles = StyleSheet.create({
   commissionIconBadge: {
     width: 40,
     height: 40,
-    borderRadius: 8,
-    backgroundColor: '#D1FAE5',
+    borderRadius: radius.sm,
+    backgroundColor: colors.successSoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   commissionTitleCopy: {
     flex: 1,
   },
   commissionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   commissionDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textTertiary,
     lineHeight: 20,
   },
   commissionSummaryBadge: {
     minWidth: 82,
-    backgroundColor: '#ECFDF5',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    backgroundColor: colors.successSoft,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     alignItems: 'center',
   },
   commissionSummaryLabel: {
+    ...typography.caption,
     fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    color: '#047857',
-    marginBottom: 2,
+    lineHeight: 15,
+    color: colors.success,
+    marginBottom: spacing.xxs,
   },
   commissionSummaryValue: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#065F46',
+    ...typography.heading,
+    color: colors.success,
   },
   commissionTypesTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   commissionOptionsGrid: {
-    gap: 12,
+    gap: spacing.md,
   },
   commissionOption: {
-    backgroundColor: '#F9FAFB',
-    padding: 16,
-    borderRadius: 8,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   commissionOptionSelected: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#10B981',
+    backgroundColor: colors.successSoft,
+    borderColor: colors.success,
   },
   commissionOptionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   commissionRadio: {
     width: 14,
     height: 14,
     borderRadius: 7,
     borderWidth: 2,
-    borderColor: '#9CA3AF',
+    borderColor: colors.textTertiary,
     marginRight: 10,
   },
   commissionRadioSelected: {
-    borderColor: '#059669',
-    backgroundColor: '#059669',
+    borderColor: colors.success,
+    backgroundColor: colors.success,
   },
   commissionOptionTitle: {
+    ...typography.label,
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    lineHeight: 20,
+    color: colors.text,
   },
   commissionOptionText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textTertiary,
     lineHeight: 18,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   commissionFieldRow: {
     flexDirection: 'row',
@@ -1720,15 +1739,13 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   commissionFieldPrefix: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#047857',
-    marginRight: 4,
+    ...typography.bodyStrong,
+    color: colors.success,
+    marginRight: spacing.xs,
   },
   commissionFieldSuffix: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#047857',
+    ...typography.bodyStrong,
+    color: colors.success,
     marginLeft: 6,
   },
   commissionInput: {
@@ -1736,208 +1753,195 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   saveButton: {
-    marginTop: 16,
+    marginTop: spacing.lg,
   },
   subscriptionCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
   },
   subscriptionHeader: {
-    marginBottom: 20,
-    paddingBottom: 16,
+    marginBottom: spacing.xl,
+    paddingBottom: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.border,
   },
   subscriptionTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   subscriptionIcon: {
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   subscriptionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   subscriptionDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   subscriptionToggleContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    padding: 16,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
+    backgroundColor: colors.background,
+    borderRadius: radius.sm,
   },
   subscriptionToggleInfo: {
     flex: 1,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   subscriptionToggleLabel: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   subscriptionToggleDescription: {
+    ...typography.bodySmall,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    lineHeight: 18,
+    color: colors.textTertiary,
   },
   subscriptionStatusContainer: {
-    marginBottom: 16,
-    padding: 12,
-    backgroundColor: '#ECFDF5',
-    borderRadius: 8,
+    marginBottom: spacing.lg,
+    padding: spacing.md,
+    backgroundColor: colors.successSoft,
+    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: '#D1FAE5',
   },
   subscriptionStatusBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#10B981',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   subscriptionStatusText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    ...typography.captionStrong,
+    color: colors.white,
   },
   subscriptionStatusInfo: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#065F46',
+    color: colors.success,
     lineHeight: 18,
   },
   subscriptionActionsContainer: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   manageSubscriptionPlansButton: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   subscriptionInfoBox: {
-    padding: 12,
-    backgroundColor: '#F0F9FF',
-    borderRadius: 8,
+    padding: spacing.md,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#DBEAFE',
+    borderColor: colors.primaryMuted,
   },
   subscriptionInfoTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1E40AF',
-    marginBottom: 8,
+    ...typography.label,
+    color: colors.primaryStrong,
+    marginBottom: spacing.sm,
   },
   subscriptionInfoText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#1E40AF',
+    color: colors.primaryStrong,
     lineHeight: 20,
   },
   adminCard: {
-    marginHorizontal: 16,
-    marginBottom: 24,
-    padding: 16,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.xxl,
+    padding: spacing.lg,
   },
   adminInfo: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   logoutButton: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   logoutOverlay: {
     flex: 1,
     backgroundColor: 'rgba(17, 24, 39, 0.42)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: spacing.xxl,
   },
   logoutOverlayCard: {
     width: '100%',
     maxWidth: 320,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 18,
-    padding: 24,
+    padding: spacing.xxl,
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: colors.black,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.18,
     shadowRadius: 16,
     elevation: 8,
   },
   logoutOverlayTitle: {
-    marginTop: 16,
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.heading,
+    marginTop: spacing.lg,
+    color: colors.text,
   },
   logoutOverlayText: {
-    marginTop: 8,
+    marginTop: spacing.sm,
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textTertiary,
     textAlign: 'center',
     lineHeight: 20,
   },
   adminEmail: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   adminRole: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 16,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginBottom: spacing.lg,
   },
   accessDenied: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.xxl,
   },
   accessDeniedTitle: {
+    ...typography.title,
     fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#EF4444',
-    marginBottom: 8,
+    lineHeight: 32,
+    color: colors.danger,
+    marginBottom: spacing.sm,
   },
   accessDeniedText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   emailConfigButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF2F2',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginTop: 8,
-    marginBottom: 12,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
     alignSelf: 'flex-start',
     marginLeft: 40,
   },
   emailConfigText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#DC2626',
-    marginLeft: 8,
+    ...typography.label,
+    color: colors.danger,
+    marginLeft: spacing.sm,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   modalScrollContainer: {
@@ -1947,12 +1951,12 @@ const styles = StyleSheet.create({
   modalScrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.xxl,
     width: '100%',
     maxWidth: 500,
     alignSelf: 'center',
@@ -1961,221 +1965,212 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   modalCloseText: {
-    fontSize: 18,
-    color: '#6B7280',
+    ...typography.heading,
+    color: colors.textTertiary,
   },
   modalTitle: {
+    ...typography.title,
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 20,
+    lineHeight: 27,
+    color: colors.text,
+    marginBottom: spacing.xl,
     textAlign: 'center',
   },
   emailTestSection: {
-    marginTop: 20,
-    marginBottom: 20,
+    marginTop: spacing.xl,
+    marginBottom: spacing.xl,
    padding: 12,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
+    backgroundColor: colors.background,
+    borderRadius: radius.sm,
   },
   emailTestTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   modalActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 20,
+    gap: spacing.md,
+    marginTop: spacing.xl,
   },
   mpStatusButton: {
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: radius.md,
   },
   mpStatusText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    ...typography.captionStrong,
   },
   mpConnectedInfo: {
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 12,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginTop: spacing.md,
   },
   mpConnectedText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    marginBottom: 4,
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   mpConnectedSection: {
-    padding: 16,
+    padding: spacing.lg,
   },
   mpConnectedHeader: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   mpConnectedTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    ...typography.heading,
+    color: colors.success,
   },
   mpAccountInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.border,
   },
   mpAccountLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
   },
   mpAccountValue: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.label,
+    color: colors.text,
   },
   mpWarning: {
-    backgroundColor: '#FEF3C7',
-    padding: 12,
-    borderRadius: 8,
-    marginVertical: 16,
+    backgroundColor: colors.warningSoft,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginVertical: spacing.lg,
   },
   mpWarningText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#92400E',
+    ...typography.caption,
+    color: colors.warning,
     textAlign: 'center',
   },
   mpConfigSection: {
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
   },
   mpInfoSection: {
-    backgroundColor: '#EBF8FF',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    marginBottom: spacing.xl,
   },
   mpInfoTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#1E40AF',
-    marginBottom: 8,
+    ...typography.bodyStrong,
+    color: colors.primaryStrong,
+    marginBottom: spacing.sm,
   },
   mpInfoText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#1E40AF',
+    color: colors.primaryStrong,
     lineHeight: 20,
   },
   mpHelpSection: {
-    backgroundColor: '#F0F9FF',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    marginBottom: spacing.xl,
   },
   mpHelpTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Bold',
-    color: '#0369A1',
-    marginBottom: 12,
+    ...typography.label,
+    color: colors.primaryStrong,
+    marginBottom: spacing.md,
   },
   mpHelpStep: {
+    ...typography.bodySmall,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#0369A1',
-    marginBottom: 4,
-    paddingLeft: 8,
+    lineHeight: 18,
+    color: colors.primaryStrong,
+    marginBottom: spacing.xs,
+    paddingLeft: spacing.sm,
   },
   mpTestModeSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   mpTestModeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   mpTestModeTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
+    ...typography.label,
+    color: colors.textSecondary,
   },
   mpTestModeDescription: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textTertiary,
     lineHeight: 16,
   },
   mpDisconnectButton: {
-    backgroundColor: '#FEE2E2',
-    paddingVertical: 12,
-    borderRadius: 10,
+    backgroundColor: colors.primarySoft,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
     alignItems: 'center',
   },
   mpDisconnectText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#B91C1C',
+    ...typography.label,
+    color: colors.danger,
   },
   mpSaveButton: {
-    backgroundColor: '#00A650',
+    backgroundColor: colors.primary,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: radius.md,
     alignItems: 'center',
   },
   mpSaveButtonDisabled: {
     opacity: 0.6,
   },
   mpSaveButtonText: {
+    ...typography.label,
     fontSize: 15,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    lineHeight: 20,
+    color: colors.white,
   },
   mpSaveActionButton: {
-    marginTop: 8,
-    marginBottom: 12,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
   },
   broadcastButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0F9FF',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginTop: 8,
-    marginBottom: 12,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
     alignSelf: 'flex-start',
     marginLeft: 40,
   },
   broadcastButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#2D6A6F',
-    marginLeft: 8,
+    ...typography.label,
+    color: colors.primary,
+    marginLeft: spacing.sm,
   },
   broadcastInfo: {
     flexDirection: 'row',
-    backgroundColor: '#F0F9FF',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginBottom: spacing.lg,
     alignItems: 'flex-start',
   },
   broadcastInfoText: {
     flex: 1,
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#0369A1',
-    marginLeft: 8,
+    color: colors.primaryStrong,
+    marginLeft: spacing.sm,
     lineHeight: 18,
   },
   broadcastMessageInput: {
@@ -2183,78 +2178,75 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   broadcastProgressContainer: {
-    marginVertical: 16,
-    padding: 12,
-    backgroundColor: '#F0FDF4',
-    borderRadius: 8,
+    marginVertical: spacing.lg,
+    padding: spacing.md,
+    backgroundColor: colors.successSoft,
+    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: '#BBF7D0',
   },
   broadcastProgressText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#166534',
-    marginBottom: 8,
+    ...typography.label,
+    color: colors.success,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   broadcastProgressBar: {
     height: 8,
-    backgroundColor: '#D1FAE5',
+    backgroundColor: colors.successSoft,
     borderRadius: 4,
     overflow: 'hidden',
   },
   broadcastProgressFill: {
     height: '100%',
-    backgroundColor: '#10B981',
+    backgroundColor: colors.success,
     borderRadius: 4,
   },
   batchSizeInfo: {
-    backgroundColor: '#FFFBEB',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
+    backgroundColor: colors.warningSoft,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginBottom: spacing.lg,
   },
   batchSizeInfoText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#92400E',
+    color: colors.warning,
     lineHeight: 18,
   },
   broadcastModalActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 20,
+    gap: spacing.md,
+    marginTop: spacing.xl,
   },
   broadcastCancelButton: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: colors.borderStrong,
     paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 8,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   broadcastCancelButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
+    ...typography.bodyStrong,
+    color: colors.textSecondary,
   },
   broadcastSendButton: {
     flex: 1,
-    backgroundColor: '#2D6A6F',
+    backgroundColor: colors.primary,
     paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 8,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   broadcastSendButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    ...typography.bodyStrong,
+    color: colors.white,
   },
   buttonDisabled: {
     opacity: 0.5,

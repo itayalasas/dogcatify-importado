@@ -2,9 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Dimensions, TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, ChevronDown, Check, Mars, Venus, Search } from '../../components/ui/Icons';
+import { ChevronDown, Check, Search } from '../../components/ui/Icons';
+import { Camera, Image as ImageIcon } from 'lucide-react-native';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { toast } from '../../components/ui/Toast';
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -12,6 +15,7 @@ import { supabaseClient } from '../../lib/supabase';
 import { uploadImage } from '../../utils/imageUpload';
 import { resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
 
+import { colors, radius, spacing, typography } from '../../constants/theme';
 interface BreedInfo {
   name: string;
   min_height?: number;
@@ -248,7 +252,7 @@ export default function AddPet() {
 
   const handleBreedSelect = () => {
     if (!species) {
-      Alert.alert('Selecciona especie', 'Por favor selecciona primero la especie de tu mascota');
+      Alert.alert('Seleccioná la especie', 'Primero seleccioná la especie de tu mascota');
       return;
     }
     
@@ -270,19 +274,19 @@ export default function AddPet() {
     if (!isTokenValid) {
       Alert.alert(
         'Sesión expirada',
-        'Tu sesión ha expirado. Por favor inicia sesión nuevamente.',
+        'Tu sesión expiró. Iniciá sesión de nuevo.',
         [{ text: 'OK', onPress: () => router.replace('/auth/login') }]
       );
       return;
     }
     
     if (!name.trim() || !species || !breed.trim() || !age.trim() || !weight.trim() || !gender) {
-      Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
+      Alert.alert('Error', 'Completá todos los campos obligatorios');
       return;
     }
     
     if (!currentUser) {
-      Alert.alert('Error', 'Debes estar autenticado para agregar una mascota');
+      Alert.alert('Error', 'Tenés que iniciar sesión para agregar una mascota');
       return;
     }
 
@@ -324,7 +328,7 @@ export default function AddPet() {
         } else if ((petsCount || 0) >= maxPetsAllowed) {
           Alert.alert(
             'Límite alcanzado',
-            `Tu plan actual permite hasta ${maxPetsAllowed} mascota${maxPetsAllowed === 1 ? '' : 's'}. Actualiza tu suscripción para registrar más.`,
+            `Tu plan actual permite hasta ${maxPetsAllowed} mascota${maxPetsAllowed === 1 ? '' : 's'}. Actualizá tu suscripción para registrar más.`,
             [
               { text: 'Ver suscripción', onPress: () => router.push('/profile/subscription') },
               { text: 'OK', style: 'cancel' },
@@ -353,7 +357,7 @@ export default function AddPet() {
         console.log('Duplicate pet found:', existingPets[0]);
         Alert.alert(
           'Mascota ya registrada',
-          `Ya tienes una mascota registrada con el nombre "${name.trim()}", especie "${species === 'dog' ? 'Perro' : 'Gato'}" y raza "${breed.trim()}". Por favor verifica la información o usa un nombre diferente.`,
+          `Ya tenés una mascota registrada con el nombre "${name.trim()}", especie "${species === 'dog' ? 'Perro' : 'Gato'}" y raza "${breed.trim()}". Revisá la información o usá un nombre diferente.`,
           [{ text: 'Entendido', style: 'default' }]
         );
         return;
@@ -425,7 +429,7 @@ export default function AddPet() {
             if (checkError.message?.includes('JWT') || checkError.message?.includes('expired')) {
               Alert.alert(
                 'Sesión expirada',
-                'Tu sesión expiró durante el proceso. La mascota se creó correctamente, pero inicia sesión nuevamente.',
+                'Tu sesión expiró durante el proceso. La mascota se creó correctamente, pero iniciá sesión de nuevo.',
                 [{ text: 'OK', onPress: () => router.replace('/auth/login') }]
               );
               return;
@@ -459,7 +463,7 @@ export default function AddPet() {
               if (weightError.message?.includes('JWT') || weightError.message?.includes('expired')) {
                 Alert.alert(
                   'Sesión expirada',
-                  'Tu sesión expiró durante el proceso. La mascota se creó correctamente, pero inicia sesión nuevamente.',
+                  'Tu sesión expiró durante el proceso. La mascota se creó correctamente, pero iniciá sesión de nuevo.',
                   [{ text: 'OK', onPress: () => router.replace('/auth/login') }]
                 );
                 return;
@@ -473,18 +477,15 @@ export default function AddPet() {
           // Don't fail pet creation if weight record fails
         }
         
-        Alert.alert(
-          'Mascota agregada',
-          'Tu mascota ha sido agregada correctamente',
-          [{ text: 'OK', onPress: () => router.push('/(tabs)/pets') }]
-        );
+        toast.success('¡Listo! Tu mascota se agregó correctamente');
+        router.push('/(tabs)/pets');
       } else {
         console.log('Error creating pet:', error);
         // Check if this is a JWT error
         if (error && (error.message?.includes('JWT') || error.message?.includes('expired'))) {
           Alert.alert(
             'Sesión expirada',
-            'Tu sesión ha expirado. Por favor inicia sesión nuevamente.',
+            'Tu sesión expiró. Iniciá sesión de nuevo.',
             [{ text: 'OK', onPress: () => router.replace('/auth/login') }]
           );
           return;
@@ -498,7 +499,7 @@ export default function AddPet() {
       if (errorMessage.includes('JWT') || errorMessage.includes('expired')) {
         Alert.alert(
           'Sesión expirada',
-          'Tu sesión ha expirado. Por favor inicia sesión nuevamente.',
+          'Tu sesión expiró. Iniciá sesión de nuevo.',
           [{ text: 'OK', onPress: () => router.replace('/auth/login') }]
         );
         return;
@@ -532,16 +533,20 @@ export default function AddPet() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/pets')} style={styles.backButton}>
-          <ArrowLeft size={24} color="#374151" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Agregar Mascota</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title="Agregar mascota" onBack={() => router.push('/(tabs)/pets')} />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.form}>
+          <View style={[styles.sectionHeader, styles.sectionHeaderFirst]}>
+            <Text style={styles.sectionStep}>Paso 1 de 4</Text>
+            <Text style={styles.sectionTitle}>Especie y raza</Text>
+            <Text style={styles.sectionSubtitle}>Así te mostramos información y cuidados según su raza.</Text>
+          </View>
+
           {/* Especie - Primer campo */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Especie *</Text>
@@ -557,7 +562,7 @@ export default function AddPet() {
                   {speciesOptions.find(opt => opt.value === species)?.label || 'Seleccionar especie'}
                 </Text>
               </View>
-              <ChevronDown size={20} color="#6B7280" />
+              <ChevronDown size={20} color={colors.textSecondary} />
             </TouchableOpacity>
             
             {showSpeciesSelector && (
@@ -587,7 +592,7 @@ export default function AddPet() {
                       {option.label}
                     </Text>
                     {species === option.value && (
-                      <Check size={16} color="#2D6A6F" />
+                      <Check size={16} color={colors.primary} />
                     )}
                   </TouchableOpacity>
                 ))}
@@ -609,7 +614,7 @@ export default function AddPet() {
                   styles.selectorText,
                   !species && styles.disabledSelectorText
                 ]}>
-                  {breed || (species ? 'Seleccionar raza' : 'Primero selecciona la especie')}
+                  {breed || (species ? 'Seleccionar raza' : 'Primero seleccioná la especie')}
                 </Text>
               </View>
               <ChevronDown size={20} color={!species ? "#D1D5DB" : "#6B7280"} />
@@ -753,15 +758,21 @@ export default function AddPet() {
             </Card>
           )}
 
-          {/* Nombre - Después de la información de la raza */}
-          {/* Especie - Primer campo */}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionStep}>Paso 2 de 4</Text>
+            <Text style={styles.sectionTitle}>Datos básicos</Text>
+            <Text style={styles.sectionSubtitle}>Nombre, foto, edad y peso de tu mascota.</Text>
+          </View>
+
+          {/* Nombre */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Nombre *</Text>
             <Input
+              label="Nombre *"
               value={name}
               onChangeText={setName}
               placeholder="Nombre de tu mascota"
-              style={styles.input}
+              autoCapitalize="words"
+              containerStyle={styles.inputContainer}
             />
           </View>
 
@@ -780,12 +791,20 @@ export default function AddPet() {
               )}
               
               <View style={styles.imageButtons}>
-                <TouchableOpacity style={styles.imageButton} onPress={takePhoto}>
-                  <Text style={styles.imageButtonText}>Tomar foto</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
-                  <Text style={styles.imageButtonText}>Galería</Text>
-                </TouchableOpacity>
+                <Button
+                  title="Sacar foto"
+                  onPress={takePhoto}
+                  variant="secondary"
+                  icon={<Camera size={18} color={colors.primary} />}
+                  style={styles.imageButton}
+                />
+                <Button
+                  title="Galería"
+                  onPress={pickImage}
+                  variant="secondary"
+                  icon={<ImageIcon size={18} color={colors.primary} />}
+                  style={styles.imageButton}
+                />
               </View>
             </View>
           </View>
@@ -793,13 +812,13 @@ export default function AddPet() {
           {/* Edad y Peso en fila */}
           <View style={styles.row}>
             <View style={styles.inputGroupHalf}>
-              <Text style={styles.label}>Edad *</Text>
               <Input
+                label="Edad *"
+                containerStyle={styles.inputContainer}
                 value={age}
                 onChangeText={setAge}
                 placeholder="Edad"
                 keyboardType="numeric"
-                style={styles.input}
               />
             </View>
             
@@ -812,7 +831,7 @@ export default function AddPet() {
                 <Text style={styles.selectorText}>
                   {ageUnitOptions.find(opt => opt.value === ageUnit)?.label || 'Años'}
                 </Text>
-                <ChevronDown size={20} color="#6B7280" />
+                <ChevronDown size={20} color={colors.textSecondary} />
               </TouchableOpacity>
               
               {showAgeUnitSelector && (
@@ -836,7 +855,7 @@ export default function AddPet() {
                         {option.label}
                       </Text>
                       {ageUnit === option.value && (
-                        <Check size={16} color="#2D6A6F" />
+                        <Check size={16} color={colors.primary} />
                       )}
                     </TouchableOpacity>
                   ))}
@@ -847,13 +866,13 @@ export default function AddPet() {
 
           <View style={styles.row}>
             <View style={styles.inputGroupHalf}>
-              <Text style={styles.label}>Peso *</Text>
               <Input
+                label="Peso *"
+                containerStyle={styles.inputContainer}
                 value={weight}
                 onChangeText={setWeight}
                 placeholder="Peso"
-                keyboardType="numeric"
-                style={styles.input}
+                keyboardType="decimal-pad"
               />
             </View>
             
@@ -866,7 +885,7 @@ export default function AddPet() {
                 <Text style={styles.selectorText}>
                   {weightUnitOptions.find(opt => opt.value === weightUnit)?.label || 'Kilogramos'}
                 </Text>
-                <ChevronDown size={20} color="#6B7280" />
+                <ChevronDown size={20} color={colors.textSecondary} />
               </TouchableOpacity>
               
               {showWeightUnitSelector && (
@@ -890,7 +909,7 @@ export default function AddPet() {
                         {option.label}
                       </Text>
                       {weightUnit === option.value && (
-                        <Check size={16} color="#2D6A6F" />
+                        <Check size={16} color={colors.primary} />
                       )}
                     </TouchableOpacity>
                   ))}
@@ -901,19 +920,15 @@ export default function AddPet() {
 
           {/* Color con autocompletado */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Color</Text>
-            <View style={styles.colorInputContainer}>
-              <TextInput
-                style={styles.colorInput}
-                value={colorQuery}
-                onChangeText={handleColorInputChange}
-                placeholder="Escribe o selecciona un color"
-                onFocus={() => setShowColorSuggestions(true)}
-              />
-              <View style={styles.colorSearchIcon}>
-                <Search size={20} color="#6B7280" />
-              </View>
-            </View>
+            <Input
+              label="Color"
+              containerStyle={styles.inputContainer}
+              value={colorQuery}
+              onChangeText={handleColorInputChange}
+              placeholder="Escribí o seleccioná un color"
+              onFocus={() => setShowColorSuggestions(true)}
+              rightIcon={<Search size={20} color={colors.icon} />}
+            />
             
             {showColorSuggestions && filteredColors.length > 0 && (
               <View style={styles.colorSuggestions}>
@@ -922,6 +937,7 @@ export default function AddPet() {
                     key={item}
                     style={styles.colorSuggestion}
                     onPress={() => handleColorSelect(item)}
+                    accessibilityRole="button"
                   >
                     <Text style={styles.colorSuggestionText}>{item}</Text>
                   </TouchableOpacity>
@@ -942,10 +958,12 @@ export default function AddPet() {
                     gender === option.value && styles.selectedGenderOption
                   ]}
                   onPress={() => setGender(option.value)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: gender === option.value }}
                 >
                   <Text style={[
                     styles.genderIcon,
-                    { color: gender === option.value ? '#FFFFFF' : '#6B7280' }
+                    { color: gender === option.value ? colors.onPrimary : colors.textSecondary }
                   ]}>
                     {option.icon}
                   </Text>
@@ -960,16 +978,22 @@ export default function AddPet() {
             </View>
           </View>
 
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionStep}>Paso 3 de 4</Text>
+            <Text style={styles.sectionTitle}>Salud e identificación</Text>
+          </View>
+
           {/* Estado - Checkboxes mejorados */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Estado</Text>
             <View style={styles.checkboxContainer}>
               <TouchableOpacity
-                style={styles.modernCheckboxRow} 
+                style={styles.modernCheckboxRow}
                 onPress={() => setIsNeutered(!isNeutered)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: isNeutered }}
               >
                 <View style={[styles.modernCheckbox, isNeutered && styles.checkedModernCheckbox]}>
-                  {isNeutered && <Check size={16} color="#FFFFFF" />}
+                  {isNeutered && <Check size={16} color={colors.white} />}
                 </View>
                 <Text style={styles.checkboxText}>
                   {species === 'dog' ? 'Castrado' : 'Esterilizado'}
@@ -977,11 +1001,13 @@ export default function AddPet() {
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={styles.modernCheckboxRow} 
+                style={styles.modernCheckboxRow}
                 onPress={() => setHasChip(!hasChip)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: hasChip }}
               >
                 <View style={[styles.modernCheckbox, hasChip && styles.checkedModernCheckbox]}>
-                  {hasChip && <Check size={16} color="#FFFFFF" />}
+                  {hasChip && <Check size={16} color={colors.white} />}
                 </View>
                 <Text style={styles.checkboxText}>
                   Tiene microchip
@@ -992,81 +1018,107 @@ export default function AddPet() {
           
           {hasChip && (
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Número de microchip</Text>
               <Input
+                label="Número de microchip"
+                containerStyle={styles.inputContainer}
                 value={chipNumber}
                 onChangeText={setChipNumber}
-                placeholder="Ingresa el número de microchip"
-                style={styles.input}
+                placeholder="Ingresá el número de microchip"
               />
             </View>
           )}
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Descripción</Text>
-            <Input
-              value={description}
-              onChangeText={setDescription}
-              placeholder="Descripción adicional (opcional)"
-              multiline
-              numberOfLines={4}
-              style={StyleSheet.flatten([styles.input, styles.textArea])}
-            />
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionStep}>Paso 4 de 4</Text>
+            <Text style={styles.sectionTitle}>Sobre tu mascota</Text>
           </View>
 
-          <Button
-            title={isLoading ? "Agregando..." : "Agregar Mascota"}
-            onPress={handleSubmit}
-            loading={isLoading}
-            disabled={isLoading}
-            size="large"
-            style={styles.submitButton}
-          />
+          <View style={styles.inputGroup}>
+            <Input
+              label="Descripción"
+              helperText="Opcional: carácter, costumbres, lo que la hace única."
+              containerStyle={styles.inputContainer}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Descripción adicional"
+              multiline
+              numberOfLines={4}
+              style={styles.textArea}
+            />
+          </View>
+          <Text style={styles.requiredNote}>* Campos obligatorios</Text>
         </View>
       </ScrollView>
+
+      <View style={styles.footer}>
+        <Button
+          title={isLoading ? 'Agregando...' : 'Agregar mascota'}
+          onPress={handleSubmit}
+          loading={isLoading}
+          disabled={isLoading}
+          size="large"
+        />
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  sectionHeader: {
+    marginTop: spacing.xl,
+    marginBottom: spacing.lg,
+    paddingTop: spacing.xl,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  sectionHeaderFirst: {
+    marginTop: 0,
+    paddingTop: 0,
+    borderTopWidth: 0,
+  },
+  sectionStep: {
+    ...typography.captionStrong,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  sectionTitle: {
+    ...typography.heading,
+    color: colors.text,
+    marginTop: spacing.xxs,
+  },
+  sectionSubtitle: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: spacing.xxs,
+  },
+  inputContainer: {
+    marginBottom: 0,
+  },
+  requiredNote: {
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginTop: spacing.xs,
+  },
+  footer: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
     paddingTop: 44,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 18,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  backButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F8FAFC',
-  },
-  headerTitle: {
-    fontSize: 21,
-    fontFamily: 'Inter-Bold',
-    color: '#0F172A',
-  },
-  placeholder: {
-    width: 42,
   },
   content: {
     flex: 1,
   },
   form: {
     paddingHorizontal: 18,
-    paddingTop: 20,
+    paddingTop: spacing.xl,
     paddingBottom: 34,
   },
   inputGroup: {
@@ -1075,24 +1127,13 @@ const styles = StyleSheet.create({
   },
   inputGroupHalf: {
     flex: 1,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   label: {
     fontSize: 14,
-    fontFamily: 'Inter-Bold',
-    color: '#334155',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: '#111827',
-    minHeight: 54,
+    fontFamily: 'Inter-SemiBold',
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   textArea: {
     height: 118,
@@ -1101,25 +1142,25 @@ const styles = StyleSheet.create({
   
   // Modern selector styles
   modernSelector: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: 18,
-    paddingHorizontal: 16,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     minHeight: 56,
-    shadowColor: '#0F172A',
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.03,
     shadowRadius: 8,
     elevation: 1,
   },
   disabledSelector: {
-    backgroundColor: '#F9FAFB',
-    borderColor: '#E5E7EB',
+    backgroundColor: colors.background,
+    borderColor: colors.border,
   },
   selectorContent: {
     flexDirection: 'row',
@@ -1128,16 +1169,16 @@ const styles = StyleSheet.create({
   },
   selectorIcon: {
     fontSize: 20,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   selectorText: {
     fontSize: 15,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
   },
   disabledSelectorText: {
-    color: '#9CA3AF',
+    color: colors.textSecondary,
   },
   
   // Modern dropdown styles
@@ -1146,12 +1187,12 @@ const styles = StyleSheet.create({
     top: '100%',
     left: 0,
     right: 0,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 18,
-    marginTop: 8,
-    shadowColor: '#0F172A',
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    marginTop: spacing.sm,
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.1,
     shadowRadius: 18,
@@ -1162,61 +1203,40 @@ const styles = StyleSheet.create({
   modernDropdownOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   selectedDropdownOption: {
     backgroundColor: '#F0F9FF',
   },
   dropdownIcon: {
     fontSize: 18,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   dropdownOptionText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.body,
+    color: colors.textSecondary,
     flex: 1,
   },
   selectedDropdownOptionText: {
-    color: '#2D6A6F',
+    color: colors.primary,
     fontFamily: 'Inter-Medium',
   },
 
   // Color input styles
-  colorInputContainer: {
-    position: 'relative',
-  },
-  colorInput: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    paddingRight: 50,
-    fontSize: 16,
-    color: '#111827',
-    minHeight: 56,
-  },
-  colorSearchIcon: {
-    position: 'absolute',
-    right: 16,
-    top: 15,
-  },
   colorSuggestions: {
     position: 'absolute',
     top: '100%',
     left: 0,
     right: 0,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 18,
-    marginTop: 8,
-    shadowColor: '#0F172A',
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    marginTop: spacing.sm,
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.1,
     shadowRadius: 18,
@@ -1226,43 +1246,42 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   colorSuggestion: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   colorSuggestionText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.body,
+    color: colors.textSecondary,
   },
 
   // Gender selector styles
   genderSelector: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
   genderOption: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: 18,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
     minHeight: 60,
-    shadowColor: '#0F172A',
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.03,
     shadowRadius: 8,
     elevation: 1,
   },
   selectedGenderOption: {
-    backgroundColor: '#2D6A6F',
-    borderColor: '#2D6A6F',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   genderIcon: {
     fontSize: 24,
@@ -1271,25 +1290,25 @@ const styles = StyleSheet.create({
   genderOptionText: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginLeft: 8,
+    color: colors.textSecondary,
+    marginLeft: spacing.sm,
   },
   selectedGenderOptionText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
 
   // Modern checkbox styles
   checkboxContainer: {
-    gap: 12,
+    gap: spacing.md,
   },
   modernCheckboxRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: 18,
-    paddingHorizontal: 16,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 14,
     minHeight: 56,
   },
@@ -1297,35 +1316,34 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderWidth: 2,
-    borderColor: '#D1D5DB',
+    borderColor: colors.borderStrong,
     borderRadius: 6,
-    marginRight: 12,
+    marginRight: spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   checkedModernCheckbox: {
-    backgroundColor: '#2D6A6F',
-    borderColor: '#2D6A6F',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   checkboxText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.body,
+    color: colors.textSecondary,
     flex: 1,
   },
 
   // Image styles
   imageContainer: {
     alignItems: 'stretch',
-    marginTop: 2,
-    marginBottom: 4,
-    padding: 12,
-    borderRadius: 26,
-    backgroundColor: '#FFFFFF',
+    marginTop: spacing.xxs,
+    marginBottom: spacing.xs,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#0F172A',
+    borderColor: colors.border,
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.06,
     shadowRadius: 16,
@@ -1334,20 +1352,20 @@ const styles = StyleSheet.create({
   petImage: {
     width: '100%',
     height: 230,
-    borderRadius: 20,
-    marginBottom: 12,
+    borderRadius: radius.md,
+    marginBottom: spacing.md,
     borderWidth: 0,
   },
   imagePlaceholder: {
     width: '100%',
     height: 230,
-    borderRadius: 20,
-    backgroundColor: '#F1F5F9',
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
     borderWidth: 1.5,
-    borderColor: '#CBD5E1',
+    borderColor: colors.borderStrong,
     borderStyle: 'dashed',
   },
   imagePlaceholderText: {
@@ -1359,104 +1377,85 @@ const styles = StyleSheet.create({
   },
   imageButton: {
     flex: 1,
-    backgroundColor: '#2D6A6F',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 16,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.lg,
     alignItems: 'center',
-  },
-  imageButtonText: {
-    color: '#FFFFFF',
-    fontFamily: 'Inter-Medium',
-    fontSize: 14,
   },
 
   // Breed info styles
   breedInfoContainer: {
     marginBottom: 22,
-    padding: 16,
-    borderRadius: 24,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#0F172A',
+    borderColor: colors.border,
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.06,
     shadowRadius: 18,
     elevation: 4,
   },
   breedInfoTitle: { 
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.lg,
     textAlign: 'center',
   },
   breedImage: {
     width: '100%',
     height: 190,
-    borderRadius: 18,
-    marginBottom: 16,
+    borderRadius: radius.md,
+    marginBottom: spacing.lg,
   },
   breedStatsGrid: {
-    gap: 12,
+    gap: spacing.md,
   },
   breedStat: {
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 16,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.border,
   },
   breedStatLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginBottom: 4,
+    ...typography.label,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   breedStatValue: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   breedStatRating: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   ratingBar: {
     flex: 1,
     height: 6,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: colors.border,
     borderRadius: 3,
     overflow: 'hidden',
   },
   ratingFill: {
     height: '100%',
-    backgroundColor: '#2D6A6F',
+    backgroundColor: colors.primary,
     borderRadius: 3,
   },
 
   // Layout styles
   row: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 4,
+    gap: spacing.md,
+    marginBottom: spacing.xs,
   },
   loadingText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: colors.textSecondary,
     fontStyle: 'italic',
-    marginTop: 4,
-  },
-  submitButton: {
-    minHeight: 56,
-    borderRadius: 18,
-    marginTop: 4,
-    marginBottom: 10,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.12,
-    shadowRadius: 14,
-    elevation: 5,
+    marginTop: spacing.xs,
   },
 });

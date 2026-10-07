@@ -43,7 +43,7 @@ export const GamePromoInput: React.FC<GamePromoInputProps> = ({
     return (
       <View style={styles.appliedContainer}>
         <View style={styles.appliedLeft}>
-          <CheckCircle size={20} color="#10B981" />
+          <CheckCircle size={20} color="#047857" />
           <View style={styles.appliedInfo}>
             <Text style={styles.appliedTitle}>
               {isPercent ? `${appliedPromo.discountPercent}% OFF total` : `-${formatCurrency(appliedPromo.discountAmount)} total`}
@@ -68,7 +68,7 @@ export const GamePromoInput: React.FC<GamePromoInputProps> = ({
         <TextInput
           style={styles.input}
           placeholder="Ej: RESCATE15"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor="#6B7280"
           value={promoCode}
           onChangeText={(text) => onChangeCode(text.toUpperCase())}
           autoCapitalize="characters"
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   },
   hint: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: '#6B7280',
     marginTop: 8,
     lineHeight: 17,
   },
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   appliedCode: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#059669',
+    color: '#047857',
     letterSpacing: 0.5,
   },
   removeButton: {

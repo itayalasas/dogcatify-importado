@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, TextInput, Platform } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowLeft, Trash2, TriangleAlert as AlertTriangle, Shield } from 'lucide-react-native';
+import { TriangleAlert as AlertTriangle, Shield, PawPrint, Image as ImageIcon, FileText, Stethoscope, Calendar, ShoppingBag, MessageCircle, UserRound, LifeBuoy } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { colors, typography, spacing, radius } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient, setSuppressTokenExpirationAlerts } from '../../lib/supabase';
 import { envConfig } from '../../utils/envConfig';
@@ -88,7 +90,7 @@ export default function DeleteAccount() {
     }
 
     if (confirmationText !== 'ELIMINAR MI CUENTA') {
-      Alert.alert('Error', 'Debes escribir exactamente "ELIMINAR MI CUENTA" para confirmar');
+      Alert.alert('Error', 'Tenés que escribir exactamente "ELIMINAR MI CUENTA" para confirmar');
       return;
     }
 
@@ -112,7 +114,7 @@ export default function DeleteAccount() {
         setDeletionProgress(prev => [...prev, 'Error: Usuario tiene negocios asociados']);
         Alert.alert(
           'Cuenta con negocio',
-          'Tu cuenta tiene negocios asociados. Para eliminar tu cuenta, primero debes transferir o eliminar tus negocios. Contacta con soporte para asistencia.',
+          'Tu cuenta tiene negocios asociados. Para eliminarla, primero tenés que transferir o eliminar tus negocios. Escribinos a soporte si necesitás ayuda.',
           [{ text: 'Entendido', onPress: () => setLoading(false) }]
         );
         return;
@@ -133,7 +135,7 @@ export default function DeleteAccount() {
         await removeDogcatifyStorageObjects((userPets || []).map((pet: any) => pet.photo_url));
       }
 
-      setDeletionProgress(prev => [...prev, 'Eliminando archivos y albumes del usuario...']);
+      setDeletionProgress(prev => [...prev, 'Eliminando archivos y álbumes del usuario...']);
       const { data: userAlbums, error: userAlbumsError } = await supabaseClient
         .from('pet_albums')
         .select('id, images')
@@ -358,7 +360,7 @@ export default function DeleteAccount() {
       setDeletionProgress(prev => [...prev, 'Eliminando comentarios en otras publicaciones...']);
 
       // Delete user-level data (not pet-specific)
-      setDeletionProgress(prev => [...prev, 'Eliminando tokens de confirmación de email...']);
+      setDeletionProgress(prev => [...prev, 'Eliminando enlaces de confirmación de correo...']);
       console.log('Step 12: Deleting email confirmations...');
       const { error: emailConfirmationsError } = await supabaseClient
         .from('email_confirmations')
@@ -367,10 +369,10 @@ export default function DeleteAccount() {
       
       if (emailConfirmationsError) {
         console.error('Error deleting email confirmations:', emailConfirmationsError);
-        setDeletionProgress(prev => [...prev, `⚠️ Error eliminando confirmaciones: ${emailConfirmationsError.message}`]);
+        setDeletionProgress(prev => [...prev, `Error eliminando confirmaciones: ${emailConfirmationsError.message}`]);
       } else {
         console.log('Email confirmations deleted successfully');
-        setDeletionProgress(prev => [...prev, '✅ Tokens de confirmación eliminados']);
+        setDeletionProgress(prev => [...prev, 'Tokens de confirmación eliminados']);
       }
       
       console.log('Step 13: Deleting chat conversations and messages...');
@@ -481,10 +483,10 @@ export default function DeleteAccount() {
         .eq('user_id', currentUser.id);
 
       if (partnerData && partnerData.length > 0) {
-        setDeletionProgress(prev => [...prev, '❌ Error: Usuario tiene negocios asociados']);
+        setDeletionProgress(prev => [...prev, 'Error: Usuario tiene negocios asociados']);
         Alert.alert(
           'Cuenta con negocio',
-          'Tu cuenta tiene negocios asociados. Para eliminar tu cuenta, primero debes transferir o eliminar tus negocios. Contacta con soporte para asistencia.',
+          'Tu cuenta tiene negocios asociados. Para eliminarla, primero tenés que transferir o eliminar tus negocios. Escribinos a soporte si necesitás ayuda.',
           [{ text: 'Entendido', onPress: () => setLoading(false) }]
         );
         return;
@@ -503,15 +505,15 @@ export default function DeleteAccount() {
       if (profileError) {
         console.error('Error deleting user profile:', profileError);
         if (profileError.message?.includes('JWT expired')) {
-          Alert.alert('Sesión expirada', 'Por favor inicia sesión nuevamente.');
+          Alert.alert('Sesión vencida', 'Volvé a ingresar para continuar.');
           router.replace('/auth/login');
           return;
         }
-        setDeletionProgress(prev => [...prev, `❌ Error eliminando perfil: ${profileError.message}`]);
+        setDeletionProgress(prev => [...prev, `Error eliminando perfil: ${profileError.message}`]);
         throw new Error(`No se pudo eliminar el perfil: ${profileError.message}`);
       }
       
-      setDeletionProgress(prev => [...prev, '✅ Perfil de usuario eliminado correctamente']);
+      setDeletionProgress(prev => [...prev, 'Perfil de usuario eliminado correctamente']);
       console.log('User profile deleted successfully');
 
       // Delete user from auth.users table (this requires admin privileges)
@@ -546,23 +548,23 @@ export default function DeleteAccount() {
           console.log('Delete user API result:', result);
           
           if (result.success) {
-            setDeletionProgress(prev => [...prev, '✅ Usuario eliminado del sistema de autenticación']);
+            setDeletionProgress(prev => [...prev, 'Usuario eliminado del sistema de autenticación']);
             console.log('✅ User deleted from auth.users table');
           } else {
             console.warn('Could not delete from auth.users:', result.error);
-            setDeletionProgress(prev => [...prev, `⚠️ No se pudo eliminar de auth: ${result.error}`]);
-            setDeletionProgress(prev => [...prev, '⚠️ Continuando con logout forzado...']);
+            setDeletionProgress(prev => [...prev, `No se pudo eliminar de auth: ${result.error}`]);
+            setDeletionProgress(prev => [...prev, 'Continuando con el cierre de sesión...']);
           }
         } else {
           const errorText = await response.text();
           console.warn('Auth deletion API error:', response.status, errorText);
-          setDeletionProgress(prev => [...prev, `⚠️ Error API auth (${response.status})`]);
-          setDeletionProgress(prev => [...prev, '⚠️ Continuando con logout forzado...']);
+          setDeletionProgress(prev => [...prev, `Error API auth (${response.status})`]);
+          setDeletionProgress(prev => [...prev, 'Continuando con el cierre de sesión...']);
         }
       } catch (authError) {
         console.warn('Error deleting from auth system:', authError);
-        setDeletionProgress(prev => [...prev, `⚠️ Error eliminando de auth: ${getErrorMessage(authError)}`]);
-        setDeletionProgress(prev => [...prev, '⚠️ Continuando con logout forzado...']);
+        setDeletionProgress(prev => [...prev, `Error eliminando de auth: ${getErrorMessage(authError)}`]);
+        setDeletionProgress(prev => [...prev, 'Continuando con el cierre de sesión...']);
       }
 
       // From here on the account may already be gone from auth.users (the
@@ -580,23 +582,23 @@ export default function DeleteAccount() {
       await clearLocalAuthArtifacts();
       await logout();
       
-      setDeletionProgress(prev => [...prev, '✅ Datos del usuario eliminados exitosamente']);
-      setDeletionProgress(prev => [...prev, '✅ Sesión cerrada - Cuenta desactivada']);
+      setDeletionProgress(prev => [...prev, 'Datos del usuario eliminados exitosamente']);
+      setDeletionProgress(prev => [...prev, 'Sesión cerrada - Cuenta desactivada']);
       console.log('✅ Account deletion process completed successfully');
       
       Alert.alert(
         'Datos eliminados',
-        'Todos tus datos han sido eliminados de DogCatiFy. Tu cuenta ha sido desactivada y puedes crear una nueva cuenta con el mismo email si lo deseas.',
+        'Eliminamos todos tus datos de DogCatiFy. Tu cuenta quedó desactivada y, si querés, podés crear una cuenta nueva con el mismo correo.',
         [{ text: 'OK' }]
       );
 
     } catch (error) {
       const errorMessage = getErrorMessage(error);
-      setDeletionProgress(prev => [...prev, `❌ Error: ${errorMessage}`]);
+      setDeletionProgress(prev => [...prev, `Error: ${errorMessage}`]);
       console.error('Error deleting account:', error);
       Alert.alert(
         'Error',
-        `Ocurrió un error durante la eliminación: ${errorMessage}. Algunos datos pueden haber sido eliminados. Por favor contacta con soporte para completar el proceso.`
+        `Ocurrió un error durante la eliminación: ${errorMessage}. Es posible que algunos datos ya se hayan eliminado. Escribinos a soporte para completar el proceso.`
       );
     } finally {
       setLoading(false);
@@ -608,103 +610,82 @@ export default function DeleteAccount() {
   };
 
   if (step === 1) {
+    const dataItems = [
+      { icon: PawPrint, text: 'Todos los perfiles de tus mascotas' },
+      { icon: ImageIcon, text: 'Todas las fotos y álbumes' },
+      { icon: FileText, text: 'Todas tus publicaciones y comentarios' },
+      { icon: Stethoscope, text: 'Registros médicos y de salud' },
+      { icon: Calendar, text: 'Historial de reservas y citas' },
+      { icon: ShoppingBag, text: 'Historial de compras y pedidos' },
+      { icon: MessageCircle, text: 'Conversaciones y mensajes' },
+      { icon: UserRound, text: 'Tu perfil y tu información personal' },
+    ];
+
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Eliminar Cuenta</Text>
-          <View style={styles.placeholder} />
-        </View>
+        <ScreenHeader title="Eliminar cuenta" />
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <Card style={styles.warningCard}>
-            <View style={styles.warningHeader}>
-              <AlertTriangle size={48} color="#EF4444" />
-              <Text style={styles.warningTitle}>¡Atención!</Text>
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={styles.contentInner}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.warningCard} accessibilityRole="alert">
+            <View style={styles.warningIcon}>
+              <AlertTriangle size={28} color={colors.danger} />
             </View>
-            
-            <Text style={styles.warningText}>
-              Estás a punto de eliminar permanentemente tu cuenta de DogCatiFy. Esta acción no se puede deshacer.
-            </Text>
-          </Card>
+            <View style={styles.warningCopy}>
+              <Text style={styles.warningTitle}>Esta acción no se puede deshacer</Text>
+              <Text style={styles.warningText}>
+                Vas a eliminar de forma permanente tu cuenta de DogCatiFy y toda la información asociada.
+              </Text>
+            </View>
+          </View>
 
           <Card style={styles.dataCard}>
-            <Text style={styles.dataTitle}>Se eliminarán los siguientes datos:</Text>
-            
+            <Text style={styles.dataTitle}>Se van a eliminar estos datos</Text>
+
             <View style={styles.dataList}>
-              <View style={styles.dataItem}>
-                <Text style={styles.dataIcon}>🐾</Text>
-                <Text style={styles.dataText}>Todos los perfiles de tus mascotas</Text>
-              </View>
-              
-              <View style={styles.dataItem}>
-                <Text style={styles.dataIcon}>📸</Text>
-                <Text style={styles.dataText}>Todas las fotos y álbumes</Text>
-              </View>
-              
-              <View style={styles.dataItem}>
-                <Text style={styles.dataIcon}>📝</Text>
-                <Text style={styles.dataText}>Todas tus publicaciones y comentarios</Text>
-              </View>
-              
-              <View style={styles.dataItem}>
-                <Text style={styles.dataIcon}>🏥</Text>
-                <Text style={styles.dataText}>Registros médicos y de salud</Text>
-              </View>
-              
-              <View style={styles.dataItem}>
-                <Text style={styles.dataIcon}>📅</Text>
-                <Text style={styles.dataText}>Historial de reservas y citas</Text>
-              </View>
-              
-              <View style={styles.dataItem}>
-                <Text style={styles.dataIcon}>🛒</Text>
-                <Text style={styles.dataText}>Historial de compras y pedidos</Text>
-              </View>
-              
-              <View style={styles.dataItem}>
-                <Text style={styles.dataIcon}>💬</Text>
-                <Text style={styles.dataText}>Conversaciones y mensajes</Text>
-              </View>
-              
-              <View style={styles.dataItem}>
-                <Text style={styles.dataIcon}>👤</Text>
-                <Text style={styles.dataText}>Tu perfil y información personal</Text>
-              </View>
+              {dataItems.map(({ icon: Icon, text }) => (
+                <View key={text} style={styles.dataItem}>
+                  <Icon size={18} color={colors.textSecondary} />
+                  <Text style={styles.dataText}>{text}</Text>
+                </View>
+              ))}
             </View>
           </Card>
 
-          <Card style={styles.alternativeCard}>
-            <Text style={styles.alternativeTitle}>¿Consideraste estas alternativas?</Text>
-            
+          <Card style={styles.alternativeCard} variant="outlined">
+            <Text style={styles.alternativeTitle}>Antes de seguir, ¿probaste estas alternativas?</Text>
+
             <View style={styles.alternativeList}>
-              <Text style={styles.alternativeItem}>
-                • Desactivar temporalmente tu cuenta
-              </Text>
-              <Text style={styles.alternativeItem}>
-                • Cambiar tu configuración de privacidad
-              </Text>
-              <Text style={styles.alternativeItem}>
-                • Contactar con soporte para resolver problemas
-              </Text>
+              <Text style={styles.alternativeItem}>• Desactivar temporalmente tu cuenta</Text>
+              <Text style={styles.alternativeItem}>• Cambiar tu configuración de privacidad</Text>
+              <Text style={styles.alternativeItem}>• Contactar a soporte para resolver un problema</Text>
             </View>
+
+            <TouchableOpacity
+              style={styles.supportLink}
+              onPress={() => router.push('/profile/help-support')}
+              accessibilityRole="link"
+            >
+              <LifeBuoy size={16} color={colors.primary} />
+              <Text style={styles.supportLinkText}>Ir a Ayuda y soporte</Text>
+            </TouchableOpacity>
           </Card>
 
           <View style={styles.actionButtons}>
             <Button
-              title="Cancelar"
-              onPress={() => router.back()}
-              variant="outline"
-              size="large"
-            />
-            
-            <Button
               title="Continuar con la eliminación"
               onPress={handleContinueToConfirmation}
+              variant="danger"
               size="large"
-              style={styles.dangerButton}
+            />
+            <Button
+              title="Cancelar"
+              onPress={() => router.back()}
+              variant="ghost"
+              size="large"
             />
           </View>
         </ScrollView>
@@ -712,43 +693,51 @@ export default function DeleteAccount() {
     );
   }
 
+  const phraseMatches = confirmationText === 'ELIMINAR MI CUENTA';
+
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => setStep(1)} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Confirmar Eliminación</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title="Confirmar eliminación" onBack={() => setStep(1)} />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentInner}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <Card style={styles.confirmationCard}>
           <View style={styles.confirmationHeader}>
-            <Shield size={48} color="#EF4444" />
-            <Text style={styles.confirmationTitle}>Confirmación Final</Text>
+            <View style={styles.confirmationIcon}>
+              <Shield size={28} color={colors.danger} />
+            </View>
+            <Text style={styles.confirmationTitle} accessibilityRole="header">Confirmación final</Text>
           </View>
-          
+
           <Text style={styles.confirmationText}>
-            Para confirmar que deseas eliminar permanentemente tu cuenta, escribe exactamente:
+            Para confirmar que querés eliminar tu cuenta de forma permanente, escribí exactamente:
           </Text>
-          
+
           <View style={styles.confirmationPhrase}>
-            <Text style={styles.phraseText}>ELIMINAR MI CUENTA</Text>
+            <Text style={styles.phraseText} selectable>ELIMINAR MI CUENTA</Text>
           </View>
-          
+
           <TextInput
-            style={styles.confirmationInput}
-            placeholder="Escribe la frase exacta aquí"
+            style={[styles.confirmationInput, phraseMatches && styles.confirmationInputMatch]}
+            placeholder="Escribí la frase acá"
+            placeholderTextColor={colors.placeholder}
             value={confirmationText}
             onChangeText={setConfirmationText}
             autoCapitalize="characters"
+            autoCorrect={false}
+            editable={!loading}
+            accessibilityLabel="Frase de confirmación"
+            accessibilityHint="Escribí ELIMINAR MI CUENTA para habilitar el botón"
           />
-          
+
           {/* Progress indicator during deletion */}
           {loading && deletionProgress.length > 0 && (
-            <View style={styles.progressContainer}>
-              <Text style={styles.progressTitle}>Progreso de eliminación:</Text>
+            <View style={styles.progressContainer} accessibilityLiveRegion="polite">
+              <Text style={styles.progressTitle}>Progreso de la eliminación</Text>
               <ScrollView style={styles.progressScroll} showsVerticalScrollIndicator={false}>
                 {deletionProgress.map((step, index) => (
                   <Text key={index} style={styles.progressStep}>
@@ -758,27 +747,27 @@ export default function DeleteAccount() {
               </ScrollView>
             </View>
           )}
-          
+
           <Text style={styles.confirmationNote}>
-            Esta acción es irreversible. Una vez eliminada, no podrás recuperar tu cuenta ni tus datos.
+            Una vez eliminada, no vas a poder recuperar tu cuenta ni tus datos.
           </Text>
         </Card>
 
         <View style={styles.finalActions}>
           <Button
-            title="Cancelar"
-            onPress={() => router.back()}
-            variant="outline" 
-            size="large"
-          />
-          
-          <Button
-            title={loading ? "Eliminando..." : "Eliminar mi cuenta permanentemente"}
+            title={loading ? 'Eliminando...' : 'Eliminar mi cuenta permanentemente'}
             onPress={handleDeleteAccount}
             loading={loading}
-            disabled={confirmationText !== 'ELIMINAR MI CUENTA' || loading}
+            disabled={!phraseMatches || loading}
+            variant="danger"
             size="large"
-            style={styles.deleteButton}
+          />
+          <Button
+            title="Cancelar"
+            onPress={() => router.back()}
+            variant="ghost"
+            size="large"
+            disabled={loading}
           />
         </View>
       </ScrollView>
@@ -789,193 +778,181 @@ export default function DeleteAccount() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.surface,
     paddingTop: 50,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  backButton: {
-    padding: 8,
-  },
-  title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  placeholder: {
-    width: 32,
-  },
+  // El fondo gris va en el contenido; el blanco de arriba acompaña al encabezado.
   content: {
     flex: 1,
-    padding: 16,
+    backgroundColor: colors.background,
+  },
+  contentInner: {
+    padding: spacing.lg,
+    paddingBottom: spacing.huge,
   },
   warningCard: {
-    marginBottom: 16,
-    backgroundColor: '#FEF2F2',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    backgroundColor: colors.dangerSoft,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: colors.danger,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
   },
-  warningHeader: {
+  warningIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
     alignItems: 'center',
-    marginBottom: 16,
+    justifyContent: 'center',
+  },
+  warningCopy: {
+    flex: 1,
   },
   warningTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#EF4444',
-    marginTop: 8,
+    ...typography.bodyStrong,
+    color: colors.danger,
+    marginBottom: spacing.xxs,
   },
   warningText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#991B1B',
-    textAlign: 'center',
-    lineHeight: 24,
+    ...typography.bodySmall,
+    color: colors.text,
   },
   dataCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   dataTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   dataList: {
-    gap: 12,
+    gap: spacing.md,
   },
   dataItem: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  dataIcon: {
-    fontSize: 20,
-    marginRight: 12,
-    width: 24,
+    gap: spacing.md,
   },
   dataText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     flex: 1,
   },
   alternativeCard: {
-    marginBottom: 24,
-    backgroundColor: '#F0F9FF',
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
+    marginBottom: spacing.xxl,
   },
   alternativeTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#0369A1',
-    marginBottom: 12,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   alternativeList: {
-    gap: 8,
+    gap: spacing.xs,
   },
   alternativeItem: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#0369A1',
-    lineHeight: 20,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+  },
+  supportLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 44,
+    marginTop: spacing.sm,
+  },
+  supportLinkText: {
+    ...typography.label,
+    color: colors.primary,
   },
   actionButtons: {
-    gap: 12,
-    marginBottom: 24,
-  },
-  dangerButton: {
-    backgroundColor: '#EF4444',
+    gap: spacing.sm,
   },
   confirmationCard: {
-    marginBottom: 24,
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
+    marginBottom: spacing.xxl,
   },
   confirmationHeader: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.lg,
+  },
+  confirmationIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.pill,
+    backgroundColor: colors.dangerSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
   },
   confirmationTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#EF4444',
-    marginTop: 8,
+    ...typography.title,
+    color: colors.text,
+    textAlign: 'center',
   },
   confirmationText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#991B1B',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 24,
+    marginBottom: spacing.lg,
   },
   confirmationPhrase: {
-    backgroundColor: '#991B1B',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    marginBottom: spacing.lg,
   },
   phraseText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
-    textAlign: 'center',
+    ...typography.bodyStrong,
+    color: colors.text,
+    letterSpacing: 1,
   },
   confirmationInput: {
-    borderWidth: 2,
-    borderColor: '#EF4444',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    ...typography.body,
+    lineHeight: undefined,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
+    minHeight: 50,
+    color: colors.text,
+    backgroundColor: colors.surface,
     textAlign: 'center',
-    backgroundColor: '#FFFFFF',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
+  },
+  confirmationInputMatch: {
+    borderColor: colors.danger,
   },
   confirmationNote: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#991B1B',
+    ...typography.caption,
+    color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 20,
   },
   finalActions: {
-    gap: 12,
-    marginBottom: 24,
-  },
-  deleteButton: {
-    backgroundColor: '#991B1B',
+    gap: spacing.sm,
   },
   progressContainer: {
-    backgroundColor: '#F3F4F6',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 16,
-    maxHeight: 200,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
   },
   progressTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
-    marginBottom: 8,
+    ...typography.captionStrong,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   progressScroll: {
-    maxHeight: 150,
+    maxHeight: 160,
   },
   progressStep: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
 });

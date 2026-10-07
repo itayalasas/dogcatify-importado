@@ -5,8 +5,14 @@ import { ArrowLeft, Truck, Store, Check } from 'lucide-react-native';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
+import { ScreenHeader } from '../components/ui/ScreenHeader';
+import { EmptyState } from '../components/ui/EmptyState';
+import { toast } from '../components/ui/Toast';
+import { FormSkeleton } from '../components/partner-setup/FormSkeleton';
+import { FormFooter } from '../components/partner-setup/FormFooter';
 import { useAuth } from '../contexts/AuthContext';
 import { supabaseClient } from '../lib/supabase';
+import { colors, radius, spacing, typography } from '../constants/theme';
 
 type DeliveryMode = 'single_store' | 'multi_store';
 
@@ -115,7 +121,7 @@ export default function DeliveryRegister() {
 
 	const handleSave = async () => {
 		if (!currentUser?.id) {
-			Alert.alert('Iniciar sesión', 'Debes iniciar sesión para continuar.');
+			Alert.alert('Iniciar sesión', 'Tenés que iniciar sesión para continuar.');
 			return;
 		}
 
@@ -125,7 +131,7 @@ export default function DeliveryRegister() {
 		}
 
 		if (selectedStoreIds.length === 0) {
-			Alert.alert('Selecciona tiendas', 'Debes seleccionar al menos una tienda.');
+			Alert.alert('Elegí tiendas', 'Tenés que seleccionar al menos una tienda.');
 			return;
 		}
 
@@ -195,9 +201,8 @@ export default function DeliveryRegister() {
 
 			if (profileFlagError) throw profileFlagError;
 
-			Alert.alert('Listo', 'Tu perfil de repartidor quedó configurado.', [
-				{ text: 'OK', onPress: () => router.back() },
-			]);
+			toast.success('Listo', 'Tu perfil de repartidor quedó configurado.');
+			router.back();
 		} catch (error) {
 			console.error('Error saving delivery profile:', error);
 			Alert.alert('Error', 'No se pudo guardar tu perfil de repartidor.');
@@ -219,31 +224,24 @@ export default function DeliveryRegister() {
 	if (loading) {
 		return (
 			<SafeAreaView style={styles.container}>
-				<View style={styles.loadingContainer}>
-					<LoadingSpinner message="Cargando configuración de reparto..." size="medium" />
-				</View>
+				<ScreenHeader title="Perfil de repartidor" />
+				<FormSkeleton sections={2} />
 			</SafeAreaView>
 		);
 	}
 
 	return (
 		<SafeAreaView style={styles.container}>
-			<View style={styles.header}>
-				<TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-					<ArrowLeft size={24} color="#111827" />
-				</TouchableOpacity>
-				<Text style={styles.title}>Perfil de Repartidor</Text>
-				<View style={styles.placeholder} />
-			</View>
+			<ScreenHeader title="Perfil de repartidor" />
 
-			<ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+			<ScrollView style={styles.content} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 				<Card style={styles.introCard}>
 					<View style={styles.introTitleRow}>
-						<Truck size={22} color="#2D6A6F" />
-						<Text style={styles.introTitle}>Configura tu modalidad de reparto</Text>
+						<Truck size={22} color={colors.primary} />
+						<Text style={styles.introTitle}>Configurá tu modalidad de reparto</Text>
 					</View>
 					<Text style={styles.introDescription}>
-						Elige si repartirás para una sola tienda o para múltiples tiendas y asócialas para poder gestionar pedidos.
+						Elegí si vas a repartir para una sola tienda o para varias, y asociálas para poder gestionar pedidos.
 					</Text>
 				</Card>
 
@@ -252,6 +250,8 @@ export default function DeliveryRegister() {
 
 					<TouchableOpacity
 						style={[styles.modeOption, deliveryMode === 'single_store' && styles.modeOptionActive]}
+						accessibilityRole="radio"
+						accessibilityState={{ selected: deliveryMode === 'single_store' }}
 						onPress={() => {
 							setDeliveryMode('single_store');
 							if (selectedStoreIds.length > 1) {
@@ -261,20 +261,22 @@ export default function DeliveryRegister() {
 					>
 						<View>
 							<Text style={styles.modeTitle}>Una tienda específica</Text>
-							<Text style={styles.modeDescription}>Trabajas con un solo negocio.</Text>
+							<Text style={styles.modeDescription}>Trabajás con un solo negocio.</Text>
 						</View>
-						{deliveryMode === 'single_store' && <Check size={18} color="#2D6A6F" />}
+						{deliveryMode === 'single_store' && <Check size={18} color={colors.primary} />}
 					</TouchableOpacity>
 
 					<TouchableOpacity
 						style={[styles.modeOption, deliveryMode === 'multi_store' && styles.modeOptionActive]}
+						accessibilityRole="radio"
+						accessibilityState={{ selected: deliveryMode === 'multi_store' }}
 						onPress={() => setDeliveryMode('multi_store')}
 					>
 						<View>
 							<Text style={styles.modeTitle}>Multi-tienda</Text>
-							<Text style={styles.modeDescription}>Repartes para varios negocios.</Text>
+							<Text style={styles.modeDescription}>Repartís para varios negocios.</Text>
 						</View>
-						{deliveryMode === 'multi_store' && <Check size={18} color="#2D6A6F" />}
+						{deliveryMode === 'multi_store' && <Check size={18} color={colors.primary} />}
 					</TouchableOpacity>
 				</Card>
 
@@ -283,9 +285,11 @@ export default function DeliveryRegister() {
 					<Text style={styles.sectionSubtitle}>{selectedCountLabel}</Text>
 
 					{stores.length === 0 ? (
-						<View style={styles.emptyStores}>
-							<Text style={styles.emptyStoresText}>No hay tiendas verificadas disponibles.</Text>
-						</View>
+						<EmptyState
+							icon={<Store size={28} color={colors.primary} />}
+							title="No hay tiendas verificadas disponibles"
+							description="Cuando haya tiendas verificadas vas a poder asociarte acá."
+						/>
 					) : (
 						<View style={styles.storeList}>
 							{stores.map((store) => {
@@ -296,16 +300,19 @@ export default function DeliveryRegister() {
 										style={[styles.storeRow, selected && styles.storeRowSelected]}
 										onPress={() => toggleStore(store.id)}
 										activeOpacity={0.8}
+										accessibilityRole="checkbox"
+										accessibilityState={{ checked: selected }}
+										accessibilityLabel={store.business_name}
 									>
 										<View style={styles.storeRowInfo}>
-											<Store size={16} color="#6B7280" />
+											<Store size={16} color={colors.textTertiary} />
 											<View style={styles.storeTextGroup}>
 												<Text style={styles.storeName}>{store.business_name}</Text>
 												<Text style={styles.storeType}>{businessTypeName(store.business_type)}</Text>
 											</View>
 										</View>
 										<View style={[styles.checkbox, selected && styles.checkboxSelected]}>
-											{selected && <Check size={14} color="#FFFFFF" />}
+											{selected && <Check size={14} color={colors.white} />}
 										</View>
 									</TouchableOpacity>
 								);
@@ -314,15 +321,17 @@ export default function DeliveryRegister() {
 					)}
 				</Card>
 
-				<View style={styles.bottomActions}>
-					<Button
-						title={saving ? 'Guardando...' : 'Guardar configuración'}
-						onPress={handleSave}
-						disabled={saving}
-						size="large"
-					/>
-				</View>
 			</ScrollView>
+
+			<FormFooter>
+				<Button
+					title="Guardar configuración"
+					onPress={handleSave}
+					loading={saving}
+					disabled={saving}
+					size="large"
+				/>
+			</FormFooter>
 		</SafeAreaView>
 	);
 }
@@ -330,7 +339,7 @@ export default function DeliveryRegister() {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: '#F9FAFB',
+		backgroundColor: colors.background,
 	},
 	loadingContainer: {
 		flex: 1,
@@ -341,139 +350,132 @@ const styles = StyleSheet.create({
 		flexDirection: 'row',
 		alignItems: 'center',
 		justifyContent: 'space-between',
-		paddingHorizontal: 16,
-		paddingVertical: 12,
+		paddingHorizontal: spacing.lg,
+		paddingVertical: spacing.md,
 		borderBottomWidth: 1,
-		borderBottomColor: '#E5E7EB',
-		backgroundColor: '#FFFFFF',
+		borderBottomColor: colors.border,
+		backgroundColor: colors.surface,
 	},
 	backButton: {
-		padding: 4,
+		padding: spacing.xs,
 	},
 	title: {
-		fontSize: 18,
-		fontFamily: 'Inter-Bold',
-		color: '#111827',
+		...typography.heading,
+		color: colors.text,
 	},
 	placeholder: {
 		width: 28,
 	},
 	content: {
 		flex: 1,
-		paddingHorizontal: 16,
+		paddingHorizontal: spacing.lg,
+	},
+	scrollContent: {
+		paddingBottom: spacing.xxxl,
 	},
 	introCard: {
-		marginTop: 12,
-		marginBottom: 12,
+		marginTop: spacing.md,
+		marginBottom: spacing.md,
 		padding: 14,
 	},
 	introTitleRow: {
 		flexDirection: 'row',
 		alignItems: 'center',
-		gap: 8,
+		gap: spacing.sm,
 		marginBottom: 6,
 	},
 	introTitle: {
-		fontSize: 16,
-		fontFamily: 'Inter-SemiBold',
-		color: '#111827',
+		...typography.bodyStrong,
+		color: colors.text,
 		flex: 1,
 	},
 	introDescription: {
-		fontSize: 13,
-		fontFamily: 'Inter-Regular',
-		color: '#6B7280',
-		lineHeight: 20,
+		...typography.bodySmall,
+		color: colors.textTertiary,
 	},
 	modeCard: {
-		marginBottom: 12,
+		marginBottom: spacing.md,
 		padding: 14,
 	},
 	sectionTitle: {
-		fontSize: 15,
-		fontFamily: 'Inter-SemiBold',
-		color: '#111827',
-		marginBottom: 8,
+		...typography.bodyStrong,
+		color: colors.text,
+		marginBottom: spacing.sm,
 	},
 	sectionSubtitle: {
-		fontSize: 12,
-		fontFamily: 'Inter-Regular',
-		color: '#6B7280',
+		...typography.caption,
+		color: colors.textTertiary,
 		marginBottom: 10,
 	},
 	modeOption: {
 		borderWidth: 1,
-		borderColor: '#E5E7EB',
-		borderRadius: 10,
-		padding: 12,
+		borderColor: colors.border,
+		borderRadius: radius.md,
+		padding: spacing.md,
 		marginBottom: 10,
 		flexDirection: 'row',
 		alignItems: 'center',
 		justifyContent: 'space-between',
-		backgroundColor: '#FFFFFF',
+		backgroundColor: colors.surface,
 	},
 	modeOptionActive: {
-		borderColor: '#2D6A6F',
-		backgroundColor: '#F0FDFA',
+		borderColor: colors.primary,
+		backgroundColor: colors.primarySoft,
 	},
 	modeTitle: {
-		fontSize: 14,
-		fontFamily: 'Inter-SemiBold',
-		color: '#111827',
-		marginBottom: 2,
+		...typography.label,
+		color: colors.text,
+		marginBottom: spacing.xxs,
 	},
 	modeDescription: {
-		fontSize: 12,
-		fontFamily: 'Inter-Regular',
-		color: '#6B7280',
+		...typography.caption,
+		color: colors.textTertiary,
 	},
 	storesCard: {
-		marginBottom: 12,
+		marginBottom: spacing.md,
 		padding: 14,
 	},
 	emptyStores: {
-		paddingVertical: 12,
+		paddingVertical: spacing.md,
 	},
 	emptyStoresText: {
-		fontSize: 13,
-		fontFamily: 'Inter-Regular',
-		color: '#6B7280',
+		...typography.bodySmall,
+		color: colors.textTertiary,
 	},
 	storeList: {
-		gap: 8,
+		gap: spacing.sm,
 	},
 	storeRow: {
 		borderWidth: 1,
-		borderColor: '#E5E7EB',
-		borderRadius: 10,
-		padding: 10,
+		borderColor: colors.border,
+		borderRadius: radius.md,
+		padding: spacing.md,
+		minHeight: 56,
 		flexDirection: 'row',
 		alignItems: 'center',
 		justifyContent: 'space-between',
-		backgroundColor: '#FFFFFF',
+		backgroundColor: colors.surface,
 	},
 	storeRowSelected: {
-		borderColor: '#2D6A6F',
-		backgroundColor: '#F0FDFA',
+		borderColor: colors.primary,
+		backgroundColor: colors.primarySoft,
 	},
 	storeRowInfo: {
 		flexDirection: 'row',
 		alignItems: 'center',
-		gap: 8,
+		gap: spacing.sm,
 		flex: 1,
 	},
 	storeTextGroup: {
 		flex: 1,
 	},
 	storeName: {
-		fontSize: 13,
-		fontFamily: 'Inter-SemiBold',
-		color: '#111827',
+		...typography.label,
+		color: colors.text,
 	},
 	storeType: {
-		fontSize: 12,
-		fontFamily: 'Inter-Regular',
-		color: '#6B7280',
+		...typography.caption,
+		color: colors.textTertiary,
 		marginTop: 1,
 	},
 	checkbox: {
@@ -481,17 +483,17 @@ const styles = StyleSheet.create({
 		height: 20,
 		borderRadius: 10,
 		borderWidth: 1.5,
-		borderColor: '#D1D5DB',
+		borderColor: colors.borderStrong,
 		alignItems: 'center',
 		justifyContent: 'center',
-		backgroundColor: '#FFFFFF',
+		backgroundColor: colors.surface,
 	},
 	checkboxSelected: {
-		borderColor: '#2D6A6F',
-		backgroundColor: '#2D6A6F',
+		borderColor: colors.primary,
+		backgroundColor: colors.primary,
 	},
 	bottomActions: {
-		marginTop: 4,
-		marginBottom: 24,
+		marginTop: spacing.xs,
+		marginBottom: spacing.xxl,
 	},
 });

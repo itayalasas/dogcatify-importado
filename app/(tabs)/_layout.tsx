@@ -1,12 +1,12 @@
 import { Tabs, usePathname, useSegments, router } from 'expo-router';
-import { Chrome as Home, Heart, ShoppingBag, Briefcase, MapPin, User } from 'lucide-react-native';
+import { House, PawPrint, Compass, ShoppingBag, User } from 'lucide-react-native';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 import { getAvailableRoles, shouldShowOnboarding } from '../../utils/onboarding';
 import { LoadingScreen } from '../../components/ui/LoadingScreen';
+import { colors, fonts, shadows } from '../../constants/theme';
 
 export default function TabLayout() {
   const { t } = useLanguage();
@@ -123,27 +123,21 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#2D6A6F',
-        tabBarInactiveTintColor: '#9CA3AF',
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textTertiary,
+        tabBarAllowFontScaling: false,
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
+          backgroundColor: colors.surface,
           borderTopWidth: 0,
           paddingTop: 8,
           paddingBottom: Math.max(insets.bottom, 8),
-          height: Platform.OS === 'ios' ? 85 : 60 + Math.max(insets.bottom, 0),
-          shadowColor: '#000',
-          shadowOffset: {
-            width: 0,
-            height: -2,
-          },
-          shadowOpacity: 0.1,
-          shadowRadius: 8,
-          elevation: 10,
+          height: 60 + Math.max(insets.bottom, 0),
+          ...shadows.lg,
         },
         tabBarLabelStyle: {
           fontSize: 12,
-          fontFamily: 'Inter-Medium',
-          marginTop: 4,
+          fontFamily: fonts.medium,
+          marginTop: 2,
         },
       }}
     >
@@ -151,56 +145,43 @@ export default function TabLayout() {
         name="index"
         options={{
           title: t('home'),
-          tabBarIcon: ({ size, color }) => (
-            <Home size={size} color={color} />
-          ),
+          tabBarAccessibilityLabel: 'Inicio',
+          tabBarIcon: ({ size, color }) => <House size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="pets"
         options={{
-          title: t('myPets'),
-          tabBarIcon: ({ size, color }) => (
-            <Heart size={size} color={color} />
-          ),
+          title: 'Mascotas',
+          tabBarAccessibilityLabel: 'Mis mascotas',
+          tabBarIcon: ({ size, color }) => <PawPrint size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="explore"
+        options={{
+          title: 'Explorar',
+          tabBarAccessibilityLabel: 'Explorar servicios y lugares',
+          tabBarIcon: ({ size, color }) => <Compass size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="shop"
         options={{
           title: t('shop'),
-          tabBarIcon: ({ size, color }) => (
-            <ShoppingBag size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="services"
-        options={{
-          title: t('services'),
-          tabBarIcon: ({ size, color }) => (
-            <Briefcase size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="places"
-        options={{
-          title: 'Lugares',
-          tabBarIcon: ({ size, color }) => (
-            <MapPin size={size} color={color} />
-          ),
+          tabBarIcon: ({ size, color }) => <ShoppingBag size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: t('profile'),
-          tabBarIcon: ({ size, color }) => (
-            <User size={size} color={color} />
-          ),
+          tabBarIcon: ({ size, color }) => <User size={size} color={color} />,
         }}
       />
+      {/* Rutas viejas: redirigen a Explorar y no se muestran en la barra. */}
+      <Tabs.Screen name="services" options={{ href: null }} />
+      <Tabs.Screen name="places" options={{ href: null }} />
       <Tabs.Screen
         name="partner-register"
         options={{

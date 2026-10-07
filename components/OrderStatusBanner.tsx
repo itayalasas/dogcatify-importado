@@ -10,6 +10,7 @@ import {
   X as CloseIcon,
 } from 'lucide-react-native';
 import { Card } from './ui/Card';
+import { colors, spacing, typography, touchTarget } from '../constants/theme';
 
 type BannerSeverity = 'success' | 'info' | 'warning' | 'danger' | 'neutral';
 
@@ -92,31 +93,31 @@ const getTone = (severity: BannerSeverity) => {
   switch (severity) {
     case 'success':
       return {
-        backgroundColor: '#ECFDF5',
+        backgroundColor: colors.successSoft,
         borderColor: '#A7F3D0',
-        accentColor: '#047857',
+        accentColor: colors.success,
         textColor: '#065F46',
         iconBackgroundColor: '#D1FAE5',
       };
     case 'info':
       return {
-        backgroundColor: '#EFF6FF',
-        borderColor: '#BFDBFE',
-        accentColor: '#1D4ED8',
-        textColor: '#1E3A8A',
-        iconBackgroundColor: '#DBEAFE',
+        backgroundColor: colors.primarySoft,
+        borderColor: colors.primaryBorder,
+        accentColor: colors.primaryStrong,
+        textColor: colors.primaryPressed,
+        iconBackgroundColor: colors.primaryMuted,
       };
     case 'warning':
       return {
         backgroundColor: '#FFFBEB',
         borderColor: '#FDE68A',
-        accentColor: '#B45309',
+        accentColor: colors.warning,
         textColor: '#92400E',
-        iconBackgroundColor: '#FEF3C7',
+        iconBackgroundColor: colors.warningSoft,
       };
     case 'danger':
       return {
-        backgroundColor: '#FEF2F2',
+        backgroundColor: colors.dangerSoft,
         borderColor: '#FECACA',
         accentColor: '#B91C1C',
         textColor: '#7F1D1D',
@@ -124,11 +125,11 @@ const getTone = (severity: BannerSeverity) => {
       };
     default:
       return {
-        backgroundColor: '#F8FAFC',
-        borderColor: '#E2E8F0',
-        accentColor: '#334155',
-        textColor: '#475569',
-        iconBackgroundColor: '#E2E8F0',
+        backgroundColor: colors.background,
+        borderColor: colors.border,
+        accentColor: colors.text,
+        textColor: colors.textSecondary,
+        iconBackgroundColor: colors.surfaceAlt,
       };
   }
 };
@@ -176,7 +177,7 @@ const getDefaultTitle = (status: string, fulfillmentMode: string, recipientRole:
     payment_failed: 'Pago fallido',
     confirmed: 'Pedido confirmado',
     processing: 'Pedido en proceso',
-    preparing: 'Pedido en preparacion',
+    preparing: 'Pedido en preparación',
     shipped: fulfillmentMode === 'pickup' ? 'Pedido actualizado' : 'En reparto',
     delivered: fulfillmentMode === 'pickup' ? 'Pedido retirado' : 'Pedido entregado',
     completed: 'Pedido completado',
@@ -196,12 +197,12 @@ const getDefaultBody = (status: string, fulfillmentMode: string, recipientRole: 
       return fulfillmentMode === 'pickup'
         ? recipientRole === 'partner'
           ? `El ${orderLabel} ya puede ser retirado en tienda.`
-          : `Tu ${orderLabel} ya esta listo para retirar en tienda.`
-        : `Tu ${orderLabel} ya esta listo para salir a entrega.`;
+          : `Tu ${orderLabel} ya está listo para retirar en tienda.`
+        : `Tu ${orderLabel} ya está listo para salir a entrega.`;
     case 'delivered':
       return fulfillmentMode === 'pickup'
         ? recipientRole === 'partner'
-          ? `El cliente confirmo que retiro el ${orderLabel} en tienda.`
+          ? `El cliente confirmó que retiró el ${orderLabel} en tienda.`
           : `Confirmamos que retiraste tu ${orderLabel} en tienda.`
         : `Tu ${orderLabel} fue entregado.`;
     case 'confirmed':
@@ -212,8 +213,8 @@ const getDefaultBody = (status: string, fulfillmentMode: string, recipientRole: 
       return `Estamos preparando tu ${orderLabel}.`;
     case 'shipped':
       return fulfillmentMode === 'pickup'
-        ? `Tu ${orderLabel} cambio de estado.`
-        : `Tu ${orderLabel} esta en camino.`;
+        ? `Tu ${orderLabel} cambió de estado.`
+        : `Tu ${orderLabel} está en camino.`;
     case 'payment_failed':
       return `No pudimos confirmar el pago de tu ${orderLabel}.`;
     case 'cancelled':
@@ -277,8 +278,9 @@ export const OrderStatusBanner: React.FC<OrderStatusBannerProps> = ({ style }) =
 
         <TouchableOpacity
           accessibilityRole="button"
-          accessibilityLabel="Cerrar notificacion"
+          accessibilityLabel="Cerrar notificación"
           onPress={() => setVisible(false)}
+          hitSlop={8}
           style={styles.closeButton}
         >
           <CloseIcon size={16} color={tone.textColor} />
@@ -291,40 +293,45 @@ export const OrderStatusBanner: React.FC<OrderStatusBannerProps> = ({ style }) =
 const styles = StyleSheet.create({
   card: {
     borderWidth: 1,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
   iconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   content: {
     flex: 1,
   },
   orderLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    marginBottom: 2,
+    ...typography.captionStrong,
+    marginBottom: spacing.xxs,
   },
   title: {
+    ...typography.bodyStrong,
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
+    lineHeight: 20,
   },
   message: {
-    marginTop: 4,
+    ...typography.bodySmall,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
     lineHeight: 19,
+    marginTop: spacing.xs,
   },
   closeButton: {
-    paddingLeft: 12,
-    paddingTop: 2,
+    width: touchTarget - 8,
+    height: touchTarget - 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: spacing.sm,
+    marginTop: -spacing.sm,
+    marginRight: -spacing.sm,
   },
 });

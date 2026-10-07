@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Dimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, TrendingUp, Users, MapPin, Calendar, Target, Award, DollarSign, ChartBar as BarChart3, ChartPie as PieChart, Activity } from 'lucide-react-native';
-import { Card } from '../../components/ui/Card';
+import { Card, Button, IconButton, Skeleton } from '../../components/ui';
+import { BusinessTypeAvatar } from '../../components/partner/BusinessTypeAvatar';
+import { formatMoney } from '../../components/partner/format';
+import { colors, radius, spacing, touchTarget } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import {
@@ -619,24 +622,7 @@ export default function BusinessInsights() {
     return startDate.toISOString();
   };
 
-  const getBusinessTypeIcon = (type: string) => {
-    switch (type) {
-      case 'veterinary': return '🏥';
-      case 'grooming': return '✂️';
-      case 'walking': return '🚶';
-      case 'boarding': return '🏠';
-      case 'shop': return '🛍️';
-      case 'shelter': return '🐾';
-      default: return '🏢';
-    }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => formatMoney(amount);
 
   const renderMetricCard = (title: string, value: string | number, subtitle?: string, icon?: any, trend?: 'up' | 'down') => (
     <Card style={styles.metricCard}>
@@ -660,15 +646,22 @@ export default function BusinessInsights() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Inteligencia de Negocio</Text>
+          <IconButton
+            icon={<ArrowLeft size={24} color={colors.text} />}
+            onPress={() => router.back()}
+            accessibilityLabel="Volver"
+          />
+          <Text style={styles.title} accessibilityRole="header">Estadísticas</Text>
           <View style={styles.placeholder} />
         </View>
-        <View style={styles.loadingContainer}>
-          <Activity size={48} color="#2D6A6F" />
-          <Text style={styles.loadingText}>Analizando datos del mercado...</Text>
+        <View style={{ padding: spacing.lg, gap: spacing.lg }} accessibilityRole="progressbar" accessibilityLabel="Analizando datos del mercado">
+          <Skeleton height={72} borderRadius={radius.lg} />
+          <Skeleton height={44} borderRadius={radius.md} />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Skeleton width="48%" height={96} borderRadius={radius.lg} />
+            <Skeleton width="48%" height={96} borderRadius={radius.lg} />
+          </View>
+          <Skeleton height={200} borderRadius={radius.lg} />
         </View>
       </SafeAreaView>
     );
@@ -686,10 +679,12 @@ export default function BusinessInsights() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Inteligencia de Negocio</Text>
+          <IconButton
+            icon={<ArrowLeft size={24} color={colors.text} />}
+            onPress={() => router.back()}
+            accessibilityLabel="Volver"
+          />
+          <Text style={styles.title} accessibilityRole="header">Estadísticas</Text>
           <View style={styles.placeholder} />
         </View>
 
@@ -705,12 +700,7 @@ export default function BusinessInsights() {
             <Text style={styles.lockedTextSecondary}>
               Desde este plan también quedan habilitados los clientes y la inteligencia de negocio para tomar mejores decisiones.
             </Text>
-            <TouchableOpacity
-              style={styles.lockedButton}
-              onPress={() => router.back()}
-            >
-              <Text style={styles.lockedButtonText}>Volver</Text>
-            </TouchableOpacity>
+            <Button title="Volver" onPress={() => router.back()} fullWidth={false} />
           </Card>
         </View>
       </SafeAreaView>
@@ -720,10 +710,12 @@ export default function BusinessInsights() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Inteligencia de Negocio</Text>
+        <IconButton
+          icon={<ArrowLeft size={24} color={colors.text} />}
+          onPress={() => router.back()}
+          accessibilityLabel="Volver"
+        />
+        <Text style={styles.title} accessibilityRole="header">Estadísticas</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -731,12 +723,10 @@ export default function BusinessInsights() {
         {/* Business Header */}
         <Card style={styles.businessCard}>
           <View style={styles.businessHeader}>
-            <Text style={styles.businessIcon}>
-              {getBusinessTypeIcon(partnerProfile?.businessType)}
-            </Text>
+            <BusinessTypeAvatar type={partnerProfile?.businessType} size={48} style={{ marginRight: spacing.md }} />
             <View style={styles.businessInfo}>
               <Text style={styles.businessName}>{partnerProfile?.businessName}</Text>
-              <Text style={styles.businessType}>Dashboard de Inteligencia Comercial</Text>
+              <Text style={styles.businessType}>Estadísticas del negocio</Text>
             </View>
           </View>
         </Card>
@@ -758,6 +748,9 @@ export default function BusinessInsights() {
                   selectedTimeRange === option.key && styles.selectedTimeRange
                 ]}
                 onPress={() => setSelectedTimeRange(option.key as any)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: selectedTimeRange === option.key }}
+                accessibilityLabel={option.key === '1y' ? 'Último año' : `Últimos ${option.key.replace('m', '')} ${option.key === '1m' ? 'mes' : 'meses'}`}
               >
                 <Text style={[
                   styles.timeRangeText,
@@ -893,9 +886,9 @@ export default function BusinessInsights() {
         {/* Mensaje si no tiene coordenadas */}
         {!locationInsights?.hasCoordinates && (
           <Card style={styles.noLocationCard}>
-            <Text style={styles.noLocationTitle}>📍 Mejora tu Análisis de Ubicación</Text>
+            <Text style={styles.noLocationTitle}>📍 Mejorá tu análisis de ubicación</Text>
             <Text style={styles.noLocationText}>
-              {locationInsights?.message || 'Para obtener insights precisos sobre mascotas en tu zona, configura las coordenadas GPS de tu negocio.'}
+              {locationInsights?.message || 'Para obtener datos precisos sobre mascotas en tu zona, configurá las coordenadas GPS de tu negocio.'}
             </Text>
             <TouchableOpacity 
               style={styles.configureLocationButton}
@@ -904,8 +897,8 @@ export default function BusinessInsights() {
                 params: { businessId: normalizedPartnerId }
               })}
             >
-              <MapPin size={16} color="#3B82F6" />
-              <Text style={styles.configureLocationText}>Configurar Ubicación</Text>
+              <MapPin size={16} color={colors.onPrimary} />
+              <Text style={styles.configureLocationText}>Configurar ubicación</Text>
             </TouchableOpacity>
           </Card>
         )}
@@ -1754,10 +1747,11 @@ const styles = StyleSheet.create({
   configureLocationButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    minHeight: touchTarget,
+    borderRadius: radius.md,
   },
   configureLocationText: {
     fontSize: 14,

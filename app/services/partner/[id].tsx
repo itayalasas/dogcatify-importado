@@ -1,17 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, TextInput, Dimensions, Modal, Alert, Share, Platform, Linking } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MapPin, Clock, Phone, Star, Search, User, Heart, MessageCircle, Stethoscope, Scissors, Home, Dog, ShoppingBag, Syringe, Activity, Pill, Droplet, Bath } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Clock, Phone, Star, Search, ChevronRight, User, Heart, MessageCircle, Stethoscope, Scissors, Home, Dog, ShoppingBag, Syringe, Activity, Pill, Droplet, Bath } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { LoadingScreen } from '../../../components/ui/LoadingScreen';
+import { IconButton, Badge, EmptyState } from '../../../components/ui';
+import { RatingStars } from '../../../components/services/RatingStars';
+import { getBusinessTypeLabel } from '../../../components/services/labels';
+import { colors, radius, spacing, typography, shadows, hitSlop } from '../../../constants/theme';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 
 const { width } = Dimensions.get('window');
 
 export default function PartnerServices() {
-  const { id, refresh } = useLocalSearchParams<{ id: string; refresh?: string }>();
+  const { id, refresh, tab } = useLocalSearchParams<{ id: string; refresh?: string; tab?: string }>();
   const { currentUser } = useAuth();
   const [partner, setPartner] = useState<any>(null);
   const [services, setServices] = useState<any[]>([]);
@@ -28,6 +32,9 @@ export default function PartnerServices() {
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [viewerImages, setViewerImages] = useState<string[]>([]);
+  const scrollRef = useRef<ScrollView>(null);
+  const [servicesSectionY, setServicesSectionY] = useState(0);
+  const [openedReviewsFromLink, setOpenedReviewsFromLink] = useState(false);
 
   const handleBackPress = () => {
     if (router.canGoBack()) {
@@ -302,7 +309,7 @@ export default function PartnerServices() {
     // Validate service ID before navigation
     if (!serviceId || typeof serviceId !== 'string') {
       console.error('Invalid service ID for navigation:', serviceId);
-      Alert.alert('Error', 'ID de servicio inválido');
+      Alert.alert('Error', 'No pudimos abrir este servicio.');
       return;
     }
     
@@ -310,7 +317,7 @@ export default function PartnerServices() {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(serviceId)) {
       console.error('Service ID is not a valid UUID for navigation:', serviceId);
-      Alert.alert('Error', 'ID de servicio no válido');
+      Alert.alert('Error', 'No pudimos abrir este servicio.');
       return;
     }
     
@@ -326,6 +333,37 @@ export default function PartnerServices() {
   const handleShowReviews = () => {
     setShowReviewsModal(true);
     fetchDetailedReviews();
+  };
+
+  // Si se llega con ?tab=reviews (desde la calificación de la tarjeta), abrir las reseñas una vez.
+  useEffect(() => {
+    if (tab === 'reviews' && partner && !loading && !openedReviewsFromLink) {
+      setOpenedReviewsFromLink(true);
+      handleShowReviews();
+    }
+  }, [tab, partner, loading]);
+
+  /** Precio más bajo de los servicios, para la barra inferior. */
+  const minPrice = services.reduce((min: number, svc: any) => {
+    const price = Number(svc.price) || 0;
+    return price > 0 && (min === 0 || price < min) ? price : min;
+  }, 0);
+
+  /** Imagen principal: primera foto de un servicio o mascota; si no hay, una foto según el rubro. */
+  const getHeroImage = (): string | null => {
+    const fromServices = services.find((svc: any) => Array.isArray(svc.images) && svc.images.length > 0);
+    if (fromServices) return fromServices.images[0];
+    const fromPets = adoptionPets.find((pet: any) => Array.isArray(pet.images) && pet.images.length > 0);
+    if (fromPets) return fromPets.images[0];
+    const fallback: Record<string, string> = {
+      veterinary: 'https://images.pexels.com/photos/6235231/pexels-photo-6235231.jpeg?auto=compress&cs=tinysrgb&w=1200',
+      grooming: 'https://images.pexels.com/photos/7788009/pexels-photo-7788009.jpeg?auto=compress&cs=tinysrgb&w=1200',
+      boarding: 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=1200',
+      walking: 'https://images.pexels.com/photos/406014/pexels-photo-406014.jpeg?auto=compress&cs=tinysrgb&w=1200',
+      shelter: 'https://images.pexels.com/photos/2253275/pexels-photo-2253275.jpeg?auto=compress&cs=tinysrgb&w=1200',
+    };
+    const type = partner?.business_type || partner?.businessType;
+    return fallback[type] || partner?.logo || null;
   };
 
   const fetchDetailedReviews = async () => {
@@ -433,72 +471,62 @@ export default function PartnerServices() {
 
     // Hotel / Hospedaje / Boarding
     if (name.includes('hotel') || name.includes('hospedaje') || name.includes('boarding') || cat.includes('boarding')) {
-      return <Home size={24} color="#10B981" />;
+      return <Home size={24} color={colors.primary} />;
     }
 
     // Consulta / Veterinaria
     if (name.includes('consulta') || name.includes('veterinaria') || name.includes('revision') || name.includes('examen')) {
-      return <Stethoscope size={24} color="#10B981" />;
+      return <Stethoscope size={24} color={colors.primary} />;
     }
 
     // Vacunación / Vacunas
     if (name.includes('vacun') || name.includes('vaccine')) {
-      return <Syringe size={24} color="#10B981" />;
+      return <Syringe size={24} color={colors.primary} />;
     }
 
     // Cirugía
     if (name.includes('cirug') || name.includes('surgery') || name.includes('operación')) {
-      return <Activity size={24} color="#10B981" />;
+      return <Activity size={24} color={colors.primary} />;
     }
 
     // Baño / Grooming / Peluquería
     if (name.includes('baño') || name.includes('bath') || name.includes('grooming') || name.includes('peluque')) {
-      return <Bath size={24} color="#10B981" />;
+      return <Bath size={24} color={colors.primary} />;
     }
 
     // Corte / Tijeras
     if (name.includes('corte') || name.includes('trim') || name.includes('pelo')) {
-      return <Scissors size={24} color="#10B981" />;
+      return <Scissors size={24} color={colors.primary} />;
     }
 
     // Paseo / Walking
     if (name.includes('paseo') || name.includes('walk') || name.includes('caminar')) {
-      return <Dog size={24} color="#10B981" />;
+      return <Dog size={24} color={colors.primary} />;
     }
 
     // Medicamentos / Tratamiento
     if (name.includes('medicamento') || name.includes('tratamiento') || name.includes('medicina')) {
-      return <Pill size={24} color="#10B981" />;
+      return <Pill size={24} color={colors.primary} />;
     }
 
     // Desparasitación
     if (name.includes('desparasit') || name.includes('deworm')) {
-      return <Droplet size={24} color="#10B981" />;
+      return <Droplet size={24} color={colors.primary} />;
     }
 
     // Tienda / Shop
     if (name.includes('tienda') || name.includes('shop') || name.includes('producto')) {
-      return <ShoppingBag size={24} color="#10B981" />;
+      return <ShoppingBag size={24} color={colors.primary} />;
     }
 
     // Default: icono de mascota
-    return <Heart size={24} color="#10B981" />;
+    return <Heart size={24} color={colors.primary} />;
   };
 
-  const renderStarRating = (rating: number, size: number = 16) => {
-    return (
-      <View style={styles.starRating}>
-        {[1, 2, 3, 4, 5].map((star) => (
-          <Star
-            key={star}
-            size={size}
-            color={star <= rating ? '#F59E0B' : '#E5E7EB'}
-            fill={star <= rating ? '#F59E0B' : 'none'}
-          />
-        ))}
-      </View>
-    );
-  };
+  /** Estrellas con medias estrellas (4,5 muestra cuatro y media). */
+  const renderStarRating = (rating: number, size: number = 16) => (
+    <RatingStars rating={rating} size={size} showValue={false} style={styles.starRating} />
+  );
 
   const calculateReviewPercentages = () => {
     if (detailedReviews.length === 0) return [];
@@ -575,7 +603,7 @@ export default function PartnerServices() {
 
   const handleStartAdoptionChat = (petId: string, petName: string) => {
     if (!currentUser) {
-      Alert.alert('Iniciar sesión', 'Debes iniciar sesión para contactar sobre adopciones');
+      Alert.alert('Iniciar sesión', 'Tenés que iniciar sesión para consultar sobre adopciones.');
       return;
     }
 
@@ -700,6 +728,8 @@ export default function PartnerServices() {
           {pet.images.map((image: string, index: number) => (
             <TouchableOpacity
               key={index}
+              accessibilityRole="imagebutton"
+              accessibilityLabel={`Ver foto ${index + 1} de ${pet.name}`}
               onPress={() => {
                 setViewerImages(pet.images);
                 setSelectedImageIndex(index);
@@ -800,16 +830,23 @@ export default function PartnerServices() {
         
         {/* Action Buttons */}
         <View style={styles.petActions}>
-          <TouchableOpacity 
-            style={styles.contactButton}
+          <Button
+            title="Contactar"
+            variant="outline"
+            fullWidth={false}
+            style={styles.petActionButton}
+            icon={<Phone size={16} color={colors.primary} />}
             onPress={() => handleContactShelter(pet.contactInfo || pet.contact_info || partner?.phone || '')}
-          >
-            <Phone size={16} color="#FFFFFF" />
-            <Text style={styles.contactButtonText}>Contactar</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.adoptionButton}
+            accessibilityLabel={`Contactar al refugio por ${pet.name}`}
+          />
+
+          <Button
+            title="Quiero adoptar"
+            variant="primary"
+            fullWidth={false}
+            style={styles.petActionButton}
+            icon={<MessageCircle size={16} color={colors.onPrimary} />}
+            accessibilityLabel={`Iniciar adopción de ${pet.name}`}
             onPress={() => {
               console.log('Adoption button pressed for pet:', { id: pet.id, name: pet.name });
               if (pet.id && pet.name) {
@@ -819,10 +856,7 @@ export default function PartnerServices() {
                 Alert.alert('Error', 'Información de la mascota incompleta');
               }
             }}
-          >
-            <MessageCircle size={16} color="#FFFFFF" />
-            <Text style={styles.adoptionButtonText}>Adopción</Text>
-          </TouchableOpacity>
+          />
         </View>
       </View>
     </Card>
@@ -832,183 +866,256 @@ export default function PartnerServices() {
     return <LoadingScreen message="Cargando servicios..." />;
   }
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <View style={styles.titleContainer}>
-          <Text style={styles.title}>Servicios Disponibles</Text>
-        </View>
-        <View style={styles.placeholder} />
-      </View>
+  const partnerName = partner?.business_name || partner?.businessName || 'Negocio';
+  const partnerType = partner?.business_type || partner?.businessType;
+  const isShelter = partnerType === 'shelter';
+  const isBoardingPartner = partnerType === 'boarding';
+  const heroImage = getHeroImage();
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Partner Profile Card */}
-        <Card style={styles.partnerCard}>
-          <View style={styles.partnerHeader}>
+  const handleStickyPrimary = () => {
+    if (isShelter) {
+      handleContactShelter(partner?.phone || '');
+      return;
+    }
+    if (filteredServices.length === 1) {
+      handleServicePress(filteredServices[0].id);
+      return;
+    }
+    scrollRef.current?.scrollTo({ y: Math.max(servicesSectionY - spacing.lg, 0), animated: true });
+  };
+
+  return (
+    <View style={styles.container}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.content}
+        contentContainerStyle={styles.contentInner}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Hero */}
+        <View style={styles.hero}>
+          {heroImage ? (
+            <Image source={{ uri: heroImage }} style={styles.heroImage} resizeMode="cover" />
+          ) : (
+            <View style={[styles.heroImage, styles.heroPlaceholder]}>
+              <Text style={styles.heroPlaceholderEmoji}>{getBusinessTypeIcon(partnerType)}</Text>
+            </View>
+          )}
+          <View style={styles.heroShade} />
+          <SafeAreaView style={styles.heroTopBar}>
+            <IconButton
+              icon={<ArrowLeft size={22} color={colors.text} />}
+              variant="surface"
+              onPress={handleBackPress}
+              accessibilityLabel="Volver"
+              style={styles.heroBackButton}
+            />
+          </SafeAreaView>
+        </View>
+
+        {/* Listing header */}
+        <View style={styles.listingHeader}>
+          <View style={styles.listingLogoWrap}>
             {(partner?.logo || partner?.business_logo) ? (
               <Image source={{ uri: partner.logo || partner.business_logo }} style={styles.partnerLogo} />
             ) : (
               <View style={styles.logoPlaceholder}>
-                <Text style={styles.logoPlaceholderText}>
-                  {getBusinessTypeIcon(partner?.business_type || partner?.businessType)}
-                </Text>
+                <Text style={styles.logoPlaceholderText}>{getBusinessTypeIcon(partnerType)}</Text>
               </View>
             )}
-            
-            <View style={styles.partnerInfo}>
-              <Text style={styles.partnerName}>{partner?.business_name || partner?.businessName || 'Negocio'}</Text>
+          </View>
 
-              <View style={styles.partnerDetails}>
-                <View style={styles.partnerDetailRow}>
-                  <MapPin size={14} color="#6B7280" style={styles.detailIcon} />
-                  <Text style={styles.partnerAddressText}>
-                    {partner?.address || 'Ubicación no disponible'}
-                  </Text>
-                </View>
+          <Text style={styles.partnerName} accessibilityRole="header">{partnerName}</Text>
+          <Badge label={getBusinessTypeLabel(partnerType)} tone="primary" style={styles.typeBadge} />
 
-                <TouchableOpacity
-                  style={styles.partnerDetailRow}
-                  onPress={() => handlePhoneCall(partner?.phone || '')}
-                  activeOpacity={0.7}
-                >
-                  <Phone size={14} color="#10B981" style={styles.detailIcon} />
-                  <Text style={styles.partnerPhoneText}>
-                    {partner?.phone || 'Teléfono no disponible'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+          {averageRating > 0 ? (
+            <TouchableOpacity
+              style={styles.ratingContainer}
+              onPress={handleShowReviews}
+              hitSlop={hitSlop}
+              accessibilityRole="button"
+              accessibilityLabel={`Calificación ${averageRating.toFixed(1)} de 5, ${totalReviews} reseñas. Ver reseñas`}
+            >
+              <RatingStars rating={averageRating} size={16} />
+              <Text style={styles.reviewsText}>· {totalReviews} {totalReviews === 1 ? 'reseña' : 'reseñas'}</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.noRatingText}>Todavía sin reseñas</Text>
+          )}
+        </View>
 
-              {averageRating > 0 && (
-                <TouchableOpacity style={styles.ratingContainer} onPress={handleShowReviews}>
-                  {renderStarRating(averageRating)}
-                  <Text style={styles.ratingText}>{averageRating.toFixed(1)}</Text>
-                  <Text style={styles.reviewsText}>
-                    ({totalReviews} reseñas)
-                  </Text>
-                </TouchableOpacity>
-              )}
+        {/* Info rows */}
+        <View style={styles.infoSection}>
+          <View style={styles.infoRow}>
+            <View style={styles.infoIcon}>
+              <MapPin size={18} color={colors.primary} />
+            </View>
+            <View style={styles.infoTextBox}>
+              <Text style={styles.infoLabel}>Dirección</Text>
+              <Text style={styles.infoValue}>{partner?.address || 'Ubicación no disponible'}</Text>
             </View>
           </View>
-        </Card>
 
-        {/* Search Bar */}
-        {partner?.business_type !== 'shelter' && (
-          <View style={styles.searchContainer}>
-            <View style={styles.searchBar}>
-              <Search size={20} color="#9CA3AF" />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Buscar servicios..."
-                placeholderTextColor="#9CA3AF"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
+          <TouchableOpacity
+            style={styles.infoRow}
+            onPress={() => handlePhoneCall(partner?.phone || '')}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={partner?.phone ? `Llamar al ${partner.phone}` : 'Teléfono no disponible'}
+          >
+            <View style={styles.infoIcon}>
+              <Phone size={18} color={colors.primary} />
             </View>
-          </View>
-        )}
+            <View style={styles.infoTextBox}>
+              <Text style={styles.infoLabel}>Teléfono</Text>
+              <Text style={[styles.infoValue, !!partner?.phone && styles.infoLink]}>
+                {partner?.phone || 'Teléfono no disponible'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {!!partner?.description && (
+            <Text style={styles.partnerDescription}>{partner.description}</Text>
+          )}
+        </View>
+
+        <View style={styles.divider} />
 
         {/* Services or Adoption Pets List */}
-        <Text style={styles.sectionTitle}>
-          {partner?.business_type === 'shelter' ? 'Mascotas en Adopción' : 'Servicios Disponibles'}
-        </Text>
-        
-        {partner?.business_type === 'shelter' ? (
-          adoptionPets.length === 0 ? (
-            <Card style={styles.emptyCard}>
-              <Heart size={48} color="#EF4444" />
-              <Text style={styles.emptyTitle}>No hay mascotas en adopción</Text>
-              <Text style={styles.emptySubtitle}>
-                Este refugio aún no tiene mascotas disponibles para adopción
-              </Text>
-            </Card>
-          ) : (
-            <View>
-              {adoptionPets.map(renderAdoptionPet)}
-            </View>
-          )
-        ) : (
-          filteredServices.length === 0 ? (
-            <Card style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>No hay servicios disponibles</Text>
-              <Text style={styles.emptySubtitle}>
-                {searchQuery ? 'No se encontraron servicios que coincidan con tu búsqueda' : 'Este negocio aún no tiene servicios registrados'}
-              </Text>
-            </Card>
-          ) : (
-            filteredServices.map((service) => {
-              const isBoarding = partner?.business_type === 'boarding' || partner?.businessType === 'boarding';
+        <View onLayout={(e) => setServicesSectionY(e.nativeEvent.layout.y)}>
+          <Text style={styles.sectionTitle} accessibilityRole="header">
+            {isShelter ? 'Mascotas en adopción' : 'Servicios disponibles'}
+          </Text>
 
-              return (
-                <TouchableOpacity
-                  key={service.id}
-                  onPress={() => handleServicePress(service.id)}
-                  style={styles.modernServiceCard}
-                >
-                  <View style={styles.modernServiceContent}>
-                    <View style={styles.modernServiceLeft}>
+          {/* Search Bar */}
+          {!isShelter && services.length > 3 && (
+            <View style={styles.searchContainer}>
+              <View style={styles.searchBar}>
+                <Search size={20} color={colors.icon} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Buscar servicios..."
+                  placeholderTextColor={colors.placeholder}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  accessibilityLabel="Buscar servicios de este negocio"
+                />
+              </View>
+            </View>
+          )}
+
+          {isShelter ? (
+            adoptionPets.length === 0 ? (
+              <EmptyState
+                icon={<Heart size={32} color={colors.primary} />}
+                title="No hay mascotas en adopción"
+                description="Este refugio todavía no tiene mascotas disponibles para adopción."
+              />
+            ) : (
+              <View>
+                {adoptionPets.map(renderAdoptionPet)}
+              </View>
+            )
+          ) : (
+            filteredServices.length === 0 ? (
+              <EmptyState
+                icon={<Search size={32} color={colors.primary} />}
+                title={searchQuery ? 'No encontramos servicios' : 'No hay servicios disponibles'}
+                description={searchQuery ? 'Probá con otra búsqueda.' : 'Este negocio todavía no tiene servicios registrados.'}
+                actionLabel={searchQuery ? 'Limpiar búsqueda' : undefined}
+                onAction={searchQuery ? () => setSearchQuery('') : undefined}
+              />
+            ) : (
+              filteredServices.map((service) => {
+                const isBoarding = isBoardingPartner;
+
+                return (
+                  <TouchableOpacity
+                    key={service.id}
+                    onPress={() => handleServicePress(service.id)}
+                    style={styles.modernServiceCard}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${service.name}${!isBoarding && service.price > 0 ? `, ${formatPrice(service.price)}` : ''}`}
+                    accessibilityHint={isBoarding ? 'Ver opciones de hospedaje' : 'Ver detalle y reservar'}
+                  >
+                    <View style={styles.modernServiceContent}>
                       <View style={styles.serviceIconContainer}>
                         {getServiceIcon(service.name, service.category)}
                       </View>
-                    </View>
 
-                    <View style={styles.modernServiceCenter}>
-                      <View style={styles.serviceHeaderRow}>
-                        <View style={styles.serviceTitleContainer}>
-                          <Text style={styles.modernServiceName}>
-                            {service.name}
+                      <View style={styles.modernServiceCenter}>
+                        <Text style={styles.modernServiceName} numberOfLines={2}>
+                          {service.name}
+                        </Text>
+                        {service.description && (
+                          <Text style={styles.modernServiceDescription} numberOfLines={2}>
+                            {service.description}
                           </Text>
-                          {service.description && (
-                            <Text style={styles.modernServiceDescription} numberOfLines={2}>
-                              {service.description}
-                            </Text>
-                          )}
+                        )}
 
-                          {!isBoarding && (
-                            <View style={styles.modernServiceInfo}>
-                              {service.duration && (
-                                <View style={styles.modernInfoItem}>
-                                  <Clock size={14} color="#10B981" />
-                                  <Text style={styles.modernInfoText}>
-                                    {service.duration} min
-                                  </Text>
-                                </View>
-                              )}
-                              {service.price > 0 && (
-                                <View style={styles.modernInfoItem}>
-                                  <Text style={styles.modernPriceText}>
-                                    {formatPrice(service.price)}
-                                  </Text>
-                                </View>
-                              )}
-                            </View>
-                          )}
-
-                          {isBoarding && (
-                            <View style={styles.boardingBadge}>
-                              <Text style={styles.boardingBadgeText}>Ver opciones de hospedaje</Text>
-                            </View>
-                          )}
-                        </View>
-
-                        <View style={styles.modernServiceRight}>
-                          <View style={styles.reserveButton}>
-                            <Text style={styles.reserveButtonText}>
-                              {isBoarding ? 'Ver' : 'Reservar'}
-                            </Text>
+                        {!isBoarding && (
+                          <View style={styles.modernServiceInfo}>
+                            {service.duration && (
+                              <View style={styles.modernInfoItem}>
+                                <Clock size={14} color={colors.textTertiary} />
+                                <Text style={styles.modernInfoText}>
+                                  {service.duration} min
+                                </Text>
+                              </View>
+                            )}
+                            {service.price > 0 && (
+                              <Text style={styles.modernPriceText}>
+                                {formatPrice(service.price)}
+                              </Text>
+                            )}
                           </View>
-                        </View>
+                        )}
+
+                        {isBoarding && (
+                          <Badge label="Ver opciones de hospedaje" tone="primary" size="small" style={styles.boardingBadge} />
+                        )}
                       </View>
+
+                      <ChevronRight size={20} color={colors.textTertiary} />
                     </View>
-                  </View>
-                </TouchableOpacity>
-              );
-            })
-          )
-        )}
+                  </TouchableOpacity>
+                );
+              })
+            )
+          )}
+        </View>
       </ScrollView>
+
+      {/* Sticky action bar */}
+      {(isShelter || filteredServices.length > 0) && (
+        <View style={styles.stickyBar}>
+          <View style={styles.stickyInfo}>
+            {!isShelter && !isBoardingPartner && minPrice > 0 ? (
+              <>
+                <Text style={styles.stickyCaption}>Desde</Text>
+                <Text style={styles.stickyPrice}>{formatPrice(minPrice)}</Text>
+              </>
+            ) : (
+              <Text style={styles.stickyName} numberOfLines={2}>{partnerName}</Text>
+            )}
+          </View>
+          <Button
+            title={isShelter ? 'Contactar' : 'Reservar'}
+            onPress={handleStickyPrimary}
+            size="large"
+            fullWidth={false}
+            style={styles.stickyButton}
+            accessibilityHint={
+              isShelter
+                ? 'Llama o escribe al refugio'
+                : filteredServices.length === 1
+                  ? 'Abre el servicio para reservar'
+                  : 'Muestra los servicios para elegir uno'
+            }
+          />
+        </View>
+      )}
 
       {/* Reviews Modal */}
       <Modal
@@ -1023,7 +1130,12 @@ export default function PartnerServices() {
               <Text style={styles.modalTitle}>
                 Reseñas de {partner?.businessName || partner?.business_name}
               </Text>
-              <TouchableOpacity onPress={() => setShowReviewsModal(false)}>
+              <TouchableOpacity
+                onPress={() => setShowReviewsModal(false)}
+                hitSlop={hitSlop}
+                accessibilityRole="button"
+                accessibilityLabel="Cerrar reseñas"
+              >
                 <Text style={styles.modalCloseText}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -1034,7 +1146,7 @@ export default function PartnerServices() {
                   <Text style={styles.averageRatingNumber}>
                     {averageRating.toFixed(1)}
                   </Text>
-                  {renderStarRating(Math.round(averageRating), 24)}
+                  {renderStarRating(averageRating, 24)}
                 </View>
                 <Text style={styles.totalReviewsText}>
                   Basado en {totalReviews} reseñas
@@ -1048,7 +1160,7 @@ export default function PartnerServices() {
                 <Text style={styles.breakdownTitle}>Distribución de calificaciones</Text>
                 {calculateReviewPercentages().map((item) => (
                   <View key={item.stars} style={styles.breakdownRow}>
-                    <Text style={styles.breakdownStars}>{item.stars} ⭐</Text>
+                    <Text style={styles.breakdownStars}>{item.stars} ★</Text>
                     <View style={styles.breakdownBar}>
                       <View 
                         style={[
@@ -1073,7 +1185,7 @@ export default function PartnerServices() {
               ) : detailedReviews.length === 0 ? (
                 <View style={styles.noReviewsContainer}>
                   <Text style={styles.noReviewsText}>
-                    Aún no hay reseñas para este negocio
+                    Todavía no hay reseñas para este negocio
                   </Text>
                 </View>
               ) : (
@@ -1088,7 +1200,7 @@ export default function PartnerServices() {
                               style={styles.reviewerAvatarImage} 
                             />
                           ) : (
-                            <User size={16} color="#9CA3AF" />
+                            <User size={16} color={colors.icon} />
                           )}
                         </View>
                         <View style={styles.reviewerDetails}>
@@ -1129,6 +1241,8 @@ export default function PartnerServices() {
           <TouchableOpacity
             style={styles.imageViewerCloseButton}
             onPress={() => setShowImageViewer(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar fotos"
           >
             <Text style={styles.imageViewerCloseText}>✕</Text>
           </TouchableOpacity>
@@ -1158,14 +1272,14 @@ export default function PartnerServices() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.surface,
   },
   header: {
     flexDirection: 'row',
@@ -1174,9 +1288,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 50,
     paddingBottom: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: 8,
@@ -1188,14 +1302,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 40,
   },
   content: {
     flex: 1,
-    padding: 16,
   },
   loadingContainer: {
     flex: 1,
@@ -1205,7 +1318,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   starRating: {
     flexDirection: 'row',
@@ -1219,8 +1332,8 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
     padding: 20,
     flex: 1,
     maxHeight: '80%',
@@ -1235,18 +1348,18 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
   },
   modalCloseText: {
     fontSize: 18,
-    color: '#6B7280',
+    color: colors.textSecondary,
     padding: 4,
   },
   overallRating: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: radius.md,
     alignItems: 'center',
     marginBottom: 20,
   },
@@ -1264,7 +1377,7 @@ const styles = StyleSheet.create({
   totalReviewsText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   reviewsList: {
     flex: 1,
@@ -1275,7 +1388,7 @@ const styles = StyleSheet.create({
   breakdownTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 12,
   },
   breakdownRow: {
@@ -1286,13 +1399,13 @@ const styles = StyleSheet.create({
   breakdownStars: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: colors.textSecondary,
     width: 40,
   },
   breakdownBar: {
     flex: 1,
     height: 8,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     borderRadius: 4,
     marginHorizontal: 12,
   },
@@ -1304,17 +1417,17 @@ const styles = StyleSheet.create({
   breakdownPercentage: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
     width: 35,
     textAlign: 'right',
   },
   reviewItem: {
-    backgroundColor: '#FAFAFA',
-    borderRadius: 12,
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: colors.surfaceAlt,
   },
   reviewItemHeader: {
     flexDirection: 'row',
@@ -1330,8 +1443,8 @@ const styles = StyleSheet.create({
   reviewerAvatar: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -1340,7 +1453,7 @@ const styles = StyleSheet.create({
   reviewerAvatarImage: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: radius.lg,
   },
   reviewerDetails: {
     flex: 1,
@@ -1348,13 +1461,13 @@ const styles = StyleSheet.create({
   reviewerName: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 2,
   },
   reviewServiceInfo: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   reviewRatingContainer: {
     alignItems: 'flex-end',
@@ -1362,7 +1475,7 @@ const styles = StyleSheet.create({
   reviewComment: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   noReviewsContainer: {
@@ -1372,7 +1485,7 @@ const styles = StyleSheet.create({
   noReviewsText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   partnerCard: {
@@ -1383,31 +1496,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   partnerLogo: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginRight: 16,
+    width: '100%',
+    height: '100%',
   },
   logoPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#3B82F6',
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
   },
   logoPlaceholderText: {
-    fontSize: 32,
+    fontSize: 30,
   },
   partnerInfo: {
     flex: 1,
   },
   partnerName: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.display,
+    color: colors.text,
   },
   partnerDetails: {
     marginBottom: 8,
@@ -1431,61 +1538,65 @@ const styles = StyleSheet.create({
   partnerDetailText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginLeft: 4,
   },
   partnerAddressText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     flex: 1,
     lineHeight: 18,
   },
   partnerPhoneText: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
+    color: colors.success,
     textDecorationLine: 'underline',
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginTop: spacing.md,
+    minHeight: 32,
   },
   ratingText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginLeft: 4,
   },
   reviewsText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 4,
+    ...typography.label,
+    color: colors.text,
+    marginLeft: spacing.xs,
+    textDecorationLine: 'underline',
   },
   searchContainer: {
-    marginBottom: 16,
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.md,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    height: 44,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
+    marginLeft: spacing.sm,
+    ...typography.body,
+    color: colors.text,
+    paddingVertical: 0,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
+    ...typography.title,
+    color: colors.text,
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.md,
   },
   emptyCard: {
     alignItems: 'center',
@@ -1494,53 +1605,51 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   serviceCard: {
     marginBottom: 12,
   },
   modernServiceCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginHorizontal: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-    overflow: 'hidden',
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    ...shadows.sm,
   },
   modernServiceContent: {
     flexDirection: 'row',
-    padding: 16,
-    alignItems: 'flex-start',
-    minHeight: 90,
+    alignItems: 'center',
   },
   modernServiceLeft: {
     marginRight: 12,
     paddingTop: 4,
   },
   serviceIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#ECFDF5',
-    justifyContent: 'center',
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
   },
   serviceIcon: {
     fontSize: 24,
   },
   modernServiceCenter: {
     flex: 1,
+    marginRight: spacing.sm,
   },
   serviceHeaderRow: {
     flexDirection: 'row',
@@ -1552,50 +1661,40 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   modernServiceName: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 6,
-    lineHeight: 22,
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   modernServiceDescription: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    lineHeight: 18,
-    marginBottom: 8,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: spacing.xxs,
   },
   modernServiceInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.md,
+    marginTop: spacing.sm,
   },
   modernInfoItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: spacing.xs,
   },
   modernInfoText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#10B981',
+    ...typography.caption,
+    color: colors.textSecondary,
   },
   modernPriceText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   boardingBadge: {
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
+    marginTop: spacing.sm,
   },
   boardingBadgeText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#3B82F6',
+    color: colors.primary,
   },
   modernServiceRight: {
     justifyContent: 'flex-start',
@@ -1603,11 +1702,11 @@ const styles = StyleSheet.create({
     minWidth: 95,
   },
   reserveButton: {
-    backgroundColor: '#10B981',
+    backgroundColor: colors.success,
     paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 12,
-    shadowColor: '#10B981',
+    borderRadius: radius.md,
+    shadowColor: colors.success,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
@@ -1618,7 +1717,7 @@ const styles = StyleSheet.create({
   reserveButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: colors.white,
     textAlign: 'center',
   },
   serviceContent: {
@@ -1633,21 +1732,21 @@ const styles = StyleSheet.create({
   serviceName: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
     marginRight: 8,
   },
   servicePrice: {
     fontSize: 16,
     fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    color: colors.success,
     flexShrink: 0,
     maxWidth: '40%',
   },
   serviceDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 8,
     lineHeight: 20,
   },
@@ -1663,7 +1762,7 @@ const styles = StyleSheet.create({
   serviceDetailText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginLeft: 4,
   },
   // Adoption pets styles
@@ -1671,19 +1770,20 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   adoptionPetCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.lg,
+    padding: 0,
     overflow: 'hidden',
   },
   petImagesContainer: {
     height: 200,
   },
   petImage: {
-    width: width - 64, // Account for card margins
+    width: width - spacing.xl * 2, // ancho de la tarjeta (sin padding)
     height: 200,
   },
   petInfo: {
-    padding: 16,
+    padding: spacing.lg,
   },
   petHeader: {
     flexDirection: 'row',
@@ -1694,17 +1794,17 @@ const styles = StyleSheet.create({
   petName: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
   },
   adoptionFee: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
+    color: colors.success,
   },
   petDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
+    color: colors.textSecondary,
     marginBottom: 12,
     lineHeight: 20,
   },
@@ -1715,10 +1815,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   healthBadge: {
-    backgroundColor: '#D1FAE5',
+    backgroundColor: colors.successSoft,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: radius.md,
   },
   healthBadgeText: {
     fontSize: 12,
@@ -1728,14 +1828,14 @@ const styles = StyleSheet.create({
   petBasicInfo: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
+    color: colors.textSecondary,
     marginBottom: 8,
     lineHeight: 20,
   },
   petHealthInfo: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#059669',
+    color: colors.success,
     marginBottom: 6,
     lineHeight: 18,
   },
@@ -1749,50 +1849,51 @@ const styles = StyleSheet.create({
   petAdoptionInfo: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#DC2626',
+    color: colors.danger,
     marginBottom: 6,
     lineHeight: 18,
   },
   petContactInfo: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 16,
     lineHeight: 18,
   },
   petActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
+    marginTop: spacing.lg,
   },
   contactButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     gap: 6,
   },
   contactButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   adoptionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.danger,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     gap: 6,
   },
   adoptionButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   imageViewerContainer: {
     flex: 1,
@@ -1814,7 +1915,7 @@ const styles = StyleSheet.create({
   },
   imageViewerCloseText: {
     fontSize: 24,
-    color: '#FFFFFF',
+    color: colors.white,
     fontFamily: 'Inter-Bold',
   },
   imageViewerScroll: {
@@ -1841,6 +1942,152 @@ const styles = StyleSheet.create({
   imageViewerCounterText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: colors.white,
+  },
+  contentInner: {
+    paddingBottom: 120,
+  },
+  hero: {
+    width: '100%',
+    height: 280,
+    backgroundColor: colors.surfaceAlt,
+  },
+  heroImage: {
+    width: '100%',
+    height: '100%',
+  },
+  heroPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primarySoft,
+  },
+  heroPlaceholderEmoji: {
+    fontSize: 56,
+  },
+  heroShade: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 110,
+    backgroundColor: 'rgba(0, 0, 0, 0.18)',
+  },
+  heroTopBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: Platform.OS === 'android' ? spacing.xxxl : spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  heroBackButton: {
+    marginTop: spacing.sm,
+    ...shadows.md,
+  },
+  listingHeader: {
+    paddingHorizontal: spacing.xl,
+    marginTop: -36,
+  },
+  listingLogoWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 3,
+    borderColor: colors.white,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+    marginBottom: spacing.md,
+    ...shadows.md,
+  },
+  typeBadge: {
+    marginTop: spacing.sm,
+  },
+  noRatingText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: spacing.md,
+  },
+  infoSection: {
+    marginTop: spacing.xl,
+    marginHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    gap: spacing.lg,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 44,
+  },
+  infoIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+  },
+  infoTextBox: {
+    flex: 1,
+  },
+  infoLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  infoValue: {
+    ...typography.body,
+    color: colors.text,
+  },
+  infoLink: {
+    color: colors.primary,
+  },
+  partnerDescription: {
+    ...typography.body,
+    color: colors.textSecondary,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing.xl,
+    marginVertical: spacing.xl,
+  },
+  petActionButton: {
+    flex: 1,
+  },
+  stickyBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: Platform.OS === 'ios' ? spacing.xxxl : spacing.lg,
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    ...shadows.lg,
+  },
+  stickyInfo: {
+    flex: 1,
+    marginRight: spacing.md,
+  },
+  stickyCaption: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  stickyPrice: {
+    ...typography.heading,
+    color: colors.text,
+  },
+  stickyName: {
+    ...typography.bodyStrong,
+    color: colors.text,
+  },
+  stickyButton: {
+    minWidth: 150,
   },
 });

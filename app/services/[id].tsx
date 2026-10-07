@@ -6,6 +6,9 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingScreen } from '../../components/ui/LoadingScreen';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { ScreenHeader, Badge, EmptyState } from '../../components/ui';
+import { RatingStars } from '../../components/services/RatingStars';
+import { colors, radius, spacing, typography, shadows, hitSlop } from '../../constants/theme';
 import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
@@ -392,13 +395,13 @@ export default function ServiceDetail() {
 
   const handleBookService = () => {
     if (!currentUser) {
-      Alert.alert('Iniciar sesión', 'Debes iniciar sesión para reservar servicios');
+      Alert.alert('Iniciar sesión', 'Tenés que iniciar sesión para reservar servicios.');
       return;
     }
 
     // For boarding services, must select category first
     if (boardingCategories.length > 0 && !selectedCategory) {
-      Alert.alert('Selecciona una categoría', 'Por favor selecciona el tipo de hospedaje antes de continuar');
+      Alert.alert('Elegí un tipo de hospedaje', 'Seleccioná el tipo de hospedaje antes de continuar.');
       return;
     }
 
@@ -513,20 +516,10 @@ export default function ServiceDetail() {
     }).format(price);
   };
 
-  const renderStarRating = (rating: number, size: number = 16) => {
-    return (
-      <View style={styles.starRating}>
-        {[1, 2, 3, 4, 5].map((star) => (
-          <Star
-            key={star}
-            size={size}
-            color={star <= rating ? '#F59E0B' : '#E5E7EB'}
-            fill={star <= rating ? '#F59E0B' : 'none'}
-          />
-        ))}
-      </View>
-    );
-  };
+  /** Estrellas con medias estrellas (4,5 muestra cuatro y media). */
+  const renderStarRating = (rating: number, size: number = 16) => (
+    <RatingStars rating={rating} size={size} showValue={false} style={styles.starRating} />
+  );
 
   if (loading) {
     return <LoadingScreen message="Cargando detalles del servicio..." />;
@@ -535,30 +528,36 @@ export default function ServiceDetail() {
   if (!service) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>No se encontró el servicio</Text>
-          <Button title="Volver" onPress={() => router.back()} />
-        </View>
+        <ScreenHeader title="Detalle del servicio" onBack={handleBackPress} />
+        <EmptyState
+          title="No encontramos este servicio"
+          description="Puede que ya no esté disponible."
+          actionLabel="Volver"
+          onAction={() => router.back()}
+        />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={handleBackPress}
-          style={styles.backButton}
-        >
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <View style={styles.titleContainer}>
-          <Text style={styles.title}>Detalle del Servicio</Text>
-        </View>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title="Detalle del servicio" onBack={handleBackPress} />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} showsVerticalScrollIndicator={false}>
+        {service.images && service.images.length > 0 && (
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => {
+              setSelectedImageIndex(0);
+              setShowImageViewer(true);
+            }}
+            accessibilityRole="imagebutton"
+            accessibilityLabel={`Ver fotos de ${service.name}`}
+          >
+            <Image source={{ uri: service.images[0] }} style={styles.heroImage} resizeMode="cover" />
+          </TouchableOpacity>
+        )}
+
         {/* Partner Profile Card */}
         <Card style={styles.partnerCard}>
           <View style={styles.partnerHeader}>
@@ -581,14 +580,14 @@ export default function ServiceDetail() {
               
               <View style={styles.partnerDetails}>
                 <View style={styles.partnerDetail}>
-                  <MapPin size={14} color="#6B7280" />
+                  <MapPin size={14} color={colors.textTertiary} />
                   <Text style={styles.partnerDetailText} numberOfLines={1}>
                     {partnerInfo?.address || 'Ubicación no disponible'}
                   </Text>
                 </View>
                 
                 <View style={styles.partnerDetail}>
-                  <Phone size={14} color="#6B7280" />
+                  <Phone size={14} color={colors.textTertiary} />
                   <Text style={styles.partnerDetailText}>
                     {partnerInfo?.phone || 'Teléfono no disponible'}
                   </Text>
@@ -596,7 +595,13 @@ export default function ServiceDetail() {
               </View>
               
               {averageRating > 0 && (
-                <TouchableOpacity style={styles.ratingContainer} onPress={handleShowReviews}>
+                <TouchableOpacity
+                style={styles.ratingContainer}
+                onPress={handleShowReviews}
+                hitSlop={hitSlop}
+                accessibilityRole="button"
+                accessibilityLabel={`Calificación ${averageRating.toFixed(1)} de 5, ${totalReviews} reseñas. Ver reseñas`}
+              >
                   {renderStarRating(averageRating)}
                   <Text style={styles.ratingText}>{averageRating.toFixed(1)}</Text>
                   <Text style={styles.reviewsText}>
@@ -610,7 +615,7 @@ export default function ServiceDetail() {
 
         {/* Service Details */}
         <Card style={styles.serviceCard}>
-          <Text style={styles.sectionTitle}>Detalles del Servicio</Text>
+          <Text style={styles.sectionTitle}>Detalles del servicio</Text>
           
           <Text style={styles.serviceName}>{service.name}</Text>
 
@@ -623,7 +628,7 @@ export default function ServiceDetail() {
               onHidden={() => setCanShowReserveHint(true)}
             >
               <View style={styles.categoriesContainer}>
-                <Text style={styles.categoriesTitle}>Selecciona el tipo de hospedaje:</Text>
+                <Text style={styles.categoriesTitle}>Elegí el tipo de hospedaje</Text>
                 {boardingCategories.map((category) => {
                 const isAvailable = categoryAvailability[category.id] === undefined || categoryAvailability[category.id] > 0;
                 return (
@@ -636,6 +641,9 @@ export default function ServiceDetail() {
                     ]}
                     onPress={() => isAvailable && setSelectedCategory(category.id)}
                     disabled={!isAvailable}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: selectedCategory === category.id, disabled: !isAvailable }}
+                    accessibilityLabel={`${category.name}, ${formatPrice(category.price)}`}
                   >
                   <View style={styles.categoryHeader}>
                     <Text style={[
@@ -661,7 +669,7 @@ export default function ServiceDetail() {
                         categoryAvailability[category.id] > 0 ? (
                           `Disponible: ${categoryAvailability[category.id]} de ${category.capacity} mascotas`
                         ) : (
-                          '❌ Sin disponibilidad'
+                          'Sin disponibilidad'
                         )
                       ) : (
                         `Capacidad: ${category.capacity} mascotas`
@@ -710,7 +718,7 @@ export default function ServiceDetail() {
                     {formatPrice(service.price * (1 - appliedDiscount / 100))}
                   </Text>
                   <Text style={styles.savingsText}>
-                    ¡Ahorras {formatPrice(service.price * (appliedDiscount / 100))}!
+                    ¡Ahorrás {formatPrice(service.price * (appliedDiscount / 100))}!
                   </Text>
                   <Text style={styles.ivaIncluded}>IVA incluido</Text>
                 </View>
@@ -727,7 +735,13 @@ export default function ServiceDetail() {
             {/* Duración oculta - no aplica para servicios de pensión */}
 
             {averageRating > 0 && (
-              <TouchableOpacity style={styles.ratingContainer} onPress={handleShowReviews}>
+              <TouchableOpacity
+                style={styles.ratingContainer}
+                onPress={handleShowReviews}
+                hitSlop={hitSlop}
+                accessibilityRole="button"
+                accessibilityLabel={`Calificación ${averageRating.toFixed(1)} de 5, ${totalReviews} reseñas. Ver reseñas`}
+              >
                 {renderStarRating(averageRating)}
                 <Text style={styles.ratingText}>{averageRating.toFixed(1)}</Text>
                 <Text style={styles.reviewsText}>
@@ -752,6 +766,7 @@ export default function ServiceDetail() {
                     <Image
                       source={{ uri: imageUrl }}
                       style={styles.serviceImage}
+                      accessibilityLabel={`Foto ${index + 1}`}
                     />
                   </TouchableOpacity>
                 ))}
@@ -760,25 +775,27 @@ export default function ServiceDetail() {
           )}
         </Card>
         
-        <View style={styles.bookingButtonContainer}>
-          <OneTimeTooltip
-            hintKey="service_detail_book"
-            userId={currentUser?.id}
-            text="Tip: confirmá aquí tu reserva"
-            enabled={canShowReserveHint}
-          >
-            <Button
-              title={
-                boardingCategories.length > 0 && selectedCategory
-                  ? `Reservar ${boardingCategories.find(c => c.id === selectedCategory)?.name}`
-                  : `Reservar por ${formatPrice(appliedDiscount > 0 ? service.price * (1 - appliedDiscount / 100) : service.price)}`
-              }
-              onPress={handleBookService}
-              variant="primary"
-            />
-          </OneTimeTooltip>
-        </View>
       </ScrollView>
+
+      <View style={styles.bookingButtonContainer}>
+        <OneTimeTooltip
+          hintKey="service_detail_book"
+          userId={currentUser?.id}
+          text="Tip: confirmá acá tu reserva"
+          enabled={canShowReserveHint}
+        >
+          <Button
+            title={
+              boardingCategories.length > 0 && selectedCategory
+                ? `Reservar ${boardingCategories.find(c => c.id === selectedCategory)?.name}`
+                : `Reservar por ${formatPrice(appliedDiscount > 0 ? service.price * (1 - appliedDiscount / 100) : service.price)}`
+            }
+            onPress={handleBookService}
+            variant="primary"
+            size="large"
+          />
+        </OneTimeTooltip>
+      </View>
 
       {/* Booking Modal */}
       <Modal
@@ -792,10 +809,15 @@ export default function ServiceDetail() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
                 {boardingCategories.length > 0 && service?.petType && service.petType !== 'both'
-                  ? `Selecciona tu ${service.petType === 'dog' ? 'perro' : 'gato'}`
-                  : 'Selecciona tu mascota'}
+                  ? `Seleccioná tu ${service.petType === 'dog' ? 'perro' : 'gato'}`
+                  : 'Seleccioná tu mascota'}
               </Text>
-              <TouchableOpacity onPress={() => setShowBookingModal(false)}>
+              <TouchableOpacity
+                onPress={() => setShowBookingModal(false)}
+                hitSlop={hitSlop}
+                accessibilityRole="button"
+                accessibilityLabel="Cerrar"
+              >
                 <Text style={styles.modalCloseText}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -804,9 +826,9 @@ export default function ServiceDetail() {
               <LoadingSpinner message="Cargando mascotas..." />
             ) : userPets.length === 0 ? (
               <View style={styles.noPetsContainer}>
-                <Text style={styles.noPetsTitle}>No tienes mascotas registradas</Text>
+                <Text style={styles.noPetsTitle}>No tenés mascotas registradas</Text>
                 <Text style={styles.noPetsText}>
-                  Necesitas registrar al menos una mascota para reservar servicios
+                  Necesitás registrar al menos una mascota para reservar servicios.
                 </Text>
                 <Button
                   title="Registrar mascota"
@@ -824,6 +846,8 @@ export default function ServiceDetail() {
                     key={pet.id}
                     style={styles.petItem}
                     onPress={() => handleSelectPet(pet.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Reservar para ${pet.name}`}
                   >
                     {pet.photo_url ? (
                       <Image source={{ uri: pet.photo_url }} style={styles.petItemImage} />
@@ -862,7 +886,12 @@ export default function ServiceDetail() {
               <Text style={styles.modalTitle}>
                 Reseñas del servicio
               </Text>
-              <TouchableOpacity onPress={() => setShowReviewsModal(false)}>
+              <TouchableOpacity
+                onPress={() => setShowReviewsModal(false)}
+                hitSlop={hitSlop}
+                accessibilityRole="button"
+                accessibilityLabel="Cerrar reseñas"
+              >
                 <Text style={styles.modalCloseText}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -873,7 +902,7 @@ export default function ServiceDetail() {
                   <Text style={styles.averageRatingNumber}>
                     {averageRating.toFixed(1)}
                   </Text>
-                  {renderStarRating(Math.round(averageRating), 24)}
+                  {renderStarRating(averageRating, 24)}
                 </View>
                 <Text style={styles.totalReviewsText}>
                   Basado en {totalReviews} reseñas
@@ -887,7 +916,7 @@ export default function ServiceDetail() {
                 <Text style={styles.breakdownTitle}>Distribución de calificaciones</Text>
                 {calculateReviewPercentages().map((item) => (
                   <View key={item.stars} style={styles.breakdownRow}>
-                    <Text style={styles.breakdownStars}>{item.stars} ⭐</Text>
+                    <Text style={styles.breakdownStars}>{item.stars} ★</Text>
                     <View style={styles.breakdownBar}>
                       <View 
                         style={[
@@ -908,7 +937,7 @@ export default function ServiceDetail() {
               {reviews.length === 0 ? (
                 <View style={styles.noReviewsContainer}>
                   <Text style={styles.noReviewsText}>
-                    Aún no hay reseñas para este servicio
+                    Todavía no hay reseñas para este servicio
                   </Text>
                 </View>
               ) : (
@@ -923,7 +952,7 @@ export default function ServiceDetail() {
                               style={styles.reviewerAvatarImage} 
                             />
                           ) : (
-                            <User size={16} color="#9CA3AF" />
+                            <User size={16} color={colors.icon} />
                           )}
                         </View>
                         <View style={styles.reviewerDetails}>
@@ -967,6 +996,8 @@ export default function ServiceDetail() {
           <TouchableOpacity
             style={styles.imageViewerCloseButton}
             onPress={() => setShowImageViewer(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar fotos"
           >
             <Text style={styles.imageViewerCloseText}>✕</Text>
           </TouchableOpacity>
@@ -1003,7 +1034,7 @@ export default function ServiceDetail() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -1012,9 +1043,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 50,
     paddingBottom: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: 8,
@@ -1026,14 +1057,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 40,
   },
   content: {
     flex: 1,
-    padding: 16,
   },
   loadingContainer: {
     flex: 1,
@@ -1043,7 +1073,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   errorContainer: {
     flex: 1,
@@ -1054,12 +1084,12 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#EF4444',
+    color: colors.danger,
     marginBottom: 16,
     textAlign: 'center',
   },
   partnerCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   partnerHeader: {
     flexDirection: 'row',
@@ -1075,7 +1105,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -1089,7 +1119,7 @@ const styles = StyleSheet.create({
   partnerName: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 8,
   },
   partnerDetails: {
@@ -1103,7 +1133,7 @@ const styles = StyleSheet.create({
   partnerDetailText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginLeft: 4,
   },
   ratingContainer: {
@@ -1113,28 +1143,28 @@ const styles = StyleSheet.create({
   ratingText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginLeft: 4,
   },
   reviewsText: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginLeft: 4,
   },
   serviceCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   sectionTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 12,
   },
   serviceName: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 12,
   },
   priceContainer: {
@@ -1144,44 +1174,44 @@ const styles = StyleSheet.create({
   priceText: {
     fontSize: 22,
     fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    color: colors.success,
     marginBottom: 12,
   },
   discountBadge: {
-    backgroundColor: '#10B981',
+    backgroundColor: colors.success,
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     alignSelf: 'flex-start',
     marginBottom: 8,
   },
   discountBadgeText: {
     fontSize: 14,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   originalPrice: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    color: colors.textSecondary,
     textDecorationLine: 'line-through',
     marginBottom: 4,
   },
   discountedPrice: {
     fontSize: 24,
     fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    color: colors.success,
     marginBottom: 4,
   },
   savingsText: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
+    color: colors.success,
   },
   ivaIncluded: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginTop: 4,
   },
   serviceDetails: {
@@ -1191,7 +1221,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   serviceDetail: {
     flexDirection: 'row',
@@ -1200,24 +1230,24 @@ const styles = StyleSheet.create({
   serviceDetailText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginLeft: 4,
   },
   servicePrice: {
     fontSize: 24,
     fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    color: colors.success,
   },
   descriptionTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 8,
   },
   descriptionText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     lineHeight: 20,
     marginBottom: 16,
   },
@@ -1227,13 +1257,13 @@ const styles = StyleSheet.create({
   imagesTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 8,
   },
   serviceImage: {
     width: 120,
     height: 120,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     marginRight: 8,
   },
   reviewsCard: {
@@ -1242,11 +1272,17 @@ const styles = StyleSheet.create({
   reviewsTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 12,
   },
   bookingButtonContainer: {
-    marginBottom: 24,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    ...shadows.lg,
   },
   modalOverlay: {
     flex: 1,
@@ -1254,7 +1290,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
@@ -1269,14 +1305,14 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
   },
   modalCloseButton: {
     padding: 4,
   },
   modalCloseText: {
     fontSize: 18,
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   noPetsContainer: {
     padding: 40,
@@ -1285,14 +1321,14 @@ const styles = StyleSheet.create({
   noPetsTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 8,
     textAlign: 'center',
   },
   noPetsText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -1304,7 +1340,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   petItemImage: {
     width: 50,
@@ -1317,7 +1353,7 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: 25,
     marginRight: 12,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1330,13 +1366,13 @@ const styles = StyleSheet.create({
   petName: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 4,
   },
   petBreed: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   starRating: {
     flexDirection: 'row',
@@ -1344,9 +1380,9 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   overallRating: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: radius.md,
     alignItems: 'center',
     marginBottom: 20,
   },
@@ -1364,7 +1400,7 @@ const styles = StyleSheet.create({
   totalReviewsText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   ratingBreakdown: {
     marginBottom: 20,
@@ -1372,7 +1408,7 @@ const styles = StyleSheet.create({
   breakdownTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 12,
   },
   breakdownRow: {
@@ -1383,13 +1419,13 @@ const styles = StyleSheet.create({
   breakdownStars: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: colors.textSecondary,
     width: 40,
   },
   breakdownBar: {
     flex: 1,
     height: 8,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     borderRadius: 4,
     marginHorizontal: 12,
   },
@@ -1401,7 +1437,7 @@ const styles = StyleSheet.create({
   breakdownPercentage: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
     width: 35,
     textAlign: 'right',
   },
@@ -1409,12 +1445,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   reviewItem: {
-    backgroundColor: '#FAFAFA',
-    borderRadius: 12,
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: colors.surfaceAlt,
   },
   reviewItemHeader: {
     flexDirection: 'row',
@@ -1430,8 +1466,8 @@ const styles = StyleSheet.create({
   reviewerAvatar: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -1440,7 +1476,7 @@ const styles = StyleSheet.create({
   reviewerAvatarImage: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: radius.lg,
   },
   reviewerDetails: {
     flex: 1,
@@ -1448,13 +1484,13 @@ const styles = StyleSheet.create({
   reviewerName: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 2,
   },
   reviewPetName: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   reviewRatingContainer: {
     alignItems: 'flex-end',
@@ -1462,13 +1498,13 @@ const styles = StyleSheet.create({
   reviewDate: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    color: colors.textSecondary,
     marginTop: 4,
   },
   reviewComment: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
+    color: colors.textSecondary,
     lineHeight: 20,
     fontStyle: 'italic',
   },
@@ -1479,7 +1515,7 @@ const styles = StyleSheet.create({
   noReviewsText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   categoriesContainer: {
@@ -1488,25 +1524,25 @@ const styles = StyleSheet.create({
   categoriesTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 12,
   },
   categoryOption: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
+    borderColor: colors.border,
+    borderRadius: radius.md,
     padding: 16,
     marginBottom: 12,
   },
   selectedCategoryOption: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#3B82F6',
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
   },
   disabledCategoryOption: {
     opacity: 0.5,
-    backgroundColor: '#F3F4F6',
-    borderColor: '#D1D5DB',
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.borderStrong,
   },
   categoryHeader: {
     marginBottom: 8,
@@ -1514,18 +1550,18 @@ const styles = StyleSheet.create({
   categoryName: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   categoryPrice: {
     fontSize: 24,
     fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    color: colors.success,
     marginTop: 12,
   },
   categoryDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 8,
   },
   categoryFooter: {
@@ -1537,24 +1573,24 @@ const styles = StyleSheet.create({
   categoryCapacity: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#9CA3AF',
+    color: colors.textSecondary,
   },
   noAvailabilityText: {
-    color: '#EF4444',
+    color: colors.danger,
     fontFamily: 'Inter-SemiBold',
   },
   categoryPetType: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#9CA3AF',
+    color: colors.textSecondary,
   },
   selectedCategoryText: {
-    color: '#3B82F6',
+    color: colors.primary,
   },
   categoryIvaIncluded: {
     fontSize: 11,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   imageViewerContainer: {
@@ -1577,7 +1613,7 @@ const styles = StyleSheet.create({
   },
   imageViewerCloseText: {
     fontSize: 24,
-    color: '#FFFFFF',
+    color: colors.white,
     fontFamily: 'Inter-Bold',
   },
   imageViewerScroll: {
@@ -1604,6 +1640,17 @@ const styles = StyleSheet.create({
   imageViewerCounterText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: colors.white,
+  },
+  contentInner: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xxxl,
+  },
+  heroImage: {
+    width: '100%',
+    height: 220,
+    borderRadius: radius.lg,
+    marginBottom: spacing.lg,
+    backgroundColor: colors.surfaceAlt,
   },
 });

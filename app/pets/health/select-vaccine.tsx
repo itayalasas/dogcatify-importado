@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Search, Syringe, Shield, Clock, TriangleAlert as AlertTriangle, Calendar } from 'lucide-react-native';
+import { Syringe, Shield, Clock, TriangleAlert as AlertTriangle, Calendar } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Card } from '../../../components/ui/Card';
+import { Badge, EmptyState, SkeletonList } from '../../../components/ui';
+import { HealthHeader, HealthSearchBar, SelectionCheck } from '../../../components/health';
 import { supabaseClient } from '../../../lib/supabase';
 import { envConfig } from '../../../utils/envConfig';
+import { colors, spacing, radius, fontSize } from '../../../constants/theme';
 
 export default function SelectVaccine() {
   const { petId, species, returnPath, currentValue, currentVeterinarian, currentNotes, currentNextDueDate } = useLocalSearchParams<{
@@ -224,59 +227,53 @@ export default function SelectVaccine() {
   };
 
   const getTypeColor = (type: string) => {
-    const colors: Record<string, string> = {
-      core: '#DC2626', // Red for required
-      non_core: '#3B82F6', // Blue for recommended
-      lifestyle: '#10B981' // Green for lifestyle
+    const toneColors: Record<string, string> = {
+      core: colors.danger, // Red for required
+      non_core: colors.primary, // Blue for recommended
+      lifestyle: colors.success // Green for lifestyle
     };
-    return colors[type] || '#6B7280';
+    return toneColors[type] || colors.textSecondary;
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>
-          Seleccionar Vacuna {species === 'dog' ? '🐕' : '🐱'}
-        </Text>
-        <View style={styles.placeholder} />
-      </View>
+      <HealthHeader
+        title={`Elegí la vacuna ${species === 'dog' ? '🐕' : '🐱'}`}
+        subtitle="Recomendadas según especie y edad"
+      />
 
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Search size={20} color="#9CA3AF" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar vacuna..."
-            placeholderTextColor="#9CA3AF"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-      </View>
+      <HealthSearchBar value={searchQuery} onChangeText={setSearchQuery} placeholder="Buscar vacuna..." />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? (
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Cargando vacunas...</Text>
-          </View>
+          <SkeletonList kind="cards" count={4} />
         ) : filteredVaccines.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Syringe size={48} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>No se encontraron vacunas</Text>
-            <Text style={styles.emptySubtitle}>
-              Intenta con otros términos de búsqueda
-            </Text>
-          </View>
+          <EmptyState
+            icon={<Syringe size={32} color={colors.primary} />}
+            title="No se encontraron vacunas"
+            description={searchQuery.trim() ? 'Probá con otros términos de búsqueda.' : 'No pudimos cargar las recomendaciones. Probá de nuevo en un momento.'}
+            actionLabel={searchQuery.trim() ? 'Limpiar búsqueda' : 'Reintentar'}
+            onAction={() => {
+              if (searchQuery.trim()) {
+                setSearchQuery('');
+              } else {
+                setLoading(true);
+                fetchVaccines();
+              }
+            }}
+          />
         ) : (
           <View style={styles.vaccinesList}>
-            {filteredVaccines.map((vaccine, index) => (
-              <Card key={index} style={styles.vaccineCard}>
+            {filteredVaccines.map((vaccine, index) => {
+              const isSelected = !!currentValue && vaccine.name === currentValue;
+              return (
+              <Card key={index} padding={false} style={[styles.vaccineCard, isSelected && styles.cardSelected]}>
                 <TouchableOpacity
                   style={styles.vaccineContent}
                   onPress={() => handleSelectVaccine(vaccine)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Elegir ${vaccine.name}`}
+                  accessibilityState={{ selected: isSelected }}
                 >
                   <View style={styles.vaccineHeader}>
                     <View style={styles.vaccineTitleContainer}>
@@ -285,12 +282,12 @@ export default function SelectVaccine() {
                         <Text style={styles.vaccineFullName}>{vaccine.fullName}</Text>
                       )}
                     </View>
-                    {vaccine.isEssential && (
-                      <View style={styles.essentialBadge}>
-                        <Shield size={14} color="#DC2626" />
-                        <Text style={styles.essentialText}>Esencial</Text>
-                      </View>
-                    )}
+                    <View style={styles.headerRight}>
+                      {vaccine.isEssential && (
+                        <Badge label="Esencial" tone="primary" size="small" icon={<Shield size={12} color={colors.primary} />} />
+                      )}
+                      <SelectionCheck selected={isSelected} />
+                    </View>
                   </View>
 
                   {vaccine.description && (
@@ -301,14 +298,14 @@ export default function SelectVaccine() {
 
                   <View style={styles.vaccineDetails}>
                     <View style={styles.detailRow}>
-                      <Clock size={14} color="#3B82F6" />
+                      <Clock size={14} color={colors.primary} />
                       <Text style={styles.detailLabel}>Frecuencia:</Text>
                       <Text style={styles.detailValue}>{vaccine.frequency}</Text>
                     </View>
 
                     {vaccine.recommendedAgeWeeks && vaccine.recommendedAgeWeeks.length > 0 && (
                       <View style={styles.detailRow}>
-                        <Calendar size={14} color="#10B981" />
+                        <Calendar size={14} color={colors.success} />
                         <Text style={styles.detailLabel}>Edad recomendada:</Text>
                         <Text style={styles.detailValue}>
                           {vaccine.recommendedAgeWeeks[0]}-{vaccine.recommendedAgeWeeks[vaccine.recommendedAgeWeeks.length - 1]} semanas
@@ -328,7 +325,7 @@ export default function SelectVaccine() {
 
                   {vaccine.sideEffects && (
                     <View style={styles.sideEffectsContainer}>
-                      <AlertTriangle size={12} color="#F59E0B" />
+                      <AlertTriangle size={12} color={colors.warning} />
                       <Text style={styles.sideEffectsLabel}>Posibles efectos:</Text>
                       <Text style={styles.sideEffectsText}>{vaccine.sideEffects}</Text>
                     </View>
@@ -341,7 +338,8 @@ export default function SelectVaccine() {
                   )}
                 </TouchableOpacity>
               </Card>
-            ))}
+              );
+            })}
           </View>
         )}
       </ScrollView>
@@ -352,51 +350,51 @@ export default function SelectVaccine() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 0,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
     paddingTop: 50,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
+    paddingBottom: spacing.lg,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   title: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 40,
   },
   searchContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    backgroundColor: colors.surface,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
+    color: colors.text,
   },
   content: {
     flex: 1,
@@ -408,86 +406,95 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   loadingText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 40,
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 16,
+    color: colors.text,
+    marginTop: spacing.lg,
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   vaccinesList: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 24,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xxl,
   },
   vaccineCard: {
-    marginBottom: 16,
+    marginBottom: spacing.md,
+  },
+  cardSelected: {
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   vaccineContent: {
-    padding: 16,
+    padding: spacing.lg,
   },
   vaccineHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   vaccineTitleContainer: {
     flex: 1,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   vaccineName: {
     fontSize: 17,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 4,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   vaccineFullName: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   essentialBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    gap: spacing.xs,
+    backgroundColor: colors.dangerSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   essentialText: {
     fontSize: 11,
     fontFamily: 'Inter-SemiBold',
-    color: '#DC2626',
+    color: colors.danger,
   },
   vaccineDescription: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
+    color: colors.textSecondary,
     lineHeight: 20,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   vaccineDetails: {
-    gap: 8,
-    marginBottom: 12,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   detailRow: {
     flexDirection: 'row',
@@ -497,60 +504,60 @@ const styles = StyleSheet.create({
   detailLabel: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   detailValue: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
   },
   brandsContainer: {
-    backgroundColor: '#ECFDF5',
+    backgroundColor: colors.successSoft,
     padding: 10,
-    borderRadius: 8,
-    marginBottom: 8,
+    borderRadius: radius.sm,
+    marginBottom: spacing.sm,
   },
   brandsLabel: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-SemiBold',
-    color: '#059669',
-    marginBottom: 4,
+    color: colors.success,
+    marginBottom: spacing.xs,
   },
   brandsText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#047857',
+    color: colors.success,
   },
   sideEffectsContainer: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: colors.warningSoft,
     padding: 10,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 6,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   sideEffectsLabel: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-SemiBold',
-    color: '#D97706',
+    color: colors.warning,
   },
   sideEffectsText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Regular',
-    color: '#B45309',
+    color: colors.warning,
     flex: 1,
   },
   notesContainer: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: colors.primarySoft,
     padding: 10,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   notesText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Regular',
-    color: '#1E40AF',
+    color: colors.primaryStrong,
     lineHeight: 16,
   },
 });

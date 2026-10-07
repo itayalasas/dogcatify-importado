@@ -5,6 +5,10 @@ import { ArrowLeft, Package, Clock, Truck, CircleCheck as CheckCircle, Circle as
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { OrderStatusBanner } from '../../components/OrderStatusBanner';
+import { ScreenHeader, IconButton, Badge, EmptyState, Skeleton, SkeletonCard, toast } from '../../components/ui';
+import { colors, radius, spacing, typography } from '../../constants/theme';
+import { formatPrice } from '../../components/shop/format';
+import { getOrderStatusTone } from '../../components/shop/orderStatus';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { regeneratePaymentLink } from '../../utils/mercadoPago';
@@ -158,44 +162,6 @@ export default function OrderDetail() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return '#FEF3C7';
-      case 'reserved': return '#FEF3C7';
-      case 'payment_failed': return '#FECACA';
-      case 'insufficient_stock': return '#FEE2E2';
-      case 'confirmed': return '#DBEAFE';
-      case 'processing': return '#DBEAFE';
-      case 'preparing': return '#DBEAFE';
-      case 'ready_for_delivery': return '#DBEAFE';
-      case 'shipped': return '#D1FAE5';
-      case 'delivered': return '#D1FAE5';
-      case 'completed': return '#D1FAE5';
-      case 'cancelled': return '#FEE2E2';
-      case 'refunded': return '#F3F4F6';
-      default: return '#F3F4F6';
-    }
-  };
-
-  const getStatusTextColor = (status: string) => {
-    switch (status) {
-      case 'pending': return '#92400E';
-      case 'reserved': return '#92400E';
-      case 'payment_failed': return '#991B1B';
-      case 'insufficient_stock': return '#991B1B';
-      case 'confirmed': return '#1E40AF';
-      case 'processing': return '#1E40AF';
-      case 'preparing': return '#1E40AF';
-      case 'ready_for_delivery': return '#1E40AF';
-      case 'shipped': return '#065F46';
-      case 'delivered': return '#065F46';
-      case 'completed': return '#065F46';
-      case 'cancelled': return '#991B1B';
-      case 'refunded': return '#374151';
-      default: return '#374151';
-    }
-  };
-
   const isServiceOrder = isServiceBookingOrder(order);
   const shippingAddressText = (order?.shippingAddress || '').trim();
   const isStorePickup = !isServiceOrder && (
@@ -208,17 +174,12 @@ export default function OrderDetail() {
     order?.subtotalAmount ?? Math.max(0, Number(order?.totalAmount || 0) - shippingCost)
   );
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => formatPrice(amount);
 
   const handleContactSupport = () => {
     Alert.alert(
-      'Contactar Soporte',
-      `Pedido ${order.orderNumber || `#${order.id.slice(-6)}`}\n\nPuedes contactarnos por:\n\n📧 Email: soporte@dogcatify.com\n📱 WhatsApp: +54 11 1234-5678`,
+      'Contactar soporte',
+      `Pedido ${order.orderNumber || `#${order.id.slice(-6)}`}\n\nPodés contactarnos por:\n\nEmail: soporte@dogcatify.com\nWhatsApp: +54 11 1234-5678`,
       [{ text: 'Entendido' }]
     );
   };
@@ -244,10 +205,7 @@ export default function OrderDetail() {
 
       if (error) throw error;
 
-      Alert.alert(
-        'Retiro confirmado',
-        'Tu compra quedó marcada como retirada y el aliado recibirá la notificación.',
-      );
+      toast.success('Retiro confirmado. Le avisamos a la tienda.');
 
       await fetchOrderDetails();
     } catch (error) {
@@ -288,8 +246,8 @@ export default function OrderDetail() {
       Alert.alert(
         'Regenerar link de pago',
         isExpired
-          ? 'El link de pago ha expirado. Se generará uno nuevo.'
-          : 'Se generará un nuevo link de pago.',
+          ? 'El link de pago venció. Vamos a generar uno nuevo.'
+          : 'Vamos a generar un nuevo link de pago.',
         [
           { text: 'Cancelar', style: 'cancel' },
           {
@@ -362,8 +320,11 @@ export default function OrderDetail() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando detalle del pedido...</Text>
+        <ScreenHeader title="Detalle del pedido" />
+        <View style={styles.skeletonWrap} accessibilityRole="progressbar" accessibilityLabel="Cargando detalle del pedido">
+          <Skeleton height={96} borderRadius={radius.lg} />
+          <SkeletonCard imageHeight={120} style={styles.skeletonGap} />
+          <Skeleton height={140} borderRadius={radius.lg} style={styles.skeletonGap} />
         </View>
       </SafeAreaView>
     );
@@ -372,25 +333,30 @@ export default function OrderDetail() {
   if (!order) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>No se encontró el pedido</Text>
-          <Button title="Volver" onPress={() => router.back()} />
-        </View>
+        <ScreenHeader title="Detalle del pedido" />
+        <EmptyState
+          icon={<Package size={32} color={colors.primary} />}
+          title="No encontramos el pedido"
+          description="Puede que se haya eliminado o que no tengas acceso."
+          actionLabel="Volver"
+          onAction={() => router.back()}
+        />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Detalle del Pedido</Text>
-        <TouchableOpacity onPress={handleContactSupport} style={styles.supportButton}>
-          <MessageSquare size={20} color="#3B82F6" />
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader
+        title="Detalle del pedido"
+        right={
+          <IconButton
+            icon={<MessageSquare size={20} color={colors.primary} />}
+            onPress={handleContactSupport}
+            accessibilityLabel="Contactar soporte"
+          />
+        }
+      />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <OrderStatusBanner />
@@ -399,33 +365,26 @@ export default function OrderDetail() {
         <Card style={styles.statusCard}>
           <View style={styles.statusHeader}>
             <Text style={styles.orderNumber}>Pedido {order.orderNumber || `#${order.id.slice(-6)}`}</Text>
-            <View style={[
-              styles.statusBadge,
-              { backgroundColor: getStatusColor(order.status) }
-            ]}>
-              <Text style={[
-                styles.statusText,
-                { color: getStatusTextColor(order.status) }
-              ]}>
-                {getOrderStatusLabel(order.status, order.orderType, order.shippingAddress)}
-              </Text>
-            </View>
+            <Badge
+              label={getOrderStatusLabel(order.status, order.orderType, order.shippingAddress)}
+              tone={getOrderStatusTone(order.status)}
+            />
           </View>
 
           <Text style={styles.orderDate}>
-            Realizado el {order.createdAt.toLocaleDateString()} a las {order.createdAt.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+            Realizado el {order.createdAt.toLocaleDateString('es-UY')} a las {order.createdAt.toLocaleTimeString('es-UY', {hour: '2-digit', minute:'2-digit'})}
           </Text>
 
           {order.updatedAt && (
             <Text style={styles.lastUpdate}>
-              Última actualización: {order.updatedAt.toLocaleDateString()}
+              Última actualización: {order.updatedAt.toLocaleDateString('es-UY')}
             </Text>
           )}
         </Card>
 
         {/* Order Tracking Timeline */}
         <Card style={styles.trackingCard}>
-          <Text style={styles.sectionTitle}>Seguimiento del Pedido</Text>
+          <Text style={styles.sectionTitle}>Seguimiento del pedido</Text>
           <OrderTracking
             orderStatus={order.status}
             orderType={order.orderType}
@@ -467,9 +426,9 @@ export default function OrderDetail() {
         {/* Shipping Information */}
         {!isServiceOrder && order.shippingAddress && (
           <Card style={styles.shippingCard}>
-            <Text style={styles.sectionTitle}>{isStorePickup ? 'Retiro en Tienda' : 'Información de Envío'}</Text>
+            <Text style={styles.sectionTitle}>{isStorePickup ? 'Retiro en tienda' : 'Información de envío'}</Text>
             <View style={styles.shippingInfo}>
-              <MapPin size={20} color="#6B7280" />
+              <MapPin size={20} color={colors.textSecondary} />
               <Text style={styles.shippingAddress}>
                 {isStorePickup && partnerAddress ? partnerAddress : order.shippingAddress}
               </Text>
@@ -486,7 +445,7 @@ export default function OrderDetail() {
 
         {/* Order Summary */}
         <Card style={styles.summaryCard}>
-          <Text style={styles.sectionTitle}>Resumen del Pedido</Text>
+          <Text style={styles.sectionTitle}>Resumen del pedido</Text>
           
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal</Text>
@@ -552,9 +511,9 @@ export default function OrderDetail() {
 
           {order.status === 'delivered' && (
             <Button
-              title="Reordenar Productos"
+              title="Reordenar productos"
               onPress={() => {
-                Alert.alert('Reordenar', 'Los productos se han agregado al carrito');
+                toast.success('Los productos se agregaron al carrito');
                 router.push('/cart');
               }}
               size="large"
@@ -562,7 +521,7 @@ export default function OrderDetail() {
           )}
           
           <Button
-            title="Contactar Soporte"
+            title="Contactar soporte"
             onPress={handleContactSupport}
             variant="outline"
             size="large"
@@ -576,33 +535,39 @@ export default function OrderDetail() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   title: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   supportButton: {
-    padding: 8,
+    padding: spacing.sm,
+  },
+  skeletonWrap: {
+    padding: spacing.lg,
+  },
+  skeletonGap: {
+    marginTop: spacing.lg,
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
   },
   loadingContainer: {
     flex: 1,
@@ -612,42 +577,42 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   errorText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#EF4444',
-    marginBottom: 16,
+    color: colors.danger,
+    marginBottom: spacing.lg,
     textAlign: 'center',
   },
   statusCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   trackingCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   statusHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   orderNumber: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
   },
   statusBadge: {
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: radius.lg,
   },
   statusText: {
     fontSize: 14,
@@ -656,35 +621,34 @@ const styles = StyleSheet.create({
   orderDate: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   lastUpdate: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    color: colors.textSecondary,
   },
   itemsCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   orderItem: {
     flexDirection: 'row',
-    marginBottom: 16,
-    paddingBottom: 16,
+    marginBottom: spacing.lg,
+    paddingBottom: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   itemImage: {
     width: 60,
     height: 60,
-    borderRadius: 8,
-    marginRight: 12,
+    borderRadius: radius.sm,
+    marginRight: spacing.md,
   },
   itemDetails: {
     flex: 1,
@@ -692,14 +656,14 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   itemPartner: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 8,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   itemPricing: {
     flexDirection: 'row',
@@ -709,15 +673,15 @@ const styles = StyleSheet.create({
   itemQuantity: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   itemPrice: {
     fontSize: 16,
     fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    color: colors.success,
   },
   shippingCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   shippingInfo: {
     flexDirection: 'row',
@@ -726,55 +690,54 @@ const styles = StyleSheet.create({
   shippingAddress: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
-    marginLeft: 8,
+    color: colors.text,
+    marginLeft: spacing.sm,
     flex: 1,
     lineHeight: 20,
   },
   summaryCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   summaryLabel: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   summaryValue: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#111827',
+    color: colors.text,
   },
   divider: {
     height: 1,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 12,
+    backgroundColor: colors.border,
+    marginVertical: spacing.md,
   },
   totalLabel: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   totalValue: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    ...typography.heading,
+    color: colors.text,
   },
   actionsContainer: {
-    marginBottom: 24,
-    gap: 12,
+    marginBottom: spacing.xxl,
+    gap: spacing.md,
   },
   deleteOrderButton: {
-    borderColor: '#FECACA',
-    backgroundColor: '#FEF2F2',
+    borderColor: colors.danger,
+    backgroundColor: colors.dangerSoft,
   },
   deleteOrderButtonText: {
-    color: '#991B1B',
+    color: colors.danger,
     fontFamily: 'Inter-Medium',
     fontWeight: '600',
     fontSize: 16,

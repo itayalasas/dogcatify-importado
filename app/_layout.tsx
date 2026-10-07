@@ -19,6 +19,8 @@ import { SafeAppWrapper } from '../components/SafeAppWrapper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { FloatingVoiceBot } from '../components/FloatingVoiceBot';
 import { AppLoadingScreen } from '../components/AppLoadingScreen';
+import { ToastHost } from '../components/ui/Toast';
+import { useFonts } from 'expo-font';
 
 const SYSTEM_CONFIG_KEY = 'system_config';
 const APP_DEEP_LINK_SCHEME = 'dogcatify';
@@ -109,6 +111,15 @@ global.onunhandledrejection = (event: any) => {
 
 function RootLayout() {
   useFrameworkReady();
+  // Inter estaba referenciada en los estilos pero nunca se cargaba, así que la app
+  // se veía con la fuente del sistema. No bloquea el arranque: si tarda o falla,
+  // el texto sigue con la fuente del sistema y cambia a Inter al terminar de cargar.
+  useFonts({
+    'Inter-Regular': require('../assets/fonts/Inter-Regular.ttf'),
+    'Inter-Medium': require('../assets/fonts/Inter-Medium.ttf'),
+    'Inter-SemiBold': require('../assets/fonts/Inter-SemiBold.ttf'),
+    'Inter-Bold': require('../assets/fonts/Inter-Bold.ttf'),
+  });
   const [configReady, setConfigReady] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
   const logoScale = new Animated.Value(0.8);
@@ -548,7 +559,13 @@ function RootLayout() {
             headerShown: false
           }}
         />
-        <Stack.Screen name="payment/pending" />
+        <Stack.Screen
+          name="payment/pending"
+          options={{
+            gestureEnabled: false,
+            headerShown: false
+          }}
+        />
         <Stack.Screen name="subscription/return" />
         <Stack.Screen name="test-adoption" />
         <Stack.Screen name="medical-history/[id]" />
@@ -673,7 +690,7 @@ function RootLayout() {
             width: '100%',
           }}>
             <Text style={{
-              color: '#9CA3AF',
+              color: '#6B7280',
               fontSize: 13,
               textAlign: 'center',
               lineHeight: 18,
@@ -804,6 +821,7 @@ function RootLayout() {
 	                </Stack>)}
                   </ErrorBoundary>
                   <FloatingVoiceBot showWelcome={false} />
+                  <ToastHost />
                   <StatusBar style="auto" />
                 </CartProvider>
               </NotificationProvider>

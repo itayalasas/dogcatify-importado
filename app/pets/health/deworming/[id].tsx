@@ -10,6 +10,9 @@ import { Card } from '../../../../components/ui/Card';
 import { supabaseClient } from '../../../../lib/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { extractMedicalRecordsFromImage, ExtractedMedicalRecord, simulateOCRExtraction } from '../../../../utils/medicalCardOCR';
+import { colors, spacing, radius, fontSize } from '../../../../constants/theme';
+import { HealthHeader, HealthStatusBadge } from '../../../../components/health';
+import { toast } from '../../../../components/ui/Toast';
 
 export default function AddDeworming() {
   const { id, recordId, refresh } = useLocalSearchParams<{ id: string; recordId?: string; refresh?: string }>();
@@ -270,14 +273,14 @@ export default function AddDeworming() {
 
   const handleAddTemporaryVet = async () => {
     if (!tempVetName.trim()) {
-      Alert.alert('Error', 'Por favor ingresa el nombre del veterinario');
+      Alert.alert('Error', 'Ingresá el nombre del veterinario');
       return;
     }
     
     setVeterinarian(tempVetName.trim());
     setTempVetName('');
     setShowAddVetModal(false);
-    Alert.alert('Veterinario agregado', `${tempVetName.trim()} ha sido agregado temporalmente`);
+    toast.success('Veterinario agregado', `${tempVetName.trim()} quedó agregado temporalmente`);
   };
   const fetchDewormingDetails = async () => {
     try {
@@ -341,7 +344,7 @@ export default function AddDeworming() {
 
   const handleSubmit = async () => {
     if (!productName.trim() || !applicationDate) {
-      Alert.alert('Error', 'Por favor completa los campos obligatorios');
+      Alert.alert('Error', 'Completá los campos obligatorios');
       return;
     }
 
@@ -426,12 +429,11 @@ export default function AddDeworming() {
         }
       }
 
-      Alert.alert('Éxito', 'Desparasitación guardada correctamente', [
-        { text: 'OK', onPress: () => router.replace({
-          pathname: '/pets/[id]',
-          params: { id, activeTab: 'health' }
-        }) }
-      ]);
+      toast.success('Desparasitación guardada');
+      router.replace({
+        pathname: '/pets/[id]',
+        params: { id, activeTab: 'health' }
+      });
     } catch (error) {
       console.error('Error saving deworming:', error);
       Alert.alert('Error', 'No se pudo registrar la desparasitación');
@@ -518,18 +520,14 @@ export default function AddDeworming() {
       if (extractedRecords.length === 0) {
         Alert.alert(
           'Sin resultados',
-          'No se encontraron desparasitaciones en la imagen. Por favor ingresa los datos manualmente.'
+          'No se encontraron desparasitaciones en la imagen. Ingresá los datos a mano.'
         );
         return;
       }
 
       if (extractedRecords.length === 1) {
         populateFormWithRecord(extractedRecords[0]);
-        Alert.alert(
-          'Información extraída',
-          'Se extrajo 1 desparasitación. Por favor verifica los datos antes de guardar.',
-          [{ text: 'OK' }]
-        );
+        toast.info('Información extraída', 'Se extrajo 1 desparasitación. Revisá los datos antes de guardar.');
       } else {
         handleMultipleRecords(extractedRecords);
       }
@@ -537,7 +535,7 @@ export default function AddDeworming() {
       console.error('Error processing deworming card:', error);
       Alert.alert(
         'Error',
-        'No se pudo procesar la imagen del registro. Por favor ingresa los datos manualmente.'
+        'No se pudo procesar la imagen del registro. Ingresá los datos a mano.'
       );
     } finally {
       setProcessingImage(false);
@@ -626,7 +624,7 @@ export default function AddDeworming() {
   const handleMultipleRecords = async (records: ExtractedMedicalRecord[]) => {
     Alert.alert(
       `¡${records.length} desparasitaciones encontradas!`,
-      `Se encontraron ${records.length} desparasitaciones en la imagen. ¿Deseas guardarlas todas automáticamente?`,
+      `Se encontraron ${records.length} desparasitaciones en la imagen. ¿Querés guardarlas todas automáticamente?`,
       [
         {
           text: 'Cancelar',
@@ -636,9 +634,9 @@ export default function AddDeworming() {
           text: 'Revisar una por una',
           onPress: () => {
             populateFormWithRecord(records[0]);
-            Alert.alert(
+            toast.info(
               'Primera desparasitación',
-              `Mostrando la primera de ${records.length} desparasitaciones. Guarda esta y luego escanea nuevamente para las demás.`
+              `Mostrando la primera de ${records.length} desparasitaciones. Guardá esta y después escaneá de nuevo para las demás.`
             );
           }
         },
@@ -676,19 +674,11 @@ export default function AddDeworming() {
 
       if (error) throw error;
 
-      Alert.alert(
-        'Éxito',
-        `Se guardaron ${records.length} desparasitaciones correctamente`,
-        [
-          {
-            text: 'OK',
-            onPress: () => router.replace({
-              pathname: '/pets/[id]',
-              params: { id, activeTab: 'health' }
-            })
-          }
-        ]
-      );
+      toast.success(`Se guardaron ${records.length} desparasitaciones`);
+      router.replace({
+        pathname: '/pets/[id]',
+        params: { id, activeTab: 'health' }
+      });
     } catch (error) {
       console.error('Error saving multiple dewormings:', error);
       Alert.alert('Error', 'No se pudieron guardar todas las desparasitaciones');
@@ -698,13 +688,11 @@ export default function AddDeworming() {
   };
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBackNavigation} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>{isEditing ? 'Editar Desparasitación' : 'Agregar Desparasitación'}</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <HealthHeader
+        title={isEditing ? 'Editar desparasitación' : 'Nueva desparasitación'}
+        subtitle={pet?.name}
+        onBack={handleBackNavigation}
+      />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -714,7 +702,7 @@ export default function AddDeworming() {
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Card style={styles.formCard}>
           <View style={styles.iconContainer}>
-            <Pill size={40} color="#10B981" />
+            <Pill size={40} color={colors.primary} />
           </View>
 
           {pet && (
@@ -731,13 +719,14 @@ export default function AddDeworming() {
           {/* Scan Deworming Card Button */}
           <TouchableOpacity
             style={styles.scanButton}
+            accessibilityRole="button"
             onPress={() => setShowScanOptions(true)}
             disabled={processingImage}
           >
             {processingImage ? (
-              <ActivityIndicator size="small" color="#10B981" />
+              <ActivityIndicator size="small" color={colors.primary} />
             ) : (
-              <Camera size={24} color="#10B981" />
+              <Camera size={24} color={colors.primary} />
             )}
             <Text style={styles.scanButtonText}>
               {processingImage ? 'Procesando imagen...' : 'Escanear registro de desparasitación'}
@@ -749,6 +738,7 @@ export default function AddDeworming() {
             <Text style={styles.inputLabel}>Producto utilizado *</Text>
             <TouchableOpacity 
               style={styles.selectableInput}
+              accessibilityRole="button"
               onPress={handleSelectDewormer}
             >
               <Text style={[
@@ -756,11 +746,11 @@ export default function AddDeworming() {
                 !productName && styles.placeholderText
               ]}>
                 {productName || (pet?.species === 'dog' ? 
-                  "Seleccionar desparasitante para perros..." : 
-                  "Seleccionar desparasitante para gatos..."
+                  "Elegí un desparasitante para perros..." : 
+                  "Elegí un desparasitante para gatos..."
                 )}
               </Text>
-              <ChevronDown size={20} color="#6B7280" />
+              <ChevronDown size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -769,9 +759,10 @@ export default function AddDeworming() {
             <Text style={styles.dateInputLabel}>Fecha de aplicación *</Text>
             <TouchableOpacity 
               style={styles.dateInput}
+              accessibilityRole="button"
               onPress={() => setShowApplicationDatePicker(true)}
             >
-              <Calendar size={20} color="#6B7280" />
+              <Calendar size={20} color={colors.textSecondary} />
               <Text style={styles.dateInputText}>
                 {formatDate(applicationDate)}
               </Text>
@@ -788,12 +779,16 @@ export default function AddDeworming() {
 
           {/* Next Due Date */}
           <View style={styles.dateInputContainer}>
-            <Text style={styles.dateInputLabel}>Próxima desparasitación</Text>
+            <View style={styles.labelRow}>
+              <Text style={[styles.dateInputLabel, styles.labelRowText]}>Próxima desparasitación</Text>
+              <HealthStatusBadge dueDate={nextDueDate} />
+            </View>
             <TouchableOpacity 
               style={styles.dateInput}
+              accessibilityRole="button"
               onPress={() => setShowNextDueDatePicker(true)}
             >
-              <Calendar size={20} color="#6B7280" />
+              <Calendar size={20} color={colors.textSecondary} />
               <Text style={styles.dateInputText}>
                 {nextDueDate ? formatDate(nextDueDate) : 'No establecida'}
               </Text>
@@ -813,19 +808,21 @@ export default function AddDeworming() {
             <Text style={styles.inputLabel}>Veterinario</Text>
             <TouchableOpacity 
               style={styles.selectableInput}
+              accessibilityRole="button"
               onPress={handleSelectVeterinarian}
             >
               <Text style={[
                 styles.selectableInputText,
                 !veterinarian && styles.placeholderText
               ]}>
-                {veterinarian || "Seleccionar veterinario..."}
+                {veterinarian || "Elegí un veterinario..."}
               </Text>
-              <ChevronDown size={20} color="#6B7280" />
+              <ChevronDown size={20} color={colors.textSecondary} />
             </TouchableOpacity>
             
             <TouchableOpacity 
               style={styles.addTempVetButton}
+              accessibilityRole="button"
               onPress={() => setShowAddVetModal(true)}
             >
               <Text style={styles.addTempVetText}>+ Agregar veterinario temporal</Text>
@@ -842,7 +839,7 @@ export default function AddDeworming() {
           />
 
           <Button
-            title={isEditing ? "Actualizar Desparasitación" : "Guardar Desparasitación"}
+            title={isEditing ? "Guardar cambios" : "Guardar desparasitación"}
             onPress={handleSubmit}
             loading={loading}
             size="large"
@@ -860,9 +857,9 @@ export default function AddDeworming() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Agregar Veterinario Temporal</Text>
+            <Text style={styles.modalTitle}>Agregar veterinario temporal</Text>
             <Text style={styles.modalSubtitle}>
-              Si el veterinario no está en la lista, puedes agregarlo temporalmente
+              Si el veterinario no está en la lista, podés agregarlo temporalmente
             </Text>
             
             <Input
@@ -903,32 +900,34 @@ export default function AddDeworming() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Escanear Registro de Desparasitación</Text>
+            <Text style={styles.modalTitle}>Escanear registro de desparasitación</Text>
             <Text style={styles.modalSubtitle}>
-              Toma una foto o selecciona una imagen del registro de desparasitación para extraer la información automáticamente
+              Sacá una foto o elegí una imagen del registro de desparasitación para extraer la información automáticamente
             </Text>
 
             <View style={styles.scanOptionsContainer}>
               <TouchableOpacity
                 style={styles.scanOptionButton}
+                accessibilityRole="button"
                 onPress={() => {
                   setShowScanOptions(false);
                   handleTakePhoto();
                 }}
               >
-                <Camera size={32} color="#10B981" />
-                <Text style={styles.scanOptionText}>Tomar Foto</Text>
+                <Camera size={32} color={colors.primary} />
+                <Text style={styles.scanOptionText}>Sacar foto</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.scanOptionButton}
+                accessibilityRole="button"
                 onPress={() => {
                   setShowScanOptions(false);
                   handlePickImage();
                 }}
               >
-                <ImageIcon size={32} color="#10B981" />
-                <Text style={styles.scanOptionText}>Desde Galería</Text>
+                <ImageIcon size={32} color={colors.primary} />
+                <Text style={styles.scanOptionText}>Desde la galería</Text>
               </TouchableOpacity>
             </View>
 
@@ -948,26 +947,25 @@ export default function AddDeworming() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   title: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 40,
@@ -976,131 +974,140 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   formCard: {
-    margin: 20,
+    margin: spacing.lg,
   },
   iconContainer: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   petInfoContainer: {
-    backgroundColor: '#F0F9FF',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 20,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    marginBottom: spacing.xl,
     alignItems: 'center',
   },
   petInfoText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-SemiBold',
-    color: '#0369A1',
-    marginBottom: 4,
+    color: colors.info,
+    marginBottom: spacing.xs,
   },
   petInfoSubtext: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Regular',
-    color: '#0369A1',
+    color: colors.info,
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   inputLabel: {
-    fontSize: 15,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: colors.textSecondary,
     marginBottom: 6,
   },
   selectableInput: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 14,
     minHeight: 50,
   },
   selectableInputText: {
     fontSize: 15,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
   },
   placeholderText: {
-    color: '#9CA3AF',
+    color: colors.textSecondary,
   },
   addTempVetButton: {
     alignSelf: 'flex-start',
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
   },
   addTempVetText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    color: colors.primary,
   },
   dateInputContainer: {
     marginBottom: 14,
   },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  labelRowText: {
+    marginBottom: 0,
+  },
   dateInputLabel: {
-    fontSize: 15,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: colors.textSecondary,
     marginBottom: 6,
   },
   dateInput: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#FFFFFF',
-    minHeight: 44,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+    minHeight: 50,
+    gap: spacing.sm,
   },
   dateInputText: {
-    fontSize: 15,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
-    marginLeft: 10,
+    color: colors.text,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingBottom: 0,
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    padding: 20,
+    padding: spacing.xl,
     paddingBottom: 40,
     width: '100%',
     maxHeight: '60%',
     minHeight: 300,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 12,
+    color: colors.text,
+    marginBottom: spacing.md,
     textAlign: 'center',
   },
   modalSubtitle: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
     lineHeight: 20,
   },
   modalActions: {
     flexDirection: 'column',
-    gap: 16,
-    marginTop: 24,
+    gap: spacing.lg,
+    marginTop: spacing.xxl,
   },
   modalButton: {
     width: '100%',
@@ -1109,42 +1116,42 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F0FDF4',
+    backgroundColor: colors.primarySoft,
     borderWidth: 2,
-    borderColor: '#10B981',
+    borderColor: colors.primary,
     borderStyle: 'dashed',
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    marginBottom: 24,
-    gap: 12,
+    borderRadius: radius.md,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    marginBottom: spacing.xxl,
+    gap: spacing.md,
   },
   scanButtonText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
+    color: colors.primary,
   },
   scanOptionsContainer: {
     flexDirection: 'row',
-    gap: 16,
-    marginBottom: 24,
+    gap: spacing.lg,
+    marginBottom: spacing.xxl,
   },
   scanOptionButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    gap: 12,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingVertical: spacing.xxl,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
   },
   scanOptionText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
 });

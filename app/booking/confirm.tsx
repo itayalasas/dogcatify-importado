@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, ActivityIndicator, Image } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { CheckCircle, XCircle, Calendar, Clock } from 'lucide-react-native';
 import { Button } from '../../components/ui/Button';
+import { Badge } from '../../components/ui';
+import { colors, radius, spacing, typography, shadows } from '../../constants/theme';
 import { envConfig } from '../../utils/envConfig';
 
 interface BookingData {
@@ -25,7 +27,7 @@ export default function ConfirmBooking() {
     if (token) {
       confirmBooking(token);
     } else {
-      setError('Token no proporcionado');
+      setError('El enlace de confirmación está incompleto.');
       setLoading(false);
     }
   }, [token]);
@@ -71,7 +73,7 @@ export default function ConfirmBooking() {
     return (
       <View style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2D6A6F" />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Confirmando tu reserva...</Text>
         </View>
       </View>
@@ -89,12 +91,12 @@ export default function ConfirmBooking() {
         {success ? (
           <>
             <View style={styles.iconContainer}>
-              <CheckCircle size={80} color="#10B981" />
+              <CheckCircle size={72} color={colors.success} />
             </View>
 
-            <Text style={styles.title}>¡Reserva Confirmada!</Text>
+            <Text style={styles.title} accessibilityRole="header">¡Reserva confirmada!</Text>
             <Text style={styles.message}>
-              Tu cita ha sido confirmada exitosamente
+              Tu turno quedó confirmado. Te esperamos.
             </Text>
 
             {bookingData && (
@@ -107,7 +109,7 @@ export default function ConfirmBooking() {
                 </View>
 
                 <View style={styles.detailRow}>
-                  <Calendar size={16} color="#6B7280" />
+                  <Calendar size={16} color={colors.textTertiary} />
                   <Text style={styles.detailLabel}>Fecha:</Text>
                   <Text style={styles.detailValue}>
                     {formatDate(bookingData.appointment_date)}
@@ -115,14 +117,12 @@ export default function ConfirmBooking() {
                 </View>
 
                 <View style={styles.detailRow}>
-                  <Clock size={16} color="#6B7280" />
+                  <Clock size={16} color={colors.textTertiary} />
                   <Text style={styles.detailLabel}>Hora:</Text>
                   <Text style={styles.detailValue}>{bookingData.appointment_time}</Text>
                 </View>
 
-                <View style={styles.statusBadge}>
-                  <Text style={styles.statusText}>Confirmada</Text>
-                </View>
+                <Badge label="Confirmada" tone="success" style={styles.statusBadge} />
               </View>
             )}
 
@@ -135,19 +135,19 @@ export default function ConfirmBooking() {
         ) : (
           <>
             <View style={styles.iconContainer}>
-              <XCircle size={80} color="#EF4444" />
+              <XCircle size={72} color={colors.danger} />
             </View>
 
-            <Text style={styles.title}>Error al Confirmar</Text>
+            <Text style={styles.title} accessibilityRole="header">No pudimos confirmar la reserva</Text>
             <Text style={styles.errorMessage}>{error}</Text>
 
             <View style={styles.errorCard}>
               <Text style={styles.errorCardTitle}>Posibles causas:</Text>
               <Text style={styles.errorCardText}>
                 • El enlace ya fue utilizado{'\n'}
-                • El enlace ha expirado{'\n'}
+                • El enlace venció{'\n'}
                 • La reserva fue cancelada{'\n'}
-                • El token es inválido
+                • El enlace no es válido
               </Text>
             </View>
 
@@ -166,7 +166,7 @@ export default function ConfirmBooking() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   loadingContainer: {
     flex: 1,
@@ -174,114 +174,94 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    marginTop: spacing.lg,
+    ...typography.label,
+    color: colors.textSecondary,
   },
   content: {
     flex: 1,
-    padding: 24,
+    padding: spacing.xxl,
     justifyContent: 'center',
     alignItems: 'center',
   },
   logo: {
-    width: 120,
-    height: 120,
+    width: 96,
+    height: 96,
     resizeMode: 'contain',
-    marginBottom: 24,
+    marginBottom: spacing.xl,
   },
   iconContainer: {
-    marginBottom: 24,
+    marginBottom: spacing.xl,
   },
   title: {
-    fontSize: 28,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.display,
+    color: colors.text,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   message: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 32,
+    marginBottom: spacing.xxxl,
   },
   errorMessage: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#EF4444',
+    ...typography.body,
+    color: colors.danger,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   detailsCard: {
     width: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    marginBottom: spacing.xxxl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    ...shadows.md,
   },
   detailsTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.lg,
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-    gap: 8,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
   },
   detailLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textSecondary,
   },
   detailValue: {
+    ...typography.bodyStrong,
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
   },
   statusBadge: {
-    backgroundColor: '#D1FAE5',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-    marginTop: 12,
-  },
-  statusText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#065F46',
+    marginTop: spacing.md,
   },
   errorCard: {
     width: '100%',
-    backgroundColor: '#FEF2F2',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 32,
+    backgroundColor: colors.dangerSoft,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.xxxl,
     borderWidth: 1,
     borderColor: '#FECACA',
   },
   errorCardTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    ...typography.label,
+    fontWeight: '600',
     color: '#991B1B',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   errorCardText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    ...typography.bodySmall,
     color: '#991B1B',
-    lineHeight: 20,
   },
 });

@@ -17,6 +17,8 @@ import { supabaseClient } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { Send, ArrowLeft, User } from 'lucide-react-native';
+import { IconButton, Skeleton } from '../../components/ui';
+import { colors, radius, spacing, typography, maxFontScale } from '../../constants/theme';
 
 interface Message {
   id: string;
@@ -408,8 +410,11 @@ export default function ChatScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando mensajes...</Text>
+        <View style={styles.loadingContainer} accessibilityRole="progressbar" accessibilityLabel="Cargando mensajes">
+          <Skeleton width="60%" height={44} borderRadius={radius.lg} />
+          <Skeleton width="45%" height={44} borderRadius={radius.lg} style={styles.skeletonMine} />
+          <Skeleton width="70%" height={64} borderRadius={radius.lg} style={styles.skeletonGap} />
+          <Skeleton width="40%" height={44} borderRadius={radius.lg} style={styles.skeletonMine} />
         </View>
       </SafeAreaView>
     );
@@ -422,26 +427,25 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton}
+          <IconButton
+            icon={<ArrowLeft size={24} color={colors.text} />}
             onPress={() => router.back()}
-          >
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
+            accessibilityLabel="Volver"
+          />
           
           <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle}>
+            <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">
               {recipientName || 'Chat'}
             </Text>
             {petName && (
-              <Text style={styles.headerSubtitle}>
+              <Text style={styles.headerSubtitle} numberOfLines={1}>
                 Sobre la adopción de {petName}
               </Text>
             )}
           </View>
           
           <View style={styles.headerAvatar}>
-            <User size={24} color="#6B7280" />
+            <User size={24} color={colors.primary} />
           </View>
         </View>
 
@@ -461,8 +465,10 @@ export default function ChatScreen() {
             style={styles.textInput}
             value={newMessage}
             onChangeText={setNewMessage}
-            placeholder="Escribe un mensaje..."
-            placeholderTextColor="#9CA3AF"
+            placeholder="Escribí un mensaje..."
+            placeholderTextColor={colors.placeholder}
+            accessibilityLabel="Mensaje"
+            maxFontSizeMultiplier={maxFontScale.default}
             multiline
             maxLength={500}
           />
@@ -473,10 +479,13 @@ export default function ChatScreen() {
             ]}
             onPress={sendMessage}
             disabled={!newMessage.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="Enviar mensaje"
+            accessibilityState={{ disabled: !newMessage.trim() }}
           >
             <Send 
               size={20} 
-              color={!newMessage.trim() ? '#9CA3AF' : '#FFFFFF'} 
+              color={!newMessage.trim() ? colors.textTertiary : colors.onPrimary} 
             />
           </TouchableOpacity>
         </View>
@@ -488,7 +497,7 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   keyboardContainer: {
@@ -496,150 +505,154 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: spacing.lg,
+    paddingTop: spacing.xxl,
+  },
+  skeletonMine: {
+    alignSelf: 'flex-end',
+    marginTop: spacing.md,
+  },
+  skeletonGap: {
+    marginTop: spacing.md,
   },
   loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   headerInfo: {
     flex: 1,
-    marginLeft: 8,
+    marginLeft: spacing.xs,
+    marginRight: spacing.sm,
   },
   headerTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   headerSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   headerAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   messagesList: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   messagesContainer: {
-    padding: 16,
-    paddingBottom: 20,
+    padding: spacing.lg,
+    paddingBottom: spacing.xl,
   },
   messageContainer: {
-    marginVertical: 4,
+    marginVertical: spacing.xs,
     maxWidth: '80%',
-    padding: 12,
-    borderRadius: 16,
+    padding: spacing.md,
+    borderRadius: radius.lg,
   },
   myMessage: {
     alignSelf: 'flex-end',
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.primary,
+    borderBottomRightRadius: radius.sm / 2,
   },
   otherMessage: {
     alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: radius.sm / 2,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   senderName: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginBottom: 4,
+    color: colors.textTertiary,
+    marginBottom: spacing.xs,
   },
   messageText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    ...typography.body,
     lineHeight: 20,
   },
   myMessageText: {
-    color: '#FFFFFF',
+    color: colors.surface,
   },
   otherMessageText: {
-    color: '#111827',
+    color: colors.text,
   },
   messageTime: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    marginTop: 4,
+    ...typography.caption,
+    marginTop: spacing.xs,
   },
   myMessageTime: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255, 255, 255, 0.85)',
     textAlign: 'right',
   },
   otherMessageTime: {
-    color: '#9CA3AF',
+    color: colors.textTertiary,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.border,
   },
   textInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: colors.borderStrong,
     borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginRight: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    marginRight: spacing.md,
     maxHeight: 100,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    backgroundColor: '#F9FAFB',
+    ...typography.body,
+    color: colors.text,
+    backgroundColor: colors.background,
   },
   sendButton: {
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.primary,
     borderRadius: 20,
-    padding: 12,
+    padding: spacing.md,
     justifyContent: 'center',
     alignItems: 'center',
     minWidth: 44,
     minHeight: 44,
   },
   sendButtonDisabled: {
-    backgroundColor: '#D1D5DB',
+    backgroundColor: colors.borderStrong,
   },
   dateSeparatorContainer: {
     alignItems: 'center',
-    marginVertical: 16,
+    marginVertical: spacing.lg,
   },
   dateSeparator: {
-    backgroundColor: '#E5E7EB',
-    paddingHorizontal: 12,
+    backgroundColor: colors.border,
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: radius.md,
   },
   dateSeparatorText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textTertiary,
     textAlign: 'center',
   },
 });

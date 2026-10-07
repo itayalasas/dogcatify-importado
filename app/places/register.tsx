@@ -8,6 +8,8 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { ScreenHeader, toast } from '../../components/ui';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { analyzePlacePhoto, submitPlaceRequest } from '../../utils/placeDiscovery';
 
@@ -139,7 +141,7 @@ export default function RegisterPlace() {
       if (!suggestion.name && !suggestion.address) {
         Alert.alert(
           'No pudimos identificar el lugar',
-          'No encontramos datos suficientes en la foto. Completa el formulario manualmente.'
+          'No encontramos datos suficientes en la foto. Completá el formulario manualmente.'
         );
       }
     } catch (error) {
@@ -166,7 +168,7 @@ export default function RegisterPlace() {
     if (!currentUser?.id) return;
 
     if (!name.trim() || !address.trim() || !description.trim()) {
-      Alert.alert('Faltan datos', 'Completa nombre, dirección y descripción antes de enviar.');
+      Alert.alert('Faltan datos', 'Completá nombre, dirección y descripción antes de enviar.');
       return;
     }
 
@@ -188,11 +190,11 @@ export default function RegisterPlace() {
         aiRawResponse,
       });
 
-      Alert.alert(
+      toast.success(
         'Enviado para aprobación',
-        'Gracias por tu aporte. Un administrador va a revisar tu lugar antes de publicarlo.',
-        [{ text: 'OK', onPress: () => router.replace('/(tabs)/places') }]
+        'Gracias por tu aporte. Vamos a revisar el lugar antes de publicarlo.'
       );
+      router.replace('/(tabs)/places');
     } catch (error) {
       Alert.alert('Error', `No se pudo enviar la solicitud: ${getErrorMessage(error)}`);
     } finally {
@@ -204,13 +206,10 @@ export default function RegisterPlace() {
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => (step === 'form' ? setStep('choose') : router.back())} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Registrar lugar</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader
+        title="Registrar lugar"
+        onBack={() => (step === 'form' ? setStep('choose') : router.back())}
+      />
 
       <ScrollView contentContainerStyle={styles.content}>
         {step === 'choose' && (
@@ -219,9 +218,11 @@ export default function RegisterPlace() {
               Sumá un lugar pet-friendly para que otros lo descubran. Tu propuesta se revisa antes de publicarse.
             </Text>
 
-            <TouchableOpacity onPress={() => pickPhotoAndAnalyze(false)} activeOpacity={0.88}>
+            <TouchableOpacity onPress={() => pickPhotoAndAnalyze(false)} activeOpacity={0.88} accessibilityRole="button" accessibilityLabel="Con foto: subí una foto y completamos el formulario">
               <Card style={styles.optionCard}>
-                <ImagePlus size={32} color="#2D6A6F" />
+                <View style={styles.optionIcon}>
+                  <ImagePlus size={28} color={colors.primary} />
+                </View>
                 <Text style={styles.optionTitle}>Con foto (IA)</Text>
                 <Text style={styles.optionDescription}>
                   Subí una foto del lugar y completamos el formulario automáticamente buscando el negocio real.
@@ -229,9 +230,11 @@ export default function RegisterPlace() {
               </Card>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => pickPhotoAndAnalyze(true)} activeOpacity={0.88}>
+            <TouchableOpacity onPress={() => pickPhotoAndAnalyze(true)} activeOpacity={0.88} accessibilityRole="button" accessibilityLabel="Tomar una foto ahora con la cámara">
               <Card style={styles.optionCard}>
-                <Camera size={32} color="#2D6A6F" />
+                <View style={styles.optionIcon}>
+                  <Camera size={28} color={colors.primary} />
+                </View>
                 <Text style={styles.optionTitle}>Tomar una foto ahora</Text>
                 <Text style={styles.optionDescription}>
                   Usá la cámara en el lugar para que la IA tenga más contexto (incluida tu ubicación).
@@ -239,9 +242,11 @@ export default function RegisterPlace() {
               </Card>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={startManual} activeOpacity={0.88}>
+            <TouchableOpacity onPress={startManual} activeOpacity={0.88} accessibilityRole="button" accessibilityLabel="Cargar el lugar manualmente">
               <Card style={styles.optionCard}>
-                <PenLine size={32} color="#2D6A6F" />
+                <View style={styles.optionIcon}>
+                  <PenLine size={28} color={colors.primary} />
+                </View>
                 <Text style={styles.optionTitle}>Cargar manualmente</Text>
                 <Text style={styles.optionDescription}>
                   Completá vos mismo el nombre, dirección y demás datos del lugar.
@@ -279,6 +284,9 @@ export default function RegisterPlace() {
                           key={cat.value}
                           style={[styles.categoryOption, category === cat.value && styles.selectedCategoryOption]}
                           onPress={() => setCategory(cat.value)}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: category === cat.value }}
+                          accessibilityLabel={`Categoría ${cat.label}`}
                         >
                           <Text style={styles.categoryOptionIcon}>{cat.icon}</Text>
                           <Text style={[styles.categoryOptionText, category === cat.value && styles.selectedCategoryOptionText]}>
@@ -292,23 +300,23 @@ export default function RegisterPlace() {
 
                 <Input
                   label="Dirección *"
-                  placeholder="Ej: Av. Principal 123, Ciudad"
+                  placeholder="Ej: Av. 18 de Julio 1234, Montevideo"
                   value={address}
                   onChangeText={setAddress}
-                  leftIcon={<MapPin size={20} color="#6B7280" />}
+                  leftIcon={<MapPin size={20} color={colors.textTertiary} />}
                 />
 
                 <Input
                   label="Teléfono"
-                  placeholder="Ej: +1234567890"
+                  placeholder="Ej: 099 123 456"
                   value={phone}
                   onChangeText={setPhone}
-                  leftIcon={<Phone size={20} color="#6B7280" />}
+                  leftIcon={<Phone size={20} color={colors.textTertiary} />}
                 />
 
                 <Input
                   label="Descripción *"
-                  placeholder="Describe por qué este lugar es pet-friendly..."
+                  placeholder="Contá por qué este lugar es pet-friendly..."
                   value={description}
                   onChangeText={setDescription}
                   multiline
@@ -317,7 +325,7 @@ export default function RegisterPlace() {
 
                 {coordinates && (
                   <View style={styles.coordinatesRow}>
-                    <Navigation size={16} color="#6B7280" />
+                    <Navigation size={16} color={colors.textTertiary} />
                     <Text style={styles.coordinatesText}>
                       Ubicación detectada: {coordinates.latitude.toFixed(5)}, {coordinates.longitude.toFixed(5)}
                     </Text>
@@ -332,6 +340,8 @@ export default function RegisterPlace() {
                         key={amenity}
                         style={[styles.amenityOption, selectedAmenities.includes(amenity) && styles.selectedAmenityOption]}
                         onPress={() => toggleAmenity(amenity)}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: selectedAmenities.includes(amenity) }}
                       >
                         <Text style={[styles.amenityOptionText, selectedAmenities.includes(amenity) && styles.selectedAmenityOptionText]}>
                           {amenity}
@@ -342,14 +352,17 @@ export default function RegisterPlace() {
 
                   <View style={styles.customAmenityContainer}>
                     <Input
-                      label="¿No encuentras el servicio? Agrégalo aquí"
+                      label="¿No encontrás el servicio? Agregalo acá"
                       placeholder="Ej: Peluquería canina"
                       value={customAmenity}
                       onChangeText={setCustomAmenity}
                     />
-                    <TouchableOpacity style={styles.addAmenityButton} onPress={handleAddCustomAmenity}>
-                      <Text style={styles.addAmenityButtonText}>Agregar</Text>
-                    </TouchableOpacity>
+                    <Button
+                      title="Agregar"
+                      variant="outline"
+                      onPress={handleAddCustomAmenity}
+                      disabled={!customAmenity.trim()}
+                    />
                   </View>
                 </View>
 
@@ -371,7 +384,7 @@ export default function RegisterPlace() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  container: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -381,88 +394,93 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   backButton: { padding: 8, width: 40 },
-  title: { fontSize: 18, fontFamily: 'Inter-Bold', color: '#111827' },
-  content: { padding: 20, paddingBottom: 40 },
+  title: { fontSize: 18, fontFamily: 'Inter-Bold', color: colors.text },
+  content: { padding: spacing.xl, paddingBottom: spacing.huge },
   subtitle: {
-    fontSize: 15,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 20,
-    lineHeight: 22,
+    ...typography.body,
+    color: colors.textSecondary,
+    marginBottom: spacing.xl,
   },
   optionCard: {
-    padding: 20,
-    marginBottom: 14,
+    padding: spacing.xl,
+    marginBottom: spacing.md,
     alignItems: 'center',
   },
   optionTitle: {
-    fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 10,
-    marginBottom: 6,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
   },
   optionDescription: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 18,
   },
   previewImage: {
     width: '100%',
     height: 180,
-    borderRadius: 12,
-    marginBottom: 16,
+    borderRadius: radius.lg,
+    marginBottom: spacing.lg,
   },
   analyzingContainer: {
     paddingVertical: 32,
   },
   fieldLabel: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    ...typography.label,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   categorySection: { marginBottom: 16 },
   categoryOptions: { flexDirection: 'row', gap: 8 },
   categoryOption: {
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.borderStrong,
     minWidth: 80,
+    minHeight: 56,
   },
-  selectedCategoryOption: { backgroundColor: '#2D6A6F', borderColor: '#2D6A6F' },
+  selectedCategoryOption: { backgroundColor: colors.primary, borderColor: colors.primary },
   categoryOptionIcon: { fontSize: 20, marginBottom: 4 },
-  categoryOptionText: { fontSize: 12, fontFamily: 'Inter-Medium', color: '#6B7280', textAlign: 'center' },
-  selectedCategoryOptionText: { color: '#FFFFFF' },
+  categoryOptionText: { ...typography.captionStrong, color: colors.textSecondary, textAlign: 'center' },
+  selectedCategoryOptionText: { color: colors.onPrimary },
   coordinatesRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
-  coordinatesText: { fontSize: 13, fontFamily: 'Inter-Regular', color: '#6B7280' },
+  coordinatesText: { ...typography.caption, color: colors.textSecondary },
   amenitiesSection: { marginBottom: 20 },
   amenitiesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   amenityOption: {
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.borderStrong,
+    minHeight: 36,
+    justifyContent: 'center',
   },
-  selectedAmenityOption: { backgroundColor: '#2D6A6F', borderColor: '#2D6A6F' },
-  amenityOptionText: { fontSize: 12, fontFamily: 'Inter-Medium', color: '#6B7280' },
-  selectedAmenityOptionText: { color: '#FFFFFF' },
+  selectedAmenityOption: { backgroundColor: colors.primary, borderColor: colors.primary },
+  amenityOptionText: { ...typography.label, fontSize: 13, color: colors.textSecondary },
+  selectedAmenityOptionText: { color: colors.onPrimary },
   customAmenityContainer: { marginTop: 16, gap: 8 },
   addAmenityButton: {
-    backgroundColor: '#2D6A6F',
+    backgroundColor: colors.primary,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignItems: 'center',
   },
-  addAmenityButtonText: { fontSize: 14, fontFamily: 'Inter-SemiBold', color: '#FFFFFF' },
+  addAmenityButtonText: { fontSize: 14, fontFamily: 'Inter-SemiBold', color: colors.white },
   submitButton: { marginTop: 8 },
+  optionIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

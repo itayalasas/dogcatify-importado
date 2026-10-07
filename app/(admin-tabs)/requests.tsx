@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, ActivityIndicator, Modal } from 'react-native';
-import { Eye, Clock, CircleCheck as CheckCircle, Circle as XCircle, Camera, MapPin, Phone, Star } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, ActivityIndicator, Modal, RefreshControl } from 'react-native';
+import { Eye, Clock, CircleCheck as CheckCircle, CircleX as XCircle, Camera, MapPin, Phone, Star, Mail, Calendar, User, Image as ImageIcon, X } from 'lucide-react-native';
+import { EmptyState, SkeletonList, toast } from '../../components/ui';
+import { BusinessTypeIcon } from '../../components/admin/BusinessTypeIcon';
+import { AdminDetailRow } from '../../components/admin/AdminDetailRow';
+import { ReviewStatusBadge } from '../../components/admin/ReviewStatusBadge';
 import * as ImagePicker from 'expo-image-picker';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -10,6 +14,7 @@ import { useNotifications } from '../../contexts/NotificationContext';
 import { supabaseClient } from '../../lib/supabase';
 import { NotificationService } from '../../utils/notifications';
 import { uploadImage as uploadImageUtil } from '../../utils/imageUpload';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
@@ -114,6 +119,7 @@ export default function AdminRequests() {
   const [placeLoading, setPlaceLoading] = useState(true);
   const [rejectingPlaceId, setRejectingPlaceId] = useState<string | null>(null);
   const [placeError, setPlaceError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Review-and-approve modal: lets the admin fill in whatever the user's
   // submission is missing (address, phone, photos, amenities) before the
@@ -329,7 +335,7 @@ export default function AdminRequests() {
         }
       }
 
-      Alert.alert('Éxito', 'Solicitud aprobada correctamente');
+      toast.success('Solicitud aprobada correctamente');
       
       // Actualizar las listas localmente sin necesidad de recargar
       const approvedRequest = pendingRequests.find(req => req.id === requestId);
@@ -356,8 +362,8 @@ export default function AdminRequests() {
   const handleRejectRequest = (requestId: string) => {
     setRejectingId(requestId);
     Alert.alert(
-      'Rechazar Solicitud',
-      '¿Estás seguro de que quieres rechazar esta solicitud?',
+      'Rechazar solicitud',
+      '¿Seguro que querés rechazar esta solicitud?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -399,7 +405,7 @@ export default function AdminRequests() {
                 }
               }
 
-              Alert.alert('Solicitud rechazada', 'La solicitud ha sido rechazada');
+              toast.success('Solicitud rechazada');
               
               // Actualizar las listas localmente
               const rejectedRequest = pendingRequests.find(req => req.id === requestId);
@@ -448,6 +454,19 @@ export default function AdminRequests() {
       console.error('Error fetching place requests:', error);
     } finally {
       setPlaceLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      if (requestType === 'partner') {
+        await fetchRequests();
+      } else {
+        await fetchPlaceRequests();
+      }
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -514,7 +533,7 @@ export default function AdminRequests() {
     if (!reviewingRequest) return;
 
     if (!reviewName.trim() || !reviewAddress.trim() || !reviewDescription.trim()) {
-      Alert.alert('Faltan datos', 'Completa al menos nombre, dirección y descripción antes de aprobar.');
+      Alert.alert('Faltan datos', 'Completá al menos nombre, dirección y descripción antes de aprobar.');
       return;
     }
 
@@ -579,7 +598,7 @@ export default function AdminRequests() {
         console.error('Error sending place approval notification:', notificationError);
       }
 
-      Alert.alert('Éxito', 'Lugar aprobado y publicado correctamente');
+      toast.success('Lugar aprobado y publicado correctamente');
 
       setPendingPlaceRequests(prev => prev.filter(r => r.id !== reviewingRequest.id));
       setProcessedPlaceRequests(prev => [{ ...reviewingRequest, status: 'approved', reviewed_at: new Date().toISOString() }, ...prev]);
@@ -595,8 +614,8 @@ export default function AdminRequests() {
   const handleRejectPlaceRequest = (request: any) => {
     setRejectingPlaceId(request.id);
     Alert.alert(
-      'Rechazar Lugar',
-      '¿Estás seguro de que quieres rechazar esta propuesta de lugar?',
+      'Rechazar lugar',
+      '¿Seguro que querés rechazar esta propuesta de lugar?',
       [
         { text: 'Cancelar', style: 'cancel', onPress: () => setRejectingPlaceId(null) },
         {
@@ -630,7 +649,7 @@ export default function AdminRequests() {
                 console.error('Error sending place rejection notification:', notificationError);
               }
 
-              Alert.alert('Solicitud rechazada', 'La propuesta de lugar ha sido rechazada');
+              toast.success('Propuesta de lugar rechazada');
 
               setPendingPlaceRequests(prev => prev.filter(r => r.id !== request.id));
             } catch (error) {
@@ -649,36 +668,23 @@ export default function AdminRequests() {
     <Card key={request.id} style={styles.requestCard}>
       <View style={styles.requestHeader}>
         <View style={styles.businessInfo}>
-          <Text style={styles.businessIcon}>📍</Text>
+          <View style={styles.businessIcon}>
+            <BusinessTypeIcon type="place" />
+          </View>
           <View style={styles.businessDetails}>
             <Text style={styles.businessName}>{request.name}</Text>
             <Text style={styles.businessType}>{request.category}</Text>
           </View>
         </View>
 
-        {isPending ? (
-          <View style={styles.pendingBadge}>
-            <Clock size={16} color="#92400E" />
-            <Text style={styles.pendingText}>Pendiente</Text>
-          </View>
-        ) : request.status === 'approved' ? (
-          <View style={styles.approvedBadge}>
-            <CheckCircle size={16} color="#10B981" />
-            <Text style={styles.approvedText}>Aprobado</Text>
-          </View>
-        ) : (
-          <View style={styles.rejectedBadge}>
-            <XCircle size={16} color="#DC2626" />
-            <Text style={styles.rejectedText}>Rechazado</Text>
-          </View>
-        )}
+        <ReviewStatusBadge status={isPending ? 'pending' : request.status === 'approved' ? 'approved' : 'rejected'} />
       </View>
 
       <View style={styles.methodBadge}>
         {request.submission_method === 'photo_ai' ? (
-          <Camera size={14} color="#6B7280" />
+          <Camera size={14} color={colors.textTertiary} />
         ) : (
-          <MapPin size={14} color="#6B7280" />
+          <MapPin size={14} color={colors.textTertiary} />
         )}
         <Text style={styles.methodBadgeText}>
           {request.submission_method === 'photo_ai' ? 'Enviado con foto (IA)' : 'Enviado manualmente'}
@@ -690,14 +696,10 @@ export default function AdminRequests() {
       </Text>
 
       <View style={styles.requestDetails}>
-        <Text style={styles.requestDetail}>📍 {request.address}</Text>
-        {request.phone && <Text style={styles.requestDetail}>📞 {request.phone}</Text>}
-        <Text style={styles.requestDetail}>
-          👤 {request.requester?.display_name || request.requester?.email || 'Usuario'}
-        </Text>
-        <Text style={styles.requestDetail}>
-          📅 {new Date(request.created_at).toLocaleDateString()}
-        </Text>
+        <AdminDetailRow icon={MapPin} text={request.address} numberOfLines={2} />
+        <AdminDetailRow icon={Phone} text={request.phone} />
+        <AdminDetailRow icon={User} text={request.requester?.display_name || request.requester?.email || 'Usuario'} />
+        <AdminDetailRow icon={Calendar} text={new Date(request.created_at).toLocaleDateString()} />
       </View>
 
       {request.source_photo_url && (
@@ -711,9 +713,11 @@ export default function AdminRequests() {
               style={[styles.rejectButton, rejectingPlaceId === request.id && styles.disabledButton]}
               onPress={() => handleRejectPlaceRequest(request)}
               disabled={rejectingPlaceId === request.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Rechazar ${request.name || 'lugar'}`}
             >
               {rejectingPlaceId === request.id ? (
-                <ActivityIndicator size="small" color="#DC2626" />
+                <ActivityIndicator size="small" color={colors.danger} />
               ) : (
                 <Text style={styles.rejectButtonText}>Rechazar</Text>
               )}
@@ -722,6 +726,8 @@ export default function AdminRequests() {
               style={styles.approveButton}
               onPress={() => openReviewModal(request)}
               disabled={rejectingPlaceId === request.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Revisar y aprobar ${request.name || 'lugar'}`}
             >
               <Text style={styles.approveButtonText}>Revisar y aprobar</Text>
             </TouchableOpacity>
@@ -730,18 +736,6 @@ export default function AdminRequests() {
       )}
     </Card>
   );
-
-  const getBusinessTypeIcon = (type: string) => {
-    switch (type) {
-      case 'veterinary': return '🏥';
-      case 'grooming': return '✂️';
-      case 'walking': return '🚶';
-      case 'boarding': return '🏠';
-      case 'shop': return '🛍️';
-      case 'shelter': return '🐾';
-      default: return '🏢';
-    }
-  };
 
   const getBusinessTypeName = (type: string) => {
     const types: Record<string, string> = {
@@ -759,26 +753,16 @@ export default function AdminRequests() {
     <Card key={request.id} style={styles.requestCard}>
       <View style={styles.requestHeader}>
         <View style={styles.businessInfo}>
-          <Text style={styles.businessIcon}>
-            {getBusinessTypeIcon(request.businessType)}
-          </Text>
+          <View style={styles.businessIcon}>
+            <BusinessTypeIcon type={request.businessType} />
+          </View>
           <View style={styles.businessDetails}>
             <Text style={styles.businessName}>{request.businessName}</Text>
             <Text style={styles.businessType}>{getBusinessTypeName(request.businessType)}</Text>
           </View>
         </View>
         
-        {isPending ? (
-          <View style={styles.pendingBadge}>
-            <Clock size={16} color="#92400E" />
-            <Text style={styles.pendingText}>Pendiente</Text>
-          </View>
-        ) : (
-          <View style={styles.approvedBadge}>
-            <CheckCircle size={16} color="#10B981" />
-            <Text style={styles.approvedText}>Aprobado</Text>
-          </View>
-        )}
+        <ReviewStatusBadge status={isPending ? 'pending' : 'approved'} />
       </View>
 
       <Text style={styles.requestDescription} numberOfLines={2}>
@@ -786,12 +770,10 @@ export default function AdminRequests() {
       </Text>
 
       <View style={styles.requestDetails}>
-        <Text style={styles.requestDetail}>📍 {request.address}</Text>
-        <Text style={styles.requestDetail}>📞 {request.phone}</Text>
-        <Text style={styles.requestDetail}>📧 {request.email}</Text>
-        <Text style={styles.requestDetail}>
-          📅 {request.createdAt.toLocaleDateString()}
-        </Text>
+        <AdminDetailRow icon={MapPin} text={request.address} numberOfLines={2} />
+        <AdminDetailRow icon={Phone} text={request.phone} />
+        <AdminDetailRow icon={Mail} text={request.email} />
+        <AdminDetailRow icon={Calendar} text={request.createdAt.toLocaleDateString()} />
       </View>
 
       {request.logo && (
@@ -805,9 +787,11 @@ export default function AdminRequests() {
               style={[styles.rejectButton, rejectingId === request.id && styles.disabledButton]}
               onPress={() => handleRejectRequest(request.id)}
               disabled={rejectingId === request.id || approvingId === request.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Rechazar ${request.businessName || 'solicitud'}`}
             >
               {rejectingId === request.id ? (
-                <ActivityIndicator size="small" color="#DC2626" />
+                <ActivityIndicator size="small" color={colors.danger} />
               ) : (
                 <Text style={styles.rejectButtonText}>Rechazar</Text>
               )}
@@ -816,9 +800,11 @@ export default function AdminRequests() {
               style={[styles.approveButton, approvingId === request.id && styles.disabledButton]}
               onPress={() => handleApproveRequest(request.id)}
               disabled={approvingId === request.id || rejectingId === request.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Aprobar ${request.businessName || 'solicitud'}`}
             >
               {approvingId === request.id ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <ActivityIndicator size="small" color={colors.white} />
               ) : (
                 <Text style={styles.approveButtonText}>Aprobar</Text>
               )}
@@ -834,10 +820,10 @@ export default function AdminRequests() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.accessDenied}>
-          <XCircle size={64} color="#EF4444" />
-          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
+          <XCircle size={64} color={colors.danger} />
+          <Text style={styles.accessDeniedTitle}>Acceso denegado</Text>
           <Text style={styles.accessDeniedText}>
-            No tienes permisos para acceder a esta sección
+            No tenés permisos para acceder a esta sección
           </Text>
         </View>
       </SafeAreaView>
@@ -847,14 +833,16 @@ export default function AdminRequests() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Panel de Administración</Text>
-        <Text style={styles.subtitle}>Gestión de Solicitudes</Text>
+        <Text style={styles.title} accessibilityRole="header">Solicitudes</Text>
+        <Text style={styles.subtitle}>Revisá y aprobá negocios y lugares nuevos</Text>
       </View>
 
       <View style={styles.typeBar}>
         <TouchableOpacity
           style={[styles.typeChip, requestType === 'partner' && styles.activeTypeChip]}
           onPress={() => setRequestType('partner')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: requestType === 'partner' }}
         >
           <Text style={[styles.typeChipText, requestType === 'partner' && styles.activeTypeChipText]}>
             Negocios
@@ -863,6 +851,8 @@ export default function AdminRequests() {
         <TouchableOpacity
           style={[styles.typeChip, requestType === 'place' && styles.activeTypeChip]}
           onPress={() => setRequestType('place')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: requestType === 'place' }}
         >
           <Text style={[styles.typeChipText, requestType === 'place' && styles.activeTypeChipText]}>
             Lugares
@@ -874,6 +864,8 @@ export default function AdminRequests() {
         <TouchableOpacity
           style={[styles.tab, activeTab === 'pending' && styles.activeTab]}
           onPress={() => setActiveTab('pending')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'pending' }}
         >
           <Text style={[styles.tabText, activeTab === 'pending' && styles.activeTabText]}>
             Pendientes ({requestType === 'partner' ? pendingRequests.length : pendingPlaceRequests.length})
@@ -882,6 +874,8 @@ export default function AdminRequests() {
         <TouchableOpacity
           style={[styles.tab, activeTab === 'processed' && styles.activeTab]}
           onPress={() => setActiveTab('processed')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'processed' }}
         >
           <Text style={[styles.tabText, activeTab === 'processed' && styles.activeTabText]}>
             Procesadas ({requestType === 'partner' ? processedRequests.length : processedPlaceRequests.length})
@@ -889,12 +883,17 @@ export default function AdminRequests() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+        }
+      >
         {requestType === 'partner' ? (
-          loading ? (
-            <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>Cargando solicitudes...</Text>
-            </View>
+          loading && !refreshing ? (
+            <SkeletonList kind="cards" count={3} style={styles.skeleton} />
           ) : error ? (
             <View style={styles.errorContainer}>
               <Text style={styles.errorText}>{error}</Text>
@@ -906,51 +905,39 @@ export default function AdminRequests() {
             </View>
           ) : activeTab === 'pending' ? (
             pendingRequests.length === 0 ? (
-              <View style={styles.emptyState}>
-                <CheckCircle size={48} color="#10B981" />
-                <Text style={styles.emptyTitle}>¡Todo al día!</Text>
-                <Text style={styles.emptySubtitle}>
-                  No hay solicitudes pendientes de revisión o hubo un error al cargarlas
-                </Text>
-                <Button
-                  title="Actualizar"
-                  onPress={() => {
-                    setLoading(true);
-                    logDebug('Manual refresh triggered by user for pending requests');
-                    fetchRequests();
-                  }}
-                  size="medium"
-                />
-              </View>
+              <EmptyState
+                icon={<CheckCircle size={32} color={colors.primary} />}
+                title="Todo al día"
+                description="No hay solicitudes de negocios pendientes de revisión."
+                actionLabel="Actualizar"
+                onAction={() => {
+                  setLoading(true);
+                  logDebug('Manual refresh triggered by user for pending requests');
+                  fetchRequests();
+                }}
+              />
             ) : (
               pendingRequests.map(request => renderRequest(request, true))
             )
           ) : (
             processedRequests.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Eye size={48} color="#6B7280" />
-                <Text style={styles.emptyTitle}>Sin historial</Text>
-                <Text style={styles.emptySubtitle}>
-                  No hay solicitudes procesadas aún o hubo un error al cargarlas
-                </Text>
-                <Button
-                  title="Actualizar"
-                  onPress={() => {
-                    setLoading(true);
-                    logDebug('Manual refresh triggered by user for processed requests');
-                    fetchRequests();
-                  }}
-                  size="medium"
-                />
-              </View>
+              <EmptyState
+                icon={<Eye size={32} color={colors.primary} />}
+                title="Sin historial"
+                description="Todavía no hay solicitudes de negocios procesadas."
+                actionLabel="Actualizar"
+                onAction={() => {
+                  setLoading(true);
+                  logDebug('Manual refresh triggered by user for processed requests');
+                  fetchRequests();
+                }}
+              />
             ) : (
               processedRequests.map(request => renderRequest(request, false))
             )
           )
-        ) : placeLoading ? (
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Cargando solicitudes...</Text>
-          </View>
+        ) : placeLoading && !refreshing ? (
+          <SkeletonList kind="cards" count={3} style={styles.skeleton} />
         ) : placeError ? (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{placeError}</Text>
@@ -962,41 +949,31 @@ export default function AdminRequests() {
           </View>
         ) : activeTab === 'pending' ? (
           pendingPlaceRequests.length === 0 ? (
-            <View style={styles.emptyState}>
-              <CheckCircle size={48} color="#10B981" />
-              <Text style={styles.emptyTitle}>¡Todo al día!</Text>
-              <Text style={styles.emptySubtitle}>
-                No hay lugares pendientes de revisión
-              </Text>
-              <Button
-                title="Actualizar"
-                onPress={() => {
-                  setPlaceLoading(true);
-                  fetchPlaceRequests();
-                }}
-                size="medium"
-              />
-            </View>
+            <EmptyState
+              icon={<CheckCircle size={32} color={colors.primary} />}
+              title="Todo al día"
+              description="No hay lugares pendientes de revisión."
+              actionLabel="Actualizar"
+              onAction={() => {
+                setPlaceLoading(true);
+                fetchPlaceRequests();
+              }}
+            />
           ) : (
             pendingPlaceRequests.map(request => renderPlaceRequest(request, true))
           )
         ) : (
           processedPlaceRequests.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Eye size={48} color="#6B7280" />
-              <Text style={styles.emptyTitle}>Sin historial</Text>
-              <Text style={styles.emptySubtitle}>
-                No hay lugares procesados aún
-              </Text>
-              <Button
-                title="Actualizar"
-                onPress={() => {
-                  setPlaceLoading(true);
-                  fetchPlaceRequests();
-                }}
-                size="medium"
-              />
-            </View>
+            <EmptyState
+              icon={<Eye size={32} color={colors.primary} />}
+              title="Sin historial"
+              description="Todavía no hay lugares procesados."
+              actionLabel="Actualizar"
+              onAction={() => {
+                setPlaceLoading(true);
+                fetchPlaceRequests();
+              }}
+            />
           ) : (
             processedPlaceRequests.map(request => renderPlaceRequest(request, false))
           )
@@ -1033,8 +1010,9 @@ export default function AdminRequests() {
                         key={cat.value}
                         style={[styles.categoryOption, reviewCategory === cat.value && styles.selectedCategoryOption]}
                         onPress={() => setReviewCategory(cat.value)}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: reviewCategory === cat.value }}
                       >
-                        <Text style={styles.categoryOptionIcon}>{cat.icon}</Text>
                         <Text style={[styles.categoryOptionText, reviewCategory === cat.value && styles.selectedCategoryOptionText]}>
                           {cat.label}
                         </Text>
@@ -1049,7 +1027,7 @@ export default function AdminRequests() {
                 placeholder="Ej: Av. Principal 123, Ciudad"
                 value={reviewAddress}
                 onChangeText={setReviewAddress}
-                leftIcon={<MapPin size={20} color="#6B7280" />}
+                leftIcon={<MapPin size={20} color={colors.textTertiary} />}
               />
 
               <Input
@@ -1057,18 +1035,25 @@ export default function AdminRequests() {
                 placeholder="Ej: +1234567890"
                 value={reviewPhone}
                 onChangeText={setReviewPhone}
-                leftIcon={<Phone size={20} color="#6B7280" />}
+                leftIcon={<Phone size={20} color={colors.textTertiary} />}
               />
 
               <View style={styles.ratingSection}>
                 <Text style={styles.categoryLabel}>Rating (qué tan pet-friendly es) *</Text>
                 <View style={styles.ratingSelector}>
                   {[1, 2, 3, 4, 5].map((rating) => (
-                    <TouchableOpacity key={rating} onPress={() => setReviewRating(rating)}>
+                    <TouchableOpacity
+                      key={rating}
+                      onPress={() => setReviewRating(rating)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${rating} de 5 estrellas`}
+                      accessibilityState={{ selected: rating === reviewRating }}
+                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                    >
                       <Star
                         size={28}
-                        color={rating <= reviewRating ? '#FCD34D' : '#E5E7EB'}
-                        fill={rating <= reviewRating ? '#FCD34D' : 'transparent'}
+                        color={rating <= reviewRating ? colors.accent : colors.border}
+                        fill={rating <= reviewRating ? colors.accent : 'transparent'}
                       />
                     </TouchableOpacity>
                   ))}
@@ -1077,7 +1062,7 @@ export default function AdminRequests() {
 
               <Input
                 label="Descripción *"
-                placeholder="Describe por qué este lugar es pet-friendly..."
+                placeholder="Describí por qué este lugar es pet-friendly..."
                 value={reviewDescription}
                 onChangeText={setReviewDescription}
                 multiline
@@ -1092,8 +1077,14 @@ export default function AdminRequests() {
                     {reviewImages.map((imageUri, index) => (
                       <View key={`${imageUri}-${index}`} style={styles.imagePreviewContainer}>
                         <Image source={{ uri: imageUri }} style={styles.selectedImage} />
-                        <TouchableOpacity style={styles.removeImageButton} onPress={() => handleRemoveReviewImage(index)}>
-                          <Text style={styles.removeImageText}>✕</Text>
+                        <TouchableOpacity
+                          style={styles.removeImageButton}
+                          onPress={() => handleRemoveReviewImage(index)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Quitar foto ${index + 1}`}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <X size={14} color={colors.white} />
                         </TouchableOpacity>
                       </View>
                     ))}
@@ -1102,11 +1093,12 @@ export default function AdminRequests() {
 
                 <View style={styles.imageActions}>
                   <TouchableOpacity style={styles.imageActionButton} onPress={() => handleAddReviewImage(true)}>
-                    <Camera size={24} color="#6B7280" />
+                    <Camera size={24} color={colors.textTertiary} />
                     <Text style={styles.imageActionText}>Tomar foto</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.imageActionButton} onPress={() => handleAddReviewImage(false)}>
-                    <Text style={styles.imageActionText}>📷 Galería</Text>
+                    <ImageIcon size={24} color={colors.textTertiary} />
+                    <Text style={styles.imageActionText}>Galería</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1129,7 +1121,7 @@ export default function AdminRequests() {
 
                 <View style={styles.customAmenityContainer}>
                   <Input
-                    label="¿Falta algún servicio? Agrégalo aquí"
+                    label="¿Falta algún servicio? Agregalo acá"
                     placeholder="Ej: Peluquería canina"
                     value={reviewCustomAmenity}
                     onChangeText={setReviewCustomAmenity}
@@ -1163,87 +1155,95 @@ export default function AdminRequests() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   header: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
     paddingTop: 50,
-    paddingBottom: 16,
+    paddingBottom: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   title: {
+    ...typography.title,
     fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    lineHeight: 32,
+    color: colors.text,
   },
   subtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 2,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginTop: spacing.xxs,
   },
   typeBar: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    gap: 8,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    gap: spacing.sm,
   },
   typeChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+    minHeight: 36,
+    justifyContent: 'center',
   },
   activeTypeChip: {
-    backgroundColor: '#DC2626',
+    backgroundColor: colors.primary,
   },
   typeChipText: {
+    ...typography.label,
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    lineHeight: 18,
+    color: colors.textTertiary,
   },
   activeTypeChipText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   tab: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
   activeTab: {
-    borderBottomColor: '#DC2626',
+    borderBottomColor: colors.primary,
   },
   tabText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
   },
   activeTabText: {
-    color: '#DC2626',
+    color: colors.primary,
   },
   content: {
     flex: 1,
-    padding: 16,
+  },
+  contentContainer: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xxxl,
+  },
+  skeleton: {
+    padding: 0,
   },
   requestCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   requestHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   businessInfo: {
     flexDirection: 'row',
@@ -1251,137 +1251,129 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   businessIcon: {
-    fontSize: 24,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   businessDetails: {
     flex: 1,
   },
   businessName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   businessType: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   pendingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.warningSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   pendingText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#92400E',
-    marginLeft: 4,
+    ...typography.caption,
+    color: colors.warning,
+    marginLeft: spacing.xs,
   },
   approvedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#D1FAE5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.successSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   approvedText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#065F46',
-    marginLeft: 4,
+    ...typography.caption,
+    color: colors.success,
+    marginLeft: spacing.xs,
   },
   rejectedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.dangerSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   rejectedText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#991B1B',
-    marginLeft: 4,
+    ...typography.caption,
+    color: colors.danger,
+    marginLeft: spacing.xs,
   },
   methodBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   methodBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   requestDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
+    color: colors.textSecondary,
     lineHeight: 20,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   requestDetails: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   requestDetail: {
+    ...typography.bodySmall,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    lineHeight: 18,
+    color: colors.textTertiary,
+    marginBottom: spacing.xs,
   },
   businessLogo: {
     width: 60,
     height: 60,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignSelf: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   requestActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
     justifyContent: 'space-between',
     width: '100%',
   },
   requestActionsContainer: {
-    marginTop: 12,
+    marginTop: spacing.md,
     width: '100%',
   },
   rejectButton: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#DC2626',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    borderColor: colors.danger,
+    borderRadius: radius.md,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
     alignItems: 'center',
-    marginRight: 6,
   },
   rejectButtonText: {
-    color: '#DC2626',
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    ...typography.label,
+    color: colors.danger,
   },
   approveButton: {
     flex: 1,
-    backgroundColor: '#10B981',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
     alignItems: 'center',
-    marginLeft: 6,
   },
   approveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    ...typography.label,
+    color: colors.white,
   },
   disabledButton: {
     opacity: 0.6,
@@ -1391,36 +1383,36 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   emptyTitle: {
+    ...typography.title,
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 8,
+    lineHeight: 27,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   emptySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280', 
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   accessDenied: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.xxl,
   },
   accessDeniedTitle: {
+    ...typography.title,
     fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#EF4444',
-    marginTop: 16,
-    marginBottom: 8,
+    lineHeight: 32,
+    color: colors.danger,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   accessDeniedText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   loadingContainer: {
@@ -1430,9 +1422,8 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
   },
   errorContainer: {
     flex: 1,
@@ -1441,15 +1432,14 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   errorText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#EF4444',
-    marginBottom: 16,
+    ...typography.body,
+    color: colors.danger,
+    marginBottom: spacing.lg,
     textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   modalScrollContent: {
@@ -1457,89 +1447,92 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    padding: spacing.xl,
     paddingBottom: 40,
   },
   modalTitle: {
+    ...typography.title,
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    lineHeight: 27,
+    color: colors.text,
     textAlign: 'center',
     marginBottom: 6,
   },
   modalSubtitle: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textTertiary,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
     lineHeight: 18,
   },
   categorySection: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   categoryLabel: {
+    ...typography.label,
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    lineHeight: 20,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   categoryOptions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing.sm,
   },
   categoryOption: {
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     minWidth: 80,
   },
   selectedCategoryOption: {
-    backgroundColor: '#DC2626',
-    borderColor: '#DC2626',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   categoryOptionIcon: {
+    ...typography.title,
     fontSize: 20,
-    marginBottom: 4,
+    lineHeight: 27,
+    marginBottom: spacing.xs,
   },
   categoryOptionText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   selectedCategoryOptionText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   ratingSection: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   ratingSelector: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   imageSection: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   imagesPreviewScroll: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   imagePreviewContainer: {
-    marginRight: 12,
+    marginRight: spacing.md,
     position: 'relative',
   },
   selectedImage: {
     width: 150,
     height: 150,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   removeImageButton: {
     position: 'absolute',
@@ -1553,96 +1546,91 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   removeImageText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
+    ...typography.bodyStrong,
+    color: colors.white,
   },
   imageActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
-    gap: 12,
+    marginBottom: spacing.md,
+    gap: spacing.md,
   },
   imageActionButton: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     paddingVertical: 40,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     borderStyle: 'dashed',
   },
   imageActionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   amenitiesSection: {
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   amenitiesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: spacing.sm,
   },
   amenityOption: {
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   selectedAmenityOption: {
-    backgroundColor: '#DC2626',
-    borderColor: '#DC2626',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   amenityOptionText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   selectedAmenityOptionText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   customAmenityContainer: {
-    marginTop: 16,
-    gap: 8,
+    marginTop: spacing.lg,
+    gap: spacing.sm,
   },
   addAmenityButton: {
-    backgroundColor: '#2D6A6F',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.sm,
     alignItems: 'center',
   },
   addAmenityButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    ...typography.label,
+    color: colors.white,
   },
   modalButtonsContainer: {
     flexDirection: 'column',
-    gap: 12,
-    marginTop: 12,
+    gap: spacing.md,
+    marginTop: spacing.md,
     width: '100%',
   },
   cancelModalButton: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#DC2626',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
     paddingVertical: 14,
-    borderRadius: 8,
+    borderRadius: radius.md,
     alignItems: 'center',
     width: '100%',
   },
   cancelModalButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#DC2626',
+    ...typography.bodyStrong,
+    color: colors.textSecondary,
   },
 });

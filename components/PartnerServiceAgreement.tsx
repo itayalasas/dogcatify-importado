@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Modal, TouchableOpacity, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { FileText, X } from 'lucide-react-native';
+import { colors, radius, spacing, typography } from '../constants/theme';
 
 interface PartnerServiceAgreementProps {
   visible: boolean;
@@ -40,11 +41,16 @@ export const PartnerServiceAgreement: React.FC<PartnerServiceAgreementProps> = (
       <View style={styles.container}>
         <View style={styles.header}>
           <View style={styles.headerContent}>
-            <FileText size={24} color="#2D6A6F" />
-            <Text style={styles.headerTitle}>Contrato de Servicio para Aliados</Text>
+            <FileText size={24} color={colors.primary} />
+            <Text style={styles.headerTitle} accessibilityRole="header">Contrato de servicio para aliados</Text>
           </View>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <X size={24} color="#6B7280" />
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.closeButton}
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar contrato"
+          >
+            <X size={24} color={colors.textTertiary} />
           </TouchableOpacity>
         </View>
 
@@ -260,7 +266,7 @@ export const PartnerServiceAgreement: React.FC<PartnerServiceAgreementProps> = (
         <View style={styles.buttonContainer}>
           {!hasScrolledToBottom && (
             <Text style={styles.scrollHint}>
-              Desplázate hasta el final para aceptar el contrato
+              Desplazate hasta el final para aceptar el contrato
             </Text>
           )}
           <View style={styles.buttonRow}>
@@ -268,6 +274,7 @@ export const PartnerServiceAgreement: React.FC<PartnerServiceAgreementProps> = (
               style={styles.cancelButton}
               onPress={onClose}
               activeOpacity={0.7}
+              accessibilityRole="button"
             >
               <Text style={styles.cancelButtonText}>Cancelar</Text>
             </TouchableOpacity>
@@ -279,12 +286,15 @@ export const PartnerServiceAgreement: React.FC<PartnerServiceAgreementProps> = (
               onPress={handleAccept}
               disabled={!hasScrolledToBottom}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !hasScrolledToBottom }}
+              accessibilityHint={!hasScrolledToBottom ? 'Desplazate hasta el final para habilitarlo' : undefined}
             >
               <Text style={[
                 styles.acceptButtonText,
                 !hasScrolledToBottom && styles.acceptButtonTextDisabled
               ]}>
-                Aceptar Contrato
+                Aceptar contrato
               </Text>
             </TouchableOpacity>
           </View>
@@ -297,17 +307,17 @@ export const PartnerServiceAgreement: React.FC<PartnerServiceAgreementProps> = (
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    backgroundColor: '#F9FAFB',
+    borderBottomColor: colors.border,
+    backgroundColor: colors.background,
   },
   headerContent: {
     flexDirection: 'row',
@@ -315,128 +325,118 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginLeft: 12,
+    ...typography.heading,
+    color: colors.text,
+    marginLeft: spacing.md,
     flex: 1,
   },
   closeButton: {
-    padding: 4,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
   },
   section: {
-    marginTop: 24,
+    marginTop: spacing.xxl,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
-    marginBottom: 12,
+    ...typography.bodyStrong,
+    color: colors.primary,
+    marginBottom: spacing.md,
   },
   paragraph: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    lineHeight: 22,
-    marginBottom: 12,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
   },
   bold: {
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   listItem: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    lineHeight: 22,
-    marginBottom: 8,
-    marginLeft: 16,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+    marginLeft: spacing.lg,
   },
   footer: {
-    marginTop: 32,
-    padding: 16,
-    backgroundColor: '#F0F9FF',
-    borderRadius: 12,
+    marginTop: spacing.xxxl,
+    padding: spacing.lg,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderColor: colors.primaryBorder,
   },
   footerText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#0369A1',
-    lineHeight: 20,
-    marginBottom: 8,
+    ...typography.label,
+    color: colors.info,
+    marginBottom: spacing.sm,
   },
   footerDate: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   bottomPadding: {
     height: 40,
   },
   buttonContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    paddingBottom: 16,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    paddingBottom: spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
   },
   scrollHint: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#F59E0B',
+    ...typography.captionStrong,
+    color: colors.warning,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   buttonRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.md,
   },
   cancelButton: {
     flex: 1,
     paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 10,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
+    borderColor: colors.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     minHeight: 48,
   },
   cancelButtonText: {
-    fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    ...typography.bodyStrong,
+    color: colors.textTertiary,
   },
   acceptButton: {
     flex: 1,
     paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 10,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2D6A6F',
+    backgroundColor: colors.primary,
     minHeight: 48,
   },
   acceptButtonDisabled: {
-    backgroundColor: '#9CA3AF',
-    opacity: 0.6,
+    opacity: 0.5,
   },
   acceptButtonText: {
-    fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    ...typography.bodyStrong,
+    color: colors.white,
   },
   acceptButtonTextDisabled: {
-    color: '#E5E7EB',
+    color: colors.white,
   },
 });

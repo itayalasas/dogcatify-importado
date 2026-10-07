@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Tag, CheckCircle, XCircle, X } from 'lucide-react-native';
 import type { PromoValidationStatus, AppliedPromo } from '../hooks/usePromoCode';
+import { colors, radius, spacing } from '../constants/theme';
 
 interface PromoCodeInputProps {
   promoCode: string;
@@ -37,7 +38,7 @@ export const PromoCodeInput: React.FC<PromoCodeInputProps> = ({
     return (
       <View style={styles.appliedContainer}>
         <View style={styles.appliedLeft}>
-          <CheckCircle size={20} color="#10B981" />
+          <CheckCircle size={20} color="#047857" />
           <View style={styles.appliedInfo}>
             <Text style={styles.appliedTitle}>
               🎟️ {appliedPromo.discountPercent}% OFF aplicado
@@ -48,8 +49,14 @@ export const PromoCodeInput: React.FC<PromoCodeInputProps> = ({
             ) : null}
           </View>
         </View>
-        <TouchableOpacity onPress={onRemove} style={styles.removeButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <X size={18} color="#6B7280" />
+        <TouchableOpacity
+          onPress={onRemove}
+          style={styles.removeButton}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          accessibilityRole="button"
+          accessibilityLabel="Quitar código promocional"
+        >
+          <X size={18} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
     );
@@ -65,7 +72,7 @@ export const PromoCodeInput: React.FC<PromoCodeInputProps> = ({
         <TextInput
           style={styles.input}
           placeholder="Ej: RESCATE15"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor="#6B7280"
           value={promoCode}
           onChangeText={(text) => onChangeCode(text.toUpperCase())}
           autoCapitalize="characters"
@@ -104,21 +111,21 @@ export const PromoCodeInput: React.FC<PromoCodeInputProps> = ({
 
 const styles = StyleSheet.create({
   wrapper: {
-    marginVertical: 8,
+    marginVertical: spacing.sm,
   },
   label: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#374151',
-    marginBottom: 8,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
     overflow: 'hidden',
   },
   inputRowError: {
@@ -126,19 +133,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF5F5',
   },
   iconWrap: {
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
   },
   input: {
     flex: 1,
     paddingVertical: 13,
-    paddingRight: 8,
+    paddingRight: spacing.sm,
     fontSize: 15,
     fontFamily: 'Inter-Medium',
-    color: '#111827',
+    color: colors.text,
     letterSpacing: 1,
   },
   applyBtn: {
-    backgroundColor: '#2D6A6F',
+    backgroundColor: colors.primary,
     paddingHorizontal: 18,
     paddingVertical: 13,
     alignItems: 'center',
@@ -149,7 +156,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   applyBtnText: {
-    color: '#FFFFFF',
+    color: colors.white,
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
   },
@@ -162,31 +169,31 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#EF4444',
+    color: colors.danger,
     flex: 1,
   },
   hint: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    marginTop: 8,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
     lineHeight: 17,
   },
   hintBold: {
     fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   // Estado: promo aplicada
   appliedContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F0FDF4',
+    backgroundColor: colors.successSoft,
     borderWidth: 1.5,
     borderColor: '#6EE7B7',
-    borderRadius: 12,
+    borderRadius: radius.md,
     padding: 14,
-    marginVertical: 8,
+    marginVertical: spacing.sm,
   },
   appliedLeft: {
     flexDirection: 'row',
@@ -201,21 +208,21 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
     color: '#065F46',
-    marginBottom: 2,
+    marginBottom: spacing.xxs,
   },
   appliedCode: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#059669',
+    color: colors.success,
     letterSpacing: 0.5,
   },
   appliedDesc: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#6EE7B7',
-    marginTop: 2,
+    marginTop: spacing.xxs,
   },
   removeButton: {
-    padding: 4,
+    padding: spacing.xs,
   },
 });

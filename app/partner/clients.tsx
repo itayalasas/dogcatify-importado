@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Linking, RefreshControl } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, User, Phone, Mail, Calendar, Heart } from 'lucide-react-native';
-import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
+import { Card, Button, IconButton, EmptyState, SkeletonList } from '../../components/ui';
+import { BusinessTypeAvatar } from '../../components/partner/BusinessTypeAvatar';
+import { formatNumber } from '../../components/partner/format';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import {
@@ -18,6 +20,7 @@ export default function PartnerClients() {
   const { currentUser } = useAuth();
   const [clients, setClients] = useState<any[]>([]);
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const loadAccountSubscription = async (userId?: string | null) => {
@@ -124,6 +127,15 @@ export default function PartnerClients() {
       subscription.unsubscribe();
     };
   }, [partnerId, currentUser?.id]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await fetchClients();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const fetchClients = async () => {
     try {
@@ -266,9 +278,9 @@ export default function PartnerClients() {
   const getSegmentTone = (segment: string) => {
     switch (segment) {
       case 'Activo':
-        return { backgroundColor: '#ECFDF5', color: '#059669' };
+        return { backgroundColor: '#ECFDF5', color: '#047857' };
       case 'Fiel':
-        return { backgroundColor: '#EFF6FF', color: '#2563EB' };
+        return { backgroundColor: '#EEF6F6', color: '#24565A' };
       case 'En riesgo':
         return { backgroundColor: '#FFFBEB', color: '#D97706' };
       case 'Dormido':
@@ -346,7 +358,7 @@ export default function PartnerClients() {
           <Text style={styles.clientEmail}>{client.email}</Text>
           {client.phone && (
             <View style={styles.clientDetail}>
-              <Phone size={14} color="#6B7280" />
+              <Phone size={14} color={colors.textSecondary} />
               <Text style={styles.clientDetailText}>{client.phone}</Text>
             </View>
           )}
@@ -357,7 +369,7 @@ export default function PartnerClients() {
               </Text>
             </View>
             <View style={styles.lastBookingRow}>
-              <Calendar size={14} color="#6B7280" />
+              <Calendar size={14} color={colors.textSecondary} />
               <Text style={styles.lastBookingRowText}>Última: {formatLastBooking(client.lastBooking)}</Text>
             </View>
           </View>
@@ -376,7 +388,7 @@ export default function PartnerClients() {
 
       <View style={styles.clientFooter}>
         <View style={styles.lastBooking}>
-          <Calendar size={14} color="#6B7280" />
+          <Calendar size={14} color={colors.textSecondary} />
           <Text style={styles.lastBookingText}>
             Última interacción: {formatLastBooking(client.lastBooking)}
           </Text>
@@ -386,8 +398,11 @@ export default function PartnerClients() {
           style={[styles.contactButton, !client.phone && !client.email ? styles.contactButtonDisabled : null]}
           onPress={() => handleContactClient(client)}
           disabled={!client.phone && !client.email}
+          accessibilityRole="button"
+          accessibilityLabel={client.phone ? `Llamar a ${client.displayName || 'cliente'}` : client.email ? `Escribir a ${client.displayName || 'cliente'}` : 'Sin contacto'}
+          accessibilityState={{ disabled: !client.phone && !client.email }}
         >
-          {client.phone ? <Phone size={16} color="#3B82F6" /> : <Mail size={16} color="#3B82F6" />}
+          {client.phone ? <Phone size={16} color={colors.primary} /> : <Mail size={16} color={colors.primary} />}
           <Text style={styles.contactButtonText}>
             {client.phone ? 'Llamar' : client.email ? 'Escribir' : 'Sin contacto'}
           </Text>
@@ -401,25 +416,19 @@ export default function PartnerClients() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
+          <IconButton
+            icon={<ArrowLeft size={24} color={colors.text} />}
+            onPress={() => router.back()}
+            accessibilityLabel="Volver"
+          />
           <View style={styles.businessInfo}>
             {partnerProfile?.logo ? (
               <Image source={{ uri: partnerProfile.logo }} style={styles.businessLogo} />
             ) : (
-              <View style={styles.logoPlaceholder}>
-                <Text style={styles.logoPlaceholderText}>
-                  {partnerProfile?.businessType === 'veterinary' ? '🏥' : 
-                   partnerProfile?.businessType === 'grooming' ? '✂️' : 
-                   partnerProfile?.businessType === 'walking' ? '🚶' : 
-                   partnerProfile?.businessType === 'boarding' ? '🏠' : 
-                   partnerProfile?.businessType === 'shop' ? '🛍️' : '👥'}
-                </Text>
-              </View>
+              <BusinessTypeAvatar type={partnerProfile?.businessType} size={40} style={styles.logoPlaceholder} />
             )}
             <View>
-              <Text style={styles.title}>Mis Clientes</Text>
+              <Text style={styles.title} accessibilityRole="header">Mis clientes</Text>
               <Text style={styles.businessName}>{partnerProfile?.businessName}</Text>
             </View>
           </View>
@@ -453,12 +462,12 @@ export default function PartnerClients() {
         <Card style={styles.statsCard}>
           <View style={styles.statsContent}>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{clients.length}</Text>
+              <Text style={styles.statNumber}>{formatNumber(clients.length)}</Text>
               <Text style={styles.statLabel}>Clientes totales</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
-                {clients.reduce((sum, client) => sum + (client.totalInteractions || client.bookingsCount), 0)}
+                {formatNumber(clients.reduce((sum, client) => sum + (client.totalInteractions || client.bookingsCount), 0))}
               </Text>
               <Text style={styles.statLabel}>Interacciones</Text>
             </View>
@@ -470,29 +479,33 @@ export default function PartnerClients() {
         </Card>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+        }
+      >
         {loading ? (
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Cargando clientes...</Text>
-          </View>
+          <SkeletonList kind="list" count={6} />
         ) : clients.length === 0 ? (
           <Card style={styles.emptyCard}>
-            <User size={48} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>Aún no tienes clientes</Text>
-            <Text style={styles.emptySubtitle}>
-              Los clientes aparecerán aquí cuando hagan reservas de tus servicios o compren productos
-            </Text>
+            <EmptyState
+              icon={<User size={32} color={colors.primary} />}
+              title="Todavía no tenés clientes"
+              description="Tus clientes van a aparecer acá cuando reserven tus servicios o compren productos."
+            />
           </Card>
         ) : (
           <>
             <Card style={styles.retentionCard}>
               <View style={styles.retentionHeader}>
                 <View style={styles.retentionHeaderLeft}>
-                  <Heart size={20} color="#EF4444" />
+                  <Heart size={20} color={colors.danger} />
                   <View>
                     <Text style={styles.retentionTitle}>Seguimiento y retención</Text>
                     <Text style={styles.retentionSubtitle}>
-                      Prioriza a quienes necesitan un recontacto hoy
+                      Priorizá a quienes necesitan un recontacto hoy
                     </Text>
                   </View>
                 </View>
@@ -545,6 +558,9 @@ export default function PartnerClients() {
                           ]}
                           onPress={() => handleContactClient(client)}
                           disabled={!client.phone && !client.email}
+                          accessibilityRole="button"
+                          accessibilityLabel={client.phone ? `Llamar a ${client.displayName || 'cliente'}` : client.email ? `Escribir a ${client.displayName || 'cliente'}` : 'Sin contacto'}
+                          accessibilityState={{ disabled: !client.phone && !client.email }}
                         >
                           <Text style={styles.priorityClientActionText}>
                             {client.phone ? 'Llamar' : client.email ? 'Email' : 'Sin contacto'}
@@ -574,18 +590,18 @@ export default function PartnerClients() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: 6,
@@ -598,45 +614,43 @@ const styles = StyleSheet.create({
   businessInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 8,
+    marginLeft: spacing.sm,
   },
   businessLogo: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   logoPlaceholder: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   logoPlaceholderText: {
     fontSize: 20,
   },
   businessName: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   placeholder: {
     width: 32,
   },
   statsHeader: {
-    padding: 16,
-    paddingBottom: 8,
+    padding: spacing.lg,
+    paddingBottom: spacing.sm,
   },
   statsCard: {
-    padding: 16,
+    padding: spacing.lg,
   },
   statsContent: {
     flexDirection: 'row',
@@ -648,62 +662,58 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 24,
     fontFamily: 'Inter-Bold',
-    color: '#3B82F6',
+    color: colors.primary,
   },
   statLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   retentionCard: {
-    marginBottom: 12,
-    padding: 16,
+    marginBottom: spacing.md,
+    padding: spacing.lg,
   },
   retentionHeader: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   retentionHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.md,
   },
   retentionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   retentionSubtitle: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textTertiary,
     marginTop: 2,
   },
   retentionStatsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   retentionStat: {
     width: '48%',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    paddingVertical: 12,
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
     paddingHorizontal: 10,
     alignItems: 'center',
     marginBottom: 10,
   },
   retentionStatValue: {
-    fontSize: 22,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.title,
+    color: colors.text,
   },
   retentionStatLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     marginTop: 2,
   },
   priorityList: {
@@ -713,51 +723,50 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   priorityClientInfo: {
     flex: 1,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   priorityClientName: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 8,
+    color: colors.text,
+    marginTop: spacing.sm,
   },
   priorityClientMeta: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     marginTop: 2,
   },
   priorityClientAction: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     borderRadius: 10,
     backgroundColor: '#EBF8FF',
   },
   priorityClientActionDisabled: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
   },
   priorityClientActionText: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#2563EB',
+    color: colors.primaryPressed,
   },
   retentionEmptyText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textTertiary,
     lineHeight: 19,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
   },
   loadingContainer: {
     flex: 1,
@@ -766,33 +775,30 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
   },
   lockedContainer: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 24,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xxl,
   },
   lockedCard: {
     alignItems: 'center',
     paddingVertical: 28,
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
   },
   lockedTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   lockedText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
     lineHeight: 20,
   },
   emptyCard: {
@@ -800,54 +806,50 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 4,
+    ...typography.heading,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.xs,
     textAlign: 'center',
   },
   emptySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
     lineHeight: 20,
   },
   clientCard: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   clientHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   clientAvatar: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   clientInfo: {
     flex: 1,
   },
   clientName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
     marginBottom: 2,
   },
   clientEmail: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginBottom: spacing.xs,
   },
   clientMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: spacing.sm,
   },
   clientDetail: {
     flexDirection: 'row',
@@ -856,16 +858,16 @@ const styles = StyleSheet.create({
   clientDetailText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 4,
+    color: colors.textTertiary,
+    marginLeft: spacing.xs,
   },
   clientStats: {
     alignItems: 'center',
   },
   segmentBadge: {
     alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
     borderRadius: 999,
   },
   segmentBadgeText: {
@@ -877,20 +879,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   lastBookingRowText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 4,
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginLeft: spacing.xs,
   },
   bookingsCount: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    color: colors.success,
   },
   bookingsLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   clientFooter: {
     flexDirection: 'row',
@@ -905,24 +905,24 @@ const styles = StyleSheet.create({
   lastBookingText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 4,
+    color: colors.textTertiary,
+    marginLeft: spacing.xs,
   },
   contactButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#EBF8FF',
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   contactButtonDisabled: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
   },
   contactButtonText: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-    marginLeft: 4,
+    color: colors.primary,
+    marginLeft: spacing.xs,
   },
 });

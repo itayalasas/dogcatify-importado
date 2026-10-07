@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, TextInput, RefreshControl } from 'react-native';
 import { Filter, Search, ShoppingCart, Package } from 'lucide-react-native';
 import { FlatGrid } from 'react-native-super-grid';
 import { ProductCard } from '../../components/ProductCard';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { groupProductsByVariant } from '../../utils/productVariants';
+import { SkeletonList, EmptyState, toast } from '../../components/ui';
+import { colors, radius, spacing, typography, touchTarget } from '../../constants/theme';
 import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 import { hasSeenHint } from '../../utils/oneTimeHints';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -20,6 +22,7 @@ export default function Shop() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [canShowCategoryHint, setCanShowCategoryHint] = useState(false);
   const { t } = useLanguage();
   const { currentUser } = useAuth();
@@ -109,7 +112,7 @@ export default function Shop() {
           };
         });
 
-        setProducts(processedProducts);
+        setProducts(groupProductsByVariant(processedProducts));
 
         if (promotionsMap.size > 0) {
           console.log(`✨ Applied ${promotionsMap.size} active promotions to products`);
@@ -119,6 +122,15 @@ export default function Shop() {
       console.error('Error fetching products:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([fetchProducts(), loadFavoriteProducts()]);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -139,12 +151,19 @@ export default function Shop() {
 
   const handleAddToCart = (productId: string) => {
     if (!currentUser) {
-      Alert.alert('Iniciar sesión', 'Debes iniciar sesión para agregar productos al carrito');
+      Alert.alert('Iniciar sesión', 'Tenés que iniciar sesión para agregar productos al carrito');
       return;
     }
 
     const product = products.find(p => p.id === productId);
     if (!product) return;
+
+    // With several presentations (1 kg, 2 kg, ...) the customer must pick
+    // one first, so send them to the product page instead of guessing.
+    if ((product.variantCount || 1) > 1) {
+      handleProductPress(productId);
+      return;
+    }
 
     // Verificar stock disponible
     if (!product.stock || product.stock <= 0) {
@@ -161,7 +180,7 @@ export default function Shop() {
     if (newTotalQuantity > product.stock) {
       Alert.alert(
         'Stock insuficiente',
-        `Solo hay ${product.stock} unidades disponibles. Ya tienes ${currentQuantityInCart} en el carrito.`
+        `No hay más unidades disponibles de este producto. Ya tenés ${currentQuantityInCart} en el carrito.`
       );
       return;
     }
@@ -194,7 +213,7 @@ export default function Shop() {
 
   const handleToggleFavorite = async (productId: string) => {
     if (!currentUser?.id) {
-      Alert.alert('Iniciar sesión', 'Debes iniciar sesión para guardar favoritos');
+      Alert.alert('Iniciar sesión', 'Tenés que iniciar sesión para guardar favoritos');
       return;
     }
 
@@ -218,7 +237,7 @@ export default function Shop() {
     } catch (error) {
       console.error('Error updating favorite products:', error);
       setFavoriteProductIds(previousFavorites);
-      Alert.alert('Error', 'No se pudo actualizar tus favoritos');
+      toast.error('No se pudieron actualizar tus favoritos');
     }
   };
 
@@ -251,11 +270,15 @@ export default function Shop() {
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>{t('shop')}</Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.cartButton}
             onPress={() => router.push('/cart')}
+            accessibilityRole="button"
+            accessibilityLabel={cart.length > 0
+              ? `Ver carrito, ${cart.reduce((count, item) => count + item.quantity, 0)} productos`
+              : 'Ver carrito'}
           >
-            <ShoppingCart size={22} color="#6B7280" />
+            <ShoppingCart size={24} color={colors.text} />
             {cart.length > 0 && (
               <View style={styles.cartBadge}>
                 <Text style={styles.cartBadgeText}>{cart.reduce((count, item) => count + item.quantity, 0)}</Text>
@@ -273,11 +296,13 @@ export default function Shop() {
           onHidden={() => setCanShowCategoryHint(true)}
         >
           <View style={styles.searchBar}>
-            <Search size={20} color="#9CA3AF" />
+            <Search size={20} color={colors.icon} />
             <TextInput
               style={styles.searchInput}
               placeholder="Buscar productos..."
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.placeholder}
+              accessibilityLabel="Buscar productos"
+              returnKeyType="search"
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
@@ -306,6 +331,10 @@ export default function Shop() {
                   selectedCategory === category.id && styles.selectedCategoryButton
                 ]}
                 onPress={() => setSelectedCategory(category.id)}
+                hitSlop={{ top: 6, bottom: 6 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Categoría ${category.name}`}
+                accessibilityState={{ selected: selectedCategory === category.id }}
               >
                 <Text style={[
                   styles.categoryText,
@@ -319,22 +348,31 @@ export default function Shop() {
         </View>
 
         {loading ? (
-          <View style={styles.loadingContainer}>
-            <LoadingSpinner message="Cargando productos..." size="medium" />
-          </View> 
+          <ScrollView contentContainerStyle={styles.skeletonContainer}>
+            <SkeletonList kind="grid" count={6} />
+          </ScrollView>
         ) : filteredProducts.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Package size={64} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>{t('noProductsAvailable')}</Text>
-            <Text style={styles.emptySubtitle}>
-              {searchQuery ? t('noProductsAvailable') : t('noProductsInCategory')}
-            </Text>
-          </View>
+          <ScrollView
+            contentContainerStyle={styles.emptyContainer}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
+          >
+            <EmptyState
+              icon={<Package size={32} color={colors.primary} />}
+              title={selectedCategory === 'favorites' && !searchQuery ? 'Todavía no tenés favoritos' : t('noProductsAvailable')}
+              description={selectedCategory === 'favorites' && !searchQuery
+                ? 'Tocá el corazón de un producto para guardarlo acá.'
+                : searchQuery ? 'Probá con otra palabra o revisá la ortografía.' : t('noProductsInCategory')}
+              actionLabel={searchQuery || selectedCategory !== 'all' ? 'Ver todos los productos' : undefined}
+              onAction={searchQuery || selectedCategory !== 'all' ? () => { setSearchQuery(''); setSelectedCategory('all'); } : undefined}
+            />
+          </ScrollView>
         ) : (
           <FlatGrid
             itemDimension={160}
             data={filteredProducts}
-            spacing={8}
+            spacing={spacing.sm}
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
             renderItem={({ item }) => {
               const cartItem = cart.find(c => c.id === item.id);
               const currentCartQuantity = cartItem ? cartItem.quantity : 0;
@@ -362,23 +400,20 @@ export default function Shop() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     paddingTop: 30, // Add padding at the top to show status bar
   },
   headerContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.surface,
   },
   headerTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
+    ...typography.title,
+    color: colors.text,
   },
   headerActions: {
     flexDirection: 'row',
@@ -386,75 +421,64 @@ const styles = StyleSheet.create({
   },
   cartButton: {
     position: 'relative',
-    padding: 6,
-    minWidth: 32,
-    minHeight: 32,
+    minWidth: touchTarget,
+    minHeight: touchTarget,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cartBadge: {
     position: 'absolute',
-    top: 0,
-    right: 0,
-    backgroundColor: '#EF4444',
-    borderRadius: 10,
-    minWidth: 16,
-    height: 16,
+    top: spacing.xs,
+    right: spacing.xxs,
+    backgroundColor: colors.danger,
+    borderRadius: radius.pill,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: spacing.xs,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.surface,
   },
   cartBadgeText: {
-    color: '#FFFFFF',
+    ...typography.captionStrong,
     fontSize: 10,
-    fontFamily: 'Inter-Bold',
-  },
-  searchButton: {
-    padding: 6,
-    marginRight: 6,
-    minWidth: 32,
-    minHeight: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filterButton: {
-    padding: 6,
-    minWidth: 32,
-    minHeight: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
+    lineHeight: 12,
+    color: colors.white,
   },
   content: {
     flex: 1,
   },
   searchContainer: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    minHeight: touchTarget,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
+    marginLeft: spacing.sm,
+    ...typography.body,
+    color: colors.text,
+    paddingVertical: spacing.sm,
   },
   categories: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginTop: 0,
+    paddingLeft: spacing.lg,
+    paddingVertical: spacing.md,
     zIndex: 20,
   },
   categoriesTooltipAnchor: {
     position: 'absolute',
-    right: 16,
+    right: spacing.lg,
     top: 0,
     zIndex: 30,
   },
@@ -463,62 +487,34 @@ const styles = StyleSheet.create({
     height: 1,
   },
   categoriesContent: {
-    paddingRight: 16,
+    paddingRight: spacing.lg,
   },
   categoryButton: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    marginRight: spacing.sm,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    minHeight: 32,
+    borderColor: colors.borderStrong,
+    minHeight: 34,
     justifyContent: 'center',
   },
   selectedCategoryButton: {
-    backgroundColor: '#2D6A6F',
-    borderColor: '#2D6A6F',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   categoryText: {
-    fontSize: 13,
-    color: '#6B7280',
-    fontFamily: 'Inter-Medium',
+    ...typography.label,
+    color: colors.textSecondary,
   },
   selectedCategoryText: {
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+  skeletonContainer: {
+    paddingHorizontal: spacing.xs,
   },
   emptyContainer: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
-    alignItems: 'center', 
-    paddingVertical: 40,
-    paddingHorizontal: 24,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    textAlign: 'center', 
-    marginBottom: 8,
-    marginTop: 16,
-  },
-  emptySubtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 24,
   },
 });

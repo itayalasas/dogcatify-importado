@@ -1,14 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, DollarSign, Package, Camera, Upload, X, Tag } from 'lucide-react-native';
+import { ArrowLeft, DollarSign, Package, Camera, Upload, X, Tag, Plus, ChevronRight } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { toast } from '../../components/ui/Toast';
+import { FormSection } from '../../components/partner-setup/FormSection';
+import { FormFooter } from '../../components/partner-setup/FormFooter';
+import { FormSkeleton } from '../../components/partner-setup/FormSkeleton';
 import { useAuth } from '../../contexts/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
 import { supabaseClient } from '../../lib/supabase';
 import { uploadImage as uploadImageUtil } from '../../utils/imageUpload';
+import { generateVariantGroupId } from '../../utils/productVariants';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 
 export default function EditProduct() {
   const { productId } = useLocalSearchParams<{ productId: string }>();
@@ -31,6 +38,11 @@ export default function EditProduct() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
   const [partnerId, setPartnerId] = useState<string>('');
+  const [variantGroupId, setVariantGroupId] = useState<string | null>(null);
+  const [siblings, setSiblings] = useState<any[]>([]);
+  const [showAddPresentation, setShowAddPresentation] = useState(false);
+  const [newPresentation, setNewPresentation] = useState({ weight: '', price: '', stock: '10' });
+  const [addingPresentation, setAddingPresentation] = useState(false);
 
   useEffect(() => {
     if (!productId) {
@@ -64,6 +76,10 @@ export default function EditProduct() {
         setColor(data.color || '');
         setAgeRange(data.age_range || '');
         setPetType(data.pet_type || '');
+        setVariantGroupId(data.variant_group_id || null);
+        setShowAddPresentation(false);
+        setNewPresentation({ weight: '', price: '', stock: '10' });
+        await loadSiblings(data.variant_group_id || null);
 
         // Store existing images separately
         if (data.images && data.images.length > 0) {
@@ -95,6 +111,103 @@ export default function EditProduct() {
     }
   };
 
+  const loadSiblings = async (groupId: string | null) => {
+    if (!groupId) {
+      setSiblings([]);
+      return;
+    }
+
+    const { data } = await supabaseClient
+      .from('partner_products')
+      .select('id, weight, price, stock, is_active')
+      .eq('variant_group_id', groupId)
+      .neq('id', productId)
+      .order('price', { ascending: true });
+
+    setSiblings(data || []);
+  };
+
+  const handleAddPresentation = async () => {
+    const newWeight = newPresentation.weight.trim();
+    const newPrice = parseFloat(newPresentation.price);
+    const newStock = parseInt(newPresentation.stock);
+
+    if (!weight.trim()) {
+      Alert.alert('Error', 'Primero indica el peso/volumen de este producto y guarda los cambios para poder diferenciarlo de la nueva presentación');
+      return;
+    }
+
+    if (!newWeight) {
+      Alert.alert('Error', 'Indicá el peso/volumen de la nueva presentación (ej: 2kg)');
+      return;
+    }
+
+    if (!(newPrice > 0)) {
+      Alert.alert('Error', 'Indicá un precio mayor a 0 para la nueva presentación');
+      return;
+    }
+
+    if (isNaN(newStock) || newStock < 0) {
+      Alert.alert('Error', 'Indicá un stock válido (0 o más) para la nueva presentación');
+      return;
+    }
+
+    const takenLabels = [weight, ...siblings.map((item) => item.weight || '')].map((label) => label.trim().toLowerCase());
+    if (takenLabels.includes(newWeight.toLowerCase())) {
+      Alert.alert('Error', 'Ya existe una presentación con ese peso/volumen');
+      return;
+    }
+
+    setAddingPresentation(true);
+    try {
+      // Copy the saved version of this product so the new presentation shares
+      // its name, images, brand, etc.
+      const { data: current, error: currentError } = await supabaseClient
+        .from('partner_products')
+        .select('*')
+        .eq('id', productId)
+        .single();
+
+      if (currentError || !current) throw currentError || new Error('PRODUCT_NOT_FOUND');
+
+      const groupId = current.variant_group_id || generateVariantGroupId();
+
+      if (!current.variant_group_id) {
+        const { error: groupError } = await supabaseClient
+          .from('partner_products')
+          .update({ variant_group_id: groupId })
+          .eq('id', productId);
+
+        if (groupError) throw groupError;
+      }
+
+      const { id: _id, created_at: _createdAt, updated_at: _updatedAt, ...copy } = current;
+      const { error: insertError } = await supabaseClient
+        .from('partner_products')
+        .insert({
+          ...copy,
+          variant_group_id: groupId,
+          weight: newWeight,
+          price: newPrice,
+          stock: newStock,
+          is_active: true,
+          created_at: new Date().toISOString(),
+        });
+
+      if (insertError) throw insertError;
+
+      setVariantGroupId(groupId);
+      setNewPresentation({ weight: '', price: '', stock: '10' });
+      setShowAddPresentation(false);
+      await loadSiblings(groupId);
+    } catch (error) {
+      console.error('Error adding presentation:', error);
+      Alert.alert('Error', 'No se pudo agregar la presentación');
+    } finally {
+      setAddingPresentation(false);
+    }
+  };
+
   const handleSelectImages = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -106,7 +219,7 @@ export default function EditProduct() {
 
       if (!result.canceled && result.assets) {
         if (images.length + existingImages.length + result.assets.length > 5) {
-          Alert.alert('Límite alcanzado', 'Puedes seleccionar máximo 5 imágenes en total');
+          Alert.alert('Límite alcanzado', 'Podés seleccionar máximo 5 imágenes en total');
           return;
         }
         setImages(prev => [...prev, ...result.assets]);
@@ -127,7 +240,7 @@ export default function EditProduct() {
 
       if (!result.canceled && result.assets) {
         if (images.length + existingImages.length >= 5) {
-          Alert.alert('Límite alcanzado', 'Puedes seleccionar máximo 5 imágenes');
+          Alert.alert('Límite alcanzado', 'Podés seleccionar máximo 5 imágenes');
           return;
         }
         setImages(prev => [...prev, ...result.assets]);
@@ -151,7 +264,7 @@ export default function EditProduct() {
 
   const handleSaveProduct = async () => {
     if (!productName.trim() || !price || !stock) {
-      Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
+      Alert.alert('Error', 'Completá todos los campos obligatorios');
       return;
     }
 
@@ -161,7 +274,7 @@ export default function EditProduct() {
     }
 
     if (existingImages.length === 0 && images.length === 0) {
-      Alert.alert('Error', 'Debes incluir al menos una imagen del producto');
+      Alert.alert('Error', 'Tenés que incluir al menos una imagen del producto');
       return;
     }
 
@@ -203,9 +316,8 @@ export default function EditProduct() {
 
       if (error) throw error;
 
-      Alert.alert('Éxito', 'Producto actualizado correctamente', [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
+      toast.success('Producto actualizado');
+      router.back();
     } catch (error) {
       console.error('Error updating product:', error);
       Alert.alert('Error', 'No se pudo actualizar el producto');
@@ -235,25 +347,23 @@ export default function EditProduct() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando información del producto...</Text>
-        </View>
+        <ScreenHeader title="Editar producto" />
+        <FormSkeleton />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Editar Producto</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title={"Editar producto"} />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Card style={styles.formCard}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <FormSection title="Datos básicos" style={styles.firstSection}>
           <Input
             label="Nombre del producto *"
             placeholder="Ej: Alimento premium para perros, Juguete interactivo..."
@@ -263,7 +373,7 @@ export default function EditProduct() {
 
           <Input
             label="Descripción"
-            placeholder="Describe detalladamente el producto..."
+            placeholder="Describí en detalle el producto..."
             value={description}
             onChangeText={setDescription}
             multiline
@@ -292,14 +402,16 @@ export default function EditProduct() {
               ))}
             </View>
           </View>
+        </FormSection>
 
+        <FormSection title="Precio y stock">
           <Input
             label="Precio *"
             placeholder="0.00"
             value={price}
             onChangeText={setPrice}
             keyboardType="numeric"
-            leftIcon={<DollarSign size={20} color="#6B7280" />}
+            leftIcon={<DollarSign size={20} color={colors.textTertiary} />}
           />
 
           <Input
@@ -308,15 +420,17 @@ export default function EditProduct() {
             value={stock}
             onChangeText={setStock}
             keyboardType="numeric"
-            leftIcon={<Package size={20} color="#6B7280" />}
+            leftIcon={<Package size={20} color={colors.textTertiary} />}
           />
+        </FormSection>
 
+        <FormSection title="Detalles y presentaciones">
           <Input
             label="Marca"
             placeholder="Ej: Royal Canin, Pedigree, Kong..."
             value={brand}
             onChangeText={setBrand}
-            leftIcon={<Tag size={20} color="#6B7280" />}
+            leftIcon={<Tag size={20} color={colors.textTertiary} />}
           />
           
           <View style={styles.row}>
@@ -338,6 +452,85 @@ export default function EditProduct() {
             </View>
           </View>
           
+          <View style={styles.presentationsBox}>
+            <Text style={styles.presentationsTitle}>Otras presentaciones</Text>
+            <Text style={styles.presentationsHint}>
+              Este producto se vende también en otros pesos, cada uno con su precio y stock. Tocá una para editarla.
+            </Text>
+
+            {siblings.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.siblingRow}
+                onPress={() => router.replace({ pathname: '/partner/edit-product', params: { productId: item.id } })}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`Editar presentación ${item.weight || 'sin peso'}`}
+              >
+                <View style={styles.siblingInfo}>
+                  <Text style={styles.siblingWeight}>{item.weight || 'Sin peso'}</Text>
+                  <Text style={styles.siblingMeta}>
+                    ${Number(item.price).toLocaleString('es-UY')} · Stock {item.stock}{item.is_active === false ? ' · Inactivo' : ''}
+                  </Text>
+                </View>
+                <ChevronRight size={18} color={colors.textTertiary} />
+              </TouchableOpacity>
+            ))}
+
+            {showAddPresentation ? (
+              <View style={styles.presentationCard}>
+                <View style={styles.row}>
+                  <View style={styles.halfWidth}>
+                    <Input
+                      label="Peso/Volumen *"
+                      placeholder="Ej: 2kg"
+                      value={newPresentation.weight}
+                      onChangeText={(value) => setNewPresentation((prev) => ({ ...prev, weight: value }))}
+                    />
+                  </View>
+                  <View style={styles.halfWidth}>
+                    <Input
+                      label="Precio *"
+                      placeholder="0"
+                      value={newPresentation.price}
+                      onChangeText={(value) => setNewPresentation((prev) => ({ ...prev, price: value }))}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+                <Input
+                  label="Stock *"
+                  placeholder="10"
+                  value={newPresentation.stock}
+                  onChangeText={(value) => setNewPresentation((prev) => ({ ...prev, stock: value }))}
+                  keyboardType="numeric"
+                  leftIcon={<Package size={20} color={colors.textTertiary} />}
+                />
+                <View style={styles.presentationActions}>
+                  <Button
+                    title="Cancelar"
+                    onPress={() => setShowAddPresentation(false)}
+                    variant="outline"
+                    size="medium"
+                    style={styles.presentationActionButton}
+                  />
+                  <Button
+                    title="Agregar"
+                    onPress={handleAddPresentation}
+                    loading={addingPresentation}
+                    size="medium"
+                    style={styles.presentationActionButton}
+                  />
+                </View>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.addPresentationButton} onPress={() => setShowAddPresentation(true)}>
+                <Plus size={18} color={colors.primary} />
+                <Text style={styles.addPresentationText}>Agregar presentación</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
           <View style={styles.row}>
             <View style={styles.halfWidth}>
               <Input
@@ -363,9 +556,10 @@ export default function EditProduct() {
             value={petType}
             onChangeText={setPetType}
           />
+        </FormSection>
 
+        <FormSection title="Fotos *" subtitle="Hasta 5 imágenes. Se necesita al menos una.">
           <View style={styles.imageSection}>
-            <Text style={styles.sectionTitle}>Imágenes (máx. 5) *</Text>
             
             {/* Existing Images */}
             {existingImages.length > 0 && (
@@ -378,8 +572,11 @@ export default function EditProduct() {
                       <TouchableOpacity 
                         style={styles.removeImageButton}
                         onPress={() => handleRemoveExistingImage(index)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Quitar foto"
                       >
-                        <X size={16} color="#FFFFFF" />
+                        <X size={16} color={colors.white} />
                       </TouchableOpacity>
                     </View>
                   ))}
@@ -398,8 +595,11 @@ export default function EditProduct() {
                       <TouchableOpacity 
                         style={styles.removeImageButton}
                         onPress={() => handleRemoveImage(index)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Quitar foto"
                       >
-                        <X size={16} color="#FFFFFF" />
+                        <X size={16} color={colors.white} />
                       </TouchableOpacity>
                     </View>
                   ))}
@@ -416,8 +616,11 @@ export default function EditProduct() {
                 ]} 
                 onPress={handleTakePhoto}
                 disabled={images.length + existingImages.length >= 5}
+                accessibilityRole="button"
+                accessibilityLabel="Tomar foto"
+                accessibilityState={{ disabled: images.length + existingImages.length >= 5 }}
               >
-                <Camera size={24} color={(images.length + existingImages.length >= 5) ? "#9CA3AF" : "#3B82F6"} />
+                <Camera size={24} color={(images.length + existingImages.length >= 5) ? colors.textDisabled : colors.primary} />
                 <Text style={[
                   styles.imageActionText,
                   (images.length + existingImages.length >= 5) && styles.disabledActionText
@@ -431,8 +634,11 @@ export default function EditProduct() {
                 ]} 
                 onPress={handleSelectImages}
                 disabled={images.length + existingImages.length >= 5}
+                accessibilityRole="button"
+                accessibilityLabel="Elegir fotos de la galería"
+                accessibilityState={{ disabled: images.length + existingImages.length >= 5 }}
               >
-                <Upload size={24} color={(images.length + existingImages.length >= 5) ? "#9CA3AF" : "#3B82F6"} />
+                <Upload size={24} color={(images.length + existingImages.length >= 5) ? colors.textDisabled : colors.primary} />
                 <Text style={[
                   styles.imageActionText,
                   (images.length + existingImages.length >= 5) && styles.disabledActionText
@@ -445,15 +651,18 @@ export default function EditProduct() {
             </Text>
           </View>
 
-          <Button
-            title="Guardar Cambios"
+        </FormSection>
+      </ScrollView>
+
+      <FormFooter>
+        <Button
+          title="Guardar cambios"
             onPress={handleSaveProduct}
             loading={saveLoading}
             size="large"
             disabled={saveLoading || (!productName.trim() || !price || !stock || (existingImages.length === 0 && images.length === 0))}
           />
-        </Card>
-      </ScrollView>
+      </FormFooter>
     </SafeAreaView>
   );
 }
@@ -461,38 +670,43 @@ export default function EditProduct() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: 6,
   },
   title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   placeholder: {
     width: 32,
   },
   content: {
     flex: 1,
-    paddingBottom: 20,
+    paddingBottom: spacing.xl,
+  },
+  scrollContent: {
+    paddingBottom: spacing.xxxl,
+  },
+  firstSection: {
+    marginTop: spacing.lg,
   },
   formCard: {
-    marginHorizontal: 20,
-    marginTop: 20,
-    marginBottom: 20,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.xl,
+    marginBottom: spacing.xl,
   },
   loadingContainer: {
     flex: 1,
@@ -500,109 +714,105 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
   },
   categorySection: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   categoryLabel: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    ...typography.bodyStrong,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   categories: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: spacing.sm,
   },
   categoryButton: {
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   selectedCategory: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   categoryText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
   },
   selectedCategoryText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   imageSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   imagesSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginBottom: 8,
-    marginTop: 12,
+    ...typography.label,
+    color: colors.textTertiary,
+    marginBottom: spacing.sm,
+    marginTop: spacing.md,
   },
   imageActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   imageAction: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EBF8FF',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.lg,
+    borderRadius: radius.md,
     borderWidth: 2,
-    borderColor: '#3B82F6',
+    borderColor: colors.primary,
     borderStyle: 'dashed',
-    marginHorizontal: 8,
+    marginHorizontal: spacing.sm,
   },
   disabledAction: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E5E7EB',
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.border,
   },
   imageActionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-    marginTop: 8,
+    ...typography.label,
+    color: colors.primary,
+    marginTop: spacing.sm,
   },
   disabledActionText: {
-    color: '#9CA3AF',
+    color: colors.textTertiary,
   },
   imagePreview: {
     flexDirection: 'row',
-    marginVertical: 8,
+    marginVertical: spacing.sm,
   },
   imageContainer: {
     position: 'relative',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   previewImage: {
     width: 100,
     height: 100,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   removeImageButton: {
     position: 'absolute',
     top: -8,
     right: -8,
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.danger,
     width: 24,
     height: 24,
     borderRadius: 12,
@@ -610,16 +820,86 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   imageCount: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280', 
+    ...typography.bodySmall,
+    color: colors.textTertiary, 
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
+  },
+  presentationsBox: {
+    marginBottom: spacing.lg,
+    padding: 14,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  presentationsTitle: {
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  presentationsHint: {
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginBottom: spacing.md,
+  },
+  siblingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  siblingInfo: {
+    flex: 1,
+  },
+  siblingWeight: {
+    ...typography.bodyStrong,
+    color: colors.text,
+  },
+  siblingMeta: {
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginTop: spacing.xxs,
+  },
+  presentationCard: {
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  presentationActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  presentationActionButton: {
+    flex: 1,
+    width: undefined,
+  },
+  addPresentationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  addPresentationText: {
+    ...typography.label,
+    color: colors.primary,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: spacing.md,
   },
   halfWidth: {
     flex: 1,

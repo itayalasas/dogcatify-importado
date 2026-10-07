@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { supabaseClient } from '../../lib/supabase';
 import { Card } from '../ui/Card';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
+import { Skeleton } from '../ui/Skeleton';
+import { toast } from '../ui/Toast';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 
 export function GamePromotionsAdminCard() {
   const [loading, setLoading] = useState(true);
@@ -50,7 +53,7 @@ export function GamePromotionsAdminCard() {
         }, { onConflict: 'key' });
 
       if (error) throw error;
-      Alert.alert('Éxito', 'Configuración de promociones del juego guardada correctamente.');
+      toast.success('Configuración guardada', 'Las recompensas del juego se actualizaron.');
     } catch (err) {
       console.error('Error saving game promos config:', err);
       Alert.alert('Error', 'No se pudo guardar la configuración.');
@@ -66,7 +69,16 @@ export function GamePromotionsAdminCard() {
     }));
   };
 
-  if (loading) return <ActivityIndicator style={{ margin: 20 }} />;
+  if (loading) {
+    return (
+      <Card style={styles.card} accessibilityLabel="Cargando configuración del juego">
+        <Skeleton width="60%" height={18} />
+        <Skeleton width="90%" height={14} style={{ marginTop: spacing.sm }} />
+        <Skeleton height={72} borderRadius={radius.md} style={{ marginTop: spacing.lg }} />
+        <Skeleton height={72} borderRadius={radius.md} style={{ marginTop: spacing.md }} />
+      </Card>
+    );
+  }
 
   const renderLevelConfig = (level: 'level3' | 'level5' | 'level10', title: string) => {
     const levelData = config[level];
@@ -92,18 +104,27 @@ export function GamePromotionsAdminCard() {
               <TouchableOpacity
                 style={[styles.toggleBtn, levelData.target === 'products' && styles.toggleBtnActive]}
                 onPress={() => updateLevel(level, 'target', 'products')}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: levelData.target === 'products' }}
+                accessibilityLabel={`${title}: aplicable a Tienda`}
               >
                 <Text style={[styles.toggleText, levelData.target === 'products' && styles.toggleTextActive]}>Tienda</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.toggleBtn, levelData.target === 'services' && styles.toggleBtnActive]}
                 onPress={() => updateLevel(level, 'target', 'services')}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: levelData.target === 'services' }}
+                accessibilityLabel={`${title}: aplicable a Servicios`}
               >
                 <Text style={[styles.toggleText, levelData.target === 'services' && styles.toggleTextActive]}>Servicios</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.toggleBtn, levelData.target === 'both' && styles.toggleBtnActive]}
+                style={[styles.toggleBtn, styles.toggleBtnLast, levelData.target === 'both' && styles.toggleBtnActive]}
                 onPress={() => updateLevel(level, 'target', 'both')}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: levelData.target === 'both' }}
+                accessibilityLabel={`${title}: aplicable a Ambos`}
               >
                 <Text style={[styles.toggleText, levelData.target === 'both' && styles.toggleTextActive]}>Ambos</Text>
               </TouchableOpacity>
@@ -116,9 +137,9 @@ export function GamePromotionsAdminCard() {
 
   return (
     <Card style={styles.card}>
-      <Text style={styles.cardTitle}>🎮 Promo Juego: Patitas al Rescate</Text>
+      <Text style={styles.cardTitle} accessibilityRole="header">Promo del juego: Patitas al Rescate</Text>
       <Text style={styles.cardDesc}>
-        Configura los descuentos que los usuarios ganan al superar hitos en el juego.
+        Configurá los descuentos que los usuarios ganan al superar hitos en el juego.
       </Text>
       
       {renderLevelConfig('level3', 'Recompensa Nivel 3')}
@@ -126,27 +147,29 @@ export function GamePromotionsAdminCard() {
       {renderLevelConfig('level10', 'Recompensa Nivel 10')}
 
       <Button
-        title="Guardar Configuración"
+        title="Guardar configuración"
         onPress={saveConfig}
         disabled={saving}
-        style={{ marginTop: 16 }}
+        loading={saving}
+        style={{ marginTop: spacing.lg }}
       />
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { padding: 16, marginBottom: 20 },
-  cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 6 },
-  cardDesc: { fontSize: 13, color: '#6B7280', marginBottom: 16 },
-  levelContainer: { marginBottom: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', paddingBottom: 16 },
-  levelTitle: { fontSize: 15, fontWeight: '600', color: '#374151', marginBottom: 8 },
-  row: { flexDirection: 'row', gap: 12 },
+  card: { padding: spacing.lg, marginBottom: spacing.xl },
+  cardTitle: { ...typography.heading, color: colors.text, marginBottom: spacing.xs },
+  cardDesc: { ...typography.bodySmall, color: colors.textSecondary, marginBottom: spacing.lg },
+  levelContainer: { marginBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: spacing.lg },
+  levelTitle: { ...typography.label, color: colors.text, marginBottom: spacing.sm },
+  row: { flexDirection: 'row', gap: spacing.md },
   field: { flex: 1 },
-  label: { fontSize: 12, color: '#6B7280', marginBottom: 4 },
-  toggleGroup: { flexDirection: 'row', borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, overflow: 'hidden' },
-  toggleBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', backgroundColor: '#F9FAFB', borderRightWidth: 1, borderRightColor: '#D1D5DB' },
-  toggleBtnActive: { backgroundColor: '#2D6A6F' },
-  toggleText: { fontSize: 12, color: '#4B5563', fontWeight: '500' },
-  toggleTextActive: { color: '#FFFFFF', fontWeight: 'bold' }
+  label: { ...typography.caption, color: colors.textSecondary, marginBottom: spacing.xs },
+  toggleGroup: { flexDirection: 'row', borderWidth: 1, borderColor: colors.borderStrong, borderRadius: radius.md, overflow: 'hidden' },
+  toggleBtn: { flex: 1, minHeight: 44, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surface, borderRightWidth: 1, borderRightColor: colors.borderStrong },
+  toggleBtnLast: { borderRightWidth: 0 },
+  toggleBtnActive: { backgroundColor: colors.primary },
+  toggleText: { ...typography.captionStrong, color: colors.textSecondary },
+  toggleTextActive: { color: colors.onPrimary }
 });

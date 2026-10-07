@@ -2,8 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Calendar, Clock, User, Phone, Check, X, Eye, MapPin, DollarSign } from 'lucide-react-native';
-import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
+import { Card, Button, Badge, IconButton, EmptyState, SkeletonList, toast } from '../../components/ui';
+import type { BadgeTone } from '../../components/ui';
+import { BusinessTypeAvatar } from '../../components/partner/BusinessTypeAvatar';
+import { formatMoney } from '../../components/partner/format';
+import { colors, radius, spacing, typography, touchTarget } from '../../constants/theme';
 import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
@@ -207,7 +210,7 @@ export default function PartnerBookings() {
         cancelled: 'Reserva cancelada'
       };
       
-      Alert.alert('Éxito', statusMessages[newStatus as keyof typeof statusMessages]);
+      toast.success(statusMessages[newStatus as keyof typeof statusMessages]);
       
       // Refresh bookings immediately to show updated status
       if (businessId) {
@@ -226,49 +229,34 @@ export default function PartnerBookings() {
     setShowDetailsModal(true);
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => formatMoney(amount);
 
   const getPaymentStatusText = (status: string) => {
     switch (status) {
-      case 'paid': return '✅ Pagado';
-      case 'pending': return '⏳ Pendiente';
-      case 'failed': return '❌ Fallido';
-      default: return '❓ No especificado';
+      case 'paid': return 'Pagado';
+      case 'pending': return 'Pendiente';
+      case 'failed': return 'Fallido';
+      default: return 'No especificado';
     }
   };
 
   const getPaymentMethodText = (method: string) => {
     switch (method) {
-      case 'credit_card': return '💳 Tarjeta de crédito';
-      case 'debit_card': return '💳 Tarjeta de débito';
-      case 'cash': return '💵 Efectivo';
-      case 'transfer': return '🏦 Transferencia';
-      default: return '❓ No especificado';
+      case 'credit_card': return 'Tarjeta de crédito';
+      case 'debit_card': return 'Tarjeta de débito';
+      case 'cash': return 'Efectivo';
+      case 'transfer': return 'Transferencia';
+      default: return 'No especificado';
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusTone = (status: string): BadgeTone => {
     switch (status) {
-      case 'pending': return '#FEF3C7';
-      case 'confirmed': return '#D1FAE5';
-      case 'completed': return '#DBEAFE';
-      case 'cancelled': return '#FEE2E2';
-      default: return '#F3F4F6';
-    }
-  };
-
-  const getStatusTextColor = (status: string) => {
-    switch (status) {
-      case 'pending': return '#92400E';
-      case 'confirmed': return '#065F46';
-      case 'completed': return '#1E40AF';
-      case 'cancelled': return '#991B1B';
-      default: return '#374151';
+      case 'pending': return 'warning';
+      case 'confirmed': return 'success';
+      case 'completed': return 'primary';
+      case 'cancelled': return 'danger';
+      default: return 'neutral';
     }
   };
 
@@ -293,29 +281,19 @@ export default function PartnerBookings() {
             {booking.customerName || 'Cliente'}
           </Text>
         </View>
-        <View style={[
-          styles.statusBadge,
-          { backgroundColor: getStatusColor(booking.status) }
-        ]}>
-          <Text style={[
-            styles.statusText,
-            { color: getStatusTextColor(booking.status) }
-          ]}>
-            {getStatusText(booking.status)}
-          </Text>
-        </View>
+        <Badge label={getStatusText(booking.status)} tone={getStatusTone(booking.status)} />
       </View>
 
       <View style={styles.bookingDetails}>
         <View style={styles.bookingDetail}>
-          <Calendar size={16} color="#6B7280" />
+          <Calendar size={16} color={colors.textSecondary} />
           <Text style={styles.bookingDetailText}>
             {booking.date.toLocaleDateString()}
           </Text>
         </View>
         
         <View style={styles.bookingDetail}>
-          <Clock size={16} color="#6B7280" />
+          <Clock size={16} color={colors.textSecondary} />
           <Text style={styles.bookingDetailText}>
             {booking.time || 'Hora no especificada'}
           </Text>
@@ -323,7 +301,7 @@ export default function PartnerBookings() {
         
         {booking.petName && (
           <View style={styles.bookingDetail}>
-            <User size={16} color="#6B7280" />
+            <User size={16} color={colors.textSecondary} />
             <Text style={styles.bookingDetailText}>
               Mascota: {booking.petName}
             </Text>
@@ -332,7 +310,7 @@ export default function PartnerBookings() {
         
         {booking.customerPhone && (
           <View style={styles.bookingDetail}>
-            <Phone size={16} color="#6B7280" />
+            <Phone size={16} color={colors.textSecondary} />
             <Text style={styles.bookingDetailText}>
               {booking.customerPhone}
             </Text>
@@ -354,8 +332,10 @@ export default function PartnerBookings() {
               style={styles.rejectButton}
               onPress={() => handleUpdateBookingStatus(booking.id, 'cancelled')}
               disabled={updatingBooking === booking.id}
+              accessibilityRole="button"
+              accessibilityLabel="Rechazar reserva"
             >
-              <X size={16} color="#FFFFFF" />
+              <X size={16} color={colors.onPrimary} />
               <Text style={styles.rejectButtonText}>
                 {updatingBooking === booking.id ? 'Rechazando...' : 'Rechazar'}
               </Text>
@@ -364,8 +344,10 @@ export default function PartnerBookings() {
               style={styles.confirmButton}
               onPress={() => handleUpdateBookingStatus(booking.id, 'confirmed')}
               disabled={updatingBooking === booking.id}
+              accessibilityRole="button"
+              accessibilityLabel="Confirmar reserva"
             >
-              <Check size={16} color="#FFFFFF" />
+              <Check size={16} color={colors.onPrimary} />
               <Text style={styles.confirmButtonText}>
                 {updatingBooking === booking.id ? 'Confirmando...' : 'Confirmar'}
               </Text>
@@ -378,10 +360,12 @@ export default function PartnerBookings() {
             style={styles.completeButton}
             onPress={() => handleUpdateBookingStatus(booking.id, 'completed')}
             disabled={updatingBooking === booking.id}
+            accessibilityRole="button"
+            accessibilityLabel="Marcar reserva como completada"
           >
-            <Check size={16} color="#FFFFFF" />
+            <Check size={16} color={colors.onPrimary} />
             <Text style={styles.completeButtonText}>
-              {updatingBooking === booking.id ? 'Completando...' : 'Marcar Completada'}
+              {updatingBooking === booking.id ? 'Completando...' : 'Marcar como completada'}
             </Text>
           </TouchableOpacity>
         )}
@@ -389,9 +373,11 @@ export default function PartnerBookings() {
         <TouchableOpacity 
           style={styles.viewButton}
           onPress={() => handleViewDetails(booking)}
+          accessibilityRole="button"
+          accessibilityLabel="Ver detalles de la reserva"
         >
-          <Eye size={16} color="#3B82F6" />
-          <Text style={styles.viewButtonText}>Ver Detalles</Text>
+          <Eye size={16} color={colors.primary} />
+          <Text style={styles.viewButtonText}>Ver detalles</Text>
         </TouchableOpacity>
       </View>
     </Card>
@@ -400,9 +386,7 @@ export default function PartnerBookings() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando reservas...</Text>
-        </View>
+        <SkeletonList kind="cards" count={3} style={{ padding: spacing.lg }} />
       </SafeAreaView>
     );
   }
@@ -412,9 +396,11 @@ export default function PartnerBookings() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <ArrowLeft size={24} color="#111827" />
-            </TouchableOpacity>
+            <IconButton
+              icon={<ArrowLeft size={24} color={colors.text} />}
+              onPress={() => router.back()}
+              accessibilityLabel="Volver"
+            />
             <View>
               <Text style={styles.title}>Reservas</Text>
               <Text style={styles.businessName}>Cargando información...</Text>
@@ -422,9 +408,7 @@ export default function PartnerBookings() {
           </View>
           <View style={styles.placeholder} />
         </View>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando información del negocio...</Text>
-        </View>
+        <SkeletonList kind="cards" count={3} style={{ padding: spacing.lg }} />
       </SafeAreaView>
     );
   }
@@ -433,22 +417,16 @@ export default function PartnerBookings() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
+          <IconButton
+            icon={<ArrowLeft size={24} color={colors.text} />}
+            onPress={() => router.back()}
+            accessibilityLabel="Volver"
+          />
           <View style={styles.businessInfo}>
             {partnerProfile.logo ? (
               <Image source={{ uri: partnerProfile.logo }} style={styles.businessLogo} />
             ) : (
-              <View style={styles.logoPlaceholder}>
-                <Text style={styles.logoPlaceholderText}>
-                  {partnerProfile.businessType === 'veterinary' ? '🏥' : 
-                   partnerProfile.businessType === 'grooming' ? '✂️' : 
-                   partnerProfile.businessType === 'walking' ? '🚶' : 
-                   partnerProfile.businessType === 'boarding' ? '🏠' : 
-                   partnerProfile.businessType === 'shop' ? '🛍️' : '🏢'}
-                </Text>
-              </View>
+              <BusinessTypeAvatar type={partnerProfile.businessType} size={40} style={styles.logoPlaceholder} />
             )}
             <View>
               <Text style={styles.title}>Reservas</Text>
@@ -468,6 +446,8 @@ export default function PartnerBookings() {
           <TouchableOpacity
             style={[styles.tab, activeTab === 'pending' && styles.activeTab]}
             onPress={() => setActiveTab('pending')}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === 'pending' }}
           >
             <Text style={[styles.tabText, activeTab === 'pending' && styles.activeTabText]}>
               Pendientes ({bookings.filter(b => b.status === 'pending').length})
@@ -476,6 +456,8 @@ export default function PartnerBookings() {
           <TouchableOpacity
             style={[styles.tab, activeTab === 'confirmed' && styles.activeTab]}
             onPress={() => setActiveTab('confirmed')}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === 'confirmed' }}
           >
             <Text style={[styles.tabText, activeTab === 'confirmed' && styles.activeTabText]}>
               Confirmadas ({bookings.filter(b => b.status === 'confirmed').length})
@@ -484,6 +466,8 @@ export default function PartnerBookings() {
           <TouchableOpacity
             style={[styles.tab, activeTab === 'completed' && styles.activeTab]}
             onPress={() => setActiveTab('completed')}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === 'completed' }}
           >
             <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>
               Completadas ({bookings.filter(b => b.status === 'completed').length})
@@ -495,13 +479,11 @@ export default function PartnerBookings() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {filteredBookings.length === 0 ? (
           <Card style={styles.emptyCard}>
-            <Calendar size={48} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>
-              No hay reservas {activeTab === 'pending' ? 'pendientes' : activeTab === 'confirmed' ? 'confirmadas' : 'completadas'}
-            </Text>
-            <Text style={styles.emptySubtitle}>
-              Las reservas aparecerán aquí cuando los clientes soliciten tus servicios
-            </Text>
+            <EmptyState
+              icon={<Calendar size={32} color={colors.primary} />}
+              title={`No hay reservas ${activeTab === 'pending' ? 'pendientes' : activeTab === 'confirmed' ? 'confirmadas' : 'completadas'}`}
+              description="Las reservas van a aparecer acá cuando tus clientes pidan tus servicios."
+            />
           </Card>
         ) : (
           filteredBookings.map(renderBooking)
@@ -518,17 +500,19 @@ export default function PartnerBookings() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Detalles de la Reserva</Text>
-              <TouchableOpacity onPress={() => setShowDetailsModal(false)}>
-                <Text style={styles.modalCloseText}>✕</Text>
-              </TouchableOpacity>
+              <Text style={styles.modalTitle} accessibilityRole="header">Detalles de la reserva</Text>
+              <IconButton
+                icon={<X size={22} color={colors.textSecondary} />}
+                onPress={() => setShowDetailsModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
 
             {selectedBooking && (
               <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
                 {/* Service Information */}
                 <View style={styles.detailSection}>
-                  <Text style={styles.detailSectionTitle}>📋 Información del Servicio</Text>
+                  <Text style={styles.detailSectionTitle}>Servicio</Text>
                   <View style={styles.detailItem}>
                     <Text style={styles.detailLabel}>Servicio:</Text>
                     <Text style={styles.detailValue}>{selectedBooking.serviceName || 'No especificado'}</Text>
@@ -547,7 +531,7 @@ export default function PartnerBookings() {
 
                 {/* Customer Information */}
                 <View style={styles.detailSection}>
-                  <Text style={styles.detailSectionTitle}>👤 Información del Cliente</Text>
+                  <Text style={styles.detailSectionTitle}>Cliente</Text>
                   <View style={styles.detailItem}>
                     <Text style={styles.detailLabel}>Nombre:</Text>
                     <Text style={styles.detailValue}>{selectedBooking.customerName || 'No especificado'}</Text>
@@ -568,7 +552,7 @@ export default function PartnerBookings() {
 
                 {/* Pet Information */}
                 <View style={styles.detailSection}>
-                  <Text style={styles.detailSectionTitle}>🐾 Información de la Mascota</Text>
+                  <Text style={styles.detailSectionTitle}>🐾 Mascota</Text>
                   <View style={styles.detailItem}>
                     <Text style={styles.detailLabel}>Nombre:</Text>
                     <Text style={styles.detailValue}>{selectedBooking.petName || 'No especificado'}</Text>
@@ -577,7 +561,7 @@ export default function PartnerBookings() {
 
                 {/* Appointment Information */}
                 <View style={styles.detailSection}>
-                  <Text style={styles.detailSectionTitle}>📅 Información de la Cita</Text>
+                  <Text style={styles.detailSectionTitle}>Cita</Text>
                   <View style={styles.detailItem}>
                     <Text style={styles.detailLabel}>Fecha:</Text>
                     <Text style={styles.detailValue}>{selectedBooking.date.toLocaleDateString()}</Text>
@@ -594,24 +578,14 @@ export default function PartnerBookings() {
                   )}
                   <View style={styles.detailItem}>
                     <Text style={styles.detailLabel}>Estado:</Text>
-                    <View style={[
-                      styles.statusBadgeInModal,
-                      { backgroundColor: getStatusColor(selectedBooking.status) }
-                    ]}>
-                      <Text style={[
-                        styles.statusTextInModal,
-                        { color: getStatusTextColor(selectedBooking.status) }
-                      ]}>
-                        {getStatusText(selectedBooking.status)}
-                      </Text>
-                    </View>
+                    <Badge label={getStatusText(selectedBooking.status)} tone={getStatusTone(selectedBooking.status)} size="small" />
                   </View>
                 </View>
 
                 {/* Payment Information */}
                 {(selectedBooking.paymentStatus || selectedBooking.paymentMethod || selectedBooking.totalAmount) && (
                   <View style={styles.detailSection}>
-                    <Text style={styles.detailSectionTitle}>💳 Información de Pago</Text>
+                    <Text style={styles.detailSectionTitle}>Pago</Text>
                     {selectedBooking.paymentStatus && (
                       <View style={styles.detailItem}>
                         <Text style={styles.detailLabel}>Estado del pago:</Text>
@@ -639,7 +613,7 @@ export default function PartnerBookings() {
                 {/* Notes */}
                 {selectedBooking.notes && (
                   <View style={styles.detailSection}>
-                    <Text style={styles.detailSectionTitle}>📝 Notas del Cliente</Text>
+                    <Text style={styles.detailSectionTitle}>Notas del cliente</Text>
                     <View style={styles.notesContainer}>
                       <Text style={styles.notesText}>{selectedBooking.notes}</Text>
                     </View>
@@ -648,7 +622,7 @@ export default function PartnerBookings() {
 
                 {/* Timestamps */}
                 <View style={styles.detailSection}>
-                  <Text style={styles.detailSectionTitle}>🕒 Información de Registro</Text>
+                  <Text style={styles.detailSectionTitle}>Registro</Text>
                   <View style={styles.detailItem}>
                     <Text style={styles.detailLabel}>Reserva creada:</Text>
                     <Text style={styles.detailValue}>
@@ -687,23 +661,23 @@ export default function PartnerBookings() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
     minHeight: 70,
   },
   backButton: {
-    padding: 8,
-    marginRight: 8,
+    padding: spacing.sm,
+    marginRight: spacing.sm,
   },
   placeholder: {
     width: 32,
@@ -721,58 +695,56 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   logoPlaceholder: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   logoPlaceholderText: {
     fontSize: 20,
   },
   businessName: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   tab: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
   activeTab: {
-    borderBottomColor: '#3B82F6',
+    borderBottomColor: colors.primary,
   },
   tabText: {
     fontSize: 11,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   activeTabText: {
-    color: '#3B82F6',
+    color: colors.primary,
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
     paddingBottom: 100,
   },
   loadingContainer: {
@@ -781,180 +753,172 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   errorText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#EF4444',
-    marginBottom: 16,
+    ...typography.body,
+    color: colors.danger,
+    marginBottom: spacing.lg,
     textAlign: 'center',
   },
   bookingCard: {
-    marginBottom: 12,
-    marginHorizontal: 4,
+    marginBottom: spacing.md,
+    marginHorizontal: spacing.xs,
   },
   bookingHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   bookingInfo: {
     flex: 1,
   },
   serviceName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   customerName: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   statusText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
   },
   bookingDetails: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   bookingDetail: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   bookingDetailText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     marginLeft: 6,
   },
   notesSection: {
-    backgroundColor: '#F9FAFB',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginBottom: spacing.md,
   },
   notesTitle: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   notesText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     lineHeight: 20,
   },
   bookingActions: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   pendingActions: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 8,
+    gap: spacing.md,
+    marginBottom: spacing.sm,
   },
   rejectButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EF4444',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    backgroundColor: colors.danger,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.sm,
     gap: 6,
   },
   rejectButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: colors.surface,
   },
   confirmButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#10B981',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    backgroundColor: colors.success,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.sm,
     gap: 6,
   },
   confirmButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: colors.surface,
   },
   completeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#3B82F6',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.sm,
     gap: 6,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   completeButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: colors.surface,
   },
   viewButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#EBF8FF',
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignSelf: 'flex-start',
   },
   viewButtonText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-    marginLeft: 4,
+    color: colors.primary,
+    marginLeft: spacing.xs,
   },
   emptyCard: {
     alignItems: 'center',
     paddingVertical: 40,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 4,
+    ...typography.heading,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.xs,
     textAlign: 'center',
   },
   emptySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   paidBadge: {
     fontSize: 12,
     fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    color: colors.success,
   },
   modalOverlay: {
     flex: 1,
@@ -962,68 +926,66 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    padding: 20,
+    padding: spacing.xl,
     maxHeight: '80%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   modalTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
   },
   modalCloseText: {
     fontSize: 18,
-    color: '#6B7280',
+    color: colors.textTertiary,
   },
   modalBody: {
     flex: 1,
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   detailSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   detailSectionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   detailItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   detailLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
     flex: 1,
   },
   detailValue: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     flex: 2,
     textAlign: 'right',
   },
   statusBadgeInModal: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
     alignSelf: 'flex-end',
   },
   statusTextInModal: {
@@ -1031,11 +993,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
   },
   notesContainer: {
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    borderRadius: radius.sm,
     borderLeftWidth: 3,
-    borderLeftColor: '#3B82F6',
+    borderLeftColor: colors.primary,
   },
   modalActions: {
     paddingTop: 10,

@@ -1772,7 +1772,7 @@ export const FloatingVoiceBot: React.FC<FloatingVoiceBotProps> = ({ onClose, sho
                   placeholder={resolvedRole === 'partner' || resolvedRole === 'admin'
                     ? 'Pregúntame sobre clientes, reservas o módulos...'
                     : 'Pregúntame algo sobre tu mascota...'}
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor="#6B7280"
                   value={inputText}
                   onChangeText={setInputText}
                   onSubmitEditing={handleSendMessage}

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Modal, ActivityIndicator, Dimensions, StatusBar } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Camera, Trash2, Share, X, CreditCard as Edit, Video as VideoIcon, Play, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { Camera, Trash2, Share, X, CreditCard as Edit, Video as VideoIcon, Play, ChevronLeft, ChevronRight, Image as ImageIcon } from 'lucide-react-native';
+import { ScreenHeader, EmptyState, Skeleton, IconButton, toast } from '../../../components/ui';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
@@ -16,6 +17,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
 
+import { colors, radius, spacing, typography, hitSlop } from '../../../constants/theme';
 // Keyed by the caller on the media index/url so React fully unmounts the
 // old player and mounts a fresh one when navigating between media items —
 // useVideoPlayer releases its player automatically on unmount, so no
@@ -320,7 +322,7 @@ export default function AlbumDetail() {
           if (!hasPet) {
             Alert.alert(
               'No se detectó mascota',
-              '¿Deseas subir el video de todos modos?',
+              '¿Querés subir el video de todos modos?',
               [
                 { text: 'Cancelar', style: 'cancel', onPress: () => setValidatingVideo(false) },
                 {
@@ -435,7 +437,7 @@ export default function AlbumDetail() {
 
   const handleAddVideo = async () => {
     if (!selectedVideo) {
-      Alert.alert('Error', 'Por favor selecciona un video');
+      Alert.alert('Error', 'Seleccioná un video');
       return;
     }
 
@@ -512,17 +514,17 @@ export default function AlbumDetail() {
 
             if (postError) {
               console.error('Error creating feed post:', postError);
-              Alert.alert('\u00c9xito', 'Video agregado correctamente');
+              toast.success('Video agregado correctamente');
             } else {
-              Alert.alert('\u00c9xito', 'Video agregado y compartido en el feed \ud83c\udfa5');
+              toast.success('Video agregado y compartido en el feed 🎥');
             }
           }
         } catch (feedError) {
           console.error('Error creating feed post:', feedError);
-          Alert.alert('\u00c9xito', 'Video agregado correctamente');
+          toast.success('Video agregado correctamente');
         }
       } else {
-        Alert.alert('\u00c9xito', 'Video agregado correctamente');
+        toast.success('Video agregado correctamente');
       }
     } catch (error) {
       console.error('Error adding video:', error);
@@ -534,7 +536,7 @@ export default function AlbumDetail() {
 
   const handleAddPhotos = async () => {
     if (selectedImages.length === 0) {
-      Alert.alert('Error', 'Por favor selecciona al menos una foto');
+      Alert.alert('Error', 'Seleccioná al menos una foto');
       return;
     }
 
@@ -568,7 +570,7 @@ export default function AlbumDetail() {
           const shouldContinue = await new Promise<boolean>((resolve) => {
             Alert.alert(
               'Error al subir imagen',
-              `No se pudo subir la imagen ${i + 1}.\n\n¿Deseas continuar con las imágenes restantes?`,
+              `No se pudo subir la imagen ${i + 1}.\n\n¿Querés continuar con las imágenes restantes?`,
               [
                 { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
                 { text: 'Continuar', onPress: () => resolve(true) }
@@ -665,32 +667,28 @@ export default function AlbumDetail() {
             
             if (postError) {
               console.error('Error creating feed post:', postError);
-              Alert.alert(
-                'Éxito',
-                `${successMessage}\n\nNota: Las fotos se guardaron pero no se pudieron compartir automáticamente en el feed.`
+              toast.warning(
+                `${successMessage}. Las fotos se guardaron, pero no se pudieron compartir automáticamente en el feed.`
               );
             } else {
               console.log('Feed post created successfully');
-              Alert.alert(
-                'Éxito',
-                `${successMessage}\n\n📸 Las nuevas fotos también se compartieron en el feed.`
-              );
+              toast.success(`${successMessage}. 📸 También se compartieron en el feed.`);
             }
           }
           }
         } catch (feedError) {
           console.error('Error creating feed post:', feedError);
-          Alert.alert('Éxito', successMessage);
+          toast.success(successMessage);
         }
       } else {
-        Alert.alert('Éxito', successMessage);
+        toast.success(successMessage);
       }
     } catch (error: unknown) {
       console.error('Error adding photos:', error);
       
       const errorMessage = error instanceof Error
         ? (error.message.includes('conexión')
-            ? 'Error de conexión. Verifica tu internet e intenta nuevamente.'
+            ? 'Error de conexión. Verificá tu internet e intenta nuevamente.'
             : error.message.includes('cancelada')
               ? 'Subida cancelada.'
               : error.message)
@@ -748,7 +746,7 @@ export default function AlbumDetail() {
       });
       
       setShowEditModal(false);
-      Alert.alert('Éxito', 'Álbum actualizado correctamente');
+      toast.success('Álbum actualizado correctamente');
     } catch (error) {
       console.error('Error updating album:', error);
       Alert.alert('Error', 'No se pudo actualizar el álbum');
@@ -879,17 +877,11 @@ export default function AlbumDetail() {
 
       if (error) throw error;
 
-      Alert.alert('Éxito', 'Álbum eliminado correctamente', [
-        { 
-          text: 'OK', 
-          onPress: () => {
-            router.push({
-              pathname: '/pets/[id]',
-              params: { id: album.pet_id, refresh: 'true', activeTab: 'albums' }
-            });
-          } 
-        }
-      ]);
+      toast.success('Álbum eliminado correctamente');
+      router.push({
+        pathname: '/pets/[id]',
+        params: { id: album.pet_id, refresh: 'true', activeTab: 'albums' }
+      });
     } catch (error) {
       console.error('Error deleting album:', error);
       Alert.alert('Error', 'No se pudo eliminar el álbum');
@@ -926,7 +918,7 @@ export default function AlbumDetail() {
       
       setShowDeleteConfirm(false);
       setImageToDelete(null);
-      Alert.alert('Éxito', 'Imagen eliminada correctamente');
+      toast.success('Imagen eliminada correctamente');
     } catch (error) {
       console.error('Error deleting image:', error);
       Alert.alert('Error', 'No se pudo eliminar la imagen');
@@ -936,8 +928,11 @@ export default function AlbumDetail() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando álbum...</Text>
+        <ScreenHeader title="Álbum" onBack={() => router.back()} />
+        <View style={styles.skeletonGrid} accessibilityLabel="Cargando álbum">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} width="48%" height={160} borderRadius={12} style={styles.skeletonTile} />
+          ))}
         </View>
       </SafeAreaView>
     );
@@ -946,40 +941,44 @@ export default function AlbumDetail() {
   if (!album) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>No se encontró el álbum</Text>
-          <Button title="Volver" onPress={() => router.back()} />
-        </View>
+        <EmptyState
+          icon={<ImageIcon size={32} color={colors.primary} />}
+          title="No encontramos este álbum"
+          description="Puede que se haya eliminado."
+          actionLabel="Volver"
+          onAction={() => router.back()}
+        />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>{album.title || 'Álbum sin título'}</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={() => setShowEditModal(true)} style={styles.editButton}>
-            <Edit size={20} color="#3B82F6" />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            onPress={() => Alert.alert(
-              'Eliminar Álbum', 
-              '¿Estás seguro de que quieres eliminar este álbum?',
-              [
-                { text: 'Cancelar', style: 'cancel' },
-                { text: 'Eliminar', style: 'destructive', onPress: handleDeleteAlbum }
-              ]
-            )} 
-            style={styles.deleteButton}
-          >
-            <Trash2 size={20} color="#EF4444" />
-          </TouchableOpacity>
-        </View>
-      </View>
+      <ScreenHeader
+        title={album.title || 'Álbum sin título'}
+        onBack={() => router.back()}
+        right={
+          <View style={styles.headerActions}>
+            <IconButton
+              icon={<Edit size={20} color={colors.primary} />}
+              onPress={() => setShowEditModal(true)}
+              accessibilityLabel="Editar álbum"
+            />
+            <IconButton
+              icon={<Trash2 size={20} color={colors.danger} />}
+              onPress={() => Alert.alert(
+                'Eliminar álbum',
+                '¿Seguro que querés eliminar este álbum?',
+                [
+                  { text: 'Cancelar', style: 'cancel' },
+                  { text: 'Eliminar', style: 'destructive', onPress: handleDeleteAlbum }
+                ]
+              )}
+              accessibilityLabel="Eliminar álbum"
+            />
+          </View>
+        }
+      />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {album.description && (
@@ -990,19 +989,19 @@ export default function AlbumDetail() {
 
         <View style={styles.addPhotosSection}>
           <View style={styles.addMediaButtons}>
-            <TouchableOpacity style={styles.addPhotosButton} onPress={handleSelectPhotos}>
-              <Camera size={24} color="#3B82F6" />
-              <Text style={styles.addPhotosText}>Agregar Fotos</Text>
+            <TouchableOpacity style={styles.addPhotosButton} onPress={handleSelectPhotos} accessibilityRole="button" accessibilityLabel="Agregar fotos al álbum" hitSlop={hitSlop}>
+              <Camera size={24} color={colors.primary} />
+              <Text style={styles.addPhotosText}>Agregar fotos</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.addVideoButton} onPress={handleSelectVideo} disabled={validatingVideo}>
+            <TouchableOpacity style={styles.addVideoButton} onPress={handleSelectVideo} disabled={validatingVideo} accessibilityRole="button" accessibilityLabel="Agregar video al álbum" hitSlop={hitSlop}>
               {validatingVideo ? (
-                <ActivityIndicator size="small" color="#10B981" />
+                <ActivityIndicator size="small" color={colors.success} />
               ) : (
-                <VideoIcon size={24} color="#10B981" />
+                <VideoIcon size={24} color={colors.success} />
               )}
               <Text style={styles.addVideoText}>
-                {validatingVideo ? 'Validando...' : 'Agregar Video'}
+                {validatingVideo ? 'Validando...' : 'Agregar video'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1012,7 +1011,7 @@ export default function AlbumDetail() {
               <Text style={styles.selectedPhotosTitle}>Video seleccionado:</Text>
               <View style={styles.selectedVideoContainer}>
                 <View style={styles.selectedVideoPreview}>
-                  <VideoIcon size={40} color="#10B981" />
+                  <VideoIcon size={40} color={colors.success} />
                   <Text style={styles.videoFileName}>
                     {selectedVideo.fileName || 'video.mp4'}
                   </Text>
@@ -1022,14 +1021,13 @@ export default function AlbumDetail() {
                 </View>
                 <TouchableOpacity
                   style={styles.removeSelectedPhoto}
-                  onPress={() => setSelectedVideo(null)}
-                >
-                  <X size={16} color="#FFFFFF" />
+                  onPress={() => setSelectedVideo(null)} accessibilityRole="button" accessibilityLabel="Quitar video seleccionado" hitSlop={hitSlop}>
+                  <X size={16} color={colors.white} />
                 </TouchableOpacity>
               </View>
 
               <Button
-                title="Subir Video al Álbum"
+                title="Subir video al álbum"
                 onPress={handleAddVideo}
                 loading={uploadingVideo}
                 size="medium"
@@ -1048,16 +1046,15 @@ export default function AlbumDetail() {
                     <Image source={{ uri: image.uri }} style={styles.selectedPhoto} />
                     <TouchableOpacity 
                       style={styles.removeSelectedPhoto}
-                      onPress={() => setSelectedImages(prev => prev.filter((_, i) => i !== index))}
-                    >
-                      <X size={16} color="#FFFFFF" />
+                      onPress={() => setSelectedImages(prev => prev.filter((_, i) => i !== index))} accessibilityRole="button" accessibilityLabel="Quitar foto seleccionada" hitSlop={hitSlop}>
+                      <X size={16} color={colors.white} />
                     </TouchableOpacity>
                   </View>
                 ))}
               </ScrollView>
               
               <Button
-                title="Agregar a Álbum"
+                title="Agregar al álbum"
                 onPress={handleAddPhotos}
                 loading={uploadingImages}
                 size="medium"
@@ -1079,16 +1076,15 @@ export default function AlbumDetail() {
                   setCurrentMediaIndex(index);
                   setShowMediaViewer(true);
                 }}
-                activeOpacity={0.9}
-              >
+                activeOpacity={0.9} accessibilityRole="button" accessibilityLabel={isVideo ? `Ver video ${index + 1}` : `Ver foto ${index + 1}`} hitSlop={hitSlop}>
                 {isVideo ? (
                   <View style={styles.videoThumbnailContainer}>
                     <View style={styles.videoPlaceholder}>
-                      <VideoIcon size={48} color="#10B981" />
+                      <VideoIcon size={48} color={colors.success} />
                       <Text style={styles.videoLabel}>Video</Text>
                     </View>
                     <View style={styles.videoOverlay}>
-                      <Play size={32} color="#FFFFFF" />
+                      <Play size={32} color={colors.white} />
                     </View>
                   </View>
                 ) : (
@@ -1099,13 +1095,12 @@ export default function AlbumDetail() {
                   onPress={(e) => {
                     e.stopPropagation();
                     confirmDeleteImage(mediaUrl);
-                  }}
-                >
-                  <Trash2 size={16} color="#FFFFFF" />
+                  }} accessibilityRole="button" accessibilityLabel={isVideo ? 'Eliminar video' : 'Eliminar foto'} hitSlop={hitSlop}>
+                  <Trash2 size={16} color={colors.white} />
                 </TouchableOpacity>
                 {isVideo && (
                   <View style={styles.videoBadge}>
-                    <VideoIcon size={12} color="#FFFFFF" />
+                    <VideoIcon size={12} color={colors.white} />
                   </View>
                 )}
               </TouchableOpacity>
@@ -1130,9 +1125,8 @@ export default function AlbumDetail() {
             style={styles.closeViewerButton}
             onPress={() => {
               setShowMediaViewer(false);
-            }}
-          >
-            <X size={28} color="#FFFFFF" />
+            }} accessibilityRole="button" accessibilityLabel="Cerrar visor" hitSlop={hitSlop}>
+            <X size={28} color={colors.white} />
           </TouchableOpacity>
 
           {/* Media Counter */}
@@ -1185,18 +1179,16 @@ export default function AlbumDetail() {
               {currentMediaIndex > 0 && (
                 <TouchableOpacity
                   style={[styles.navButton, styles.navButtonLeft]}
-                  onPress={() => setCurrentMediaIndex(currentMediaIndex - 1)}
-                >
-                  <ChevronLeft size={32} color="#FFFFFF" />
+                  onPress={() => setCurrentMediaIndex(currentMediaIndex - 1)} accessibilityRole="button" accessibilityLabel="Anterior" hitSlop={hitSlop}>
+                  <ChevronLeft size={32} color={colors.white} />
                 </TouchableOpacity>
               )}
 
               {currentMediaIndex < album.images.length - 1 && (
                 <TouchableOpacity
                   style={[styles.navButton, styles.navButtonRight]}
-                  onPress={() => setCurrentMediaIndex(currentMediaIndex + 1)}
-                >
-                  <ChevronRight size={32} color="#FFFFFF" />
+                  onPress={() => setCurrentMediaIndex(currentMediaIndex + 1)} accessibilityRole="button" accessibilityLabel="Siguiente" hitSlop={hitSlop}>
+                  <ChevronRight size={32} color={colors.white} />
                 </TouchableOpacity>
               )}
             </>
@@ -1213,7 +1205,7 @@ export default function AlbumDetail() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Editar Álbum</Text>
+            <Text style={styles.modalTitle}>Editar álbum</Text>
             
             <Input
               label="Título del álbum"
@@ -1224,7 +1216,7 @@ export default function AlbumDetail() {
 
             <Input
               label="Descripción"
-              placeholder="Describe este momento especial..."
+              placeholder="Describí este momento especial..."
               value={description}
               onChangeText={setDescription}
               multiline
@@ -1235,8 +1227,7 @@ export default function AlbumDetail() {
               <Text style={styles.shareOptionLabel}>Compartir en el feed</Text>
               <TouchableOpacity 
                 style={[styles.shareToggle, isShared && styles.shareToggleActive]}
-                onPress={() => setIsShared(!isShared)}
-              >
+                onPress={() => setIsShared(!isShared)} accessibilityRole="button" accessibilityLabel="Compartir en el feed" hitSlop={hitSlop}>
                 <View style={[styles.shareToggleHandle, isShared && styles.shareToggleHandleActive]} />
               </TouchableOpacity>
             </View>
@@ -1249,7 +1240,7 @@ export default function AlbumDetail() {
                 size="medium"
               />
               <Button
-                title="Guardar Cambios"
+                title="Guardar cambios"
                 onPress={handleUpdateAlbum}
                 size="medium"
               />
@@ -1268,12 +1259,12 @@ export default function AlbumDetail() {
         <View style={styles.modalOverlay}>
           <View style={styles.deleteConfirmModal}>
             <Text style={styles.confirmTitle}>
-              {imageToDelete?.startsWith('VIDEO:') ? 'Eliminar Video' : 'Eliminar Imagen'}
+              {imageToDelete?.startsWith('VIDEO:') ? 'Eliminar video' : 'Eliminar imagen'}
             </Text>
             <Text style={styles.confirmText}>
               {imageToDelete?.startsWith('VIDEO:')
-                ? '¿Estás seguro de que quieres eliminar este video?'
-                : '¿Estás seguro de que quieres eliminar esta imagen?'}
+                ? '¿Seguro que querés eliminar este video?'
+                : '¿Seguro que querés eliminar esta imagen?'}
             </Text>
 
             <View style={styles.confirmActions}>
@@ -1287,6 +1278,7 @@ export default function AlbumDetail() {
               <Button
                 title="Eliminar"
                 onPress={handleDeleteImage}
+                variant="danger"
                 size="small"
                 style={styles.confirmButton}
               />
@@ -1299,125 +1291,103 @@ export default function AlbumDetail() {
 }
 
 const styles = StyleSheet.create({
+  skeletonGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    padding: spacing.lg,
+  },
+  skeletonTile: {
+    marginBottom: spacing.md,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  backButton: {
-    padding: 8,
-  },
-  title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    flex: 1,
-    textAlign: 'center',
   },
   headerActions: {
     flexDirection: 'row',
   },
-  editButton: {
-    padding: 8,
-    marginRight: 4,
-  },
-  deleteButton: {
-    padding: 8,
-  },
   content: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
   },
   descriptionCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   descriptionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   addPhotosSection: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   addMediaButtons: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   addPhotosButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EBF8FF',
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: colors.primarySoft,
+    paddingVertical: spacing.md,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#3B82F6',
+    borderColor: colors.primary,
     borderStyle: 'dashed',
   },
   addPhotosText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-    marginLeft: 8,
+    ...typography.label,
+    color: colors.primary,
+    marginLeft: spacing.sm,
   },
   addVideoButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#D1FAE5',
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: colors.successSoft,
+    paddingVertical: spacing.md,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#10B981',
+    borderColor: colors.success,
     borderStyle: 'dashed',
   },
   addVideoText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#10B981',
-    marginLeft: 8,
+    ...typography.label,
+    color: colors.success,
+    marginLeft: spacing.sm,
   },
   selectedPhotosContainer: {
-    marginTop: 16,
+    marginTop: spacing.lg,
   },
   selectedPhotosTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.label,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   selectedPhotosScroll: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   selectedPhotoContainer: {
     position: 'relative',
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   selectedPhoto: {
     width: 80,
     height: 80,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   removeSelectedPhoto: {
     position: 'absolute',
     top: -8,
     right: -8,
-    backgroundColor: '#EF4444',
-    borderRadius: 12,
+    backgroundColor: colors.danger,
+    borderRadius: radius.md,
     width: 24,
     height: 24,
     alignItems: 'center',
@@ -1430,62 +1400,39 @@ const styles = StyleSheet.create({
   },
   photoContainer: {
     width: '48%',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
     position: 'relative',
   },
   photo: {
     width: '100%',
     height: 150,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   deletePhotoButton: {
     position: 'absolute',
     top: 8,
     right: 8,
     backgroundColor: 'rgba(239, 68, 68, 0.8)',
-    borderRadius: 16,
+    borderRadius: radius.lg,
     width: 32,
     height: 32,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#EF4444',
-    marginBottom: 16,
-    textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
-    padding: 20,
+    padding: spacing.xl,
     paddingBottom: 40,
     width: '100%',
     maxHeight: '80%',
@@ -1493,77 +1440,67 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 16,
+    color: colors.text,
+    marginBottom: spacing.lg,
     textAlign: 'center',
   },
   shareOption: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   shareOptionLabel: {
     fontSize: 15,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: colors.textSecondary,
   },
   shareToggle: {
     width: 50,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#E5E7EB',
-    padding: 2,
+    backgroundColor: colors.border,
+    padding: spacing.xxs,
   },
   shareToggleActive: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
   },
   shareToggleHandle: {
     width: 24,
     height: 24,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
   },
   shareToggleHandleActive: {
     transform: [{ translateX: 22 }],
   },
   modalActions: {
     flexDirection: 'column',
-    gap: 12,
-    marginTop: 8,
-  },
-  confirmModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    width: '85%',
-    maxWidth: 400,
-    alignSelf: 'center',
-    maxHeight: '50%',
+    gap: spacing.md,
+    marginTop: spacing.sm,
   },
   confirmTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 16,
+    color: colors.text,
+    marginBottom: spacing.lg,
     textAlign: 'center',
   },
   confirmText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 20,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: spacing.xl,
     textAlign: 'center',
     lineHeight: 20,
   },
   confirmActions: {
     flexDirection: 'column',
-    gap: 12,
+    gap: spacing.md,
   },
   deleteConfirmModal: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.xxl,
     width: '80%',
     maxWidth: 320,
     alignSelf: 'center',
@@ -1574,49 +1511,49 @@ const styles = StyleSheet.create({
   selectedVideoContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
+    backgroundColor: colors.surfaceAlt,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginBottom: spacing.lg,
   },
   selectedVideoPreview: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
+    padding: spacing.lg,
   },
   videoFileName: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginTop: 8,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
     textAlign: 'center',
   },
   videoDurationText: {
     fontSize: 11,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 4,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
   },
   videoThumbnailContainer: {
     width: '100%',
     height: 150,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     overflow: 'hidden',
     position: 'relative',
   },
   videoPlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#D1FAE5',
+    backgroundColor: colors.successSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   videoLabel: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#10B981',
-    marginTop: 8,
+    color: colors.success,
+    marginTop: spacing.sm,
   },
   videoOverlay: {
     position: 'absolute',
@@ -1633,7 +1570,7 @@ const styles = StyleSheet.create({
     bottom: 8,
     left: 8,
     backgroundColor: 'rgba(16, 185, 129, 0.9)',
-    borderRadius: 12,
+    borderRadius: radius.md,
     width: 24,
     height: 24,
     alignItems: 'center',
@@ -1666,13 +1603,12 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   mediaCounterText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    ...typography.bodyStrong,
+    color: colors.white,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 16,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.lg,
   },
   mediaContent: {
     flex: 1,

@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Share, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, QrCode, Share2, Copy, Mail, MessageCircle } from 'lucide-react-native';
+import { Clock, QrCode, Share2, Copy, Mail, MessageCircle } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { colors, spacing, radius, fontSize } from '../../constants/theme';
+import { HealthHeader } from '../../components/health';
+import { Badge } from '../../components/ui/Badge';
 
 export default function ShareMedicalHistory() {
   const { petId, petName, qrCodeUrl, shareUrl, shortUrl, expiresAt } = useLocalSearchParams<{
@@ -46,7 +49,7 @@ export default function ShareMedicalHistory() {
     try {
       // For mobile, show the URL to copy manually
       Alert.alert(
-        'Enlace para Veterinario',
+        'Enlace para el veterinario',
         shareUrl,
         [
           { text: 'Cerrar' },
@@ -63,7 +66,7 @@ export default function ShareMedicalHistory() {
   const handleShare = async () => {
     try {
       const shareContent = {
-        title: `Historia Clínica de ${petName}`,
+        title: `Historia clínica de ${petName}`,
         message: `Historia clínica veterinaria de ${petName}\n\nAccede aquí: ${shareUrl}`,
         url: shareUrl
       };
@@ -79,12 +82,12 @@ export default function ShareMedicalHistory() {
   };
 
   const handleEmailVet = () => {
-    const subject = `Historia Clínica de ${petName}`;
+    const subject = `Historia clínica de ${petName}`;
     const body = `Estimado/a Doctor/a,
 
 Adjunto la historia clínica completa de mi mascota ${petName}.
 
-Puede acceder a la información médica completa a través del siguiente enlace:
+Podés acceder a la información médica completa en este enlace:
 ${shareUrl}
 
 También puede escanear el código QR adjunto para acceso rápido.
@@ -102,7 +105,7 @@ Saludos cordiales.`;
   };
 
   const handleWhatsAppShare = () => {
-    const message = `Historia clínica de ${petName}\n\nPuede acceder a la información médica completa aquí: ${shareUrl}`;
+    const message = `Historia clínica de ${petName}\n\nPodés acceder a la información médica completa acá: ${shareUrl}`;
     const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
     
     try {
@@ -115,13 +118,7 @@ Saludos cordiales.`;
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Compartir Historia Clínica</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <HealthHeader title="Compartir historia clínica" subtitle={petName} />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Pet Info */}
@@ -134,15 +131,14 @@ Saludos cordiales.`;
 
         {/* QR Code */}
         <Card style={styles.qrCard}>
-          <Text style={styles.qrTitle}>📱 Código QR para Veterinario</Text>
+          <Text style={styles.qrTitle}>Código QR para el veterinario</Text>
           {timeRemaining && (
             <View style={styles.expirationContainer}>
-              <Text style={[
-                styles.expirationText,
-                timeRemaining === 'Expirado' && styles.expiredText
-              ]}>
-                🕒 {timeRemaining}
-              </Text>
+              <Badge
+                label={timeRemaining}
+                tone={timeRemaining === 'Expirado' ? 'danger' : 'warning'}
+                icon={<Clock size={12} color={timeRemaining === 'Expirado' ? colors.danger : colors.warning} />}
+              />
             </View>
           )}
           <Text style={styles.qrDescription}>
@@ -165,40 +161,40 @@ Saludos cordiales.`;
 
         {/* Sharing Options */}
         <Card style={styles.sharingCard}>
-          <Text style={styles.sharingTitle}>📤 Opciones de Compartir</Text>
+          <Text style={styles.sharingTitle}>Compartir</Text>
           
           <View style={styles.sharingButtons}>
-            <TouchableOpacity style={styles.sharingButton} onPress={handleCopyUrl}>
-              <Copy size={24} color="#3B82F6" />
-              <Text style={styles.sharingButtonText}>Copiar Enlace</Text>
+            <TouchableOpacity style={styles.sharingButton} onPress={handleCopyUrl} accessibilityRole="button">
+              <Copy size={24} color={colors.primary} />
+              <Text style={styles.sharingButtonText}>Copiar enlace</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.sharingButton} onPress={handleEmailVet}>
-              <Mail size={24} color="#10B981" />
-              <Text style={styles.sharingButtonText}>Enviar por Email</Text>
+            <TouchableOpacity style={styles.sharingButton} onPress={handleEmailVet} accessibilityRole="button">
+              <Mail size={24} color={colors.primary} />
+              <Text style={styles.sharingButtonText}>Enviar por correo</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.sharingButton} onPress={handleWhatsAppShare}>
+            <TouchableOpacity style={styles.sharingButton} onPress={handleWhatsAppShare} accessibilityRole="button">
               <MessageCircle size={24} color="#25D366" />
-              <Text style={styles.sharingButtonText}>Compartir WhatsApp</Text>
+              <Text style={styles.sharingButtonText}>WhatsApp</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.sharingButton} onPress={handleShare}>
-              <Share2 size={24} color="#6B7280" />
-              <Text style={styles.sharingButtonText}>Más Opciones</Text>
+            <TouchableOpacity style={styles.sharingButton} onPress={handleShare} accessibilityRole="button">
+              <Share2 size={24} color={colors.primary} />
+              <Text style={styles.sharingButtonText}>Más opciones</Text>
             </TouchableOpacity>
           </View>
         </Card>
 
         {/* Instructions */}
         <Card style={styles.instructionsCard}>
-          <Text style={styles.instructionsTitle}>💡 Instrucciones para el Veterinario</Text>
+          <Text style={styles.instructionsTitle}>Instrucciones para el veterinario</Text>
           <View style={styles.instructionsList}>
             <Text style={styles.instructionItem}>
-              1. Escanea el código QR con la cámara del teléfono
+              1. Escaneá el código QR con la cámara del teléfono
             </Text>
             <Text style={styles.instructionItem}>
-              2. O accede directamente al enlace: {shortUrl}
+              2. O entrá directamente al enlace: {shortUrl}
             </Text>
             <Text style={styles.instructionItem}>
               3. Podrá ver toda la información médica actualizada
@@ -212,7 +208,7 @@ Saludos cordiales.`;
         {/* Preview Button */}
         <View style={styles.previewContainer}>
           <Button
-            title="Vista Previa de la Historia"
+            title="Vista previa de la historia"
             onPress={() => router.push(`/medical-history/${petId}`)}
             variant="outline"
             size="large"
@@ -226,76 +222,75 @@ Saludos cordiales.`;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   title: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 32,
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
   },
   petCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: spacing.xl,
   },
   petName: {
     fontSize: 24,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 8,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   petDescription: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   qrCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
     alignItems: 'center',
   },
   qrTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   qrDescription: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
     lineHeight: 20,
   },
   qrContainer: {
-    backgroundColor: '#FFFFFF',
-    padding: 20,
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    padding: spacing.xl,
+    borderRadius: radius.md,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
-    marginBottom: 16,
+    borderColor: colors.border,
+    marginBottom: spacing.lg,
   },
   qrImage: {
     width: 200,
@@ -305,105 +300,103 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   urlLabel: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   shortUrl: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-SemiBold',
-    color: '#3B82F6',
+    color: colors.primary,
   },
   tokenContainer: {
     alignItems: 'center',
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.border,
   },
   tokenLabel: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   tokenValue: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   expirationContainer: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#F59E0B',
+
+    marginBottom: spacing.md,
+    alignSelf: 'center',
   },
   expirationText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-SemiBold',
-    color: '#92400E',
+    color: colors.warning,
     textAlign: 'center',
   },
   expiredText: {
-    color: '#DC2626',
+    color: colors.danger,
   },
   sharingCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   sharingTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    color: colors.text,
+    marginBottom: spacing.lg,
   },
   sharingButtons: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 12,
+    rowGap: spacing.md,
   },
   sharingButton: {
     width: '48%',
-    backgroundColor: '#F8FAFC',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.lg,
+    borderRadius: radius.md,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.primarySoft,
+    minHeight: 88,
+    justifyContent: 'center',
   },
   sharingButtonText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginTop: 8,
+    fontSize: fontSize.sm,
+    fontFamily: 'Inter-SemiBold',
+    color: colors.primary,
+    marginTop: spacing.sm,
     textAlign: 'center',
   },
   instructionsCard: {
-    marginBottom: 16,
-    backgroundColor: '#F0FDF4',
+    marginBottom: spacing.lg,
+    backgroundColor: colors.successSoft,
     borderWidth: 1,
-    borderColor: '#BBF7D0',
+    borderColor: colors.successSoft,
   },
   instructionsTitle: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-SemiBold',
-    color: '#166534',
-    marginBottom: 12,
+    color: colors.success,
+    marginBottom: spacing.md,
   },
   instructionsList: {
-    gap: 8,
+    gap: spacing.sm,
   },
   instructionItem: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#166534',
+    color: colors.success,
     lineHeight: 20,
   },
   previewContainer: {
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
 });

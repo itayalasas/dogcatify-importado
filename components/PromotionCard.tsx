@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Heart, ExternalLink } from 'lucide-react-native';
 import { Card } from './ui/Card';
 import { useAuth } from '../contexts/AuthContext';
+import { colors, radius, shadows, spacing, typography } from '../constants/theme';
 
 interface PromotionCardProps {
   promotion: {
@@ -61,7 +62,7 @@ const PromotionCard = memo(({ promotion, onPress, onLike }: PromotionCardProps) 
       </View>
 
       {/* Discount Badge */}
-      {promotion.discount_percentage && promotion.discount_percentage > 0 && (
+      {!!promotion.discount_percentage && promotion.discount_percentage > 0 && (
         <View style={styles.discountBadge}>
           <Text style={styles.discountBadgeText}>
             -{promotion.discount_percentage}%
@@ -70,7 +71,12 @@ const PromotionCard = memo(({ promotion, onPress, onLike }: PromotionCardProps) 
       )}
 
       {/* Promotion Image */}
-      <TouchableOpacity onPress={handlePress} activeOpacity={0.9}>
+      <TouchableOpacity
+        onPress={handlePress}
+        activeOpacity={0.9}
+        accessibilityRole="button"
+        accessibilityLabel={`Ver promoción: ${promotion.title}`}
+      >
         <Image source={{ uri: promotion.imageURL }} style={styles.image} />
       </TouchableOpacity>
 
@@ -82,11 +88,11 @@ const PromotionCard = memo(({ promotion, onPress, onLike }: PromotionCardProps) 
         </Text>
 
         {/* CTA Button */}
-        <TouchableOpacity style={styles.ctaButton} onPress={handlePress}>
+        <TouchableOpacity style={styles.ctaButton} onPress={handlePress} accessibilityRole="button">
           <Text style={styles.ctaText}>
             {promotion.ctaText || 'Más información'}
           </Text>
-          <ExternalLink size={16} color="#FFFFFF" />
+          <ExternalLink size={16} color={colors.onPrimary} />
         </TouchableOpacity>
 
         {/* Actions - Like button similar to posts */}
@@ -95,11 +101,14 @@ const PromotionCard = memo(({ promotion, onPress, onLike }: PromotionCardProps) 
             style={styles.actionButton}
             onPress={handleLike}
             disabled={isLiking}
+            accessibilityRole="button"
+            accessibilityLabel={`${isLiked ? 'Quitar me gusta' : 'Me gusta'}, ${likesCount} en total`}
+            accessibilityState={{ selected: isLiked, disabled: isLiking }}
           >
-            <Heart 
-              size={24} 
-              color={isLiked ? "#ff3040" : "#666"} 
-              fill={isLiked ? "#ff3040" : "none"}
+            <Heart
+              size={24}
+              color={isLiked ? colors.danger : colors.textSecondary}
+              fill={isLiked ? colors.danger : 'none'}
             />
             <Text style={[styles.actionText, isLiked && styles.likedText]}>
               {likesCount}
@@ -139,100 +148,95 @@ export default PromotionCard;
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 8,
-    paddingTop: 12,
-    paddingBottom: 8,
-    backgroundColor: 'white',
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
   },
   promotionBadge: {
     position: 'absolute',
-    top: 24,
-    left: 28,
-    backgroundColor: '#DC2626',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    top: spacing.xxl,
+    left: spacing.xxl + spacing.xs,
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
     zIndex: 1,
   },
   promotionBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
+    ...typography.captionStrong,
+    color: colors.onAccent,
   },
   discountBadge: {
     position: 'absolute',
-    top: 24,
-    right: 28,
-    backgroundColor: '#10B981',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    top: spacing.xxl,
+    right: spacing.xxl + spacing.xs,
+    backgroundColor: colors.success,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radius.pill,
     zIndex: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    ...shadows.sm,
   },
   discountBadgeText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    ...typography.label,
+    fontFamily: typography.display.fontFamily,
+    fontWeight: '700',
+    color: colors.white,
   },
   image: {
     width: '100%',
     height: 200,
     resizeMode: 'cover',
-    marginBottom: 8,
+    borderRadius: radius.md,
+    marginBottom: spacing.md,
   },
   content: {
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.xs,
   },
   title: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   description: {
-    fontSize: 16,
-    lineHeight: 22,
-    color: '#000',
-    marginBottom: 12,
+    ...typography.body,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
   },
   ctaButton: {
-    backgroundColor: '#DC2626',
+    backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    gap: 8,
-    marginBottom: 8,
+    minHeight: 48,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
   },
   ctaText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
+    ...typography.bodyStrong,
+    color: colors.onPrimary,
   },
   actions: {
     flexDirection: 'row',
-    paddingTop: 12,
+    paddingTop: spacing.xs,
     alignItems: 'center',
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 24,
+    minHeight: 44,
+    minWidth: 44,
+    marginRight: spacing.xxl,
   },
   actionText: {
-    marginLeft: 6,
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
+    ...typography.label,
+    marginLeft: spacing.xs + 2,
+    color: colors.textSecondary,
   },
   likedText: {
-    color: '#ff3040',
+    color: colors.danger,
   },
 });

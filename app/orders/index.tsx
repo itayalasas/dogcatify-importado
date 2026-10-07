@@ -1,18 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Alert, Linking, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Package, Clock, Truck, CircleCheck as CheckCircle, Circle as XCircle, MapPin, Phone, Star, AlertCircle, RefreshCw, Trash2 } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { ScreenHeader, IconButton, Badge, badgeColors, EmptyState, SkeletonList, SegmentedControl, toast } from '../../components/ui';
+import { colors, radius, spacing, typography, touchTarget } from '../../constants/theme';
+import { formatPrice } from '../../components/shop/format';
+import { getOrderStatusTone } from '../../components/shop/orderStatus';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { regeneratePaymentLink } from '../../utils/mercadoPago';
+import { useBackToHome } from '../../hooks/useBackToHome';
 import { getOrderFulfillmentMode, getOrderStatusLabel } from '../../utils/orderFulfillment';
 import { isServiceBookingOrder, resolveOrderType } from '../../utils/orderClassification';
 
 export default function MyOrders() {
   const { currentUser } = useAuth();
+  // Arriving from a payment result screen the history is cleared, so "back"
+  // goes home; opened normally (e.g. from Perfil) it goes back as usual.
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  const cameFromPayment = from === 'payment';
+  const goHomeOnBack = useBackToHome(cameFromPayment);
+  const handleBack = () => (cameFromPayment ? goHomeOnBack() : router.back());
   const [orders, setOrders] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
   const [loading, setLoading] = useState(true);
@@ -198,69 +208,38 @@ export default function MyOrders() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return '#FEF3C7';
-      case 'reserved': return '#FEF3C7';
-      case 'payment_failed': return '#FECACA';
-      case 'insufficient_stock': return '#FEE2E2';
-      case 'confirmed': return '#DBEAFE';
-      case 'processing': return '#DBEAFE';
-      case 'preparing': return '#DBEAFE';
-      case 'ready_for_delivery': return '#DBEAFE';
-      case 'shipped': return '#D1FAE5';
-      case 'completed': return '#D1FAE5';
-      case 'delivered': return '#D1FAE5';
-      case 'cancelled': return '#FEE2E2';
-      case 'refunded': return '#F3F4F6';
-      default: return '#F3F4F6';
-    }
-  };
-
-  const getStatusTextColor = (status: string) => {
-    switch (status) {
-      case 'pending': return '#92400E';
-      case 'reserved': return '#92400E';
-      case 'payment_failed': return '#991B1B';
-      case 'insufficient_stock': return '#991B1B';
-      case 'confirmed': return '#1E40AF';
-      case 'processing': return '#1E40AF';
-      case 'preparing': return '#1E40AF';
-      case 'ready_for_delivery': return '#1E40AF';
-      case 'shipped': return '#065F46';
-      case 'completed': return '#065F46';
-      case 'delivered': return '#065F46';
-      case 'cancelled': return '#991B1B';
-      case 'refunded': return '#374151';
-      default: return '#374151';
-    }
-  };
-
   const getStatusIcon = (status: string) => {
+    const color = badgeColors[getOrderStatusTone(status)].fg;
     switch (status) {
-      case 'pending': return <Clock size={16} color="#92400E" />;
-      case 'reserved': return <Clock size={16} color="#92400E" />;
-      case 'payment_failed': return <AlertCircle size={16} color="#991B1B" />;
-      case 'insufficient_stock': return <AlertCircle size={16} color="#991B1B" />;
-      case 'confirmed': return <CheckCircle size={16} color="#1E40AF" />;
-      case 'processing': return <Package size={16} color="#1E40AF" />;
-      case 'preparing': return <Package size={16} color="#1E40AF" />;
-      case 'ready_for_delivery': return <Clock size={16} color="#1E40AF" />;
-      case 'shipped': return <Truck size={16} color="#065F46" />;
-      case 'completed': return <CheckCircle size={16} color="#065F46" />;
-      case 'delivered': return <CheckCircle size={16} color="#065F46" />;
-      case 'cancelled': return <XCircle size={16} color="#991B1B" />;
-      case 'refunded': return <RefreshCw size={16} color="#374151" />;
-      default: return <Clock size={16} color="#374151" />;
+      case 'pending': return <Clock size={14} color={color} />;
+      case 'reserved': return <Clock size={14} color={color} />;
+      case 'payment_failed': return <AlertCircle size={14} color={color} />;
+      case 'insufficient_stock': return <AlertCircle size={14} color={color} />;
+      case 'confirmed': return <CheckCircle size={14} color={color} />;
+      case 'processing': return <Package size={14} color={color} />;
+      case 'preparing': return <Package size={14} color={color} />;
+      case 'ready_for_delivery': return <Clock size={14} color={color} />;
+      case 'shipped': return <Truck size={14} color={color} />;
+      case 'completed': return <CheckCircle size={14} color={color} />;
+      case 'delivered': return <CheckCircle size={14} color={color} />;
+      case 'cancelled': return <XCircle size={14} color={color} />;
+      case 'refunded': return <RefreshCw size={14} color={color} />;
+      default: return <Clock size={14} color={color} />;
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-    }).format(amount);
+  const getOrderTitle = (order: any) => {
+    const items = order.items || [];
+    const first = items[0];
+    const firstName = isServiceBookingOrder(order)
+      ? order.serviceName || first?.service_name || first?.name || 'Servicio'
+      : first?.name || 'Pedido';
+    const storeName = first?.partnerName || first?.partner_name || order.partnerName || null;
+    const extra = items.length > 1 ? ` y ${items.length - 1} más` : '';
+    return { title: `${firstName}${extra}`, storeName };
   };
+
+  const formatCurrency = (amount: number) => formatPrice(amount);
 
   const filteredOrders = orders.filter(order => {
     if (activeTab === 'active') {
@@ -274,14 +253,14 @@ export default function MyOrders() {
     // Add items back to cart
     Alert.alert(
       'Reordenar',
-      '¿Quieres agregar estos productos al carrito nuevamente?',
+      '¿Querés agregar estos productos al carrito nuevamente?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Sí, agregar',
           onPress: () => {
             // Here you would add the items back to cart
-            Alert.alert('Productos agregados', 'Los productos se han agregado al carrito');
+            toast.success('Agregamos los productos al carrito');
           }
         }
       ]
@@ -309,10 +288,7 @@ export default function MyOrders() {
 
       if (error) throw error;
 
-      Alert.alert(
-        'Retiro confirmado',
-        'Tu compra quedó marcada como retirada y el aliado recibirá la notificación.',
-      );
+      toast.success('Retiro confirmado. Le avisamos a la tienda.');
 
       await Promise.all([fetchOrders(true), fetchOrderCounts()]);
     } catch (error) {
@@ -340,8 +316,8 @@ export default function MyOrders() {
 
   const handleContactSupport = () => {
     Alert.alert(
-      'Contactar Soporte',
-      'Puedes contactarnos por:\n\n📧 Email: soporte@dogcatify.com\n📱 WhatsApp: +54 11 1234-5678',
+      'Contactar soporte',
+      'Podés contactarnos por:\n\nEmail: soporte@dogcatify.com\nWhatsApp: +54 11 1234-5678',
       [{ text: 'Entendido' }]
     );
   };
@@ -395,15 +371,15 @@ export default function MyOrders() {
         Alert.alert(
           'Regenerar link de pago',
           isExpired
-            ? 'El link de pago ha expirado. Se generará uno nuevo.'
-            : 'Se generará un nuevo link de pago.',
+            ? 'El link de pago venció. Vamos a generar uno nuevo.'
+            : 'Vamos a generar un nuevo link de pago.',
           [
             { text: 'Cancelar', style: 'cancel' },
             {
               text: 'Continuar',
               onPress: async () => {
                 try {
-                  Alert.alert('Generando link...', 'Por favor espera');
+                  toast.info('Generando el link de pago...');
 
                   const result = await regeneratePaymentLink(order.id);
 
@@ -438,28 +414,25 @@ export default function MyOrders() {
     <Card key={order.id} style={styles.orderCard}>
       <View style={styles.orderHeader}>
         <View style={styles.orderInfo}>
-          <Text style={styles.orderNumber}>Pedido {order.orderNumber}</Text>
+          <Text style={styles.orderNumber} numberOfLines={2}>{getOrderTitle(order).title}</Text>
+          {getOrderTitle(order).storeName ? (
+            <Text style={styles.orderStore} numberOfLines={1}>{getOrderTitle(order).storeName}</Text>
+          ) : null}
           <Text style={styles.orderDate}>
-            {order.createdAt.toLocaleDateString()}
+            Pedido {order.orderNumber} · {order.createdAt.toLocaleDateString('es-UY')}
           </Text>
         </View>
-        <View style={[
-          styles.statusBadge,
-          { backgroundColor: getStatusColor(order.status) }
-        ]}>
-          {getStatusIcon(order.status)}
-          <Text style={[
-            styles.statusText,
-            { color: getStatusTextColor(order.status) }
-          ]}>
-                {getOrderStatusLabel(order.status, order.orderType, order.shippingAddress)}
-          </Text>
-        </View>
+        <Badge
+          label={getOrderStatusLabel(order.status, order.orderType, order.shippingAddress)}
+          tone={getOrderStatusTone(order.status)}
+          icon={getStatusIcon(order.status)}
+          size="small"
+        />
       </View>
 
       <View style={styles.orderItems}>
         <Text style={styles.itemsTitle}>
-          {isServiceOrder(order) ? `Servicios (${order.items.length}):` : `Productos (${order.items.length}):`}
+          {isServiceOrder(order) ? `Servicios (${order.items.length})` : `Productos (${order.items.length})`}
         </Text>
         {order.items.slice(0, 2).map((item: any, index: number) => (
           <View key={index} style={styles.orderItem}>
@@ -485,30 +458,25 @@ export default function MyOrders() {
 
       {!isServiceOrder(order) && order.shippingAddress && (
         <View style={styles.shippingInfo}>
-          <MapPin size={16} color="#6B7280" />
+          <MapPin size={16} color={colors.textSecondary} />
           <Text style={styles.shippingAddress}>{order.shippingAddress}</Text>
         </View>
       )}
 
       <View style={styles.orderTotal}>
-        <Text style={styles.totalLabel}>Total:</Text>
+        <Text style={styles.totalLabel}>Total</Text>
         <Text style={styles.totalAmount}>{formatCurrency(order.totalAmount)}</Text>
       </View>
 
       <View style={styles.orderActions}>
         {RETRYABLE_STATUSES.includes(order.status) && (
-          <TouchableOpacity
-            style={styles.retryPaymentButton}
+          <Button
+            title={order.paymentLinkExpiresAt && new Date(order.paymentLinkExpiresAt) < new Date()
+              ? 'Generar nuevo link'
+              : 'Reintentar pago'}
             onPress={() => handleRetryPayment(order)}
-            activeOpacity={0.7}
-          >
-            <RefreshCw size={18} color="#FFFFFF" strokeWidth={2.5} />
-            <Text style={styles.retryPaymentText}>
-              {order.paymentLinkExpiresAt && new Date(order.paymentLinkExpiresAt) < new Date()
-                ? 'Generar nuevo link'
-                : 'Reintentar pago'}
-            </Text>
-          </TouchableOpacity>
+            icon={<RefreshCw size={18} color={colors.onPrimary} strokeWidth={2.5} />}
+          />
         )}
         {DELETABLE_STATUSES.includes(order.status) && (
           <TouchableOpacity
@@ -516,8 +484,10 @@ export default function MyOrders() {
             onPress={() => handleDeleteOrder(order)}
             activeOpacity={0.7}
             disabled={deletingOrderId === order.id}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: deletingOrderId === order.id, busy: deletingOrderId === order.id }}
           >
-            <Trash2 size={18} color="#991B1B" strokeWidth={2.5} />
+            <Trash2 size={18} color={colors.danger} strokeWidth={2.5} />
             <Text style={styles.deleteOrderText}>
               {deletingOrderId === order.id ? 'Eliminando...' : 'Eliminar pedido'}
             </Text>
@@ -549,8 +519,9 @@ export default function MyOrders() {
           />
         )}
         <Button
-          title="Ver Detalles"
+          title="Ver detalle"
           onPress={() => router.push(`/orders/${order.id}`)}
+          variant="secondary"
           size="small"
         />
       </View>
@@ -560,49 +531,35 @@ export default function MyOrders() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Mis Pedidos</Text>
-          <View style={styles.placeholder} />
-        </View>
-        <View style={styles.loadingContainer}>
-          <LoadingSpinner message="Cargando pedidos..." />
-        </View>
+        <ScreenHeader title="Mis pedidos" onBack={handleBack} />
+        <SkeletonList kind="cards" count={3} />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Mis Pedidos</Text>
-        <TouchableOpacity onPress={handleContactSupport} style={styles.supportButton}>
-          <Phone size={20} color="#3B82F6" />
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader
+        title="Mis pedidos"
+        onBack={handleBack}
+        right={
+          <IconButton
+            icon={<Phone size={20} color={colors.primary} />}
+            onPress={handleContactSupport}
+            accessibilityLabel="Contactar soporte"
+          />
+        }
+      />
 
       <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'active' && styles.activeTab]}
-          onPress={() => setActiveTab('active')}
-        >
-          <Text style={[styles.tabText, activeTab === 'active' && styles.activeTabText]}>
-            Activos ({counts.active})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'completed' && styles.activeTab]}
-          onPress={() => setActiveTab('completed')}
-        >
-          <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>
-            Completados ({counts.completed})
-          </Text>
-        </TouchableOpacity>
+        <SegmentedControl
+          options={[
+            { value: 'active', label: `Activos (${counts.active})` },
+            { value: 'completed', label: `Completados (${counts.completed})` },
+          ]}
+          value={activeTab}
+          onChange={setActiveTab}
+        />
       </View>
 
       <FlatList
@@ -610,6 +567,7 @@ export default function MyOrders() {
         data={filteredOrders}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => renderOrder(item)}
+        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         onEndReached={loadMoreOrders}
         onEndReachedThreshold={0.4}
@@ -617,71 +575,66 @@ export default function MyOrders() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
           />
         }
         ListEmptyComponent={
           orders.length === 0 ? (
-            <Card style={styles.emptyCard}>
-              <Package size={64} color="#9CA3AF" />
-              <Text style={styles.emptyTitle}>No tienes pedidos</Text>
-              <Text style={styles.emptySubtitle}>
-                Cuando realices compras en la tienda, aparecerán aquí
-              </Text>
-              <Button
-                title="Ir a la Tienda"
-                onPress={() => router.push('/(tabs)/shop')}
-                size="large"
-              />
-            </Card>
+            <EmptyState
+              icon={<Package size={32} color={colors.primary} />}
+              title="Todavía no tenés pedidos"
+              description="Cuando compres en la tienda, tus pedidos van a aparecer acá."
+              actionLabel="Ir a la tienda"
+              onAction={() => router.push('/(tabs)/shop')}
+            />
           ) : (
-            <Card style={styles.emptyCard}>
-              <Package size={64} color="#9CA3AF" />
-              <Text style={styles.emptyTitle}>
-                No hay pedidos {activeTab === 'active' ? 'activos' : 'completados'}
-              </Text>
-              <Text style={styles.emptySubtitle}>
-                {activeTab === 'active'
-                  ? 'Tus pedidos en proceso aparecerán aquí'
-                  : 'Tus pedidos entregados y cancelados aparecerán aquí'
-                }
-              </Text>
-            </Card>
+            <EmptyState
+              icon={<Package size={32} color={colors.primary} />}
+              title={`No hay pedidos ${activeTab === 'active' ? 'activos' : 'completados'}`}
+              description={activeTab === 'active'
+                ? 'Tus pedidos en proceso van a aparecer acá.'
+                : 'Tus pedidos entregados y cancelados van a aparecer acá.'}
+            />
           )
         }
         ListFooterComponent={
           <>
             {loadingMore && (
               <View style={styles.loadMoreContainer}>
-                <ActivityIndicator size="small" color="#3B82F6" />
+                <ActivityIndicator size="small" color={colors.primary} />
                 <Text style={styles.loadMoreText}>Cargando más pedidos...</Text>
               </View>
             )}
 
             <Card style={styles.quickActionsCard}>
-              <Text style={styles.quickActionsTitle}>Acciones Rápidas</Text>
+              <Text style={styles.quickActionsTitle}>Acciones rápidas</Text>
               <View style={styles.quickActions}>
                 <TouchableOpacity
                   style={styles.quickAction}
                   onPress={() => router.push('/(tabs)/shop')}
+                  accessibilityRole="button"
                 >
-                  <Package size={24} color="#3B82F6" />
-                  <Text style={styles.quickActionText}>Ir a Tienda</Text>
+                  <Package size={24} color={colors.primary} />
+                  <Text style={styles.quickActionText}>Ir a la tienda</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.quickAction}
                   onPress={handleContactSupport}
+                  accessibilityRole="button"
                 >
-                  <Phone size={24} color="#10B981" />
+                  <Phone size={24} color={colors.primary} />
                   <Text style={styles.quickActionText}>Soporte</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.quickAction}
                   onPress={() => router.push('/cart')}
+                  accessibilityRole="button"
                 >
-                  <Package size={24} color="#F59E0B" />
-                  <Text style={styles.quickActionText}>Mi Carrito</Text>
+                  <Package size={24} color={colors.primary} />
+                  <Text style={styles.quickActionText}>Mi carrito</Text>
                 </TouchableOpacity>
               </View>
             </Card>
@@ -695,63 +648,68 @@ export default function MyOrders() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   title: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   supportButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   placeholder: {
     width: 40,
   },
   tabBar: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   tab: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
   activeTab: {
-    borderBottomColor: '#3B82F6',
+    borderBottomColor: colors.primary,
   },
   tabText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   activeTabText: {
-    color: '#3B82F6',
+    color: colors.primary,
   },
   content: {
     flex: 1,
   },
+  listContent: {
+    paddingTop: spacing.lg,
+    flexGrow: 1,
+  },
   ordersList: {
-    padding: 16,
-    paddingBottom: 8,
+    padding: spacing.lg,
+    paddingBottom: spacing.sm,
   },
   loadingContainer: {
     flex: 1,
@@ -761,7 +719,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   emptyCard: {
     alignItems: 'center',
@@ -770,64 +728,69 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 8,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   emptySubtitle: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
     lineHeight: 24,
   },
   orderCard: {
-    marginHorizontal: 16,
-    marginBottom: 12,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
   },
   orderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    marginBottom: spacing.md,
   },
   orderInfo: {
     flex: 1,
   },
   orderNumber: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
+  },
+  orderStore: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: spacing.xxs,
   },
   orderDate: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginTop: spacing.xxs,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   statusText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    marginLeft: 4,
+    marginLeft: spacing.xs,
   },
   orderItems: {
-    backgroundColor: '#F9FAFB',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginBottom: spacing.md,
   },
   itemsTitle: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   orderItem: {
     flexDirection: 'row',
@@ -843,37 +806,37 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
+    color: colors.text,
     flex: 1,
   },
   itemQuantity: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginLeft: 8,
+    color: colors.textSecondary,
+    marginLeft: spacing.sm,
   },
   itemPrice: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   moreItems: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     fontStyle: 'italic',
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   shippingInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   shippingAddress: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginLeft: 6,
     flex: 1,
   },
@@ -882,67 +845,62 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingTop: 12,
-    marginBottom: 12,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md,
+    marginBottom: spacing.md,
   },
   totalLabel: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   totalAmount: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    ...typography.heading,
+    color: colors.text,
   },
   orderActions: {
     flexDirection: 'column',
-    gap: 12,
-    marginTop: 8,
+    gap: spacing.sm,
   },
   retryPaymentButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F59E0B',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 8,
+    backgroundColor: colors.warning,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    gap: spacing.sm,
   },
   retryPaymentText: {
     fontSize: 14,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   deleteOrderButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 8,
+    backgroundColor: colors.dangerSoft,
+    minHeight: touchTarget,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    gap: spacing.sm,
   },
   deleteOrderText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Bold',
-    color: '#991B1B',
+    ...typography.label,
+    color: colors.danger,
   },
   quickActionsCard: {
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 16,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
   },
   quickActionsTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    color: colors.text,
+    marginBottom: spacing.lg,
   },
   quickActions: {
     flexDirection: 'row',
@@ -950,29 +908,29 @@ const styles = StyleSheet.create({
   },
   quickAction: {
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
+    padding: spacing.lg,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
     flex: 1,
-    marginHorizontal: 4,
+    marginHorizontal: spacing.xs,
   },
   quickActionText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginTop: 8,
+    color: colors.text,
+    marginTop: spacing.sm,
     textAlign: 'center',
   },
   loadMoreContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 12,
-    gap: 8,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
   },
   loadMoreText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
 });

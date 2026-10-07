@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, RefreshControl } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MessageCircle, Phone, Search, Clock } from 'lucide-react-native';
-import { Card } from '../../components/ui/Card';
+import { ArrowLeft, MessageCircle, Phone, Search, Clock, User } from 'lucide-react-native';
+import { Card, Button, IconButton, EmptyState, SkeletonList } from '../../components/ui';
+import { formatNumber } from '../../components/partner/format';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
@@ -16,6 +18,7 @@ export default function ChatContacts() {
   const [loading, setLoading] = useState(true);
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (!currentUser || !businessId) return;
@@ -152,6 +155,15 @@ export default function ChatContacts() {
     }
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await fetchConversations();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const handleConversationPress = (conversation: any) => {
     router.push(`/chat/${conversation.id}?petName=${conversation.petName}`);
   };
@@ -180,6 +192,8 @@ export default function ChatContacts() {
       key={conversation.id}
       style={styles.conversationCard}
       onPress={() => handleConversationPress(conversation)}
+      accessibilityRole="button"
+      accessibilityLabel={`Conversación con ${conversation.customerName} sobre ${conversation.petName || 'la mascota'}${conversation.unreadCount > 0 ? `, ${conversation.unreadCount} sin leer` : ''}`}
     >
       <View style={styles.conversationHeader}>
         {/* Customer Avatar */}
@@ -187,7 +201,7 @@ export default function ChatContacts() {
           <Image source={{ uri: conversation.customerAvatar }} style={styles.customerAvatar} />
         ) : (
           <View style={styles.customerAvatarPlaceholder}>
-            <Text style={styles.customerAvatarText}>👤</Text>
+            <User size={22} color={colors.primary} />
           </View>
         )}
 
@@ -214,7 +228,7 @@ export default function ChatContacts() {
 
           {conversation.latestMessage && (
             <Text style={styles.lastMessage} numberOfLines={1}>
-              {conversation.latestMessage.sender_id === currentUser?.id ? 'Tú: ' : ''}
+              {conversation.latestMessage.sender_id === currentUser?.id ? 'Vos: ' : ''}
               {conversation.latestMessage.message}
             </Text>
           )}
@@ -237,9 +251,7 @@ export default function ChatContacts() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando conversaciones...</Text>
-        </View>
+        <SkeletonList kind="list" count={6} style={{ padding: spacing.lg }} />
       </SafeAreaView>
     );
   }
@@ -256,12 +268,7 @@ export default function ChatContacts() {
             <Text style={styles.lockedTextSecondary}>
               Los contactos de adopción solo están disponibles para refugios con plan Pro.
             </Text>
-            <TouchableOpacity
-              style={styles.lockedButton}
-              onPress={() => router.back()}
-            >
-              <Text style={styles.lockedButtonText}>Volver</Text>
-            </TouchableOpacity>
+            <Button title="Volver" onPress={() => router.back()} fullWidth={false} />
           </Card>
         </View>
       </SafeAreaView>
@@ -271,11 +278,13 @@ export default function ChatContacts() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
+        <IconButton
+          icon={<ArrowLeft size={24} color={colors.text} />}
+          onPress={() => router.back()}
+          accessibilityLabel="Volver"
+        />
         <View style={styles.headerInfo}>
-          <Text style={styles.title}>Contactos de Adopción</Text>
+          <Text style={styles.title} accessibilityRole="header">Contactos de adopción</Text>
           <Text style={styles.subtitle}>{partnerProfile?.businessName}</Text>
         </View>
         <View style={styles.placeholder} />
@@ -286,23 +295,29 @@ export default function ChatContacts() {
           placeholder="Buscar conversaciones..."
           value={searchQuery}
           onChangeText={setSearchQuery}
-          leftIcon={<Search size={20} color="#9CA3AF" />}
+          leftIcon={<Search size={20} color={colors.icon} />}
         />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+        }
+      >
         <Card style={styles.statsCard}>
-          <Text style={styles.statsTitle}>📊 Resumen de Contactos</Text>
+          <Text style={styles.statsTitle}>Resumen de contactos</Text>
           <View style={styles.statsGrid}>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{conversations.length}</Text>
-              <Text style={styles.statLabel}>Total{'\n'}Conversaciones</Text>
+              <Text style={styles.statNumber}>{formatNumber(conversations.length)}</Text>
+              <Text style={styles.statLabel}>Conversaciones</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
                 {conversations.filter(c => c.unreadCount > 0).length}
               </Text>
-              <Text style={styles.statLabel}>Sin{'\n'}Leer</Text>
+              <Text style={styles.statLabel}>Sin leer</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
@@ -312,25 +327,22 @@ export default function ChatContacts() {
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
-                {conversations.reduce((sum, c) => sum + c.unreadCount, 0)}
+                {formatNumber(conversations.reduce((sum, c) => sum + c.unreadCount, 0))}
               </Text>
-              <Text style={styles.statLabel}>Mensajes{'\n'}Pendientes</Text>
+              <Text style={styles.statLabel}>Mensajes{'\n'}pendientes</Text>
             </View>
           </View>
         </Card>
 
         {filteredConversations.length === 0 ? (
           <Card style={styles.emptyCard}>
-            <MessageCircle size={48} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>
-              {searchQuery ? 'No se encontraron conversaciones' : 'No hay conversaciones'}
-            </Text>
-            <Text style={styles.emptySubtitle}>
-              {searchQuery 
-                ? 'Intenta con otros términos de búsqueda'
-                : 'Las conversaciones sobre adopciones aparecerán aquí'
-              }
-            </Text>
+            <EmptyState
+              icon={<MessageCircle size={32} color={colors.primary} />}
+              title={searchQuery ? 'No encontramos conversaciones' : 'Todavía no hay conversaciones'}
+              description={searchQuery
+                ? 'Probá con otros términos de búsqueda.'
+                : 'Las conversaciones sobre adopciones van a aparecer acá.'}
+            />
           </Card>
         ) : (
           <View style={styles.conversationsList}>
@@ -345,57 +357,54 @@ export default function ChatContacts() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   headerInfo: {
     flex: 1,
     alignItems: 'center',
   },
   title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   subtitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   placeholder: {
     width: 32,
   },
   searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
   },
   statsCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   statsTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.lg,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -407,23 +416,22 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#EF4444',
+    color: colors.danger,
   },
   statLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   conversationsList: {
-    gap: 8,
+    gap: spacing.sm,
   },
   conversationCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
-    shadowColor: '#000',
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
+    shadowColor: colors.black,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
@@ -437,16 +445,16 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   customerAvatarPlaceholder: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   customerAvatarText: {
     fontSize: 20,
@@ -458,31 +466,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   customerName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   messageTime: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   petInfoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   petInfo: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    ...typography.label,
+    color: colors.primary,
   },
   unreadBadge: {
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.danger,
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -493,27 +498,26 @@ const styles = StyleSheet.create({
   unreadCount: {
     fontSize: 12,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: colors.surface,
   },
   lastMessage: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   petImage: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    marginLeft: 12,
+    marginLeft: spacing.md,
   },
   petImagePlaceholder: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
+    marginLeft: spacing.md,
   },
   petImageText: {
     fontSize: 16,
@@ -523,16 +527,14 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 4,
+    ...typography.heading,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.xs,
   },
   emptySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   loadingContainer: {
@@ -541,14 +543,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
   },
   lockedContainer: {
     flex: 1,
     justifyContent: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   lockedCard: {
     alignItems: 'center',
@@ -558,8 +559,8 @@ const styles = StyleSheet.create({
   lockedTitle: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 8,
+    color: colors.text,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   lockedText: {
@@ -568,24 +569,24 @@ const styles = StyleSheet.create({
     color: '#7C3AED',
     textAlign: 'center',
     lineHeight: 21,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   lockedTextSecondary: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textTertiary,
     textAlign: 'center',
     lineHeight: 20,
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   lockedButton: {
-    backgroundColor: '#2D6A6F',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
   },
   lockedButtonText: {
-    color: '#FFFFFF',
+    color: colors.surface,
     fontFamily: 'Inter-SemiBold',
     fontSize: 14,
   },

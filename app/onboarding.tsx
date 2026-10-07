@@ -15,6 +15,7 @@ import { Heart, PawPrint, Store } from 'lucide-react-native';
 import { Button } from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
 import { completeOnboarding, resolvePostLoginRoute } from '../utils/onboarding';
+import { colors, typography, spacing, radius, shadows, touchTarget } from '../constants/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -38,8 +39,8 @@ const SLIDES: Slide[] = [
   {
     id: 'client',
     icon: Heart,
-    accent: '#2D6A6F',
-    soft: '#EAF6F5',
+    accent: colors.primary,
+    soft: colors.primarySoft,
     eyebrow: 'Para tu mascota',
     title: 'Todo lo que tu mascota necesita',
     description:
@@ -48,8 +49,8 @@ const SLIDES: Slide[] = [
   {
     id: 'partner',
     icon: Store,
-    accent: '#4F46E5',
-    soft: '#EEF2FF',
+    accent: colors.warning,
+    soft: '#FFF8E6',
     eyebrow: 'Para tu negocio',
     title: '¿Tenés un negocio pet-friendly?',
     description:
@@ -58,8 +59,8 @@ const SLIDES: Slide[] = [
   {
     id: 'start',
     icon: PawPrint,
-    accent: '#2D6A6F',
-    soft: '#EAF6F5',
+    accent: colors.primary,
+    soft: colors.primarySoft,
     eyebrow: 'Todo listo',
     title: 'Empecemos',
     description:
@@ -114,7 +115,11 @@ export default function OnboardingScreen() {
     const Icon = item.icon;
 
     return (
-      <View style={[styles.slide, { backgroundColor: item.soft }]}>
+      <View
+        style={[styles.slide, { backgroundColor: item.soft }]}
+        accessible
+        accessibilityLabel={`${item.eyebrow}. ${item.title}. ${item.description}`}
+      >
         <View pointerEvents="none" style={styles.decorLayer}>
           <View style={[styles.decorOrb, { backgroundColor: `${item.accent}14`, top: -60, right: -60 }]} />
           <View
@@ -128,7 +133,7 @@ export default function OnboardingScreen() {
 
         <View style={styles.slideContent}>
           <View style={[styles.iconRing, { backgroundColor: `${item.accent}12` }]}>
-            <View style={[styles.iconCircle, { backgroundColor: '#FFFFFF', borderColor: `${item.accent}30` }]}>
+            <View style={[styles.iconCircle, { borderColor: `${item.accent}30` }]}>
               <Icon size={56} color={item.accent} strokeWidth={1.75} />
             </View>
           </View>
@@ -146,7 +151,13 @@ export default function OnboardingScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: activeSlide.soft }]}>
       <View style={styles.topActions}>
-        <TouchableOpacity onPress={handleFinish} disabled={finishing} hitSlop={12}>
+        <TouchableOpacity
+          onPress={handleFinish}
+          disabled={finishing}
+          style={styles.skipButton}
+          accessibilityRole="button"
+          accessibilityLabel="Saltar introducción"
+        >
           <Text style={styles.skipText}>Saltar</Text>
         </TouchableOpacity>
       </View>
@@ -164,13 +175,17 @@ export default function OnboardingScreen() {
       />
 
       <View style={styles.footer}>
-        <View style={styles.dotsRow}>
+        <View
+          style={styles.dotsRow}
+          accessible
+          accessibilityLabel={`Paso ${currentIndex + 1} de ${SLIDES.length}`}
+        >
           {SLIDES.map((slide, index) => (
             <View
               key={slide.id}
               style={[
                 styles.dot,
-                index === currentIndex && { backgroundColor: activeSlide.accent, width: 20 },
+                index === currentIndex && { backgroundColor: activeSlide.accent, width: 24 },
               ]}
             />
           ))}
@@ -182,7 +197,6 @@ export default function OnboardingScreen() {
           loading={finishing}
           disabled={finishing}
           size="large"
-          style={{ backgroundColor: activeSlide.accent }}
         />
       </View>
     </SafeAreaView>
@@ -194,15 +208,22 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   topActions: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
     alignItems: 'flex-end',
     zIndex: 2,
   },
+  skipButton: {
+    minHeight: touchTarget,
+    minWidth: touchTarget,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   skipText: {
+    ...typography.bodyStrong,
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: 'rgba(17, 24, 39, 0.45)',
+    color: colors.textSecondary,
   },
   carousel: {
     flex: 1,
@@ -218,82 +239,77 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 240,
     height: 240,
-    borderRadius: 120,
+    borderRadius: radius.pill,
   },
   decorOrbSmall: {
     width: 180,
     height: 180,
-    borderRadius: 90,
   },
   slideContent: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 36,
+    paddingHorizontal: spacing.xxxl,
   },
   iconRing: {
     width: 168,
     height: 168,
-    borderRadius: 84,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 32,
+    marginBottom: spacing.xxxl,
   },
   iconCircle: {
     width: 128,
     height: 128,
-    borderRadius: 64,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    backgroundColor: colors.surface,
+    ...shadows.md,
   },
   eyebrow: {
-    fontSize: 12,
-    fontFamily: 'Inter-Bold',
+    ...typography.captionStrong,
     letterSpacing: 0.6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   title: {
-    fontSize: 28,
-    lineHeight: 36,
+    ...typography.display,
     textAlign: 'center',
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 12,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   description: {
-    fontSize: 16,
+    ...typography.body,
     lineHeight: 24,
     textAlign: 'center',
-    color: '#4B5563',
-    fontFamily: 'Inter-Regular',
+    color: colors.textSecondary,
     maxWidth: 320,
   },
   footer: {
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-    paddingTop: 16,
-    gap: 18,
+    paddingHorizontal: spacing.xxl,
+    paddingBottom: spacing.xxl,
+    paddingTop: spacing.lg,
+    gap: spacing.xl,
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
   },
   dotsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   dot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(17, 24, 39, 0.15)',
+    borderRadius: radius.pill,
+    backgroundColor: colors.borderStrong,
   },
 });

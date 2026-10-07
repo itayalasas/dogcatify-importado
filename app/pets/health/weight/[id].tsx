@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Dimensions, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Dimensions, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Calendar, Scale, Plus, Info, TrendingUp, TriangleAlert as AlertTriangle, TrendingDown, CircleCheck as CheckCircle, Sparkles } from 'lucide-react-native';
 import { Input } from '../../../../components/ui/Input';
@@ -10,6 +10,11 @@ import { supabaseClient } from '../../../../lib/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { envConfig } from '../../../../utils/envConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { colors, spacing, radius, fontSize } from '../../../../constants/theme';
+import { HealthHeader } from '../../../../components/health';
+import { toast } from '../../../../components/ui/Toast';
+import { Badge } from '../../../../components/ui/Badge';
+import { EmptyState } from '../../../../components/ui/EmptyState';
 
 
 const screenWidth = Dimensions.get('window').width;
@@ -57,6 +62,16 @@ export default function PetWeight() {
   const [aiTips, setAiTips] = useState<string[]>([]);
   const [loadingAI, setLoadingAI] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([fetchWeightRecords(), fetchPetDetails()]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     if (id && currentUser) {
@@ -322,7 +337,7 @@ export default function PetWeight() {
 
   const handleAddWeight = async () => {
     if (!weight) {
-      Alert.alert('Error', 'Por favor ingresa el peso');
+      Alert.alert('Error', 'Ingresá el peso');
       return;
     }
 
@@ -362,7 +377,7 @@ export default function PetWeight() {
       
       if (updateError) throw updateError;
 
-      Alert.alert('Éxito', 'Peso registrado correctamente');
+      toast.success('Peso registrado');
       setShowAddForm(false);
       setNotes('');
       
@@ -546,7 +561,7 @@ export default function PetWeight() {
       setAiTips(data.tips || []);
     } catch (error: any) {
       console.error('Error generating weight advice:', error);
-      setAiError('No se pudieron generar los consejos. Intenta de nuevo.');
+      setAiError('No se pudieron generar los consejos. Probá de nuevo.');
     } finally {
       setLoadingAI(false);
     }
@@ -556,34 +571,34 @@ export default function PetWeight() {
     switch (weightStatus) {
       case 'underweight':
         return {
-          icon: <AlertTriangle size={20} color="#F59E0B" />,
+          icon: <AlertTriangle size={20} color={colors.warning} />,
           text: 'Bajo peso',
-          color: '#F59E0B',
-          bgColor: '#FEF3C7',
+          color: colors.warning,
+          bgColor: colors.warningSoft,
           recommendation: 'Consulta con un veterinario sobre la alimentación'
         };
       case 'overweight':
         return {
-          icon: <AlertTriangle size={20} color="#EF4444" />,
+          icon: <AlertTriangle size={20} color={colors.danger} />,
           text: 'Sobrepeso',
-          color: '#EF4444',
-          bgColor: '#FEE2E2',
+          color: colors.danger,
+          bgColor: colors.dangerSoft,
           recommendation: 'Considera una dieta y más ejercicio'
         };
       case 'ideal':
         return {
-          icon: <CheckCircle size={20} color="#10B981" />,
+          icon: <CheckCircle size={20} color={colors.success} />,
           text: 'Peso ideal',
-          color: '#10B981',
-          bgColor: '#D1FAE5',
+          color: colors.success,
+          bgColor: colors.successSoft,
           recommendation: 'Mantén la rutina actual'
         };
       default:
         return {
-          icon: <Scale size={20} color="#6B7280" />,
+          icon: <Scale size={20} color={colors.textSecondary} />,
           text: 'Sin datos de raza',
-          color: '#6B7280',
-          bgColor: '#F3F4F6',
+          color: colors.textSecondary,
+          bgColor: colors.surfaceAlt,
           recommendation: 'Registra más información de la raza'
         };
     }
@@ -639,8 +654,8 @@ export default function PetWeight() {
                   {
                     left: x - 4,
                     top: y - 4,
-                    backgroundColor: point.isInRange ? '#10B981' : 
-                      point.status === 'underweight' ? '#F59E0B' : '#EF4444'
+                    backgroundColor: point.isInRange ? colors.success : 
+                      point.status === 'underweight' ? colors.warning : colors.danger
                   }
                 ]}
               />
@@ -710,8 +725,8 @@ export default function PetWeight() {
   const getWeightStatus = (weightInKg: number) => {
     if (!idealWeightRange) {
       return {
-        icon: <Scale size={16} color="#6B7280" />,
-        color: '#6B7280'
+        icon: <Scale size={16} color={colors.textSecondary} />,
+        color: colors.textSecondary
       };
     }
 
@@ -725,18 +740,18 @@ export default function PetWeight() {
 
     if (weightInKg < idealMinKg) {
       return {
-        icon: <AlertTriangle size={16} color="#F59E0B" />,
-        color: '#F59E0B'
+        icon: <AlertTriangle size={16} color={colors.warning} />,
+        color: colors.warning
       };
     } else if (weightInKg > idealMaxKg) {
       return {
-        icon: <AlertTriangle size={16} color="#EF4444" />,
-        color: '#EF4444'
+        icon: <AlertTriangle size={16} color={colors.danger} />,
+        color: colors.danger
       };
     } else {
       return {
-        icon: <CheckCircle size={16} color="#10B981" />,
-        color: '#10B981'
+        icon: <CheckCircle size={16} color={colors.success} />,
+        color: colors.success
       };
     }
   };
@@ -746,7 +761,7 @@ export default function PetWeight() {
       return (
         <View style={styles.emptyChart}>
           <Text style={styles.emptyChartText}>
-            📊 Agrega registros de peso para ver la gráfica
+            📊 Agregá registros de peso para ver la gráfica
           </Text>
         </View>
       );
@@ -766,15 +781,15 @@ export default function PetWeight() {
         {/* Legend */}
         <View style={styles.chartLegend}>
           <View style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: '#10B981' }]} />
+            <View style={[styles.legendColor, { backgroundColor: colors.success }]} />
             <Text style={styles.legendText}>Peso ideal</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: '#F59E0B' }]} />
+            <View style={[styles.legendColor, { backgroundColor: colors.warning }]} />
             <Text style={styles.legendText}>Bajo peso</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: '#EF4444' }]} />
+            <View style={[styles.legendColor, { backgroundColor: colors.danger }]} />
             <Text style={styles.legendText}>Sobrepeso</Text>
           </View>
         </View>
@@ -807,8 +822,8 @@ export default function PetWeight() {
                       styles.weightBar,
                       {
                         height: barHeight,
-                        backgroundColor: record.isInRange ? '#10B981' : 
-                          record.status === 'underweight' ? '#F59E0B' : '#EF4444'
+                        backgroundColor: record.isInRange ? colors.success : 
+                          record.status === 'underweight' ? colors.warning : colors.danger
                       }
                     ]}
                   />
@@ -838,8 +853,8 @@ export default function PetWeight() {
               return (
                 <View style={styles.trendContainer}>
                   {isIncreasing ? 
-                    <TrendingUp size={20} color={difference > 0.5 ? '#EF4444' : '#3B82F6'} /> :
-                    <TrendingDown size={20} color={difference < -0.5 ? '#F59E0B' : '#3B82F6'} />
+                    <TrendingUp size={20} color={difference > 0.5 ? colors.danger : colors.primary} /> :
+                    <TrendingDown size={20} color={difference < -0.5 ? colors.warning : colors.primary} />
                   }
                   <Text style={styles.trendText}>
                     {isIncreasing ? 'Aumento' : 'Disminución'} de {Math.abs(difference).toFixed(1)}kg ({percentageChange}%)
@@ -855,31 +870,29 @@ export default function PetWeight() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity> 
-        <Text style={styles.title}>Seguimiento de Peso</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <HealthHeader title="Seguimiento de peso" subtitle={pet?.name} />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
+      >
         <Card style={styles.infoCard}>
           <View style={styles.iconContainer}>
-            <Scale size={40} color="#3B82F6" />
+            <Scale size={40} color={colors.primary} />
           </View>
-          <Text style={styles.infoTitle}>Seguimiento de Peso</Text>
+          <Text style={styles.infoTitle}>Peso de tu mascota</Text>
           {pet && (
             <Text style={styles.petInfo}>
               {pet.name} • {pet.breed} • {pet.gender === 'male' ? 'Macho' : 'Hembra'}
             </Text>
           )}
           <Text style={styles.infoDescription}>
-            Registra el peso de tu mascota regularmente para monitorear su salud.
+            Registrá el peso de tu mascota seguido para cuidar su salud.
           </Text>
           {!showAddForm ? (
             <Button
-              title="Agregar Peso"
+              title="Agregar peso"
               onPress={() => setShowAddForm(true)}
               size="large"
             />
@@ -900,12 +913,16 @@ export default function PetWeight() {
                   <View style={styles.unitButtons}>
                     <TouchableOpacity
                       style={[styles.unitButton, weightUnit === 'kg' && styles.selectedUnitButton]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: weightUnit === 'kg' }}
                       onPress={() => setWeightUnit('kg')}
                     >
                       <Text style={[styles.unitButtonText, weightUnit === 'kg' && styles.selectedUnitButtonText]}>kg</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.unitButton, weightUnit === 'lb' && styles.selectedUnitButton]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: weightUnit === 'lb' }}
                       onPress={() => setWeightUnit('lb')}
                     >
                       <Text style={[styles.unitButtonText, weightUnit === 'lb' && styles.selectedUnitButtonText]}>lb</Text>
@@ -918,9 +935,10 @@ export default function PetWeight() {
                 <Text style={styles.dateInputLabel}>Fecha *</Text>
                 <TouchableOpacity 
                   style={styles.dateInput}
+                  accessibilityRole="button"
                   onPress={() => setShowDatePicker(true)}
                 >
-                  <Calendar size={20} color="#6B7280" />
+                  <Calendar size={20} color={colors.textSecondary} />
                   <Text style={styles.dateInputText}>
                     {formatDate(date)}
                   </Text>
@@ -966,7 +984,7 @@ export default function PetWeight() {
 
         {weightRecords.length > 0 && (
           <Card style={styles.chartCard}>
-            <Text style={styles.chartTitle}>Gráfica de Peso</Text>
+            <Text style={styles.chartTitle}>Evolución del peso</Text>
             
             {/* Weight Status */}
             {idealWeightRange && (
@@ -992,30 +1010,40 @@ export default function PetWeight() {
             <View style={styles.timeRangeSelector}>
               <TouchableOpacity
                 style={[styles.timeRangeButton, timeRange === '1m' && styles.selectedTimeRange]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: timeRange === '1m' }}
                 onPress={() => setTimeRange('1m')}
               >
                 <Text style={[styles.timeRangeText, timeRange === '1m' && styles.selectedTimeRangeText]}>1M</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.timeRangeButton, timeRange === '3m' && styles.selectedTimeRange]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: timeRange === '3m' }}
                 onPress={() => setTimeRange('3m')}
               >
                 <Text style={[styles.timeRangeText, timeRange === '3m' && styles.selectedTimeRangeText]}>3M</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.timeRangeButton, timeRange === '6m' && styles.selectedTimeRange]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: timeRange === '6m' }}
                 onPress={() => setTimeRange('6m')}
               >
                 <Text style={[styles.timeRangeText, timeRange === '6m' && styles.selectedTimeRangeText]}>6M</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.timeRangeButton, timeRange === '1y' && styles.selectedTimeRange]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: timeRange === '1y' }}
                 onPress={() => setTimeRange('1y')}
               >
                 <Text style={[styles.timeRangeText, timeRange === '1y' && styles.selectedTimeRangeText]}>1A</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.timeRangeButton, timeRange === 'all' && styles.selectedTimeRange]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: timeRange === 'all' }}
                 onPress={() => setTimeRange('all')}
               >
                 <Text style={[styles.timeRangeText, timeRange === 'all' && styles.selectedTimeRangeText]}>Todo</Text>
@@ -1027,7 +1055,7 @@ export default function PetWeight() {
             ) : (
               <View style={styles.simpleChart}>
                 <Text style={styles.chartPlaceholder}>
-                  📊 Agrega registros de peso para ver la gráfica
+                  📊 Agregá registros de peso para ver la gráfica
                 </Text>
               </View>
             )}
@@ -1048,11 +1076,11 @@ export default function PetWeight() {
             )}
             
             <View style={styles.chartInfo}>
-              <Info size={16} color="#6B7280" />
+              <Info size={16} color={colors.textSecondary} />
               <Text style={styles.chartInfoText}>
                 {idealWeightRange ? 
-                  `Mantén el peso entre ${idealWeightRange.min}kg y ${idealWeightRange.max}kg para una salud óptima.` :
-                  'Registra el peso regularmente para monitorear la salud de tu mascota.'
+                  `Mantené el peso entre ${idealWeightRange.min}kg y ${idealWeightRange.max}kg para una salud óptima.` :
+                  'Registrá el peso seguido para cuidar la salud de tu mascota.'
                 }
               </Text>
             </View>
@@ -1063,7 +1091,7 @@ export default function PetWeight() {
         {weightStatus !== 'unknown' && weightRecords.length > 0 && (
           <Card style={styles.aiCard}>
             <View style={styles.aiCardHeader}>
-              <Sparkles size={20} color="#8B5CF6" />
+              <Sparkles size={20} color={colors.primary} />
               <Text style={styles.aiCardTitle}>Consejos de IA</Text>
             </View>
             <Text style={styles.aiCardSubtitle}>
@@ -1072,7 +1100,7 @@ export default function PetWeight() {
 
             {loadingAI && (
               <View style={styles.aiLoadingContainer}>
-                <ActivityIndicator size="small" color="#8B5CF6" />
+                <ActivityIndicator size="small" color={colors.primary} />
                 <Text style={styles.aiLoadingText}>Analizando el peso de {pet?.name}...</Text>
               </View>
             )}
@@ -1080,7 +1108,7 @@ export default function PetWeight() {
             {aiError && !loadingAI && (
               <View style={styles.aiErrorContainer}>
                 <Text style={styles.aiErrorText}>{aiError}</Text>
-                <TouchableOpacity style={styles.aiRetryButton} onPress={generateWeightAdvice}>
+                <TouchableOpacity style={styles.aiRetryButton} onPress={generateWeightAdvice} accessibilityRole="button">
                   <Text style={styles.aiRetryButtonText}>Reintentar</Text>
                 </TouchableOpacity>
               </View>
@@ -1093,11 +1121,11 @@ export default function PetWeight() {
                     <Text style={styles.aiTipText}>{tip}</Text>
                   </View>
                 ))}
-                <TouchableOpacity style={styles.aiRefreshButton} onPress={() => {
+                <TouchableOpacity style={styles.aiRefreshButton} accessibilityRole="button" onPress={() => {
                     AsyncStorage.removeItem(`weight_ai_tips_${id}`);
                     generateWeightAdvice();
                   }}>
-                  <Sparkles size={14} color="#8B5CF6" />
+                  <Sparkles size={14} color={colors.primary} />
                   <Text style={styles.aiRefreshText}>Regenerar consejos</Text>
                 </TouchableOpacity>
               </View>
@@ -1107,12 +1135,16 @@ export default function PetWeight() {
 
         {/* History Card */}
         <Card style={styles.historyCard}>
-          <Text style={styles.historyTitle}>Historial de Peso</Text>
+          <Text style={styles.historyTitle}>Historial de peso</Text>
           
           {weightRecords.length === 0 ? (
-            <Text style={styles.emptyText}>
-              No hay registros de peso aún. Agrega el primer registro para comenzar el seguimiento.
-            </Text>
+            <EmptyState
+              icon={<Scale size={32} color={colors.primary} />}
+              title="Sin registros todavía"
+              description="Todavía no hay registros de peso. Agregá el primero para empezar el seguimiento."
+              actionLabel={!showAddForm ? 'Agregar peso' : undefined}
+              onAction={!showAddForm ? () => setShowAddForm(true) : undefined}
+            />
           ) : (
             <View>
               {weightRecords.slice().reverse().map((record, index) => (
@@ -1136,7 +1168,7 @@ export default function PetWeight() {
                   )}
                   
                   {record.notes === 'Peso inicial al registrar la mascota' && (
-                    <Text style={styles.initialWeightBadge}>Peso inicial</Text>
+                    <Badge label="Peso inicial" tone="primary" size="small" style={styles.initialBadge} />
                   )}
                 </View>
               ))}
@@ -1149,28 +1181,30 @@ export default function PetWeight() {
 }
 
 const styles = StyleSheet.create({
+  initialBadge: {
+    marginTop: spacing.xs,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   title: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 40,
@@ -1179,46 +1213,46 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   infoCard: {
-    margin: 20,
-    marginBottom: 16,
+    margin: spacing.xl,
+    marginBottom: spacing.lg,
   },
   iconContainer: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   infoTitle: {
-    fontSize: 20,
+    fontSize: fontSize.xl,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   petInfo: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    color: colors.primary,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   infoDescription: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
     lineHeight: 20,
   },
   formContainer: {
-    marginTop: 16,
+    marginTop: spacing.lg,
   },
   weightInputRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   weightInput: {
     flex: 2,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   unitSelector: {
     flex: 1,
@@ -1226,14 +1260,14 @@ const styles = StyleSheet.create({
   unitLabel: {
     fontSize: 15,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: colors.textSecondary,
     marginBottom: 6,
   },
   unitButtons: {
     flexDirection: 'row',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
     overflow: 'hidden',
     height: 44,
   },
@@ -1241,116 +1275,116 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   selectedUnitButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
   },
   unitButtonText: {
     fontSize: 15,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   selectedUnitButtonText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   dateInputContainer: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   dateInputLabel: {
-    fontSize: 15,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: colors.textSecondary,
     marginBottom: 6,
   },
   dateInput: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#FFFFFF',
-    minHeight: 44,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+    minHeight: 50,
+    gap: spacing.sm,
   },
   dateInputText: {
-    fontSize: 15,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
-    marginLeft: 10,
+    color: colors.text,
   },
   formButtons: {
     flexDirection: 'column',
-    marginTop: 24,
+    marginTop: spacing.xxl,
     width: '100%',
-    gap: 16,
+    gap: spacing.lg,
   },
   formButton: {
     width: '100%',
   },
   chartCard: {
-    marginHorizontal: 20,
-    marginBottom: 16,
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.lg,
   },
   chartTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    color: colors.text,
+    marginBottom: spacing.lg,
   },
   weightStatusContainer: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   weightStatusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     borderRadius: 20,
     alignSelf: 'flex-start',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   weightStatusText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-SemiBold',
     marginLeft: 6,
   },
   weightRecommendation: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   timeRangeSelector: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
     justifyContent: 'space-between',
   },
   timeRangeButton: {
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceAlt,
   },
   selectedTimeRange: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
   },
   timeRangeText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   selectedTimeRangeText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   chartContainer: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   chart: {
     position: 'relative',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    marginBottom: 8,
+    backgroundColor: colors.background,
+    borderRadius: radius.sm,
+    marginBottom: spacing.sm,
   },
   idealRangeBackground: {
     position: 'absolute',
@@ -1366,18 +1400,18 @@ const styles = StyleSheet.create({
   chartLine: {
     position: 'absolute',
     height: 2,
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
     transformOrigin: 'left center',
   },
   chartLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   chartLabelText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   idealRangeInfo: {
     flexDirection: 'row',
@@ -1392,23 +1426,23 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   idealRangeText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   simpleChart: {
-    backgroundColor: '#F9FAFB',
-    padding: 20,
-    borderRadius: 12,
+    backgroundColor: colors.background,
+    padding: spacing.xl,
+    borderRadius: radius.md,
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   chartPlaceholder: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   weightSummary: {
     alignItems: 'center',
@@ -1416,55 +1450,55 @@ const styles = StyleSheet.create({
   summaryItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   summaryLabel: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginRight: 8,
+    color: colors.textSecondary,
+    marginRight: spacing.sm,
   },
   summaryValue: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   chartLegend: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
     flexWrap: 'wrap',
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 16,
-    marginBottom: 8,
+    marginRight: spacing.lg,
+    marginBottom: spacing.sm,
   },
   legendColor: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    marginRight: 4,
+    marginRight: spacing.xs,
   },
   legendText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   visualChart: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   weightBars: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'flex-end',
     height: 150,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   weightBarContainer: {
     alignItems: 'center',
@@ -1474,7 +1508,7 @@ const styles = StyleSheet.create({
   weightBarBackground: {
     width: 30,
     height: 120,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     borderRadius: 4,
     position: 'relative',
     justifyContent: 'flex-end',
@@ -1487,20 +1521,20 @@ const styles = StyleSheet.create({
   weightBarLabel: {
     fontSize: 10,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 4,
+    color: colors.text,
+    marginTop: spacing.xs,
   },
   weightBarDate: {
     fontSize: 9,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   weightTrend: {
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginTop: spacing.sm,
   },
   trendContainer: {
     flexDirection: 'row',
@@ -1508,130 +1542,130 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   trendText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginLeft: 8,
+    color: colors.textSecondary,
+    marginLeft: spacing.sm,
   },
   emptyChart: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     padding: 40,
-    borderRadius: 12,
+    borderRadius: radius.md,
     alignItems: 'center',
   },
   emptyChartText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   chartInfo: {
     flexDirection: 'row',
-    backgroundColor: '#F3F4F6',
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: colors.surfaceAlt,
+    padding: spacing.md,
+    borderRadius: radius.sm,
     alignItems: 'flex-start',
   },
   chartInfoText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 8,
+    color: colors.textSecondary,
+    marginLeft: spacing.sm,
     flex: 1,
   },
   historyCard: {
-    marginHorizontal: 20,
-    marginBottom: 20,
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.xl,
   },
   historyTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    color: colors.text,
+    marginBottom: spacing.lg,
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    color: colors.textSecondary,
     fontStyle: 'italic',
     textAlign: 'center',
-    marginVertical: 12,
+    marginVertical: spacing.md,
   },
   historyItem: {
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   historyItemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   historyItemDate: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: colors.textSecondary,
   },
   historyItemWeightContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   historyItemWeight: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-SemiBold',
-    color: '#3B82F6',
-    marginRight: 8,
+    color: colors.primary,
+    marginRight: spacing.sm,
   },
   weightStatusIndicator: {
-    marginLeft: 4,
+    marginLeft: spacing.xs,
   },
   historyItemNotes: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280', 
+    color: colors.textSecondary, 
     fontStyle: 'italic',
   },
   initialWeightBadge: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 8,
+    color: colors.white,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 2,
-    borderRadius: 12,
+    borderRadius: radius.md,
     alignSelf: 'flex-start',
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   aiCard: {
-    marginHorizontal: 20,
-    marginBottom: 16,
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.lg,
   },
   aiCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   aiCardTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginLeft: 8,
+    color: colors.text,
+    marginLeft: spacing.sm,
   },
   aiCardSubtitle: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 16,
+    color: colors.textSecondary,
+    marginBottom: spacing.lg,
     lineHeight: 20,
   },
   aiGenerateButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
-    borderRadius: 12,
-    gap: 8,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    gap: spacing.sm,
   },
   aiGenerateButtonText: {
     fontSize: 15,
@@ -1641,62 +1675,62 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
-    gap: 12,
+    padding: spacing.xl,
+    gap: spacing.md,
   },
   aiLoadingText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#8B5CF6',
+    color: colors.primary,
   },
   aiErrorContainer: {
     alignItems: 'center',
-    padding: 16,
+    padding: spacing.lg,
   },
   aiErrorText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#EF4444',
+    color: colors.danger,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   aiRetryButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    backgroundColor: '#EDE9FE',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.primarySoft,
     borderRadius: 20,
   },
   aiRetryButtonText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Medium',
-    color: '#8B5CF6',
+    color: colors.primary,
   },
   aiTipsContainer: {
-    gap: 12,
+    gap: spacing.md,
   },
   aiTipItem: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     padding: 14,
     borderRadius: 10,
     borderLeftWidth: 3,
-    borderLeftColor: '#8B5CF6',
+    borderLeftColor: colors.primary,
   },
   aiTipText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   aiRefreshButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
+    marginTop: spacing.lg,
     gap: 6,
   },
   aiRefreshText: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#8B5CF6',
+    color: colors.primary,
   },
 });

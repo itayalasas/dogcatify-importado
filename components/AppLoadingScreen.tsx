@@ -1,8 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Image, Text, Animated, Easing, Dimensions, StyleSheet } from 'react-native';
+import { colors, typography, spacing } from '../constants/theme';
 
 const { width } = Dimensions.get('window');
-const BRAND_COLOR = '#2D6A6F';
+const BRAND_COLOR = colors.primary;
 const LOGO_SIZE = Math.min(width * 0.4, 160);
 const RING_SIZE = LOGO_SIZE + 44;
 const ROTATION_PERIOD_MS = 1400;
@@ -78,7 +79,12 @@ export const AppLoadingScreen: React.FC<AppLoadingScreenProps> = ({
   });
 
   return (
-    <View style={styles.container}>
+    <View
+      style={styles.container}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={message}
+    >
       <View style={styles.logoStack}>
         <Animated.View style={[styles.ring, { transform: [{ rotate: spin }] }]} />
         <Image
@@ -98,7 +104,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
   },
   logoStack: {
     width: RING_SIZE,
@@ -112,13 +118,13 @@ const styles = StyleSheet.create({
     height: RING_SIZE,
     borderRadius: RING_SIZE / 2,
     borderWidth: 3,
-    borderColor: 'rgba(45, 106, 111, 0.15)',
+    borderColor: colors.primaryMuted,
     borderTopColor: BRAND_COLOR,
   },
   message: {
-    marginTop: 28,
-    color: BRAND_COLOR,
+    ...typography.label,
     fontSize: 16,
-    fontWeight: '500',
+    marginTop: spacing.xxl,
+    color: BRAND_COLOR,
   },
 });

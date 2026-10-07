@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Alert, ScrollView, TouchableOpacity, SafeAreaView, Switch, Linking } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowLeft, CreditCard, CircleCheck as CheckCircle, CircleAlert as AlertCircle, ExternalLink, Eye, EyeOff } from 'lucide-react-native';
+import { CreditCard, CircleCheck as CheckCircle, CircleAlert as AlertCircle, ExternalLink, Eye, EyeOff } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { disconnectPartnerMercadoPago, generateOAuth2AuthorizationUrlWithConfig, validateCredentialsFormat } from '../../utils/mercadoPago';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { SkeletonCard } from '../../components/ui/Skeleton';
+import { toast } from '../../components/ui/Toast';
+import { colors, fonts, hitSlop, radius, spacing, typography } from '../../constants/theme';
 import { Input } from '../../components/ui/Input';
 
 export default function MercadoPagoConfig() {
@@ -55,7 +59,7 @@ export default function MercadoPagoConfig() {
       if (!partnersData || partnersData.length === 0) {
         Alert.alert(
           'Sin negocio verificado',
-          'Necesitas tener un negocio verificado para configurar Mercado Pago.',
+          'Necesitás tener un negocio verificado para configurar Mercado Pago.',
           [{ text: 'OK', onPress: () => router.back() }]
         );
         return;
@@ -118,7 +122,7 @@ export default function MercadoPagoConfig() {
       Alert.alert(
         isMissingClientId ? 'Falta configurar Mercado Pago' : 'Error',
         isMissingClientId
-          ? 'El admin debe guardar el N° de aplicación / App ID (client_id) en Configuración del Sistema antes de conectar aliados.'
+          ? 'El administrador tiene que guardar el N° de aplicación / App ID (client_id) en Configuración del sistema antes de conectar aliados.'
           : errorMessage
       );
     } finally {
@@ -176,7 +180,7 @@ export default function MercadoPagoConfig() {
 
   const handleSaveManualConfig = async () => {
     if (!manualAccessToken.trim() || !manualPublicKey.trim()) {
-      Alert.alert('Error', 'Por favor completa todos los campos');
+      Alert.alert('Error', 'Completá todos los campos');
       return;
     }
 
@@ -190,7 +194,7 @@ export default function MercadoPagoConfig() {
       if (!validation.isValid) {
         Alert.alert(
           'Credenciales inválidas',
-          validation.error || 'Las credenciales ingresadas no son válidas. Verifica que sean correctas.'
+          validation.error || 'Las credenciales ingresadas no son válidas. Revisá que sean correctas.'
         );
         setSaveLoading(false);
         return;
@@ -251,13 +255,13 @@ export default function MercadoPagoConfig() {
       setManualAccessToken('');
       setManualPublicKey('');
 
-      Alert.alert(
-        '¡Éxito!',
-        'Tu cuenta de Mercado Pago ha sido configurada correctamente para TODOS tus negocios. Ya puedes recibir pagos.'
+      toast.success(
+        'Mercado Pago configurado',
+        'Tu cuenta quedó configurada para todos tus negocios. Ya podés recibir pagos.'
       );
     } catch (error) {
       console.error('Error saving MP config:', error);
-      Alert.alert('Error', 'No se pudo guardar la configuración. Intenta nuevamente.');
+      Alert.alert('Error', 'No se pudo guardar la configuración. Intentá de nuevo.');
     } finally {
       setSaveLoading(false);
     }
@@ -266,7 +270,7 @@ export default function MercadoPagoConfig() {
   const handleDisconnect = () => {
     Alert.alert(
       'Desconectar Mercado Pago',
-      '¿Estás seguro? Esto deshabilitará la recepción de pagos para TODOS tus negocios.',
+      '¿Seguro? Vas a dejar de recibir pagos en todos tus negocios.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -279,7 +283,7 @@ export default function MercadoPagoConfig() {
               // Refresh partner data from database to ensure we have the latest
               await loadPartnerData();
 
-              Alert.alert('Desconectado', 'Tu cuenta de Mercado Pago ha sido desconectada de todos tus negocios.');
+              toast.success('Mercado Pago desconectado', 'Se desconectó de todos tus negocios.');
             } catch (error) {
               Alert.alert('Error', 'No se pudo desconectar la cuenta.');
             }
@@ -292,15 +296,10 @@ export default function MercadoPagoConfig() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Configuración de Mercado Pago</Text>
-          <View style={styles.placeholder} />
-        </View>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando configuración...</Text>
+        <ScreenHeader title="Mercado Pago" subtitle="Configuración de cobros" onBack={() => router.back()} />
+        <View style={styles.loadingContainer} accessibilityLabel="Cargando configuración">
+          <SkeletonCard imageHeight={64} />
+          <SkeletonCard imageHeight={180} />
         </View>
       </SafeAreaView>
     );
@@ -309,18 +308,12 @@ export default function MercadoPagoConfig() {
   if (!partner) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Configuración de Mercado Pago</Text>
-          <View style={styles.placeholder} />
-        </View>
+        <ScreenHeader title="Mercado Pago" subtitle="Configuración de cobros" onBack={() => router.back()} />
         <View style={styles.errorContainer}>
-          <AlertCircle size={64} color="#EF4444" />
+          <AlertCircle size={56} color={colors.warning} />
           <Text style={styles.errorTitle}>Sin negocio verificado</Text>
           <Text style={styles.errorText}>
-            Necesitas tener un negocio verificado para configurar Mercado Pago.
+            Necesitás tener un negocio verificado para configurar Mercado Pago.
           </Text>
           <Button title="Volver" onPress={() => router.back()} />
         </View>
@@ -330,19 +323,13 @@ export default function MercadoPagoConfig() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Configuración de Mercado Pago</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title="Mercado Pago" subtitle="Configuración de cobros" onBack={() => router.back()} />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Business Info */}
         <Card style={styles.businessCard}>
           <View style={styles.businessHeader}>
-            <CreditCard size={24} color="#00A650" />
+            <CreditCard size={24} color={colors.primary} />
             <View style={styles.businessInfo}>
               <Text style={styles.businessName}>{partner.business_name}</Text>
               <Text style={styles.businessType}>
@@ -359,8 +346,8 @@ export default function MercadoPagoConfig() {
         {mpConfig ? (
           <Card style={styles.statusCard}>
             <View style={styles.connectedHeader}>
-              <CheckCircle size={32} color="#00A650" />
-              <Text style={styles.connectedTitle}>✅ Cuenta Conectada</Text>
+              <CheckCircle size={28} color={colors.success} />
+              <Text style={styles.connectedTitle}>Cuenta conectada</Text>
             </View>
 
             <View style={styles.configDetails}>
@@ -397,11 +384,14 @@ export default function MercadoPagoConfig() {
                 <TouchableOpacity
                   onPress={() => setShowCredentials(!showCredentials)}
                   style={styles.toggleButton}
+                  hitSlop={hitSlop}
+                  accessibilityRole="button"
+                  accessibilityLabel={showCredentials ? 'Ocultar credenciales' : 'Mostrar credenciales'}
                 >
                   {showCredentials ? (
-                    <EyeOff size={20} color="#6B7280" />
+                    <EyeOff size={20} color={colors.textTertiary} />
                   ) : (
-                    <Eye size={20} color="#6B7280" />
+                    <Eye size={20} color={colors.textTertiary} />
                   )}
                   <Text style={styles.toggleButtonText}>
                     {showCredentials ? 'Ocultar' : 'Mostrar'}
@@ -463,9 +453,10 @@ export default function MercadoPagoConfig() {
             />
 
             <Button
-              title="Desconectar Cuenta"
+              title="Desconectar cuenta"
               onPress={handleDisconnect}
-              variant="outline"
+              variant="ghost"
+              textStyle={{ color: colors.danger }}
               size="large"
             />
           </Card>
@@ -473,12 +464,12 @@ export default function MercadoPagoConfig() {
           <>
             <Card style={styles.statusCard}>
               <View style={styles.disconnectedHeader}>
-                <AlertCircle size={32} color="#F59E0B" />
-                <Text style={styles.disconnectedTitle}>⚠️ Sin Configurar</Text>
+                <AlertCircle size={28} color={colors.warning} />
+                <Text style={styles.disconnectedTitle}>Sin configurar</Text>
               </View>
 
               <Text style={styles.disconnectedText}>
-                Para recibir pagos, necesitas conectar tu cuenta de Mercado Pago.
+                Para recibir pagos, tenés que conectar tu cuenta de Mercado Pago.
               </Text>
 
               <Button
@@ -489,7 +480,7 @@ export default function MercadoPagoConfig() {
               />
 
               <View style={styles.benefitsList}>
-                <Text style={styles.benefitItem}>• Recibe pagos directamente en tu cuenta</Text>
+                <Text style={styles.benefitItem}>• Recibí pagos directamente en tu cuenta</Text>
                 <Text style={styles.benefitItem}>• Comisión automática de DogCatiFy</Text>
                 <Text style={styles.benefitItem}>• Proceso seguro y confiable</Text>
                 <Text style={styles.benefitItem}>• Compatible con tarjetas, transferencias y más</Text>
@@ -497,14 +488,14 @@ export default function MercadoPagoConfig() {
             </Card>
 
             <Card style={styles.manualConfigCard}>
-              <Text style={styles.manualConfigTitle}>Configuración Manual (legacy)</Text>
+              <Text style={styles.manualConfigTitle}>Configuración manual (anterior)</Text>
 
               <View style={styles.helpSection}>
-                <Text style={styles.helpTitle}>💡 ¿Cómo obtener las credenciales?</Text>
-                <Text style={styles.helpStep}>1. Ve a developers.mercadopago.com</Text>
-                <Text style={styles.helpStep}>2. Inicia sesión con tu cuenta de MP</Text>
-                <Text style={styles.helpStep}>3. Ve a &quot;Tus integraciones&quot; → &quot;Credenciales&quot;</Text>
-                <Text style={styles.helpStep}>4. Copia el Access Token y Public Key</Text>
+                <Text style={styles.helpTitle}>¿Cómo obtengo las credenciales?</Text>
+                <Text style={styles.helpStep}>1. Entrá a developers.mercadopago.com</Text>
+                <Text style={styles.helpStep}>2. Ingresá con tu cuenta de Mercado Pago</Text>
+                <Text style={styles.helpStep}>3. Andá a &quot;Tus integraciones&quot; → &quot;Credenciales&quot;</Text>
+                <Text style={styles.helpStep}>4. Copiá el Access Token y la Public Key</Text>
               </View>
 
               <Input
@@ -527,14 +518,15 @@ export default function MercadoPagoConfig() {
                   <Switch
                     value={isTestMode}
                     onValueChange={setIsTestMode}
-                    trackColor={{ false: '#E5E7EB', true: '#3B82F6' }}
-                    thumbColor={isTestMode ? '#FFFFFF' : '#FFFFFF'}
+                    trackColor={{ false: colors.borderStrong, true: colors.primary }}
+                    thumbColor={colors.white}
+                    accessibilityLabel="Modo de prueba"
                   />
                 </View>
                 <Text style={styles.testModeDescription}>
                   {isTestMode
-                    ? '🧪 Modo prueba activo - Usa credenciales TEST-'
-                    : '🚀 Modo producción - Usa credenciales APP_USR- reales'
+                    ? 'Modo de prueba activo: usá credenciales TEST-'
+                    : 'Modo producción: usá credenciales APP_USR- reales'
                   }
                 </Text>
               </View>
@@ -563,13 +555,17 @@ export default function MercadoPagoConfig() {
 
         {/* Help Section */}
         <Card style={styles.helpCard}>
-          <Text style={styles.helpCardTitle}>¿Necesitas ayuda?</Text>
+          <Text style={styles.helpCardTitle}>¿Necesitás ayuda?</Text>
           <Text style={styles.helpCardText}>
-            Si tienes problemas configurando Mercado Pago, puedes contactar con nuestro soporte.
+            Si tenés problemas para configurar Mercado Pago, escribile a nuestro equipo de soporte.
           </Text>
-          <TouchableOpacity style={styles.helpButton}>
-            <ExternalLink size={16} color="#3B82F6" />
-            <Text style={styles.helpButtonText}>Contactar Soporte</Text>
+          <TouchableOpacity
+            style={styles.helpButton}
+            onPress={() => router.push('/profile/help-support')}
+            accessibilityRole="button"
+          >
+            <ExternalLink size={16} color={colors.primary} />
+            <Text style={styles.helpButtonText}>Contactar a soporte</Text>
           </TouchableOpacity>
         </Card>
       </ScrollView>
@@ -580,296 +576,296 @@ export default function MercadoPagoConfig() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   title: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    fontFamily: fonts.semibold,
+    color: colors.text,
   },
   placeholder: {
     width: 32,
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: spacing.lg,
+    gap: spacing.lg,
   },
   loadingText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    fontFamily: fonts.regular,
+    color: colors.textTertiary,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   errorTitle: {
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#EF4444',
-    marginTop: 16,
-    marginBottom: 8,
+    fontFamily: fonts.bold,
+    color: colors.danger,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   errorText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    fontFamily: fonts.regular,
+    color: colors.textTertiary,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   businessCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   businessHeader: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   businessInfo: {
-    marginLeft: 12,
+    marginLeft: spacing.md,
     flex: 1,
   },
   businessName: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    fontFamily: fonts.semibold,
+    color: colors.text,
   },
   businessType: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    fontFamily: fonts.regular,
+    color: colors.textTertiary,
   },
   statusCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   connectedHeader: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   connectedTitle: {
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#00A650',
-    marginTop: 8,
+    fontFamily: fonts.bold,
+    color: colors.success,
+    marginTop: spacing.sm,
   },
   disconnectedHeader: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   disconnectedTitle: {
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#F59E0B',
-    marginTop: 8,
+    fontFamily: fonts.bold,
+    color: colors.warning,
+    marginTop: spacing.sm,
   },
   disconnectedText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   configDetails: {
-    backgroundColor: '#F8FAFC',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    marginBottom: spacing.xl,
   },
   configRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   configLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    fontFamily: fonts.medium,
+    color: colors.textTertiary,
   },
   configValue: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    fontFamily: fonts.semibold,
+    color: colors.text,
   },
   benefitsList: {
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   benefitItem: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    marginBottom: 8,
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   infoBox: {
-    backgroundColor: '#F0FDF4',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
+    backgroundColor: colors.successSoft,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    marginBottom: spacing.xl,
     borderLeftWidth: 4,
-    borderLeftColor: '#00A650',
+    borderLeftColor: colors.success,
   },
   infoTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#166534',
-    marginBottom: 8,
+    fontFamily: fonts.semibold,
+    color: colors.success,
+    marginBottom: spacing.sm,
   },
   infoText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#166534',
+    fontFamily: fonts.regular,
+    color: colors.success,
     lineHeight: 20,
   },
   manualConfigCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   manualConfigTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 16,
+    fontFamily: fonts.bold,
+    color: colors.text,
+    marginBottom: spacing.lg,
     textAlign: 'center',
   },
   helpSection: {
-    backgroundColor: '#F0F9FF',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    marginBottom: spacing.xl,
   },
   helpTitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Bold',
-    color: '#0369A1',
-    marginBottom: 12,
+    fontFamily: fonts.bold,
+    color: colors.primaryStrong,
+    marginBottom: spacing.md,
   },
   helpStep: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#0369A1',
-    marginBottom: 4,
-    paddingLeft: 8,
+    fontFamily: fonts.regular,
+    color: colors.primaryStrong,
+    marginBottom: spacing.xs,
+    paddingLeft: spacing.sm,
   },
   testModeSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   testModeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   testModeTitle: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
+    fontFamily: fonts.semibold,
+    color: colors.textSecondary,
   },
   testModeDescription: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    fontFamily: fonts.regular,
+    color: colors.textTertiary,
     lineHeight: 16,
   },
   manualConfigActions: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
+    gap: spacing.md,
+    marginTop: spacing.sm,
   },
   actionButton: {
     flex: 1,
   },
   credentialText: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: fonts.regular,
   },
   credentialsSection: {
-    backgroundColor: '#F8FAFC',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    marginBottom: spacing.xl,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   credentialsSectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   credentialsSectionTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    fontFamily: fonts.semibold,
+    color: colors.text,
   },
   toggleButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   toggleButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    fontFamily: fonts.medium,
+    color: colors.textTertiary,
     marginLeft: 6,
   },
   credentialItem: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   credentialLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginBottom: 4,
+    fontFamily: fonts.medium,
+    color: colors.textTertiary,
+    marginBottom: spacing.xs,
   },
   credentialValue: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    backgroundColor: '#FFFFFF',
-    padding: 12,
-    borderRadius: 8,
+    fontFamily: fonts.regular,
+    color: colors.text,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   helpCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   helpCardTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    fontFamily: fonts.semibold,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   helpCardText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 16,
+    fontFamily: fonts.regular,
+    color: colors.textTertiary,
+    marginBottom: spacing.lg,
   },
   helpButton: {
     flexDirection: 'row',
@@ -878,8 +874,8 @@ const styles = StyleSheet.create({
   },
   helpButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    fontFamily: fonts.medium,
+    color: colors.primary,
     marginLeft: 6,
   },
 });

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Modal, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { colors, radius, spacing, typography, touchTarget } from '../constants/theme';
 import * as Location from 'expo-location';
 import { WebView } from 'react-native-webview';
 import { ExternalLink, Navigation, X } from 'lucide-react-native';
@@ -160,7 +161,7 @@ const buildRouteHtml = (
       margin-top: 10px;
       padding: 4px 10px;
       border-radius: 999px;
-      background: #10B981;
+      background: #047857;
       color: #FFFFFF;
       font-size: 12px;
       font-weight: 700;
@@ -209,9 +210,9 @@ const buildRouteHtml = (
   <div class="status-card" id="status-card">
     Calculando la ruta...
     <div class="legend">
-      <div class="legend-item"><span class="dot" style="background:#2563EB"></span>Tu ubicación</div>
+      <div class="legend-item"><span class="dot" style="background:#24565A"></span>Tu ubicación</div>
       <div class="legend-item"><span class="dot" style="background:#EF4444"></span>Tienda</div>
-      <div class="legend-item"><span class="dot" style="background:#10B981"></span>Ruta</div>
+      <div class="legend-item"><span class="dot" style="background:#047857"></span>Ruta</div>
     </div>
   </div>
   <script>
@@ -228,7 +229,7 @@ const buildRouteHtml = (
 
       const currentIcon = L.divIcon({
         className: '',
-        html: '<div style="width:18px;height:18px;border-radius:999px;background:#2563EB;border:3px solid #FFFFFF;box-shadow:0 0 0 6px rgba(37,99,235,0.18);"></div>',
+        html: '<div style="width:18px;height:18px;border-radius:999px;background:#24565A;border:3px solid #FFFFFF;box-shadow:0 0 0 6px rgba(45, 106, 111,0.18);"></div>',
         iconSize: [18, 18],
         iconAnchor: [9, 9]
       });
@@ -274,7 +275,7 @@ const buildRouteHtml = (
             map.removeLayer(fallbackLine);
             L.geoJSON(route.geometry, {
               style: {
-                color: '#10B981',
+                color: '#047857',
                 weight: 5,
                 opacity: 0.95
               }
@@ -282,13 +283,13 @@ const buildRouteHtml = (
 
             const distanceKm = (route.distance / 1000).toFixed(1);
             const durationMin = Math.max(1, Math.round(route.duration / 60));
-            statusCard.innerHTML = 'Ruta lista: ' + distanceKm + ' km · ' + durationMin + ' min aprox.<div class="legend"><div class="legend-item"><span class="dot" style="background:#2563EB"></span>Tu ubicación</div><div class="legend-item"><span class="dot" style="background:#EF4444"></span>Tienda</div><div class="legend-item"><span class="dot" style="background:#10B981"></span>Ruta</div></div>';
+            statusCard.innerHTML = 'Ruta lista: ' + distanceKm + ' km · ' + durationMin + ' min aprox.<div class="legend"><div class="legend-item"><span class="dot" style="background:#24565A"></span>Tu ubicación</div><div class="legend-item"><span class="dot" style="background:#EF4444"></span>Tienda</div><div class="legend-item"><span class="dot" style="background:#047857"></span>Ruta</div></div>';
           } else {
-            statusCard.innerHTML = 'Se muestran los puntos de inicio y destino, pero no fue posible calcular la ruta exacta.<div class="legend"><div class="legend-item"><span class="dot" style="background:#2563EB"></span>Tu ubicación</div><div class="legend-item"><span class="dot" style="background:#EF4444"></span>Tienda</div><div class="legend-item"><span class="dot" style="background:#10B981"></span>Ruta</div></div>';
+            statusCard.innerHTML = 'Se muestran los puntos de inicio y destino, pero no fue posible calcular la ruta exacta.<div class="legend"><div class="legend-item"><span class="dot" style="background:#24565A"></span>Tu ubicación</div><div class="legend-item"><span class="dot" style="background:#EF4444"></span>Tienda</div><div class="legend-item"><span class="dot" style="background:#047857"></span>Ruta</div></div>';
           }
         })
         .catch(() => {
-          statusCard.innerHTML = 'No pudimos calcular la ruta exacta. Puedes intentarlo de nuevo o abrirla en Maps.<div class="legend"><div class="legend-item"><span class="dot" style="background:#2563EB"></span>Tu ubicación</div><div class="legend-item"><span class="dot" style="background:#EF4444"></span>Tienda</div><div class="legend-item"><span class="dot" style="background:#10B981"></span>Ruta</div></div>';
+          statusCard.innerHTML = 'No pudimos calcular la ruta exacta. Podés intentarlo de nuevo o abrirla en Maps.<div class="legend"><div class="legend-item"><span class="dot" style="background:#24565A"></span>Tu ubicación</div><div class="legend-item"><span class="dot" style="background:#EF4444"></span>Tienda</div><div class="legend-item"><span class="dot" style="background:#047857"></span>Ruta</div></div>';
         });
     })();
   </script>
@@ -387,7 +388,7 @@ export const StoreRouteMap: React.FC<StoreRouteMapProps> = ({
       <Button
         title="Ver ruta a la tienda"
         onPress={handleOpenRoute}
-        icon={<Navigation size={16} color="#FFFFFF" />}
+        icon={<Navigation size={16} color={colors.onPrimary} />}
         iconPosition="left"
         style={styles.routeButton}
       />
@@ -404,21 +405,26 @@ export const StoreRouteMap: React.FC<StoreRouteMapProps> = ({
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <View style={styles.modalHeaderText}>
-              <Text style={styles.modalTitle}>Ruta a la tienda</Text>
+              <Text style={styles.modalTitle} accessibilityRole="header">Ruta a la tienda</Text>
               <Text style={styles.modalSubtitle} numberOfLines={2}>
                 {storeName || 'Tienda'} · {storeAddress}
               </Text>
             </View>
 
-            <TouchableOpacity onPress={resetState} style={styles.closeButton}>
-              <X size={22} color="#111827" />
+            <TouchableOpacity
+              onPress={resetState}
+              style={styles.closeButton}
+              accessibilityRole="button"
+              accessibilityLabel="Cerrar mapa"
+            >
+              <X size={22} color={colors.text} />
             </TouchableOpacity>
           </View>
 
           <View style={styles.mapWrapper}>
             {loadingRoute ? (
               <View style={styles.loadingState}>
-                <ActivityIndicator size="large" color="#10B981" />
+                <ActivityIndicator size="large" color={colors.primary} />
                 <Text style={styles.loadingText}>Cargando tu ruta...</Text>
               </View>
             ) : mapError ? (
@@ -430,7 +436,7 @@ export const StoreRouteMap: React.FC<StoreRouteMapProps> = ({
                     title="Abrir en Maps"
                     onPress={handleOpenExternalMaps}
                     variant="outline"
-                    icon={<ExternalLink size={16} color="#2D6A6F" />}
+                    icon={<ExternalLink size={16} color={colors.primary} />}
                     iconPosition="left"
                     style={styles.errorButton}
                   />
@@ -455,14 +461,14 @@ export const StoreRouteMap: React.FC<StoreRouteMapProps> = ({
                 />
                 {!webViewReady && (
                   <View style={styles.webViewLoadingOverlay}>
-                    <ActivityIndicator size="large" color="#10B981" />
+                    <ActivityIndicator size="large" color={colors.primary} />
                     <Text style={styles.loadingText}>Preparando el mapa...</Text>
                   </View>
                 )}
               </View>
             ) : (
               <View style={styles.loadingState}>
-                <ActivityIndicator size="large" color="#10B981" />
+                <ActivityIndicator size="large" color={colors.primary} />
                 <Text style={styles.loadingText}>Preparando el mapa...</Text>
               </View>
             )}
@@ -473,7 +479,7 @@ export const StoreRouteMap: React.FC<StoreRouteMapProps> = ({
               title="Abrir en Maps"
               onPress={handleOpenExternalMaps}
               variant="outline"
-              icon={<ExternalLink size={16} color="#2D6A6F" />}
+              icon={<ExternalLink size={16} color={colors.primary} />}
               iconPosition="left"
               style={styles.footerButton}
             />
@@ -491,63 +497,66 @@ export const StoreRouteMap: React.FC<StoreRouteMapProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 12,
+    marginTop: spacing.md,
   },
   routeButton: {
-    backgroundColor: '#2D6A6F',
+    backgroundColor: colors.primary,
   },
   helperText: {
-    marginTop: 8,
+    marginTop: spacing.sm,
     fontSize: 12,
     lineHeight: 18,
-    color: '#6B7280',
+    color: colors.textSecondary,
     fontFamily: 'Inter-Regular',
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   modalHeaderText: {
     flex: 1,
-    paddingRight: 12,
+    paddingRight: spacing.md,
   },
   modalTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   modalSubtitle: {
-    marginTop: 4,
+    marginTop: spacing.xs,
     fontSize: 13,
     lineHeight: 18,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   closeButton: {
-    padding: 8,
-    borderRadius: 999,
-    backgroundColor: '#F3F4F6',
+    width: touchTarget,
+    height: touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
   },
   mapWrapper: {
     flex: 1,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: colors.border,
   },
   webViewContainer: {
     flex: 1,
   },
   webView: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   webViewLoadingOverlay: {
     ...StyleSheet.absoluteFill,
@@ -559,14 +568,14 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.xxl,
+    backgroundColor: colors.surface,
   },
   loadingText: {
-    marginTop: 12,
+    marginTop: spacing.md,
     fontSize: 14,
     lineHeight: 20,
-    color: '#6B7280',
+    color: colors.textSecondary,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
   },
@@ -574,36 +583,36 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.xxl,
+    backgroundColor: colors.surface,
   },
   errorTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     textAlign: 'center',
   },
   errorText: {
     marginTop: 10,
     fontSize: 14,
     lineHeight: 20,
-    color: '#6B7280',
+    color: colors.textSecondary,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
   },
   errorActions: {
     width: '100%',
-    marginTop: 20,
+    marginTop: spacing.xl,
     gap: 10,
   },
   errorButton: {
     width: '100%',
   },
   footerActions: {
-    padding: 16,
-    backgroundColor: '#FFFFFF',
+    padding: spacing.lg,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.border,
     gap: 10,
   },
   footerButton: {

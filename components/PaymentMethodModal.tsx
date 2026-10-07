@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { CreditCard, X } from 'lucide-react-native';
+import { ChevronRight, CreditCard, Lock, X } from 'lucide-react-native';
+import { colors, radius, spacing, typography, shadows, touchTarget } from '../constants/theme';
 
 interface PaymentMethodModalProps {
   visible: boolean;
@@ -24,7 +25,7 @@ export function PaymentMethodModal({
   onClose,
   onMercadoPago,
   loadingMercadoPago = false,
-  secureNote = 'Seras redirigido para completar el pago de forma segura',
+  secureNote = 'Serás redirigido para completar el pago de forma segura',
 }: PaymentMethodModalProps) {
   return (
     <Modal
@@ -37,17 +38,24 @@ export function PaymentMethodModal({
         <View style={styles.sheet}>
           <View style={styles.header}>
             <View style={styles.iconSpacer} />
-            <Text style={styles.title}>Metodo de Pago</Text>
-            <TouchableOpacity onPress={onClose} style={styles.iconButton}>
-              <X size={24} color="#6B7280" />
+            <Text style={styles.title} accessibilityRole="header">Método de pago</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.iconButton}
+              accessibilityRole="button"
+              accessibilityLabel="Cerrar"
+            >
+              <X size={24} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
           <View style={styles.content}>
             <View style={styles.methodsHeader}>
-              <CreditCard size={38} color="#2D6A6F" />
-              <Text style={styles.methodsTitle}>Selecciona tu metodo de pago</Text>
-              <Text style={styles.methodsSubtitle}>Total: {totalLabel}</Text>
+              <View style={styles.headerIcon}>
+                <CreditCard size={28} color={colors.primary} />
+              </View>
+              <Text style={styles.methodsTitle}>Seleccioná tu método de pago</Text>
+              <Text style={styles.methodsSubtitle}>Total a pagar: {totalLabel}</Text>
             </View>
 
             <TouchableOpacity
@@ -58,6 +66,9 @@ export function PaymentMethodModal({
               onPress={onMercadoPago}
               disabled={loadingMercadoPago}
               activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={`Pagar con Mercado Pago, total ${totalLabel}`}
+              accessibilityState={{ disabled: loadingMercadoPago, busy: loadingMercadoPago }}
             >
               <View style={styles.logoWrap}>
                 <Image
@@ -70,13 +81,17 @@ export function PaymentMethodModal({
                 <Text style={styles.methodTitle}>Mercado Pago</Text>
                 <Text style={styles.methodDescription}>
                   {loadingMercadoPago
-                    ? 'Abriendo checkout seguro...'
-                    : 'Pago seguro con tarjetas, transferencias y mas'}
+                    ? 'Abriendo el pago seguro...'
+                    : 'Tarjetas de crédito, débito, transferencias y más'}
                 </Text>
               </View>
+              <ChevronRight size={20} color={colors.textTertiary} />
             </TouchableOpacity>
 
-            <Text style={styles.note}>{secureNote}</Text>
+            <View style={styles.noteRow}>
+              <Lock size={14} color={colors.textSecondary} />
+              <Text style={styles.note}>{secureNote}</Text>
+            </View>
           </View>
         </View>
       </View>
@@ -87,117 +102,117 @@ export function PaymentMethodModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.42)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    paddingBottom: 34,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 20,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    paddingBottom: spacing.xxxl,
+    ...shadows.lg,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 22,
-    paddingTop: 22,
-    paddingBottom: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   iconSpacer: {
-    width: 40,
+    width: touchTarget,
   },
   iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: touchTarget,
+    height: touchTarget,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
     flex: 1,
     textAlign: 'center',
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   content: {
-    paddingHorizontal: 22,
-    paddingTop: 24,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xxl,
   },
   methodsHeader: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
+  },
+  headerIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   methodsTitle: {
-    marginTop: 12,
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    marginTop: spacing.md,
+    ...typography.heading,
+    color: colors.text,
+    textAlign: 'center',
   },
   methodsSubtitle: {
-    marginTop: 6,
-    fontSize: 15,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    marginTop: spacing.xs,
+    ...typography.bodyStrong,
+    color: colors.textSecondary,
   },
   methodCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 22,
-    paddingHorizontal: 18,
-    paddingVertical: 18,
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 4,
+    borderWidth: 1.5,
+    borderColor: colors.primaryBorder,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    backgroundColor: colors.surface,
+    ...shadows.sm,
   },
   methodCardDisabled: {
-    opacity: 0.72,
+    opacity: 0.6,
   },
   logoWrap: {
-    width: 56,
-    height: 56,
+    width: 48,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
+    marginRight: spacing.md,
   },
   mercadoPagoLogo: {
-    width: 50,
-    height: 50,
+    width: 44,
+    height: 44,
   },
   methodInfo: {
     flex: 1,
+    marginRight: spacing.sm,
   },
   methodTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   methodDescription: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+  },
+  noteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.xl,
   },
   note: {
     textAlign: 'center',
-    marginTop: 22,
-    fontSize: 14,
-    lineHeight: 20,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    flexShrink: 1,
   },
 });

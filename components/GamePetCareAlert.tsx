@@ -5,6 +5,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { X } from 'lucide-react-native';
 import { supabaseClient } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { colors } from '../constants/theme';
 
 const LOGO = require('../assets/images/patitas-game-logo.png');
 
@@ -104,7 +105,12 @@ export function GamePetCareAlert() {
       ]}
       pointerEvents="box-none"
     >
-      <Pressable onPress={openShelter} style={styles.card}>
+      <Pressable
+        onPress={openShelter}
+        style={styles.card}
+        accessibilityRole="button"
+        accessibilityLabel={`${worst.name} necesita mimos, felicidad ${worst.happiness}%. Abrir el refugio del juego`}
+      >
         <View style={styles.stripe} />
         <Animated.View style={[styles.avatarWrap, { transform: [{ rotate }] }]}>
           <Image source={LOGO} style={styles.avatar} />
@@ -129,8 +135,14 @@ export function GamePetCareAlert() {
         </View>
       </Pressable>
 
-      <Pressable onPress={() => hide()} style={styles.close} hitSlop={10}>
-        <X size={12} color="#9CA3AF" strokeWidth={3} />
+      <Pressable
+        onPress={() => hide()}
+        style={styles.close}
+        hitSlop={14}
+        accessibilityRole="button"
+        accessibilityLabel="Cerrar aviso"
+      >
+        <X size={12} color={colors.textSecondary} strokeWidth={3} />
       </Pressable>
     </Animated.View>
   );
@@ -148,7 +160,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 18,
     paddingVertical: 10,
     paddingLeft: 14,
@@ -199,7 +211,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 14,
     fontWeight: '900',
-    color: '#0F172A',
+    color: colors.text,
     marginTop: 1,
   },
   barRow: {

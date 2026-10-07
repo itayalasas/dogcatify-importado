@@ -11,9 +11,12 @@ import {
   StatusBar,
   Platform,
 } from 'react-native';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { Button } from '../../components/ui/Button';
 import { router } from 'expo-router';
 import { ArrowLeft, FileText, CheckCircle, AlertCircle, DollarSign, Scale, Mail, Phone, MessageSquare } from 'lucide-react-native';
 import { setTermsAccepted } from '../../utils/legalAcceptance';
+import { colors, fonts, radius, spacing } from '../../constants/theme';
 
 export default function TermsOfService() {
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
@@ -36,15 +39,9 @@ export default function TermsOfService() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#2D6A6F" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Términos de Servicio</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title="Términos de servicio" onBack={() => router.back()} />
 
       {/* Content */}
       <ScrollView
@@ -57,10 +54,10 @@ export default function TermsOfService() {
       >
         {/* Intro Banner */}
         <View style={styles.introBanner}>
-          <FileText size={48} color="#2D6A6F" />
+          <FileText size={48} color={colors.primary} />
           <Text style={styles.introTitle}>Términos y Condiciones</Text>
           <Text style={styles.introSubtitle}>
-            Conoce los términos y condiciones que rigen el uso de DogCatify y nuestros servicios para el cuidado integral de mascotas.
+            Conocé los términos y condiciones que rigen el uso de DogCatify y nuestros servicios para el cuidado integral de mascotas.
           </Text>
           <Text style={styles.updateDate}>Última actualización: 15/10/2025</Text>
         </View>
@@ -68,8 +65,8 @@ export default function TermsOfService() {
         {/* Aceptación */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <CheckCircle size={24} color="#2D6A6F" />
-            <Text style={styles.sectionTitle}>Aceptación de los Términos</Text>
+            <CheckCircle size={24} color={colors.primary} />
+            <Text style={styles.sectionTitle}>Aceptación de los términos</Text>
           </View>
           <Text style={styles.paragraph}>
             Al descargar, instalar o utilizar la aplicación DogCatify, aceptas estar sujeto a estos Términos de Servicio. Si no estás de acuerdo con alguno de estos términos, no debes utilizar nuestra aplicación o servicios.
@@ -81,9 +78,9 @@ export default function TermsOfService() {
 
         {/* Descripción de Servicios */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Descripción de los Servicios</Text>
+          <Text style={styles.sectionTitle}>Descripción de los servicios</Text>
 
-          <Text style={styles.subsectionTitle}>Servicios Principales</Text>
+          <Text style={styles.subsectionTitle}>Servicios principales</Text>
           <View style={styles.bulletList}>
             <Text style={styles.bulletItem}>• Gestión de perfiles de mascotas</Text>
             <Text style={styles.bulletItem}>• Historial médico y de salud</Text>
@@ -93,7 +90,7 @@ export default function TermsOfService() {
             <Text style={styles.bulletItem}>• Red de lugares pet-friendly</Text>
           </View>
 
-          <Text style={styles.subsectionTitle}>Servicios Adicionales</Text>
+          <Text style={styles.subsectionTitle}>Servicios adicionales</Text>
           <View style={styles.bulletList}>
             <Text style={styles.bulletItem}>• Consultas veterinarias virtuales</Text>
             <Text style={styles.bulletItem}>• Recordatorios de medicamentos</Text>
@@ -106,19 +103,19 @@ export default function TermsOfService() {
 
         {/* Responsabilidades del Usuario */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Responsabilidades del Usuario</Text>
+          <Text style={styles.sectionTitle}>Responsabilidades del usuario</Text>
 
-          <Text style={styles.subsectionTitle}>Uso Apropiado</Text>
+          <Text style={styles.subsectionTitle}>Uso apropiado</Text>
           <Text style={styles.paragraph}>
             Te comprometes a utilizar DogCatify únicamente para fines legítimos relacionados con el cuidado de mascotas. No debes usar la aplicación para actividades ilegales, fraudulentas o que puedan dañar a otros usuarios o mascotas.
           </Text>
 
-          <Text style={styles.subsectionTitle}>Información Veraz</Text>
+          <Text style={styles.subsectionTitle}>Información veraz</Text>
           <Text style={styles.paragraph}>
             Debes proporcionar información precisa y actualizada sobre ti y tus mascotas. La información médica incorrecta puede afectar la calidad de los servicios veterinarios y el bienestar de tu mascota.
           </Text>
 
-          <Text style={styles.subsectionTitle}>Seguridad de la Cuenta</Text>
+          <Text style={styles.subsectionTitle}>Seguridad de la cuenta</Text>
           <Text style={styles.paragraph}>
             Eres responsable de mantener la confidencialidad de tu cuenta y contraseña. Debes notificarnos inmediatamente sobre cualquier uso no autorizado de tu cuenta.
           </Text>
@@ -126,9 +123,9 @@ export default function TermsOfService() {
 
         {/* Servicios Profesionales */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Servicios Profesionales</Text>
+          <Text style={styles.sectionTitle}>Servicios profesionales</Text>
 
-          <Text style={styles.subsectionTitle}>Servicios Veterinarios</Text>
+          <Text style={styles.subsectionTitle}>Servicios veterinarios</Text>
           <View style={styles.bulletList}>
             <Text style={styles.bulletItem}>• Los veterinarios son profesionales independientes</Text>
             <Text style={styles.bulletItem}>• DogCatify facilita la conexión, no presta servicios médicos</Text>
@@ -136,7 +133,7 @@ export default function TermsOfService() {
             <Text style={styles.bulletItem}>• En emergencias, contacta servicios de urgencia locales</Text>
           </View>
 
-          <Text style={styles.subsectionTitle}>Otros Servicios</Text>
+          <Text style={styles.subsectionTitle}>Otros servicios</Text>
           <View style={styles.bulletList}>
             <Text style={styles.bulletItem}>• Peluquerías y servicios de estética</Text>
             <Text style={styles.bulletItem}>• Servicios de cuidado y paseo</Text>
@@ -148,8 +145,8 @@ export default function TermsOfService() {
         {/* Pagos y Reembolsos */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <DollarSign size={24} color="#2D6A6F" />
-            <Text style={styles.sectionTitle}>Pagos y Reembolsos</Text>
+            <DollarSign size={24} color={colors.primary} />
+            <Text style={styles.sectionTitle}>Pagos y reembolsos</Text>
           </View>
 
           <View style={styles.paymentCard}>
@@ -177,8 +174,8 @@ export default function TermsOfService() {
         {/* Limitaciones */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <AlertCircle size={24} color="#DC2626" />
-            <Text style={styles.sectionTitle}>Limitaciones de Responsabilidad</Text>
+            <AlertCircle size={24} color={colors.danger} />
+            <Text style={styles.sectionTitle}>Limitaciones de responsabilidad</Text>
           </View>
 
           <View style={styles.warningBox}>
@@ -195,7 +192,7 @@ export default function TermsOfService() {
 
         {/* Modificaciones */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Modificaciones de los Términos</Text>
+          <Text style={styles.sectionTitle}>Modificaciones de los términos</Text>
           <Text style={styles.paragraph}>
             Nos reservamos el derecho de modificar estos términos en cualquier momento. Los cambios significativos serán notificados a través de:
           </Text>
@@ -211,14 +208,14 @@ export default function TermsOfService() {
 
         {/* Contacto Legal */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Contacto Legal</Text>
+          <Text style={styles.sectionTitle}>Contacto legal</Text>
           <Text style={styles.paragraph}>
             Para consultas legales, disputas o preguntas sobre estos términos de servicio:
           </Text>
 
           <View style={styles.contactCard}>
             <View style={styles.contactItem}>
-              <Mail size={20} color="#2D6A6F" />
+              <Mail size={20} color={colors.primary} />
               <View style={styles.contactInfo}>
                 <Text style={styles.contactLabel}>Email Legal</Text>
                 <Text style={styles.contactValue}>legal@dogcatify.com</Text>
@@ -226,7 +223,7 @@ export default function TermsOfService() {
             </View>
 
             <View style={styles.contactItem}>
-              <Phone size={20} color="#2D6A6F" />
+              <Phone size={20} color={colors.primary} />
               <View style={styles.contactInfo}>
                 <Text style={styles.contactLabel}>Teléfono</Text>
                 <Text style={styles.contactValue}>+598 92519111</Text>
@@ -234,7 +231,7 @@ export default function TermsOfService() {
             </View>
 
             <View style={styles.contactItem}>
-              <MessageSquare size={20} color="#2D6A6F" />
+              <MessageSquare size={20} color={colors.primary} />
               <View style={styles.contactInfo}>
                 <Text style={styles.contactLabel}>Soporte</Text>
                 <Text style={styles.contactValue}>Soporte en la app</Text>
@@ -246,8 +243,8 @@ export default function TermsOfService() {
         {/* Ley Aplicable */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Scale size={24} color="#2D6A6F" />
-            <Text style={styles.sectionTitle}>Ley Aplicable</Text>
+            <Scale size={24} color={colors.primary} />
+            <Text style={styles.sectionTitle}>Ley aplicable</Text>
           </View>
           <Text style={styles.paragraph}>
             Estos términos se rigen por las leyes de Uruguay. Cualquier disputa relacionada con estos términos será resuelta en los tribunales competentes de Uruguay. Si alguna disposición de estos términos es considerada inválida, las disposiciones restantes permanecerán en pleno vigor y efecto.
@@ -258,7 +255,7 @@ export default function TermsOfService() {
         {!hasScrolledToBottom && (
           <View style={styles.scrollIndicator}>
             <Text style={styles.scrollIndicatorText}>
-              Desplázate hasta el final para continuar
+              Deslizá hasta el final para continuar
             </Text>
           </View>
         )}
@@ -266,15 +263,12 @@ export default function TermsOfService() {
 
       {/* Accept Button */}
       <View style={styles.footer}>
-        <TouchableOpacity
-          style={[styles.acceptButton, !hasScrolledToBottom && styles.acceptButtonDisabled]}
+        <Button
+          title={hasScrolledToBottom ? 'Entendido' : 'Leé hasta el final para continuar'}
           onPress={handleAccept}
           disabled={!hasScrolledToBottom}
-        >
-          <Text style={[styles.acceptButtonText, !hasScrolledToBottom && styles.acceptButtonTextDisabled]}>
-            {hasScrolledToBottom ? 'Entendido' : 'Lee hasta el final para continuar'}
-          </Text>
-        </TouchableOpacity>
+          size="large"
+        />
       </View>
     </SafeAreaView>
   );
@@ -283,26 +277,26 @@ export default function TermsOfService() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
     paddingTop: Platform.OS === 'android' ? 16 : 12,
-    paddingBottom: 12,
-    backgroundColor: '#FFFFFF',
+    paddingBottom: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   headerTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1A1A1A',
+    fontFamily: fonts.semibold,
+    color: colors.text,
   },
   placeholder: {
     width: 40,
@@ -311,175 +305,175 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingBottom: 24,
+    paddingBottom: spacing.xxl,
   },
   introBanner: {
-    backgroundColor: '#E8F4F5',
-    padding: 24,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.xxl,
     alignItems: 'center',
   },
   introTitle: {
     fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#1A1A1A',
-    marginTop: 16,
+    fontFamily: fonts.bold,
+    color: colors.text,
+    marginTop: spacing.lg,
     textAlign: 'center',
   },
   introSubtitle: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666',
-    marginTop: 8,
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
     textAlign: 'center',
     lineHeight: 20,
   },
   updateDate: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#2D6A6F',
-    marginTop: 12,
+    fontFamily: fonts.medium,
+    color: colors.primary,
+    marginTop: spacing.md,
   },
   section: {
-    backgroundColor: '#FFFFFF',
-    padding: 20,
-    marginTop: 12,
+    backgroundColor: colors.surface,
+    padding: spacing.xl,
+    marginTop: spacing.md,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
+    gap: spacing.md,
+    marginBottom: spacing.lg,
   },
   sectionTitle: {
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#1A1A1A',
-    marginBottom: 12,
+    fontFamily: fonts.bold,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   subsectionTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1A1A1A',
-    marginTop: 16,
-    marginBottom: 8,
+    fontFamily: fonts.semibold,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   paragraph: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666',
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
     lineHeight: 22,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   bulletList: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   bulletItem: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666',
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
     lineHeight: 24,
-    paddingLeft: 8,
+    paddingLeft: spacing.sm,
   },
   paymentCard: {
-    backgroundColor: '#F9FAFB',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+    borderRadius: radius.sm,
+    marginBottom: spacing.md,
     borderLeftWidth: 3,
-    borderLeftColor: '#10B981',
+    borderLeftColor: colors.success,
   },
   paymentTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1A1A1A',
-    marginBottom: 4,
+    fontFamily: fonts.semibold,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   paymentDescription: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666',
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   warningBox: {
-    backgroundColor: '#FEF2F2',
-    padding: 16,
-    borderRadius: 8,
+    backgroundColor: colors.dangerSoft,
+    padding: spacing.lg,
+    borderRadius: radius.sm,
     borderLeftWidth: 3,
-    borderLeftColor: '#DC2626',
+    borderLeftColor: colors.danger,
   },
   warningTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#DC2626',
-    marginBottom: 12,
+    fontFamily: fonts.bold,
+    color: colors.danger,
+    marginBottom: spacing.md,
   },
   warningItem: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#991B1B',
+    fontFamily: fonts.regular,
+    color: colors.danger,
     lineHeight: 24,
-    paddingLeft: 8,
+    paddingLeft: spacing.sm,
   },
   contactCard: {
-    backgroundColor: '#F9FAFB',
-    padding: 16,
-    borderRadius: 8,
-    marginTop: 12,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+    borderRadius: radius.sm,
+    marginTop: spacing.md,
   },
   contactItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
+    gap: spacing.md,
+    marginBottom: spacing.lg,
   },
   contactInfo: {
     flex: 1,
   },
   contactLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#999',
+    fontFamily: fonts.medium,
+    color: colors.textTertiary,
     marginBottom: 2,
   },
   contactValue: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1A1A1A',
+    fontFamily: fonts.semibold,
+    color: colors.text,
   },
   scrollIndicator: {
-    backgroundColor: '#FFF3CD',
-    padding: 16,
-    margin: 16,
-    borderRadius: 8,
+    backgroundColor: colors.warningSoft,
+    padding: spacing.lg,
+    margin: spacing.lg,
+    borderRadius: radius.sm,
     alignItems: 'center',
   },
   scrollIndicatorText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#856404',
+    fontFamily: fonts.medium,
+    color: colors.warning,
     textAlign: 'center',
   },
   footer: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: colors.border,
   },
   acceptButton: {
-    backgroundColor: '#2D6A6F',
-    paddingVertical: 16,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.lg,
+    borderRadius: radius.sm,
     alignItems: 'center',
   },
   acceptButtonDisabled: {
-    backgroundColor: '#E0E0E0',
+    backgroundColor: colors.border,
   },
   acceptButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    fontFamily: fonts.semibold,
+    color: colors.white,
   },
   acceptButtonTextDisabled: {
-    color: '#999',
+    color: colors.textTertiary,
   },
 });

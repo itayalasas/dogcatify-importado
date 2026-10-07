@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, SafeAreaView, Image, Alert, Animated, Touchable
 import { router, useLocalSearchParams } from 'expo-router';
 import { ScanFace, Fingerprint, Zap, ShieldCheck, Lock } from 'lucide-react-native';
 import { Button } from '../../components/ui/Button';
+import { toast } from '../../components/ui/Toast';
+import { colors, typography, spacing, radius, touchTarget } from '../../constants/theme';
 import { useBiometric } from '../../contexts/BiometricContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { resolvePostLoginRoute } from '../../utils/onboarding';
@@ -63,7 +65,7 @@ export default function BiometricSetup() {
 
   const handleEnableBiometric = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Información de credenciales no disponible');
+      Alert.alert('Error', 'No encontramos tus datos de ingreso. Volvé a ingresar e intentá de nuevo.');
       return;
     }
 
@@ -72,11 +74,11 @@ export default function BiometricSetup() {
       const success = await enableBiometric(email, password);
 
       if (success) {
-        Alert.alert(
+        toast.success(
           `¡${biometricType || 'Biometría'} activado!`,
-          `Ahora podés iniciar sesión con solo mirar tu teléfono.`,
-          [{ text: 'Continuar', onPress: () => navigateToPostLoginRoute() }]
+          'La próxima vez vas a poder ingresar sin escribir tu contraseña.'
         );
+        navigateToPostLoginRoute();
       } else {
         navigateToPostLoginRoute();
       }
@@ -116,10 +118,11 @@ export default function BiometricSetup() {
           <Image
             source={require('../../assets/images/logo-transp.png')}
             style={styles.logo}
+            accessibilityLabel="DogCatiFy"
           />
         </View>
 
-        <Text style={styles.welcomeText}>¡Hola {userName}! 👋</Text>
+        <Text style={styles.welcomeText}>¡Hola, {userName}! 👋</Text>
 
         <View style={styles.heroContainer}>
           <Animated.View
@@ -129,12 +132,12 @@ export default function BiometricSetup() {
             ]}
           />
           <View style={styles.iconContainer}>
-            <BiometricIcon size={56} color="#2D6A6F" strokeWidth={1.75} />
+            <BiometricIcon size={56} color={colors.primary} strokeWidth={1.75} />
           </View>
         </View>
 
-        <Text style={styles.title}>{biometricType || 'Face ID'}</Text>
-        <Text style={styles.subtitle}>Iniciá sesión más rápido y seguro</Text>
+        <Text style={styles.title} accessibilityRole="header">{biometricType || 'Face ID'}</Text>
+        <Text style={styles.subtitle}>Ingresá más rápido y seguro</Text>
 
         <View style={styles.benefitsList}>
           {benefits.map((benefit, index) => {
@@ -142,7 +145,7 @@ export default function BiometricSetup() {
             return (
               <View key={index} style={styles.benefitRow}>
                 <View style={styles.benefitIconContainer}>
-                  <Icon size={18} color="#2D6A6F" strokeWidth={2} />
+                  <Icon size={18} color={colors.primary} strokeWidth={2} />
                 </View>
                 <Text style={styles.benefitText}>{benefit.text}</Text>
               </View>
@@ -159,7 +162,13 @@ export default function BiometricSetup() {
             style={styles.primaryButton}
           />
 
-          <TouchableOpacity onPress={handleSkip} style={styles.skipButton} disabled={loading}>
+          <TouchableOpacity
+            onPress={handleSkip}
+            style={styles.skipButton}
+            disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Ahora no"
+          >
             <Text style={styles.skipButtonText}>Ahora no</Text>
           </TouchableOpacity>
         </View>
@@ -171,16 +180,19 @@ export default function BiometricSetup() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 28,
+    paddingHorizontal: spacing.xxl,
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
   },
   logoContainer: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   logo: {
     width: 48,
@@ -188,93 +200,88 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
   },
   welcomeText: {
-    fontSize: 18,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.heading,
+    fontFamily: typography.label.fontFamily,
+    fontWeight: '500',
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 36,
+    marginBottom: spacing.xxxl,
   },
   heroContainer: {
     width: 128,
     height: 128,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   pulseRing: {
     position: 'absolute',
     width: 128,
     height: 128,
-    borderRadius: 64,
-    backgroundColor: '#2D6A6F',
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
   },
   iconContainer: {
     width: 108,
     height: 108,
-    borderRadius: 54,
-    backgroundColor: '#F0F9FF',
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E0F2FE',
+    borderColor: colors.primaryMuted,
   },
   title: {
-    fontSize: 26,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.display,
+    color: colors.text,
     textAlign: 'center',
-    marginBottom: 6,
+    marginBottom: spacing.xs,
   },
   subtitle: {
-    fontSize: 15,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 32,
+    marginBottom: spacing.xxxl,
   },
   benefitsList: {
     width: '100%',
-    gap: 14,
-    marginBottom: 36,
+    gap: spacing.md,
+    marginBottom: spacing.xxxl,
   },
   benefitRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.md,
   },
   benefitIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: '#F0F9FF',
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   benefitText: {
+    ...typography.bodySmall,
     flex: 1,
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    lineHeight: 19,
+    color: colors.textSecondary,
   },
   actions: {
     width: '100%',
     alignItems: 'center',
-    gap: 4,
+    gap: spacing.xs,
   },
   primaryButton: {
     width: '100%',
-    backgroundColor: '#2D6A6F',
-    borderRadius: 16,
-    paddingVertical: 16,
   },
   skipButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    minHeight: touchTarget,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
   },
   skipButtonText: {
+    ...typography.bodyStrong,
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#9CA3AF',
+    color: colors.textSecondary,
   },
 });

@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { colors, radius, spacing, typography, shadows } from '../constants/theme';
 
 interface MercadoPagoRedirectModalProps {
   visible: boolean;
@@ -20,7 +21,7 @@ export function MercadoPagoRedirectModal({
   visible,
   message,
   progress,
-  hint = 'Seras redirigido a Mercado Pago',
+  hint = 'Serás redirigido a Mercado Pago',
 }: MercadoPagoRedirectModalProps) {
   const floatAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(0)).current;
@@ -90,7 +91,12 @@ export function MercadoPagoRedirectModal({
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
       <View style={styles.overlay}>
-        <View style={styles.card}>
+        <View
+          style={styles.card}
+          accessibilityRole="progressbar"
+          accessibilityLabel={`Procesando pago. ${message}`}
+          accessibilityLiveRegion="polite"
+        >
           <View style={styles.logoStage}>
             <Animated.View
               style={[
@@ -108,7 +114,7 @@ export function MercadoPagoRedirectModal({
             </Animated.View>
           </View>
 
-          <Text style={styles.title}>Procesando pago...</Text>
+          <Text style={styles.title}>Procesando pago</Text>
           <Text style={styles.subtitle}>{message}</Text>
 
           <View style={styles.progressTrack}>
@@ -135,25 +141,21 @@ export function MercadoPagoRedirectModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(17, 24, 39, 0.42)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 28,
+    paddingHorizontal: spacing.xxl,
   },
   card: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 28,
-    paddingHorizontal: 28,
-    paddingTop: 28,
-    paddingBottom: 26,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.xxl,
+    paddingBottom: spacing.xxl,
     alignItems: 'center',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.14,
-    shadowRadius: 28,
-    elevation: 12,
+    ...shadows.lg,
   },
   logoStage: {
     width: 206,
@@ -173,39 +175,34 @@ const styles = StyleSheet.create({
     height: 82,
   },
   title: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#0F172A',
-    marginTop: 4,
-    marginBottom: 10,
+    ...typography.title,
+    color: colors.text,
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-    fontFamily: 'Inter-SemiBold',
-    color: '#059669',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   progressTrack: {
     width: '100%',
     height: 10,
-    borderRadius: 999,
-    backgroundColor: '#E5E7EB',
+    borderRadius: radius.pill,
+    backgroundColor: colors.border,
     overflow: 'hidden',
-    marginBottom: 18,
+    marginBottom: spacing.lg,
   },
   progressFill: {
     height: '100%',
-    borderRadius: 999,
-    backgroundColor: '#00A650',
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
   },
   hint: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 20,
   },
 });

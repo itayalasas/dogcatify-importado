@@ -1,15 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Modal, Switch } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Building, Camera, MapPin, Phone, Mail, FileText, ChevronDown, Check } from 'lucide-react-native';
+import { ArrowLeft, Building, Camera, MapPin, Phone, Mail, FileText, ChevronDown, Check, X } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { IconButton } from '../../components/ui/IconButton';
+import { toast } from '../../components/ui/Toast';
+import { FormSection } from '../../components/partner-setup/FormSection';
+import { FormFooter } from '../../components/partner-setup/FormFooter';
+import { FormSkeleton } from '../../components/partner-setup/FormSkeleton';
 import { useAuth } from '../../contexts/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
 import { supabaseClient } from '../../lib/supabase';
 import { uploadImage as uploadImageUtil } from '../../utils/imageUpload';
 import { envConfig } from '../../utils/envConfig';
+import { colors, radius, shadows, spacing, typography } from '../../constants/theme';
 
 const businessTypes = [
   { id: 'veterinary', name: 'Veterinaria', icon: '🏥', description: 'Servicios médicos para mascotas' },
@@ -203,7 +210,7 @@ export default function EditBusiness() {
 
   const performGeocoding = async () => {
     if (!calle.trim() || !numero.trim() || !selectedDepartment || !selectedCountry) {
-      Alert.alert('Información incompleta', 'Por favor completa calle, número, departamento y país para buscar la ubicación');
+      Alert.alert('Información incompleta', 'Completá calle, número, departamento y país para buscar la ubicación');
       return;
     }
 
@@ -323,7 +330,7 @@ export default function EditBusiness() {
 
   const handleSave = async () => {
     if (!businessName.trim() || !selectedType || !description.trim() || !phone.trim() || !email.trim() || !rut.trim()) {
-      Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
+      Alert.alert('Error', 'Completá todos los campos obligatorios');
       return;
     }
 
@@ -366,9 +373,8 @@ export default function EditBusiness() {
 
       if (error) throw error;
 
-      Alert.alert('Éxito', 'Información del negocio actualizada correctamente', [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
+      toast.success('Información del negocio actualizada');
+      router.back();
     } catch (error) {
       console.error('Error updating business:', error);
       Alert.alert('Error', 'No se pudo actualizar la información del negocio');
@@ -380,49 +386,52 @@ export default function EditBusiness() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando información del negocio...</Text>
-        </View>
+        <ScreenHeader title="Editar negocio" />
+        <FormSkeleton />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Editar Negocio</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title={"Editar negocio"} />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Card style={styles.formCard}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
           <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle}>✏️ Editar Información del Negocio</Text>
             <Text style={styles.headerSubtitle}>
-              Actualiza la información de tu negocio para mantener tu perfil al día
+              Actualizá la información de tu negocio para mantener tu perfil al día
             </Text>
           </View>
 
+        <FormSection title="Logo">
           {/* Logo Section */}
           <View style={styles.logoSection}>
-            <Text style={styles.sectionTitle}>Logo del negocio</Text>
-            <TouchableOpacity style={styles.logoSelector} onPress={handleSelectLogo}>
+            <TouchableOpacity
+              style={styles.logoSelector}
+              onPress={handleSelectLogo}
+              accessibilityRole="button"
+              accessibilityLabel={logo ? 'Cambiar logo del negocio' : 'Elegir logo del negocio'}
+            >
               {logo ? (
                 <Image source={{ uri: logo }} style={styles.logoPreview} />
               ) : (
                 <View style={styles.logoPlaceholder}>
-                  <Camera size={32} color="#9CA3AF" />
+                  <Camera size={32} color={colors.textTertiary} />
                   <Text style={styles.logoPlaceholderText}>Seleccionar logo</Text>
                 </View>
               )}
             </TouchableOpacity>
           </View>
 
+        </FormSection>
+
+        <FormSection title="Tipo de negocio">
           {/* Business Type */}
-          <Text style={styles.sectionTitle}>Tipo de Negocio</Text>
           <View style={styles.businessTypes}>
             {businessTypes.map((type) => (
               <TouchableOpacity
@@ -432,6 +441,8 @@ export default function EditBusiness() {
                   selectedType === type.id && styles.selectedBusinessType
                 ]}
                 onPress={() => setSelectedType(type.id)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: selectedType === type.id }}
               >
                 <Text style={styles.businessTypeIcon}>{type.icon}</Text>
                 <Text style={[
@@ -445,45 +456,55 @@ export default function EditBusiness() {
             ))}
           </View>
 
+        </FormSection>
+
+        <FormSection title="Datos básicos">
           <Input
             label="Nombre del negocio *"
             placeholder="Ej: Veterinaria San Martín"
             value={businessName}
             onChangeText={setBusinessName}
-            leftIcon={<Building size={20} color="#6B7280" />}
+            leftIcon={<Building size={20} color={colors.textTertiary} />}
           />
 
           <Input
             label="Descripción *"
-            placeholder="Describe tu negocio y servicios..."
+            placeholder="Describí tu negocio y servicios..."
             value={description}
             onChangeText={setDescription}
             multiline
             numberOfLines={3}
-            leftIcon={<FileText size={20} color="#6B7280" />}
+            leftIcon={<FileText size={20} color={colors.textTertiary} />}
           />
 
+        </FormSection>
+
+        <FormSection title="Ubicación">
           {/* Location Fields */}
-          <TouchableOpacity onPress={() => setShowCountryModal(true)}>
+          <TouchableOpacity
+            onPress={() => setShowCountryModal(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`País: ${selectedCountry?.name || 'sin elegir'}. Cambiar`}
+          >
             <Input
               label="País *"
-              placeholder="Selecciona tu país"
+              placeholder="Seleccioná tu país"
               value={selectedCountry?.name || ''}
               editable={false}
-              leftIcon={<MapPin size={20} color="#6B7280" />}
-              rightIcon={<ChevronDown size={20} color="#6B7280" />}
+              leftIcon={<MapPin size={20} color={colors.textTertiary} />}
+              rightIcon={<ChevronDown size={20} color={colors.textTertiary} />}
             />
           </TouchableOpacity>
 
           <View style={styles.departmentInputGroup}>
             <Input
               label="Departamento *"
-              placeholder={selectedCountry ? "Departamento..." : "Primero selecciona un país"}
+              placeholder={selectedCountry ? "Departamento..." : "Primero elegí un país"}
               value={departmentQuery}
               onChangeText={handleDepartmentInputChange}
               onFocus={() => selectedCountry && setShowDepartmentSuggestions(true)}
               editable={!!selectedCountry}
-              leftIcon={<MapPin size={20} color="#6B7280" />}
+              leftIcon={<MapPin size={20} color={colors.textTertiary} />}
               style={!selectedCountry ? styles.disabledInput : undefined}
             />
             
@@ -524,7 +545,7 @@ export default function EditBusiness() {
             </View>
             <View style={styles.halfWidth}>
               <Input
-                label="Código Postal"
+                label="Código postal"
                 placeholder="11800"
                 value={codigoPostal}
                 onChangeText={setCodigoPostal}
@@ -543,59 +564,11 @@ export default function EditBusiness() {
             style={!selectedDepartment ? styles.disabledInput : undefined}
           />
 
-          {/* IVA Configuration */}
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>💰 Configuración de IVA</Text>
-            <Text style={styles.sectionSubtitle}>
-              Configura el IVA que se aplicará a tus servicios y productos
-            </Text>
-          </View>
-
-          <View style={styles.row}>
-            <View style={styles.halfWidth}>
-              <Input
-                label="Porcentaje de IVA (%)"
-                placeholder="21"
-                value={ivaRate}
-                onChangeText={setIvaRate}
-                keyboardType="decimal-pad"
-              />
-            </View>
-            <View style={styles.halfWidth}>
-              <Text style={styles.inputLabel}>IVA Incluido en Precio</Text>
-              <TouchableOpacity
-                style={styles.switchContainer}
-                onPress={() => setIvaIncludedInPrice(!ivaIncludedInPrice)}
-              >
-                <View style={[
-                  styles.switch,
-                  ivaIncludedInPrice && styles.switchActive
-                ]}>
-                  <View style={[
-                    styles.switchThumb,
-                    ivaIncludedInPrice && styles.switchThumbActive
-                  ]} />
-                </View>
-                <Text style={styles.switchLabel}>
-                  {ivaIncludedInPrice ? 'Sí' : 'No'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.ivaExplanation}>
-            <Text style={styles.ivaExplanationText}>
-              {ivaIncludedInPrice
-                ? '✓ El IVA está incluido en el precio que muestras a tus clientes'
-                : '✓ El IVA se sumará al precio final en el checkout'}
-            </Text>
-          </View>
-
           {/* Geocoding Button */}
           {calle.trim() && numero.trim() && selectedDepartment && selectedCountry && (
             <View style={styles.geocodingSection}>
               <Button
-                title={isGeocoding ? "Buscando ubicación..." : "🌍 Actualizar ubicación exacta"}
+                title={isGeocoding ? "Buscando ubicación..." : "Actualizar ubicación exacta"}
                 onPress={performGeocoding}
                 loading={isGeocoding}
                 variant="outline"
@@ -611,13 +584,14 @@ export default function EditBusiness() {
           {showGeocodingResults && geocodingResults.length > 0 && (
             <View style={styles.geocodingResults}>
               <Text style={styles.geocodingResultsTitle}>
-                📍 Selecciona la ubicación correcta:
+                Seleccioná la ubicación correcta
               </Text>
               {geocodingResults.map((result, index) => (
                 <TouchableOpacity
                   key={index}
                   style={styles.geocodingResultItem}
                   onPress={() => handleSelectGeocodingResult(result)}
+                  accessibilityRole="button"
                 >
                   <Text style={styles.geocodingResultAddress}>
                     {result.display_name}
@@ -639,7 +613,7 @@ export default function EditBusiness() {
           {/* Show coordinates if available */}
           {(latitud || longitud) && (
             <View style={styles.coordinatesDisplay}>
-              <Text style={styles.coordinatesTitle}>📍 Coordenadas GPS:</Text>
+              <Text style={styles.coordinatesTitle}>Coordenadas GPS</Text>
               <Text style={styles.coordinatesText}>
                 Latitud: {latitud || 'No disponible'}
               </Text>
@@ -649,13 +623,44 @@ export default function EditBusiness() {
             </View>
           )}
 
+        </FormSection>
+
+        <FormSection title="IVA" subtitle="Configurá el IVA que se aplica a tus servicios y productos">
+          <Input
+            label="Porcentaje de IVA (%)"
+            placeholder="21"
+            value={ivaRate}
+            onChangeText={setIvaRate}
+            keyboardType="decimal-pad"
+          />
+
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleTextBox}>
+              <Text style={styles.toggleLabel}>IVA incluido en el precio</Text>
+              <Text style={styles.toggleHint}>
+                {ivaIncludedInPrice
+                  ? 'El IVA está incluido en el precio que ven tus clientes'
+                  : 'El IVA se suma al precio final en el checkout'}
+              </Text>
+            </View>
+            <Switch
+              value={ivaIncludedInPrice}
+              onValueChange={setIvaIncludedInPrice}
+              trackColor={{ false: colors.borderStrong, true: colors.primary }}
+              thumbColor={colors.white}
+              accessibilityLabel="IVA incluido en el precio"
+            />
+          </View>
+        </FormSection>
+
+        <FormSection title="Contacto y facturación">
           <Input
             label="Teléfono *"
             placeholder="Número de contacto"
             value={phone}
             onChangeText={setPhone}
             keyboardType="phone-pad"
-            leftIcon={<Phone size={20} color="#6B7280" />}
+            leftIcon={<Phone size={20} color={colors.textTertiary} />}
           />
 
           <Input
@@ -665,7 +670,7 @@ export default function EditBusiness() {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
-            leftIcon={<Mail size={20} color="#6B7280" />}
+            leftIcon={<Mail size={20} color={colors.textTertiary} />}
           />
 
           <Input
@@ -673,17 +678,20 @@ export default function EditBusiness() {
             placeholder="12345678-9"
             value={rut}
             onChangeText={setRut}
-            leftIcon={<FileText size={20} color="#6B7280" />}
+            leftIcon={<FileText size={20} color={colors.textTertiary} />}
           />
 
-          <Button
-            title="Guardar Cambios"
-            onPress={handleSave}
-            loading={saveLoading}
-            size="large"
-          />
-        </Card>
+        </FormSection>
       </ScrollView>
+
+      <FormFooter>
+            <Button
+          title="Guardar cambios"
+          onPress={handleSave}
+          loading={saveLoading}
+          size="large"
+        />
+      </FormFooter>
 
       {/* Country Selection Modal */}
       <Modal
@@ -695,10 +703,12 @@ export default function EditBusiness() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Seleccionar País</Text>
-              <TouchableOpacity onPress={() => setShowCountryModal(false)}>
-                <Text style={styles.modalCloseText}>✕</Text>
-              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Elegí tu país</Text>
+              <IconButton
+                icon={<X size={22} color={colors.textSecondary} />}
+                onPress={() => setShowCountryModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
             
             <ScrollView style={styles.optionsList}>
@@ -718,7 +728,7 @@ export default function EditBusiness() {
                     {country.name}
                   </Text>
                   {selectedCountry?.id === country.id && (
-                    <Check size={16} color="#2D6A6F" />
+                    <Check size={16} color={colors.primary} />
                   )}
                 </TouchableOpacity>
               ))}
@@ -733,29 +743,50 @@ export default function EditBusiness() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: 6,
   },
   title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   placeholder: {
     width: 32,
+  },
+  scrollContent: {
+    paddingBottom: spacing.xxxl,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+    minHeight: 44,
+  },
+  toggleTextBox: {
+    flex: 1,
+  },
+  toggleLabel: {
+    ...typography.bodyStrong,
+    color: colors.text,
+  },
+  toggleHint: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: spacing.xxs,
   },
   content: {
     flex: 1,
@@ -766,40 +797,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
   },
   formCard: {
-    margin: 16,
+    margin: spacing.lg,
   },
   headerInfo: {
-    marginBottom: 24,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    marginBottom: spacing.lg,
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.title,
+    color: colors.text,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   headerSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
-    lineHeight: 20,
   },
   logoSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
     alignItems: 'center',
   },
   sectionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   logoSelector: {
     alignItems: 'center',
@@ -813,61 +841,58 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     borderStyle: 'dashed',
   },
   logoPlaceholderText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 4,
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginTop: spacing.xs,
   },
   businessTypes: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 20,
+    gap: spacing.sm,
+    marginBottom: spacing.xl,
   },
   businessType: {
     flex: 1,
     minWidth: '45%',
-    backgroundColor: '#F9FAFB',
-    padding: 12,
-    borderRadius: 12,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    borderRadius: radius.md,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     alignItems: 'center',
   },
   selectedBusinessType: {
-    backgroundColor: '#EBF8FF',
-    borderColor: '#3B82F6',
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
   },
   businessTypeIcon: {
-    fontSize: 24,
-    marginBottom: 4,
+    ...typography.title,
+    marginBottom: spacing.xs,
   },
   businessTypeName: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 2,
+    ...typography.label,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   selectedBusinessTypeName: {
-    color: '#3B82F6',
+    color: colors.primary,
   },
   businessTypeDescription: {
-    fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   disabledInput: {
-    backgroundColor: '#F9FAFB',
-    color: '#9CA3AF',
+    backgroundColor: colors.background,
+    color: colors.textTertiary,
   },
   departmentInputGroup: {
     position: 'relative',
@@ -878,190 +903,161 @@ const styles = StyleSheet.create({
     top: '100%',
     left: 0,
     right: 0,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    marginTop: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    marginTop: spacing.xs,
+    ...shadows.lg,
     zIndex: 1001,
     maxHeight: 200,
   },
   departmentSuggestion: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   departmentSuggestionText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.body,
+    color: colors.textSecondary,
   },
   row: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
   halfWidth: {
     flex: 1,
   },
   sectionHeader: {
-    marginTop: 24,
-    marginBottom: 16,
+    marginTop: spacing.xxl,
+    marginBottom: spacing.lg,
   },
   sectionHeaderTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   sectionSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    lineHeight: 20,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   switchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   switch: {
     width: 51,
     height: 31,
     borderRadius: 16,
-    backgroundColor: '#D1D5DB',
-    padding: 2,
+    backgroundColor: colors.borderStrong,
+    padding: spacing.xxs,
     justifyContent: 'center',
   },
   switchActive: {
-    backgroundColor: '#10B981',
+    backgroundColor: colors.success,
   },
   switchThumb: {
     width: 27,
     height: 27,
     borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: colors.surface,
+    ...shadows.sm,
   },
   switchThumbActive: {
     transform: [{ translateX: 20 }],
   },
   switchLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#111827',
-    marginLeft: 12,
+    ...typography.label,
+    color: colors.text,
+    marginLeft: spacing.md,
   },
   ivaExplanation: {
-    backgroundColor: '#F0F9FF',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
   },
   ivaExplanationText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#0369A1',
-    lineHeight: 18,
+    ...typography.bodySmall,
+    color: colors.info,
   },
   inputLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 4,
+    ...typography.label,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   geocodingSection: {
-    marginBottom: 20,
-    padding: 16,
-    backgroundColor: '#F0F9FF',
-    borderRadius: 12,
+    marginBottom: spacing.xl,
+    padding: spacing.lg,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderColor: colors.primaryBorder,
   },
   geocodingHint: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#0369A1',
+    ...typography.caption,
+    color: colors.info,
     textAlign: 'center',
-    marginTop: 8,
-    lineHeight: 16,
+    marginTop: spacing.sm,
   },
   geocodingResults: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderColor: colors.border,
+    marginBottom: spacing.lg,
+    ...shadows.md,
   },
   geocodingResultsTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    padding: 16,
-    paddingBottom: 8,
+    ...typography.bodyStrong,
+    color: colors.text,
+    padding: spacing.lg,
+    paddingBottom: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   geocodingResultItem: {
-    padding: 16,
+    padding: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   geocodingResultAddress: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#111827',
-    marginBottom: 4,
-    lineHeight: 20,
+    ...typography.label,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   geocodingResultType: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   cancelGeocodingButton: {
-    padding: 16,
+    padding: spacing.lg,
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   cancelGeocodingText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
   },
   coordinatesDisplay: {
-    backgroundColor: '#F0FDF4',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: colors.successSoft,
+    padding: spacing.lg,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#BBF7D0',
-    marginBottom: 16,
+    borderColor: colors.border,
+    marginBottom: spacing.lg,
   },
   coordinatesTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#166534',
-    marginBottom: 8,
+    ...typography.label,
+    color: colors.success,
+    marginBottom: spacing.sm,
   },
   coordinatesText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#166534',
-    marginBottom: 2,
+    ...typography.bodySmall,
+    color: colors.success,
+    marginBottom: spacing.xxs,
   },
   modalOverlay: {
     flex: 1,
@@ -1069,29 +1065,28 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    padding: spacing.xl,
     maxHeight: '70%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   modalTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   modalCloseText: {
-    fontSize: 18,
-    color: '#6B7280',
+    ...typography.heading,
+    color: colors.textTertiary,
   },
   optionsList: {
     maxHeight: 400,
@@ -1100,22 +1095,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 12,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   selectedOptionItem: {
-    backgroundColor: '#F0F9FF',
+    backgroundColor: colors.primarySoft,
   },
   optionText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.body,
+    color: colors.textSecondary,
     flex: 1,
   },
   selectedOptionText: {
-    color: '#2D6A6F',
+    color: colors.primary,
     fontFamily: 'Inter-Medium',
   },
 });

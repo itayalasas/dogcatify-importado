@@ -16,10 +16,14 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Search, ShoppingCart, Store, MapPin, Phone, Tag } from 'lucide-react-native';
 import { LoadingSpinner } from '../../../components/ui/LoadingSpinner';
+import { SkeletonList } from '../../../components/ui/Skeleton';
+import { EmptyState } from '../../../components/ui/EmptyState';
+import { ScreenHeader } from '../../../components/ui/ScreenHeader';
 import { ProductCard } from '../../../components/ProductCard';
 import { supabaseClient } from '../../../lib/supabase';
 import { useCart } from '@/contexts/CartContext';
 import { normalizePartnerDisplayData } from '../../../utils/partnerDisplay';
+import { colors, radius, shadows, spacing, typography } from '../../../constants/theme';
 
 export default function StoreProducts() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -147,9 +151,8 @@ export default function StoreProducts() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <LoadingSpinner message="Cargando productos..." />
-        </View>
+        <ScreenHeader title="Tienda" />
+        <SkeletonList kind="grid" count={6} style={styles.skeleton} />
       </SafeAreaView>
     );
   }
@@ -157,30 +160,42 @@ export default function StoreProducts() {
   if (!partner) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>No se encontró la tienda</Text>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Text style={styles.backButtonText}>Volver</Text>
-          </TouchableOpacity>
-        </View>
+        <ScreenHeader title="Tienda" />
+        <EmptyState
+          icon={<Store size={32} color={colors.primary} />}
+          title="No se encontró la tienda"
+          description="Puede que ya no esté disponible."
+          actionLabel="Volver"
+          onAction={() => router.back()}
+        />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
-          <ArrowLeft size={24} color="#111827" />
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.headerButton}
+          accessibilityRole="button"
+          accessibilityLabel="Volver"
+        >
+          <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>
           {partner.businessName || 'Tienda'}
         </Text>
-        <TouchableOpacity onPress={() => router.push('/cart')} style={styles.headerButton}>
-          <ShoppingCart size={24} color="#111827" />
+        <TouchableOpacity
+          onPress={() => router.push('/cart')}
+          style={styles.headerButton}
+          accessibilityRole="button"
+          accessibilityLabel={cartCount > 0 ? `Ver carrito, ${cartCount} productos` : 'Ver carrito'}
+        >
+          <ShoppingCart size={24} color={colors.text} />
           {cartCount > 0 && (
             <View style={styles.cartBadge}>
               <Text style={styles.cartBadgeText}>{cartCount}</Text>
@@ -197,14 +212,14 @@ export default function StoreProducts() {
               <Image source={{ uri: partner.logo }} style={styles.storeLogo} />
             ) : (
               <View style={styles.storeLogoPlaceholder}>
-                <Store size={32} color="#FFFFFF" />
+                <Store size={32} color={colors.white} />
               </View>
             )}
             <View style={styles.storeDetails}>
               <Text style={styles.storeName}>{partner.businessName}</Text>
               {partner.businessAddress && (
                 <View style={styles.storeInfoRow}>
-                  <MapPin size={14} color="#6B7280" />
+                  <MapPin size={14} color={colors.textTertiary} />
                   <Text style={styles.storeInfoText} numberOfLines={1}>
                     {partner.businessAddress}
                   </Text>
@@ -215,8 +230,10 @@ export default function StoreProducts() {
                   style={styles.storeInfoRow}
                   onPress={() => handleCallStore(partner.phone)}
                   activeOpacity={0.75}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Llamar a la tienda al ${partner.phone}`}
                 >
-                  <Phone size={14} color="#6B7280" />
+                  <Phone size={14} color={colors.textTertiary} />
                   <Text style={styles.storeInfoText}>{partner.phone}</Text>
                 </TouchableOpacity>
               )}
@@ -230,7 +247,7 @@ export default function StoreProducts() {
           {/* Active Promotions Banner */}
           {promotions.length > 0 && (
             <View style={styles.promotionsBanner}>
-              <Tag size={16} color="#10B981" />
+              <Tag size={16} color={colors.success} />
               <Text style={styles.promotionsBannerText}>
                 {promotions.length} {promotions.length === 1 ? 'Promoción activa' : 'Promociones activas'}
               </Text>
@@ -240,13 +257,13 @@ export default function StoreProducts() {
 
         {/* Search Bar */}
         <View style={styles.searchContainer}>
-          <Search size={20} color="#9CA3AF" />
+          <Search size={20} color={colors.textTertiary} />
           <TextInput
             style={styles.searchInput}
             placeholder="Buscar productos..."
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textTertiary}
           />
         </View>
 
@@ -266,6 +283,8 @@ export default function StoreProducts() {
                   selectedCategory === category && styles.categoryChipActive
                 ]}
                 onPress={() => setSelectedCategory(category)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: selectedCategory === category }}
               >
                 <Text
                   style={[
@@ -353,11 +372,13 @@ export default function StoreProducts() {
             })}
           </View>
         ) : (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
-              {searchQuery ? 'No se encontraron productos con ese criterio' : 'Esta tienda no tiene productos disponibles'}
-            </Text>
-          </View>
+          <EmptyState
+            icon={<Search size={32} color={colors.primary} />}
+            title={searchQuery ? 'No encontramos productos' : 'Esta tienda no tiene productos disponibles'}
+            description={searchQuery ? 'Probá con otra búsqueda o categoría.' : undefined}
+            actionLabel={searchQuery || selectedCategory !== 'all' ? 'Ver todos los productos' : undefined}
+            onAction={searchQuery || selectedCategory !== 'all' ? () => { setSearchQuery(''); setSelectedCategory('all'); } : undefined}
+          />
         )}
       </ScrollView>
     </SafeAreaView>
@@ -367,47 +388,52 @@ export default function StoreProducts() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
+  },
+  skeleton: {
+    padding: spacing.lg,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
     paddingTop: Platform.OS === 'android' ? 16 : 12,
-    paddingBottom: 12,
-    backgroundColor: '#FFFFFF',
+    paddingBottom: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   headerButton: {
-    padding: 8,
+    padding: spacing.sm,
     position: 'relative',
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     flex: 1,
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
     textAlign: 'center',
-    marginHorizontal: 16,
+    marginHorizontal: spacing.lg,
   },
   cartBadge: {
     position: 'absolute',
     top: 4,
     right: 4,
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.danger,
     borderRadius: 10,
     minWidth: 18,
     height: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: spacing.xs,
   },
   cartBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontFamily: 'Inter-Bold',
+    color: colors.white,
+    ...typography.captionStrong,
   },
   loadingContainer: {
     flex: 1,
@@ -418,166 +444,154 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   errorText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#EF4444',
-    marginBottom: 16,
+    ...typography.body,
+    color: colors.danger,
+    marginBottom: spacing.lg,
   },
   backButton: {
-    backgroundColor: '#2D6A6F',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.xxl,
+    paddingVertical: spacing.md,
+    borderRadius: radius.sm,
   },
   backButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    ...typography.label,
+    color: colors.white,
   },
   storeInfoCard: {
-    backgroundColor: '#FFFFFF',
-    padding: 20,
-    marginBottom: 12,
+    backgroundColor: colors.surface,
+    padding: spacing.xl,
+    marginBottom: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   storeHeader: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   storeLogo: {
     width: 80,
     height: 80,
-    borderRadius: 12,
-    marginRight: 16,
+    borderRadius: radius.md,
+    marginRight: spacing.lg,
   },
   storeLogoPlaceholder: {
     width: 80,
     height: 80,
-    borderRadius: 12,
-    backgroundColor: '#2D6A6F',
+    borderRadius: radius.md,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: spacing.lg,
   },
   storeDetails: {
     flex: 1,
     justifyContent: 'center',
   },
   storeName: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.title,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   storeInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   storeInfoText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     flex: 1,
   },
   storeDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    lineHeight: 20,
-    marginBottom: 12,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginBottom: spacing.md,
   },
   promotionsBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#D1FAE5',
+    gap: spacing.sm,
+    backgroundColor: colors.successSoft,
     paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.sm,
   },
   promotionsBannerText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#065F46',
+    ...typography.label,
+    color: colors.success,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginBottom: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    marginLeft: 12,
+    ...typography.body,
+    color: colors.text,
+    marginLeft: spacing.md,
   },
   categoriesContainer: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   categoriesContent: {
-    paddingHorizontal: 16,
-    gap: 8,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
   },
   categoryChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
-    marginRight: 8,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+    marginRight: spacing.sm,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   categoryChipActive: {
-    backgroundColor: '#2D6A6F',
+    backgroundColor: colors.primary,
   },
   categoryChipText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
   },
   categoryChipTextActive: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   productsHeader: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
   productsCount: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   productsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 8,
-    paddingBottom: 20,
+    paddingHorizontal: spacing.sm,
+    paddingBottom: spacing.xl,
   },
   productCardContainer: {
     width: '50%',
-    padding: 8,
+    padding: spacing.sm,
   },
   productCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     overflow: 'hidden',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...shadows.sm,
   },
   productImage: {
     width: '100%',
@@ -588,15 +602,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: '#10B981',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    backgroundColor: colors.success,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
   },
   discountText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    ...typography.captionStrong,
+    color: colors.white,
   },
   outOfStockBadge: {
     position: 'absolute',
@@ -609,60 +622,52 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   outOfStockText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    ...typography.bodyStrong,
+    color: colors.white,
   },
   productInfo: {
-    padding: 12,
+    padding: spacing.md,
   },
   productCategory: {
-    fontSize: 11,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-    marginBottom: 4,
+    ...typography.captionStrong,
+    color: colors.primary,
+    marginBottom: spacing.xs,
     textTransform: 'uppercase',
   },
   productName: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.label,
+    color: colors.text,
+    marginBottom: spacing.sm,
     minHeight: 36,
   },
   priceContainer: {
-    gap: 2,
+    gap: spacing.xxs,
   },
   originalPrice: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    ...typography.caption,
+    color: colors.textTertiary,
     textDecorationLine: 'line-through',
   },
   discountedPrice: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    ...typography.bodyStrong,
+    color: colors.success,
   },
   productPrice: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    ...typography.bodyStrong,
+    color: colors.success,
   },
   lowStockText: {
-    fontSize: 11,
-    fontFamily: 'Inter-Medium',
-    color: '#F59E0B',
-    marginTop: 4,
+    ...typography.captionStrong,
+    color: colors.warning,
+    marginTop: spacing.xs,
   },
   emptyContainer: {
     padding: 40,
     alignItems: 'center',
   },
   emptyText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
 });

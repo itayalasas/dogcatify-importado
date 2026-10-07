@@ -6,6 +6,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { supabaseClient } from '../../lib/supabase';
 import { envConfig } from '../../utils/envConfig';
+import { IconButton } from '../../components/ui';
+import { colors, radius, spacing, typography, touchTarget } from '../../constants/theme';
 
 interface ChatMessage {
   id: string;
@@ -256,16 +258,21 @@ export default function AdoptionChat() {
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
+          <IconButton
+            icon={<ArrowLeft size={24} color={colors.text} />}
+            onPress={() => router.back()}
+            accessibilityLabel="Volver"
+          />
           <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle}>{partnerName}</Text>
-            <Text style={styles.headerSubtitle}>Sobre la adopción de {petName}</Text>
+            <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">{partnerName}</Text>
+            <Text style={styles.headerSubtitle} numberOfLines={1}>Sobre la adopción de {petName}</Text>
           </View>
-          <TouchableOpacity onPress={handleContactShelter} style={styles.phoneButton}>
-            <Phone size={20} color="#3B82F6" />
-          </TouchableOpacity>
+          <IconButton
+            icon={<Phone size={20} color={colors.primary} />}
+            onPress={handleContactShelter}
+            variant="tonal"
+            accessibilityLabel={`Llamar a ${partnerName || 'el refugio'}`}
+          />
         </View>
       </SafeAreaView>
 
@@ -316,8 +323,9 @@ export default function AdoptionChat() {
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.messageInput}
-            placeholder="Escribe tu mensaje..."
-            placeholderTextColor="#9CA3AF"
+            placeholder="Escribí tu mensaje..."
+            placeholderTextColor={colors.placeholder}
+            accessibilityLabel="Mensaje"
             value={newMessage}
             onChangeText={setNewMessage}
             multiline
@@ -327,8 +335,12 @@ export default function AdoptionChat() {
             style={[styles.sendButton, !newMessage.trim() && styles.sendButtonDisabled]}
             onPress={() => sendMessage()}
             disabled={!newMessage.trim() || loading}
+            accessibilityRole="button"
+            accessibilityLabel="Enviar mensaje"
+            accessibilityState={{ disabled: !newMessage.trim() || loading }}
+            hitSlop={2}
           >
-            <Send size={20} color={newMessage.trim() ? "#FFFFFF" : "#9CA3AF"} />
+            <Send size={20} color={newMessage.trim() ? colors.onPrimary : colors.textTertiary} />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -339,40 +351,39 @@ export default function AdoptionChat() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   safeArea: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   headerInfo: {
     flex: 1,
     alignItems: 'center',
+    paddingHorizontal: spacing.sm,
   },
   headerTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   headerSubtitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   phoneButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   chatContainer: {
     flex: 1,
@@ -381,12 +392,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   messagesContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    paddingBottom: 16,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    paddingBottom: spacing.lg,
   },
   messageContainer: {
-    marginVertical: 4,
+    marginVertical: spacing.xs,
   },
   myMessage: {
     alignItems: 'flex-end',
@@ -396,79 +407,77 @@ const styles = StyleSheet.create({
   },
   messageBubble: {
     maxWidth: '80%',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.lg,
   },
   myMessageBubble: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
     borderBottomRightRadius: 4,
   },
   theirMessageBubble: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderBottomLeftRadius: 4,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   senderName: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    ...typography.captionStrong,
+    color: colors.textTertiary,
     marginBottom: 2,
   },
   messageText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    ...typography.bodySmall,
     lineHeight: 20,
   },
   myMessageText: {
-    color: '#FFFFFF',
+    color: colors.surface,
   },
   theirMessageText: {
-    color: '#111827',
+    color: colors.text,
   },
   messageTime: {
     fontSize: 11,
     fontFamily: 'Inter-Regular',
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   myMessageTime: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255, 255, 255, 0.85)',
   },
   theirMessageTime: {
-    color: '#9CA3AF',
+    color: colors.textTertiary,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
     paddingBottom: Platform.OS === 'android' ? 16 : 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.border,
   },
   messageInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: colors.borderStrong,
     borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginRight: 8,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    marginRight: spacing.sm,
     maxHeight: 100,
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    ...typography.bodySmall,
+    color: colors.text,
   },
   sendButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
     borderRadius: 20,
-    width: 40,
-    height: 40,
+    width: touchTarget - 4,
+    height: touchTarget - 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
   },
 });

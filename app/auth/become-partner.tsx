@@ -11,10 +11,12 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { router, Stack } from 'expo-router';
-import { ArrowLeft, User, Mail, Lock, Briefcase } from 'lucide-react-native';
+import { ArrowLeft, User, Mail, Lock, Briefcase, Check, CircleCheck as CheckCircle } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { IconButton } from '../../components/ui/IconButton';
+import { colors, typography, spacing, radius, hitSlop, touchTarget } from '../../constants/theme';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
@@ -59,7 +61,7 @@ export default function BecomePartner() {
   const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword;
 
   const passwordRequirementsMessage =
-    'La contrasena debe incluir minuscula, mayuscula, numero, caracter especial y tener mas de 8 caracteres';
+    'La contraseña debe incluir minúscula, mayúscula, número, carácter especial y tener más de 8 caracteres';
 
   const handlePasswordChange = (text: string) => {
     setPassword(text);
@@ -71,7 +73,7 @@ export default function BecomePartner() {
     }
 
     if (confirmPassword.length > 0 && text !== confirmPassword) {
-      setConfirmPasswordError('Las contrasenas no coinciden');
+      setConfirmPasswordError('Las contraseñas no coinciden');
     } else if (confirmPassword.length > 0) {
       setConfirmPasswordError('');
     }
@@ -80,7 +82,7 @@ export default function BecomePartner() {
   const handleConfirmPasswordChange = (text: string) => {
     setConfirmPassword(text);
     if (text.length > 0 && text !== password) {
-      setConfirmPasswordError('Las contrasenas no coinciden');
+      setConfirmPasswordError('Las contraseñas no coinciden');
     } else {
       setConfirmPasswordError('');
     }
@@ -93,12 +95,12 @@ export default function BecomePartner() {
     }
 
     if (!fullName || !email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Completa todos los campos');
+      Alert.alert('Error', 'Completá todos los campos');
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Las contrasenas no coinciden');
+      Alert.alert('Error', 'Las contraseñas no coinciden');
       return;
     }
 
@@ -108,7 +110,7 @@ export default function BecomePartner() {
     }
 
     if (!acceptTerms) {
-      Alert.alert('Error', 'Debes aceptar los terminos y condiciones');
+      Alert.alert('Error', 'Tenés que aceptar los términos y condiciones');
       return;
     }
 
@@ -164,13 +166,13 @@ export default function BecomePartner() {
         ? 'Registro de aliado exitoso'
         : 'Cuenta de aliado creada';
       const confirmationMessage = emailResult.success
-        ? `Tu cuenta de aliado fue creada correctamente.\n\nTe enviamos un correo de confirmacion a:\n${trimmedEmail}\n\nCuando confirmes el correo, podras iniciar sesion y registrar tu negocio.`
-        : `Tu cuenta de aliado fue creada correctamente, pero no pudimos enviar el correo de confirmacion automaticamente.\n\nRevisa el correo registrado o intenta reenviarlo desde la pantalla de inicio de sesion.\n\nCorreo:\n${trimmedEmail}`;
+        ? `Tu cuenta de aliado se creó correctamente.\n\nTe enviamos un correo de confirmación a:\n${trimmedEmail}\n\nCuando confirmes el correo, vas a poder ingresar y registrar tu negocio.`
+        : `Tu cuenta de aliado se creó correctamente, pero no pudimos enviar el correo de confirmación automáticamente.\n\nRevisá el correo registrado o reenvialo desde la pantalla de ingreso.\n\nCorreo:\n${trimmedEmail}`;
 
       Alert.alert(
         confirmationTitle,
         confirmationMessage,
-        [{ text: 'ENTENDIDO', onPress: () => router.replace('/auth/login') }]
+        [{ text: 'Entendido', onPress: () => router.replace('/auth/login') }]
       );
     } catch (error: any) {
       console.error('Partner registration error:', error);
@@ -196,34 +198,35 @@ export default function BecomePartner() {
       >
         <Stack.Screen options={{ headerShown: false }} />
 
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
-          <Image
-            source={require('../../assets/images/logo-transp.png')}
-            style={styles.logo}
+        <View style={styles.topBar}>
+          <IconButton
+            icon={<ArrowLeft size={24} color={colors.text} />}
+            onPress={() => router.back()}
+            accessibilityLabel="Volver"
           />
         </View>
 
         <View style={styles.form}>
-          <View style={styles.heroCard}>
+          <View style={styles.header}>
             <View style={styles.heroIcon}>
-              <Briefcase size={34} color="#2D6A6F" />
+              <Briefcase size={32} color={colors.primary} />
             </View>
-            <Text style={styles.title}>
-              {hasCurrentSession ? 'Completar alta de aliado' : t('becomePartner')}
+            <Text style={styles.title} accessibilityRole="header">
+              {hasCurrentSession ? 'Completá tu alta de aliado' : t('becomePartner')}
             </Text>
             <Text style={styles.subtitle}>
               {hasCurrentSession
-                ? 'Usaremos tu sesión actual para registrar tu negocio sin crear otra cuenta.'
+                ? 'Vamos a usar tu sesión actual para registrar tu negocio sin crear otra cuenta.'
                 : t('partnerRegisterSubtitle')}
             </Text>
           </View>
 
           {hasCurrentSession ? (
             <View style={styles.sessionCard}>
-              <Text style={styles.sessionTitle}>Sesión activa detectada</Text>
+              <View style={styles.sessionTitleRow}>
+                <CheckCircle size={18} color={colors.success} />
+                <Text style={styles.sessionTitle}>Ya tenés una sesión activa</Text>
+              </View>
               <Text style={styles.sessionText}>
                 Estás conectado como {currentUser?.email || 'tu cuenta actual'}.
                 Vamos a usar esa misma cuenta para completar el alta de tu negocio como aliado.
@@ -236,7 +239,9 @@ export default function BecomePartner() {
                 placeholder="Tu nombre completo"
                 value={fullName}
                 onChangeText={setFullName}
-                leftIcon={<User size={20} color="#6B7280" />}
+                autoComplete="name"
+                textContentType="name"
+                leftIcon={<User size={20} color={colors.icon} />}
               />
 
               <Input
@@ -246,7 +251,9 @@ export default function BecomePartner() {
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                leftIcon={<Mail size={20} color="#6B7280" />}
+                autoComplete="email"
+                textContentType="emailAddress"
+                leftIcon={<Mail size={20} color={colors.icon} />}
               />
 
               <Input
@@ -255,7 +262,9 @@ export default function BecomePartner() {
                 value={password}
                 onChangeText={handlePasswordChange}
                 secureTextEntry={!showPassword}
-                leftIcon={<Lock size={20} color="#6B7280" />}
+                autoCapitalize="none"
+                textContentType="newPassword"
+                leftIcon={<Lock size={20} color={colors.icon} />}
                 showPasswordToggle={true}
                 isPasswordVisible={showPassword}
                 onTogglePasswordVisibility={() => setShowPassword(!showPassword)}
@@ -264,29 +273,45 @@ export default function BecomePartner() {
 
               <Input
                 label="Confirmar contraseña"
-                placeholder="Repite tu contraseña"
+                placeholder="Repetí tu contraseña"
                 value={confirmPassword}
                 onChangeText={handleConfirmPasswordChange}
                 secureTextEntry={!showConfirmPassword}
-                leftIcon={<Lock size={20} color="#6B7280" />}
+                autoCapitalize="none"
+                textContentType="newPassword"
+                leftIcon={<Lock size={20} color={colors.icon} />}
                 showPasswordToggle={true}
                 isPasswordVisible={showConfirmPassword}
                 onTogglePasswordVisibility={() => setShowConfirmPassword(!showConfirmPassword)}
                 error={confirmPasswordError}
+                helperText={passwordsMatch ? 'Las contraseñas coinciden' : undefined}
               />
 
-              <TouchableOpacity
-                style={styles.termsRow}
-                onPress={() => setAcceptTerms(!acceptTerms)}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.checkbox, acceptTerms && styles.checkboxChecked]}>
-                  {acceptTerms && <Text style={styles.checkmark}>✓</Text>}
-                </View>
+              <View style={styles.termsRow}>
+                <TouchableOpacity
+                  onPress={() => setAcceptTerms(!acceptTerms)}
+                  activeOpacity={0.8}
+                  hitSlop={hitSlop}
+                  style={styles.checkboxTouch}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: acceptTerms }}
+                  accessibilityLabel="Acepto los términos y condiciones y la política de privacidad"
+                >
+                  <View style={[styles.checkbox, acceptTerms && styles.checkboxChecked]}>
+                    {acceptTerms && <Check size={14} color={colors.onPrimary} strokeWidth={3} />}
+                  </View>
+                </TouchableOpacity>
                 <Text style={styles.termsText}>
-                  Acepto los términos y condiciones y la política de privacidad
+                  Acepto los{' '}
+                  <Text style={styles.termsLink} onPress={() => router.push('/legal/terms-of-service')} accessibilityRole="link">
+                    términos y condiciones
+                  </Text>{' '}
+                  y la{' '}
+                  <Text style={styles.termsLink} onPress={() => router.push('/legal/privacy-policy')} accessibilityRole="link">
+                    política de privacidad
+                  </Text>
                 </Text>
-              </TouchableOpacity>
+              </View>
             </>
           )}
 
@@ -302,9 +327,10 @@ export default function BecomePartner() {
             <TouchableOpacity
               style={styles.loginButton}
               onPress={() => router.replace('/auth/login')}
+              accessibilityRole="link"
             >
               <Text style={styles.loginText}>
-                ¿Ya tienes una cuenta? <Text style={styles.loginLink}>Inicia sesión</Text>
+                ¿Ya tenés cuenta? <Text style={styles.loginLink}>Ingresá</Text>
               </Text>
             </TouchableOpacity>
           )}
@@ -317,33 +343,25 @@ export default function BecomePartner() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   scrollView: {
     flex: 1,
   },
   content: {
     flexGrow: 1,
-    padding: 20,
-    paddingTop: 50,
-    paddingBottom: 40,
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.xxxl,
+    paddingBottom: spacing.xxxl,
+  },
+  topBar: {
+    marginLeft: -spacing.md,
+    marginBottom: spacing.xs,
+    alignItems: 'flex-start',
   },
   header: {
     alignItems: 'center',
-    marginBottom: 32,
-  },
-  backButton: {
-    position: 'absolute',
-    left: 0,
-    top: 8,
-    padding: 8,
-    zIndex: 10,
-  },
-  logo: {
-    width: 140,
-    height: 140,
-    resizeMode: 'contain',
-    marginBottom: 16,
+    marginBottom: spacing.xxl,
   },
   form: {
     width: '100%',
@@ -351,102 +369,94 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   sessionCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 18,
-    padding: 18,
+    backgroundColor: colors.background,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginBottom: 20,
+    borderColor: colors.border,
+    marginBottom: spacing.xl,
+  },
+  sessionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
   },
   sessionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 6,
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   sessionText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#4B5563',
-    fontFamily: 'Inter-Regular',
-  },
-  heroCard: {
-    backgroundColor: '#F0FDFA',
-    borderRadius: 20,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#99F6E4',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
   heroIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#CCFBF1',
+    width: 72,
+    height: 72,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.lg,
   },
   title: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#134E4A',
+    ...typography.display,
+    color: colors.text,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   subtitle: {
-    fontSize: 15,
-    color: '#4B5563',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    fontFamily: 'Inter-Regular',
-    lineHeight: 22,
+    maxWidth: 340,
   },
   termsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    marginBottom: 16,
+    alignItems: 'flex-start',
+    marginBottom: spacing.xxl,
+  },
+  checkboxTouch: {
+    marginRight: spacing.md,
+    paddingTop: spacing.xxs,
   },
   checkbox: {
-    width: 20,
-    height: 20,
-    borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-    borderRadius: 4,
-    marginRight: 10,
+    width: 22,
+    height: 22,
+    borderWidth: 2,
+    borderColor: colors.borderStrong,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   checkboxChecked: {
-    backgroundColor: '#2D6A6F',
-    borderColor: '#2D6A6F',
-  },
-  checkmark: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   termsText: {
+    ...typography.bodySmall,
     flex: 1,
-    fontSize: 13,
-    color: '#4B5563',
-    fontFamily: 'Inter-Regular',
-    lineHeight: 18,
+    color: colors.textSecondary,
+  },
+  termsLink: {
+    color: colors.primary,
+    fontFamily: typography.label.fontFamily,
+    textDecorationLine: 'underline',
   },
   loginButton: {
-    marginTop: 14,
+    marginTop: spacing.lg,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: touchTarget,
   },
   loginText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   loginLink: {
-    color: '#2D6A6F',
-    fontFamily: 'Inter-SemiBold',
+    ...typography.bodyStrong,
+    color: colors.primary,
   },
 });

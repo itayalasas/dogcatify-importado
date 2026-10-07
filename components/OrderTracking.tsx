@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
 import { Package, CheckCircle, Truck, Home, Clock, XCircle, AlertCircle, RefreshCw } from 'lucide-react-native';
 import { type OrderFulfillmentMode } from '../utils/orderFulfillment';
+import { colors, radius, spacing, typography } from '../constants/theme';
 
 interface TrackingStep {
   id: string;
@@ -42,8 +43,8 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
     if (isPaymentLinkExpired && onRetryPayment) {
       // Si el link expiró, regenerar nueva preferencia
       Alert.alert(
-        'Link de pago expirado',
-        'El link de pago ha expirado. Se generará uno nuevo.',
+        'Link de pago vencido',
+        'El link de pago venció. Vamos a generar uno nuevo.',
         [
           { text: 'Cancelar', style: 'cancel' },
           {
@@ -83,7 +84,7 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
           description: 'No hay stock suficiente para completar este pedido. Te contactaremos pronto.',
           icon: AlertCircle,
           status: 'failed',
-          date: orderDate?.toLocaleDateString('es-ES', {
+          date: orderDate?.toLocaleDateString('es-UY', {
             day: '2-digit',
             month: 'short',
             hour: '2-digit',
@@ -103,11 +104,11 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
           id: 'payment_failed',
           label: 'Pago fallido',
           description: isPaymentLinkExpired
-            ? 'El link de pago expiró. Genera uno nuevo para continuar.'
-            : 'Hubo un problema con el pago. Intenta nuevamente.',
+            ? 'El link de pago venció. Generá uno nuevo para continuar.'
+            : 'Hubo un problema con el pago. Intentá nuevamente.',
           icon: AlertCircle,
           status: 'failed',
-          date: orderDate?.toLocaleDateString('es-ES', {
+          date: orderDate?.toLocaleDateString('es-UY', {
             day: '2-digit',
             month: 'short',
             hour: '2-digit',
@@ -119,10 +120,10 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
       serviceSteps.push({
         id: 'pending',
         label: isPaymentFailed ? 'Esperando pago' : 'Pedido recibido',
-        description: isPaymentFailed ? 'Reintenta el pago para continuar' : 'Tu pedido ha sido registrado',
+        description: isPaymentFailed ? 'Reintentá el pago para continuar' : 'Tu pedido fue registrado',
         icon: Clock,
         status: isPaymentFailed ? 'active' : 'completed',
-        date: !isPaymentFailed ? orderDate?.toLocaleDateString('es-ES', {
+        date: !isPaymentFailed ? orderDate?.toLocaleDateString('es-UY', {
           day: '2-digit',
           month: 'short',
           hour: '2-digit',
@@ -148,7 +149,7 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
           description: 'El pedido fue cancelado',
           icon: XCircle,
           status: 'cancelled',
-          date: cancelledDate?.toLocaleDateString('es-ES', {
+          date: cancelledDate?.toLocaleDateString('es-UY', {
             day: '2-digit',
             month: 'short',
             hour: '2-digit',
@@ -174,10 +175,10 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
         {
           id: 'pending',
           label: 'Pedido recibido',
-          description: 'Tu pedido ha sido registrado',
+          description: 'Tu pedido fue registrado',
           icon: Clock,
           status: 'completed',
-          date: orderDate?.toLocaleDateString('es-ES', {
+          date: orderDate?.toLocaleDateString('es-UY', {
             day: '2-digit',
             month: 'short',
             hour: '2-digit',
@@ -231,7 +232,7 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
           description: 'El pedido fue cancelado',
           icon: XCircle,
           status: 'cancelled',
-          date: cancelledDate?.toLocaleDateString('es-ES', {
+          date: cancelledDate?.toLocaleDateString('es-UY', {
             day: '2-digit',
             month: 'short',
             hour: '2-digit',
@@ -248,10 +249,10 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
       {
         id: 'pending',
         label: 'Pedido recibido',
-        description: 'Tu pedido ha sido registrado',
+        description: 'Tu pedido fue registrado',
         icon: Clock,
         status: 'completed',
-        date: orderDate?.toLocaleDateString('es-ES', {
+        date: orderDate?.toLocaleDateString('es-UY', {
           day: '2-digit',
           month: 'short',
           hour: '2-digit',
@@ -300,7 +301,7 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
       {
         id: 'delivered',
         label: 'Entregado',
-        description: '¡Tu pedido ha sido entregado!',
+        description: '¡Tu pedido fue entregado!',
         icon: Home,
         status: orderStatus === 'delivered' || orderStatus === 'completed' ? 'completed' :
                 isCancelled ? 'cancelled' :
@@ -315,7 +316,7 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
         description: 'El pedido fue cancelado',
         icon: XCircle,
         status: 'cancelled',
-        date: cancelledDate?.toLocaleDateString('es-ES', {
+        date: cancelledDate?.toLocaleDateString('es-UY', {
           day: '2-digit',
           month: 'short',
           hour: '2-digit',
@@ -332,21 +333,21 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
 
   const getStatusColor = (status: 'completed' | 'active' | 'pending' | 'cancelled' | 'failed') => {
     switch (status) {
-      case 'completed': return '#10B981';
-      case 'active': return '#3B82F6';
-      case 'cancelled': return '#EF4444';
-      case 'failed': return '#F59E0B';
-      case 'pending': return '#D1D5DB';
+      case 'completed': return colors.success;
+      case 'active': return colors.primary;
+      case 'cancelled': return colors.danger;
+      case 'failed': return colors.warning;
+      case 'pending': return colors.borderStrong;
     }
   };
 
   const getBackgroundColor = (status: 'completed' | 'active' | 'pending' | 'cancelled' | 'failed') => {
     switch (status) {
-      case 'completed': return '#D1FAE5';
-      case 'active': return '#DBEAFE';
-      case 'cancelled': return '#FEE2E2';
-      case 'failed': return '#FEF3C7';
-      case 'pending': return '#F3F4F6';
+      case 'completed': return colors.successSoft;
+      case 'active': return colors.primarySoft;
+      case 'cancelled': return colors.dangerSoft;
+      case 'failed': return colors.warningSoft;
+      case 'pending': return colors.surfaceAlt;
     }
   };
 
@@ -364,7 +365,12 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
         }
 
         return (
-          <View key={step.id} style={styles.stepContainer}>
+          <View
+            key={step.id}
+            style={styles.stepContainer}
+            accessible={step.status !== 'failed'}
+            accessibilityLabel={`${step.label}. ${step.description}${step.date ? `. ${step.date}` : ''}${step.status === 'active' ? '. En proceso' : step.status === 'completed' ? '. Completado' : ''}`}
+          >
             <View style={styles.stepIndicator}>
               <View
                 style={[
@@ -372,12 +378,12 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
                   {
                     backgroundColor,
                     borderColor: statusColor,
-                    borderWidth: step.status === 'active' ? 3 : 2
+                    borderWidth: step.status === 'active' ? 2 : 1.5
                   }
                 ]}
               >
                 <Icon
-                  size={step.status === 'active' ? 24 : 20}
+                  size={step.status === 'active' ? 20 : 18}
                   color={statusColor}
                   strokeWidth={step.status === 'completed' ? 3 : 2}
                 />
@@ -399,7 +405,7 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
                   style={[
                     styles.stepLabel,
                     {
-                      color: step.status !== 'pending' ? '#111827' : '#9CA3AF',
+                      color: step.status !== 'pending' ? colors.text : colors.textTertiary,
                       fontFamily: step.status === 'active' ? 'Inter-Bold' : 'Inter-SemiBold'
                     }
                   ]}
@@ -414,7 +420,7 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
               <Text
                 style={[
                   styles.stepDescription,
-                  { color: step.status !== 'pending' ? '#6B7280' : '#D1D5DB' }
+                  { color: step.status !== 'pending' ? colors.textSecondary : colors.textTertiary }
                 ]}
               >
                 {step.description}
@@ -432,8 +438,9 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
                   style={styles.retryButton}
                   onPress={handleRetryPayment}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
                 >
-                  <RefreshCw size={18} color="#FFFFFF" strokeWidth={2.5} />
+                  <RefreshCw size={18} color={colors.onPrimary} strokeWidth={2.5} />
                   <Text style={styles.retryButtonText}>
                     {isPaymentLinkExpired ? 'Generar nuevo link' : 'Reintentar pago'}
                   </Text>
@@ -449,50 +456,51 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
   },
   stepContainer: {
     flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   stepIndicator: {
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: spacing.lg,
   },
   iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
     justifyContent: 'center',
     alignItems: 'center',
   },
   line: {
-    width: 3,
+    width: 2,
     flex: 1,
-    marginTop: 4,
-    marginBottom: 4,
-    minHeight: 40,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+    minHeight: 24,
   },
   stepContent: {
     flex: 1,
-    paddingTop: 8,
-    paddingBottom: 16,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.lg,
   },
   stepTextContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   stepLabel: {
-    fontSize: 16,
+    ...typography.bodyStrong,
+    fontSize: 15,
     flex: 1,
   },
   stepDate: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 8,
+    color: colors.textSecondary,
+    marginLeft: spacing.sm,
   },
   stepDescription: {
     fontSize: 14,
@@ -502,39 +510,39 @@ const styles = StyleSheet.create({
   activeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#DBEAFE',
+    backgroundColor: colors.primarySoft,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 12,
-    marginTop: 8,
+    borderRadius: radius.md,
+    marginTop: spacing.sm,
     alignSelf: 'flex-start',
   },
   activeDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
     marginRight: 6,
   },
   activeText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#1E40AF',
+    color: colors.primaryStrong,
   },
   retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F59E0B',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginTop: 12,
-    gap: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    minHeight: 44,
+    borderRadius: radius.md,
+    marginTop: spacing.md,
+    gap: spacing.sm,
   },
   retryButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: colors.white,
   },
 });

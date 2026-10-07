@@ -11,9 +11,11 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { router, Stack } from 'expo-router';
-import { ArrowLeft, User, Mail, Lock } from 'lucide-react-native';
+import { ArrowLeft, User, Mail, Lock, Check, CheckCircle2, Circle } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { IconButton } from '../../components/ui/IconButton';
+import { colors, typography, spacing, radius, hitSlop, touchTarget } from '../../constants/theme';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
@@ -132,7 +134,7 @@ export default function Register() {
     }
 
     if (!acceptTerms) {
-      Alert.alert('Error', 'Debes aceptar los términos y condiciones');
+      Alert.alert('Error', 'Tenés que aceptar los términos y condiciones');
       return;
     }
 
@@ -206,8 +208,8 @@ export default function Register() {
 
       const confirmationTitle = emailResult.success ? 'Registro exitoso' : 'Cuenta creada';
       const confirmationMessage = emailResult.success
-        ? `Tu cuenta ha sido creada exitosamente.\n\nHemos enviado un correo de confirmación a:\n${trimmedEmail}\n\nPor favor revisa tu bandeja de entrada y la carpeta de spam, y haz clic en el enlace de confirmación.\n\nEl enlace expira en 24 horas.`
-        : `Tu cuenta ha sido creada, pero no pudimos enviar el correo de confirmación automáticamente.\n\nRevisa tu conexión o intenta reenviar el correo desde la pantalla de inicio de sesión.\n\nCorreo registrado:\n${trimmedEmail}`;
+        ? `Tu cuenta se creó correctamente.\n\nTe enviamos un correo de confirmación a:\n${trimmedEmail}\n\nRevisá tu bandeja de entrada y la carpeta de spam, y tocá el enlace de confirmación.\n\nEl enlace vence en 24 horas.`
+        : `Tu cuenta se creó, pero no pudimos enviar el correo de confirmación automáticamente.\n\nRevisá tu conexión o reenviá el correo desde la pantalla de ingreso.\n\nCorreo registrado:\n${trimmedEmail}`;
 
       // signUp() above triggers Supabase's own SIGNED_IN event, which
       // AuthContext's onAuthStateChange listener treats like a login attempt:
@@ -223,7 +225,7 @@ export default function Register() {
       Alert.alert(
         confirmationTitle,
         confirmationMessage,
-        [{ text: 'ENTENDIDO', onPress: () => {
+        [{ text: 'Entendido', onPress: () => {
           clearAuthError();
           router.replace('/auth/login');
         } }]
@@ -253,26 +255,33 @@ export default function Register() {
       >
         <Stack.Screen options={{ headerShown: false }} />
 
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
-          <Image
-            source={require('../../assets/images/logo-transp.png')}
-            style={styles.logo}
+        <View style={styles.topBar}>
+          <IconButton
+            icon={<ArrowLeft size={24} color={colors.text} />}
+            onPress={() => router.back()}
+            accessibilityLabel="Volver"
           />
         </View>
 
-        <View style={styles.form}>
-          <Text style={styles.title}>¡Únete a DogCatiFy! 🐾</Text>
+        <View style={styles.header}>
+          <Image
+            source={require('../../assets/images/logo-transp.png')}
+            style={styles.logo}
+            accessibilityLabel="DogCatiFy"
+          />
+          <Text style={styles.title} accessibilityRole="header">Creá tu cuenta</Text>
           <Text style={styles.subtitle}>{t('createAccountSubtitle')}</Text>
+        </View>
 
+        <View style={styles.form}>
           <Input
             label={t('fullName')}
             placeholder="Tu nombre completo"
             value={fullName}
             onChangeText={setFullName}
-            leftIcon={<User size={20} color="#6B7280" />}
+            autoComplete="name"
+            textContentType="name"
+            leftIcon={<User size={20} color={colors.icon} />}
           />
 
           <Input
@@ -282,7 +291,9 @@ export default function Register() {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
-            leftIcon={<Mail size={20} color="#6B7280" />}
+            autoComplete="email"
+            textContentType="emailAddress"
+            leftIcon={<Mail size={20} color={colors.icon} />}
           />
 
           <Input
@@ -291,7 +302,9 @@ export default function Register() {
             value={password}
             onChangeText={handlePasswordChange}
             secureTextEntry={!showPassword}
-            leftIcon={<Lock size={20} color="#6B7280" />}
+            autoCapitalize="none"
+            textContentType="newPassword"
+            leftIcon={<Lock size={20} color={colors.icon} />}
             showPasswordToggle={true}
             isPasswordVisible={showPassword}
             onTogglePasswordVisibility={() => setShowPassword(!showPassword)}
@@ -301,7 +314,7 @@ export default function Register() {
           {password.length > 0 && (
             <View style={styles.passwordFeedbackContainer}>
               <View style={styles.passwordStrengthHeader}>
-                <Text style={styles.passwordStrengthLabel}>Fortaleza</Text>
+                <Text style={styles.passwordStrengthLabel}>Seguridad de la contraseña</Text>
                 <Text style={styles.passwordStrengthValue}>{getPasswordStrength()}</Text>
               </View>
 
@@ -316,15 +329,21 @@ export default function Register() {
 
               <View style={styles.passwordRulesList}>
                 {passwordRules.map((rule) => (
-                  <Text
-                    key={rule.label}
-                    style={[
-                      styles.passwordRuleText,
-                      rule.valid ? styles.passwordRuleValid : styles.passwordRulePending,
-                    ]}
-                  >
-                    {rule.valid ? '✓' : '○'} {rule.label}
-                  </Text>
+                  <View key={rule.label} style={styles.passwordRuleRow}>
+                    {rule.valid ? (
+                      <CheckCircle2 size={16} color={colors.success} />
+                    ) : (
+                      <Circle size={16} color={colors.textTertiary} />
+                    )}
+                    <Text
+                      style={[
+                        styles.passwordRuleText,
+                        rule.valid ? styles.passwordRuleValid : styles.passwordRulePending,
+                      ]}
+                    >
+                      {rule.label}
+                    </Text>
+                  </View>
                 ))}
               </View>
             </View>
@@ -332,49 +351,44 @@ export default function Register() {
 
           <Input
             label={t('confirmPassword')}
-            placeholder="Repite tu contraseña"
+            placeholder="Repetí tu contraseña"
             value={confirmPassword}
             onChangeText={handleConfirmPasswordChange}
             secureTextEntry={!showConfirmPassword}
-            leftIcon={<Lock size={20} color="#6B7280" />}
+            autoCapitalize="none"
+            textContentType="newPassword"
+            leftIcon={<Lock size={20} color={colors.icon} />}
             showPasswordToggle={true}
             isPasswordVisible={showConfirmPassword}
             onTogglePasswordVisibility={() => setShowConfirmPassword(!showConfirmPassword)}
             error={confirmPasswordError}
+            helperText={passwordsMatch ? 'Las contraseñas coinciden' : undefined}
           />
 
-          {confirmPassword.length > 0 && (
-            <Text
-              style={[
-                styles.confirmPasswordStatus,
-                passwordsMatch ? styles.passwordRuleValid : styles.confirmPasswordError,
-              ]}
-            >
-              {passwordsMatch ? 'Las contraseñas coinciden' : 'Las contraseñas no coinciden'}
-            </Text>
-          )}
-
           <View style={styles.termsContainer}>
-            <View style={styles.checkbox}>
-              <TouchableOpacity
-                onPress={() => setAcceptTerms(!acceptTerms)}
-                style={[styles.checkboxBox, acceptTerms && styles.checkboxChecked]}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                {acceptTerms && <Text style={styles.checkmark}>✓</Text>}
-              </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setAcceptTerms(!acceptTerms)}
+              style={styles.checkboxTouch}
+              hitSlop={hitSlop}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: acceptTerms }}
+              accessibilityLabel="Acepto las políticas de privacidad y los términos de servicio"
+            >
+              <View style={[styles.checkboxBox, acceptTerms && styles.checkboxChecked]}>
+                {acceptTerms && <Check size={14} color={colors.onPrimary} strokeWidth={3} />}
+              </View>
+            </TouchableOpacity>
 
-              <Text style={styles.termsText}>
-                Acepto las{' '}
-                <Text style={styles.termsLink} onPress={handlePrivacyPress}>
-                  políticas de privacidad
-                </Text>{' '}
-                y los{' '}
-                <Text style={styles.termsLink} onPress={handleTermsPress}>
-                  términos de servicio
-                </Text>
+            <Text style={styles.termsText}>
+              Acepto las{' '}
+              <Text style={styles.termsLink} onPress={handlePrivacyPress} accessibilityRole="link">
+                políticas de privacidad
+              </Text>{' '}
+              y los{' '}
+              <Text style={styles.termsLink} onPress={handleTermsPress} accessibilityRole="link">
+                términos de servicio
               </Text>
-            </View>
+            </Text>
           </View>
 
           <Button
@@ -385,23 +399,29 @@ export default function Register() {
             size="large"
           />
 
-          <TouchableOpacity
-            style={styles.loginButton}
-            onPress={() => router.replace('/auth/login')}
-          >
-            <Text style={styles.loginText}>
-              {t('alreadyHaveAccount')} <Text style={styles.loginLink}>{t('signIn')}</Text>
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={styles.textLink}
+              onPress={() => router.replace('/auth/login')}
+              accessibilityRole="link"
+            >
+              <Text style={styles.footerText}>
+                {t('alreadyHaveAccount')} <Text style={styles.link}>{t('signIn')}</Text>
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.partnerButton}
-            onPress={() => router.push('/auth/become-partner')}
-          >
-            <Text style={styles.partnerText}>
-              ¿Sos aliado? <Text style={styles.partnerLink}>{t('becomePartner')}</Text>
-            </Text>
-          </TouchableOpacity>
+            <View style={styles.divider} />
+
+            <TouchableOpacity
+              style={styles.textLink}
+              onPress={() => router.push('/auth/become-partner')}
+              accessibilityRole="link"
+            >
+              <Text style={styles.footerText}>
+                ¿Tenés un negocio? <Text style={styles.link}>{t('becomePartner')}</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -411,174 +431,158 @@ export default function Register() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   scrollView: {
     flex: 1,
   },
   content: {
     flexGrow: 1,
-    padding: 20,
-    paddingTop: 50,
-    paddingBottom: 40,
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.xxxl,
+    paddingBottom: spacing.xxxl,
+  },
+  topBar: {
+    marginLeft: -spacing.md,
+    marginBottom: spacing.xs,
+    alignItems: 'flex-start',
   },
   header: {
-    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
-  },
-  backButton: {
-    padding: 8,
-    marginRight: 16,
+    marginBottom: spacing.xxl,
   },
   logo: {
-    width: 100,
-    height: 100,
+    width: 88,
+    height: 88,
     resizeMode: 'contain',
+    marginBottom: spacing.md,
   },
   form: {
     width: '100%',
     maxWidth: 400,
     alignSelf: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   title: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
-    marginBottom: 8,
+    ...typography.display,
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginBottom: 20,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 22,
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    maxWidth: 320,
   },
   passwordFeedbackContainer: {
-    marginTop: -4,
-    marginBottom: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
+    marginTop: -spacing.xs,
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.background,
   },
   passwordStrengthHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.sm,
   },
   passwordStrengthLabel: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
+    ...typography.label,
+    color: colors.textSecondary,
   },
   passwordStrengthValue: {
-    fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#2D6A6F',
+    ...typography.label,
+    fontFamily: typography.bodyStrong.fontFamily,
+    fontWeight: '600',
+    color: colors.primary,
   },
   passwordStrengthBarBackground: {
-    height: 10,
-    borderRadius: 999,
-    backgroundColor: '#D1D5DB',
+    height: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.border,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
   passwordStrengthBarFill: {
     height: '100%',
-    borderRadius: 999,
-    backgroundColor: '#2D6A6F',
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
   },
   passwordRulesList: {
-    gap: 8,
+    gap: spacing.sm,
+  },
+  passwordRuleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   passwordRuleText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 20,
+    ...typography.bodySmall,
+    flex: 1,
   },
   passwordRuleValid: {
-    color: '#2D6A6F',
+    color: colors.success,
   },
   passwordRulePending: {
-    color: '#6B7280',
-  },
-  confirmPasswordStatus: {
-    marginTop: -4,
-    marginBottom: 16,
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    lineHeight: 20,
-  },
-  confirmPasswordError: {
-    color: '#DC2626',
+    color: colors.textSecondary,
   },
   termsContainer: {
-    marginBottom: 24,
-  },
-  checkbox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    marginBottom: spacing.xxl,
+  },
+  checkboxTouch: {
+    marginRight: spacing.md,
+    paddingTop: spacing.xxs,
   },
   checkboxBox: {
-    width: 20,
-    height: 20,
+    width: 22,
+    height: 22,
     borderWidth: 2,
-    borderColor: '#D1D5DB',
-    borderRadius: 4,
-    marginRight: 12,
-    marginTop: 2,
+    borderColor: colors.borderStrong,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.surface,
   },
   checkboxChecked: {
-    backgroundColor: '#2D6A6F',
-    borderColor: '#2D6A6F',
-  },
-  checkmark: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   termsText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     flex: 1,
-    lineHeight: 20,
   },
   termsLink: {
-    color: '#3B82F6',
+    color: colors.primary,
+    fontFamily: typography.label.fontFamily,
     textDecorationLine: 'underline',
   },
-  loginButton: {
-    marginTop: 24,
+  footer: {
+    marginTop: spacing.xl,
     alignItems: 'center',
   },
-  loginText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+  textLink: {
+    minHeight: touchTarget,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xs,
   },
-  loginLink: {
-    color: '#3B82F6',
-    fontFamily: 'Inter-Medium',
-  },
-  partnerButton: {
-    marginTop: 14,
-    alignItems: 'center',
-  },
-  partnerText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+  footerText: {
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
-  partnerLink: {
-    color: '#2D6A6F',
-    fontFamily: 'Inter-SemiBold',
+  link: {
+    ...typography.bodyStrong,
+    color: colors.primary,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+    alignSelf: 'stretch',
+    marginVertical: spacing.sm,
   },
 });

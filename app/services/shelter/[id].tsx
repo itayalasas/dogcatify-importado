@@ -5,6 +5,8 @@ import { ArrowLeft, Phone, MessageCircle, Heart, MapPin, Calendar, Scale, Star }
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { LoadingScreen } from '../../../components/ui/LoadingScreen';
+import { ScreenHeader, Badge, EmptyState } from '../../../components/ui';
+import { colors, radius, spacing, typography } from '../../../constants/theme';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient } from '../../../lib/supabase';
 
@@ -98,7 +100,7 @@ export default function ShelterAdoptions() {
 
   const handleStartAdoptionChat = async (pet: any) => {
     if (!currentUser) {
-      Alert.alert('Iniciar sesión', 'Debes iniciar sesión para contactar sobre adopciones');
+      Alert.alert('Iniciar sesión', 'Tenés que iniciar sesión para consultar sobre adopciones.');
       return;
     }
 
@@ -191,35 +193,25 @@ export default function ShelterAdoptions() {
       <View style={styles.petInfo}>
         <View style={styles.petHeader}>
           <Text style={styles.petName}>
-            {pet.species === 'dog' ? '🐶' : '🐱'} Nombre: {pet.name}
+            {pet.species === 'dog' ? '🐶' : pet.species === 'cat' ? '🐱' : '🐾'} {pet.name}
           </Text>
-          <View style={styles.genderBadge}>
-            <Text style={styles.genderText}>
-              {pet.gender === 'male' ? '♂️' : '♀️'}
-            </Text>
-          </View>
+          <Badge label={pet.gender === 'male' ? 'Macho' : 'Hembra'} tone="neutral" size="small" />
         </View>
 
         <Text style={styles.petBasicInfo}>
-          Edad: {formatAge(pet.age, pet.age_unit)} | Tamaño: {getSizeLabel(pet.size)} | Raza: {pet.breed}
+          {formatAge(pet.age, pet.age_unit)} · {getSizeLabel(pet.size)} · {pet.breed}
         </Text>
 
         {/* Health Status */}
         <View style={styles.healthStatus}>
           {pet.is_vaccinated && (
-            <View style={styles.healthBadge}>
-              <Text style={styles.healthBadgeText}>Vacunado</Text>
-            </View>
+            <Badge label="Vacunado" tone="success" size="small" />
           )}
           {pet.is_neutered && (
-            <View style={styles.healthBadge}>
-              <Text style={styles.healthBadgeText}>Castrado</Text>
-            </View>
+            <Badge label="Castrado" tone="success" size="small" />
           )}
           {pet.is_dewormed && (
-            <View style={styles.healthBadge}>
-              <Text style={styles.healthBadgeText}>Desparasitado</Text>
-            </View>
+            <Badge label="Desparasitado" tone="success" size="small" />
           )}
         </View>
 
@@ -244,7 +236,7 @@ export default function ShelterAdoptions() {
 
         {/* Location */}
         <View style={styles.locationSection}>
-          <MapPin size={14} color="#6B7280" />
+          <MapPin size={14} color={colors.textTertiary} />
           <Text style={styles.locationText}>
             {pet.adoption_zones || 'Consultar zona de adopción'}
           </Text>
@@ -259,21 +251,25 @@ export default function ShelterAdoptions() {
 
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
-          <TouchableOpacity 
-            style={styles.callButton}
+          <Button
+            title="Llamar"
+            variant="outline"
+            fullWidth={false}
+            style={styles.actionButton}
+            icon={<Phone size={16} color={colors.primary} />}
             onPress={handleCallShelter}
-          >
-            <Phone size={16} color="#FFFFFF" />
-            <Text style={styles.callButtonText}>Llamar</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.adoptButton}
+            accessibilityLabel={`Llamar al refugio por ${pet.name}`}
+          />
+
+          <Button
+            title="Quiero adoptar"
+            variant="primary"
+            fullWidth={false}
+            style={styles.actionButton}
+            icon={<MessageCircle size={16} color={colors.onPrimary} />}
             onPress={() => handleStartAdoptionChat(pet)}
-          >
-            <MessageCircle size={16} color="#FFFFFF" />
-            <Text style={styles.adoptButtonText}>Adopción</Text>
-          </TouchableOpacity>
+            accessibilityLabel={`Iniciar adopción de ${pet.name}`}
+          />
         </View>
       </View>
     </Card>
@@ -285,13 +281,7 @@ export default function ShelterAdoptions() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Adopciones</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title="Adopciones" onBack={handleBackPress} />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Shelter Info */}
@@ -308,13 +298,13 @@ export default function ShelterAdoptions() {
             <View style={styles.shelterInfo}>
               <Text style={styles.shelterName}>{shelter?.businessName || 'Refugio'}</Text>
               <View style={styles.shelterDetail}>
-                <MapPin size={14} color="#6B7280" />
+                <MapPin size={14} color={colors.textTertiary} />
                 <Text style={styles.shelterDetailText}>
                   {shelter?.address || 'Ubicación no disponible'}
                 </Text>
               </View>
               <View style={styles.shelterDetail}>
-                <Phone size={14} color="#6B7280" />
+                <Phone size={14} color={colors.textTertiary} />
                 <Text style={styles.shelterDetailText}>
                   {shelter?.phone || 'Teléfono no disponible'}
                 </Text>
@@ -329,18 +319,16 @@ export default function ShelterAdoptions() {
 
         {/* Adoption Pets */}
         <View style={styles.petsSection}>
-          <Text style={styles.sectionTitle}>
-            🐾 Mascotas en Adopción ({adoptionPets.length})
+          <Text style={styles.sectionTitle} accessibilityRole="header">
+            Mascotas en adopción ({adoptionPets.length})
           </Text>
           
           {adoptionPets.length === 0 ? (
-            <Card style={styles.emptyCard}>
-              <Heart size={48} color="#9CA3AF" />
-              <Text style={styles.emptyTitle}>No hay mascotas disponibles</Text>
-              <Text style={styles.emptySubtitle}>
-                Este refugio no tiene mascotas en adopción en este momento
-              </Text>
-            </Card>
+            <EmptyState
+              icon={<Heart size={32} color={colors.primary} />}
+              title="No hay mascotas disponibles"
+              description="Este refugio no tiene mascotas en adopción en este momento."
+            />
           ) : (
             adoptionPets.map(renderPetCard)
           )}
@@ -353,7 +341,7 @@ export default function ShelterAdoptions() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
@@ -362,9 +350,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: 8,
@@ -372,7 +360,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 32,
@@ -389,7 +377,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   shelterCard: {
     marginBottom: 16,
@@ -409,14 +397,14 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.danger,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   logoPlaceholderText: {
     fontSize: 24,
-    color: '#FFFFFF',
+    color: colors.white,
   },
   shelterInfo: {
     flex: 1,
@@ -424,7 +412,7 @@ const styles = StyleSheet.create({
   shelterName: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 4,
   },
   shelterDetail: {
@@ -435,13 +423,13 @@ const styles = StyleSheet.create({
   shelterDetailText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginLeft: 4,
   },
   shelterDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   petsSection: {
@@ -450,7 +438,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 12,
   },
   petCard: {
@@ -465,7 +453,7 @@ const styles = StyleSheet.create({
   petImagePlaceholder: {
     width: '100%',
     height: 200,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -484,14 +472,14 @@ const styles = StyleSheet.create({
   petName: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
   },
   genderBadge: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: radius.md,
   },
   genderText: {
     fontSize: 16,
@@ -499,7 +487,7 @@ const styles = StyleSheet.create({
   petBasicInfo: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    color: colors.primary,
     marginBottom: 12,
   },
   healthStatus: {
@@ -509,10 +497,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   healthBadge: {
-    backgroundColor: '#D1FAE5',
+    backgroundColor: colors.successSoft,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: radius.md,
   },
   healthBadgeText: {
     fontSize: 12,
@@ -522,14 +510,14 @@ const styles = StyleSheet.create({
   petDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
+    color: colors.textSecondary,
     lineHeight: 20,
     marginBottom: 12,
   },
   temperamentText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 12,
   },
   requirementsSection: {
@@ -540,13 +528,13 @@ const styles = StyleSheet.create({
   requirementsTitle: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
   },
   requirementsMore: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   locationSection: {
     flexDirection: 'row',
@@ -556,7 +544,7 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginLeft: 4,
   },
   contactSection: {
@@ -565,41 +553,42 @@ const styles = StyleSheet.create({
   contactText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   actionButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
+    marginTop: spacing.lg,
   },
   callButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     gap: 6,
   },
   callButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   adoptButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.danger,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     gap: 6,
   },
   adoptButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   emptyCard: {
     alignItems: 'center',
@@ -608,14 +597,17 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginTop: 16,
     marginBottom: 4,
   },
   emptySubtitle: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
+  },
+  actionButton: {
+    flex: 1,
   },
 });
