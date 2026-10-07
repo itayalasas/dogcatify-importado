@@ -97,6 +97,18 @@ async function getAppEmailConfirmationStatus(
   }
 }
 
+const isTransientNetworkError = (error: any) => {
+  const text = `${error?.name || ''} ${error?.message || ''}`.toLowerCase();
+  return (
+    text.includes('retryable') ||
+    text.includes('network') ||
+    text.includes('fetch') ||
+    text.includes('cancelled') ||
+    text.includes('timeout') ||
+    text.includes('offline')
+  );
+};
+
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -119,6 +131,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isHandlingExpirationRef = useRef(false);
   const lastValidationRef = useRef<number>(0);
   const isExplicitLoginRef = useRef(false);
+  const isExplicitLogoutRef = useRef(false);
+  const currentUserRef = useRef<User | null>(null);
+  currentUserRef.current = currentUser;
 
   const updateCurrentUser = (updatedUser: User) => {
     setCurrentUser(updatedUser);
@@ -159,6 +174,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { data: authListener } = supabaseClient.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
+
+        if (
+          event === 'SIGNED_OUT' &&
+          currentUserRef.current &&
+          !isExplicitLogoutRef.current &&
+          !isHandlingExpirationRef.current
+        ) {
+          // Nobody asked for this sign-out (the refresh token was revoked or
+          // expired and Supabase dropped the session): tell the user and send
+          // them to login instead of leaving a half-dead screen.
+          console.log('Session ended without a logout request, handling as expired');
+          void handleTokenExpiration();
+          return;
+        }
 
         if (event === 'SIGNED_OUT' || !session) {
           if (!mounted) return;
@@ -525,10 +554,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (now >= tokenExp) {
         console.log('Token has expired, attempting refresh...');
         try {
-          const { data: refreshData, error: refreshError } = await supabaseClient.auth.refreshSession();
+          // Coming back from the background (e.g. after paying in Mercado
+          // Pago) the network is often not reachable for a moment, so a
+          // failed refresh there says nothing about the session itself.
+          // Retry a few times, and if it still can't reach the server don't
+          // log the user out: the next real request will surface a genuine
+          // auth failure if there is one.
+          let refreshResult = await supabaseClient.auth.refreshSession();
+          for (let attempt = 0; attempt < 3 && refreshResult.error && isTransientNetworkError(refreshResult.error); attempt += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+            refreshResult = await supabaseClient.auth.refreshSession();
+          }
+
+          const { data: refreshData, error: refreshError } = refreshResult;
 
           if (refreshError) {
             console.error('Failed to refresh expired session:', refreshError);
+            if (isTransientNetworkError(refreshError)) {
+              console.log('Refresh failed on a network error, keeping the session');
+              return true;
+            }
             if (refreshError.message?.includes('refresh_token_not_found') ||
                 refreshError.message?.includes('Invalid Refresh Token')) {
               console.log('Refresh token invalid, session cannot be recovered');
@@ -547,6 +592,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return true;
         } catch (refreshError) {
           console.error('Exception during session refresh:', refreshError);
+          if (isTransientNetworkError(refreshError)) {
+            return true;
+          }
           return false;
         }
       }
@@ -617,6 +665,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     isHandlingExpirationRef.current = true;
+    // Never let the guard stay stuck (e.g. the alert is never dismissed):
+    // otherwise a later expiration would be silently ignored.
+    setTimeout(() => {
+      isHandlingExpirationRef.current = false;
+    }, 30000);
 
     try {
       console.log('Handling token expiration...');
@@ -633,28 +686,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSession(null);
       setIsEmailConfirmed(false);
 
+      // Leave the broken screen first. The sign-out below needs the network
+      // and can hang on exactly the connection that just failed; the user must
+      // not be left stranded waiting for it.
       try {
-        await supabaseClient.auth.signOut();
-      } catch (signOutError) {
-        console.error('Error during sign out:', signOutError);
+        router.replace('/auth/login');
+      } catch (routerError) {
+        console.error('Error navigating to login:', routerError);
       }
 
-      setTimeout(() => {
-        try {
-          router.replace('/auth/login');
-        } catch (routerError) {
-          console.error('Error navigating to login:', routerError);
-        }
-      }, 100);
+      // Local sign-out only (no server round trip needed for an expired
+      // session), bounded so it can never block anything.
+      void Promise.race([
+        (supabaseClient.auth as any).signOut({ scope: 'local' }),
+        new Promise((resolve) => setTimeout(resolve, 4000)),
+      ]).catch((signOutError) => {
+        console.error('Error during sign out:', signOutError);
+      });
 
       Alert.alert(
-        'Sesión expirada',
-        'Tu sesión ha expirado por seguridad. Por favor inicia sesión nuevamente.',
+        'Sesión vencida',
+        'Tu sesión venció por seguridad. Inicia sesión nuevamente para continuar.',
         [
           {
-            text: 'OK',
+            text: 'Iniciar sesión',
             onPress: () => {
               isHandlingExpirationRef.current = false;
+              try {
+                router.replace('/auth/login');
+              } catch (routerError) {
+                console.error('Error navigating to login:', routerError);
+              }
             }
           }
         ],
@@ -668,13 +730,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error('Error handling token expiration:', error);
       isHandlingExpirationRef.current = false;
-      setTimeout(() => {
-        try {
-          router.replace('/auth/login');
-        } catch (routerError) {
-          console.error('Error in fallback navigation:', routerError);
-        }
-      }, 100);
+      try {
+        router.replace('/auth/login');
+      } catch (routerError) {
+        console.error('Error in fallback navigation:', routerError);
+      }
     }
   };
   const login = async (email: string, password: string): Promise<User | null> => {
@@ -682,6 +742,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // confirmation+profile-load pass for the SIGNED_IN event this call is
     // about to trigger, since this function already does that work itself.
     isExplicitLoginRef.current = true;
+    isHandlingExpirationRef.current = false;
     // Clears any suppression a prior account-deletion flow left in place
     // (see app/profile/delete-account.tsx) so a genuinely expired session
     // is handled normally from here on.
@@ -880,6 +941,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
+    isExplicitLogoutRef.current = true;
     try {
       logger.info('User logging out', { userId: currentUser?.id });
 
@@ -930,6 +992,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       logger.error('Logout error', error as Error);
       throw error;
+    } finally {
+      isExplicitLogoutRef.current = false;
     }
   };
 

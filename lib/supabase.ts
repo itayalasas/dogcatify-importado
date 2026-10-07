@@ -168,9 +168,51 @@ const isSessionErrorResponse = (status: number, responseText: string): boolean =
   );
 };
 
+// A request that never answers is worse than one that fails: supabase-js
+// serializes session work behind an internal lock, so a refresh-token call
+// stuck on a dead connection leaves every other query waiting on that lock
+// forever — screens spin on "Cargando..." and nothing ever reports that the
+// session expired. Bound auth and REST calls so a hung one errors out and
+// frees the lock. Storage uploads and edge functions can legitimately take
+// longer and are left alone.
+const REQUEST_TIMEOUT_MS = 20000;
+
+const fetchWithTimeout = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const url = typeof input === 'string'
+    ? input
+    : input instanceof URL
+      ? input.toString()
+      : (input as Request).url;
+
+  if (!url.includes('/auth/v1/') && !url.includes('/rest/v1/')) {
+    return fetch(input, init);
+  }
+
+  const controller = new AbortController();
+  const upstreamSignal = init?.signal;
+  const abortFromUpstream = () => controller.abort();
+
+  if (upstreamSignal) {
+    if (upstreamSignal.aborted) {
+      controller.abort();
+    } else {
+      upstreamSignal.addEventListener('abort', abortFromUpstream);
+    }
+  }
+
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+    upstreamSignal?.removeEventListener?.('abort', abortFromUpstream);
+  }
+};
+
 const createAuthAwareFetch = () => {
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const response = await fetch(input, init);
+    const response = await fetchWithTimeout(input, init);
 
     if (!response.ok) {
       try {

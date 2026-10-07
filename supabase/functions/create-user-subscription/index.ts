@@ -686,11 +686,29 @@ Deno.serve(async (req: Request) => {
       hasAccessToken: !!mpConfig.access_token,
     });
 
+    // No preapproval_plan_id here on purpose: Mercado Pago rejects a
+    // plan-linked preapproval created with status "pending" unless it also
+    // gets a card_token_id ("card_token_id is required"), which a server-side
+    // call never has. That error used to push every subscription onto the
+    // generic plan-checkout fallback, which carries none of our
+    // external_reference/back_url and so could never be matched back to the
+    // local row (it stayed "pending" forever). A pending preapproval without
+    // a plan returns an init_point where the buyer adds their payment method,
+    // and keeps our reference, return URL and preapproval id. The plan's
+    // price/cycle/trial are sent explicitly instead.
+    // Mercado Pago refuses a preapproval whose payer and collector aren't both
+    // real or both test users. In test mode the collector is a test seller, so
+    // the payer email must be a test buyer's: admin_settings.mercadopago_config
+    // may carry test_payer_email for that. Never used when not in test mode.
+    const configuredTestPayerEmail = String(mpConfig.test_payer_email || "").trim().toLowerCase();
+    const preapprovalPayerEmail = mpConfig.is_test_mode === true && configuredTestPayerEmail
+      ? configuredTestPayerEmail
+      : payerEmail;
+
     const preapprovalPayload = {
-      preapproval_plan_id: mpPlanId,
       reason: String(plan.name || "DogCatiFy").slice(0, 255),
       external_reference: `user:${localSubscription.id}`,
-      payer_email: payerEmail,
+      payer_email: preapprovalPayerEmail,
       back_url: buildBackUrl(localSubscription.id, supabaseUrl),
       notification_url: `${supabaseUrl}/functions/v1/mercadopago-webhook`,
       status: "pending",
@@ -699,6 +717,9 @@ Deno.serve(async (req: Request) => {
         frequency_type: "months",
         transaction_amount: price,
         currency_id: String(plan.currency || "UYU").toUpperCase(),
+        ...(canGrantTrial && trialDays > 0
+          ? { free_trial: { frequency: trialDays, frequency_type: "days" } }
+          : {}),
       },
     };
 
@@ -727,7 +748,11 @@ Deno.serve(async (req: Request) => {
       });
 
       const mappedStatus = mapPreapprovalStatus(preapproval?.status);
-      const finalStatus = (canGrantTrial ? "trialing" : mappedStatus) as UserSubscriptionStatus;
+      // Stay "pending" until Mercado Pago actually authorizes the subscription
+      // (webhook / sync flips it to active or trialing). Granting "trialing"
+      // here would hand out a free trial to anyone who just opens the
+      // checkout and leaves without adding a payment method.
+      const finalStatus = mappedStatus as UserSubscriptionStatus;
       const updatePayload = {
         status: finalStatus,
         crm_subscription_id: preapproval?.id || null,
@@ -743,9 +768,10 @@ Deno.serve(async (req: Request) => {
         metadata: {
           ...(localSubscription.metadata || {}),
           mp_preapproval: preapproval,
+          payer_email: preapprovalPayerEmail,
           preapproval_payload: {
             ...preapprovalPayload,
-            payer_email: payerEmail,
+            payer_email: preapprovalPayerEmail,
           },
           trial_days: trialDays,
           trial_granted: canGrantTrial,

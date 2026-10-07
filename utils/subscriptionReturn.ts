@@ -34,7 +34,7 @@ export const getSingleParam = (value?: string | string[] | null) =>
   Array.isArray(value) ? value[0] : value;
 
 export const isUuid = (value: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
 export const normalizeSubscriptionScope = (value?: string | string[] | null): SubscriptionScope => {
   const normalized = String(getSingleParam(value) || '').trim().toLowerCase();
