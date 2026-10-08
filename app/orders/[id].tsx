@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Linking } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Package, Clock, Truck, CircleCheck as CheckCircle, Circle as XCircle, MapPin, Phone, Star, MessageSquare, RefreshCw, Trash2 } from 'lucide-react-native';
+import { ArrowLeft, Package, Clock, Truck, CircleCheck as CheckCircle, Circle as XCircle, MapPin, Phone, Star, MessageSquare, MessageCircle, ChevronRight, RefreshCw, Trash2 } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { OrderStatusBanner } from '../../components/OrderStatusBanner';
@@ -16,6 +16,7 @@ import { OrderTracking } from '../../components/OrderTracking';
 import { StoreRouteMap } from '../../components/StoreRouteMap';
 import { getOrderFulfillmentMode, getOrderStatusLabel } from '../../utils/orderFulfillment';
 import { isServiceBookingOrder } from '../../utils/orderClassification';
+import { isOrderChatOpen, openOrderChat, ORDER_CHAT_UPCOMING_STATUSES } from '../../utils/orderChat';
 
 // See app/orders/index.tsx for the matching DB-level restriction (RLS policy)
 // on which statuses a customer can delete — this list must stay in sync.
@@ -33,6 +34,7 @@ export default function OrderDetail() {
   const [pickupConfirming, setPickupConfirming] = useState(false);
   const [retryingPayment, setRetryingPayment] = useState(false);
   const [deletingOrder, setDeletingOrder] = useState(false);
+  const [openingChat, setOpeningChat] = useState(false);
 
   useEffect(() => {
     if (!currentUser) {
@@ -175,6 +177,19 @@ export default function OrderDetail() {
   );
 
   const formatCurrency = (amount: number) => formatPrice(amount);
+
+  const handleOpenStoreChat = async () => {
+    if (!order || openingChat) return;
+    setOpeningChat(true);
+    const result = await openOrderChat(order.id, order.orderNumber);
+    setOpeningChat(false);
+    if (!result.ok) {
+      toast.error(
+        result.reason === 'closed' ? 'El chat de este pedido ya está cerrado' : 'No pudimos abrir el chat',
+        result.reason === 'closed' ? undefined : 'Probá de nuevo en un momento.'
+      );
+    }
+  };
 
   const handleContactSupport = () => {
     Alert.alert(
@@ -360,6 +375,39 @@ export default function OrderDetail() {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <OrderStatusBanner />
+
+        {/* Chat con la tienda: solo con el pedido confirmado y en curso */}
+        {isOrderChatOpen(order.status) ? (
+          <TouchableOpacity
+            style={styles.chatCard}
+            onPress={handleOpenStoreChat}
+            disabled={openingChat}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={`Chatear con ${partnerName || 'la tienda'}`}
+            accessibilityState={{ busy: openingChat }}
+          >
+            <View style={styles.chatIcon}>
+              <MessageCircle size={22} color={colors.onPrimary} />
+            </View>
+            <View style={styles.chatTextContainer}>
+              <Text style={styles.chatTitle} numberOfLines={1}>
+                Chateá con {partnerName || 'la tienda'}
+              </Text>
+              <Text style={styles.chatSubtitle}>
+                {openingChat ? 'Abriendo el chat…' : 'Consultá lo que necesites. Te avisamos cuando te respondan.'}
+              </Text>
+            </View>
+            <ChevronRight size={20} color={colors.primary} />
+          </TouchableOpacity>
+        ) : ORDER_CHAT_UPCOMING_STATUSES.includes(order.status) ? (
+          <View style={styles.chatHint}>
+            <MessageCircle size={16} color={colors.textSecondary} />
+            <Text style={styles.chatHintText}>
+              Cuando {partnerName || 'la tienda'} confirme tu pedido vas a poder chatear desde acá.
+            </Text>
+          </View>
+        ) : null}
 
         {/* Order Status */}
         <Card style={styles.statusCard}>
@@ -594,6 +642,54 @@ const styles = StyleSheet.create({
   },
   statusCard: {
     marginBottom: spacing.lg,
+  },
+  chatCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    minHeight: 64,
+  },
+  chatIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chatTextContainer: {
+    flex: 1,
+  },
+  chatTitle: {
+    ...typography.bodyStrong,
+    color: colors.primaryStrong,
+  },
+  chatSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  chatHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  chatHintText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: colors.textSecondary,
   },
   trackingCard: {
     marginBottom: spacing.lg,

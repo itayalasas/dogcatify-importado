@@ -9,6 +9,7 @@ import { OrderStatusBanner } from '../../components/OrderStatusBanner';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { getOrderFulfillmentMode, getOrderStatusLabel } from '../../utils/orderFulfillment';
+import { isOrderChatOpen, openOrderChat } from '../../utils/orderChat';
 
 export default function PartnerOrders() {
   const params = useLocalSearchParams<{
@@ -203,6 +204,16 @@ export default function PartnerOrders() {
     return getFulfillmentMode(order) === 'pickup'
       ? 'Pedido listo para retirar en tienda'
       : 'Pedido listo para entrega';
+  };
+
+  const handleOpenOrderChat = async (order: any) => {
+    const result = await openOrderChat(order.id, order.orderNumber);
+    if (!result.ok) {
+      toast.error(
+        result.reason === 'closed' ? 'El chat de este pedido ya está cerrado' : 'No pudimos abrir el chat',
+        result.reason === 'closed' ? undefined : 'Probá de nuevo en un momento.'
+      );
+    }
   };
 
   const handleUpdateOrderStatus = async (order: any, newStatus: string) => {
@@ -543,6 +554,15 @@ export default function PartnerOrders() {
               </View>
             )}
           </View>
+        )}
+
+        {isOrderChatOpen(order.status) && (
+          <Button
+            title="Chatear con el cliente"
+            onPress={() => handleOpenOrderChat(order)}
+            variant="outline"
+            size="small"
+          />
         )}
 
         {order.status === 'pending' && !isServiceOrder(order) && (

@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert, Animated, Easing, AccessibilityInfo } from 'react-native';
 import { Package, CheckCircle, Truck, Home, Clock, XCircle, AlertCircle, RefreshCw } from 'lucide-react-native';
 import { type OrderFulfillmentMode } from '../utils/orderFulfillment';
 import { colors, radius, spacing, typography } from '../constants/theme';
@@ -24,6 +24,204 @@ interface OrderTrackingProps {
   onRetryPayment?: () => void;
 }
 
+type StepStatus = TrackingStep['status'];
+
+const STEP_STAGGER_MS = 90;
+
+const useReduceMotion = () => {
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((value) => mounted && setReduceMotion(value))
+      .catch(() => {});
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => {
+      mounted = false;
+      subscription?.remove?.();
+    };
+  }, []);
+
+  return reduceMotion;
+};
+
+interface TrackingStepRowProps {
+  step: TrackingStep;
+  isLast: boolean;
+  delay: number;
+  reduceMotion: boolean;
+  statusColor: string;
+  backgroundColor: string;
+  showActiveBadge: boolean;
+  retryLabel: string;
+  onRetry: () => void;
+}
+
+// Una fila del seguimiento: entra con un leve deslizamiento, la línea hacia el
+// siguiente paso se "llena" cuando el paso está completo y el paso en curso late.
+const TrackingStepRow: React.FC<TrackingStepRowProps> = ({
+  step,
+  isLast,
+  delay,
+  reduceMotion,
+  statusColor,
+  backgroundColor,
+  showActiveBadge,
+  retryLabel,
+  onRetry,
+}) => {
+  const Icon = step.icon;
+  const appear = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
+  const lineFill = useRef(new Animated.Value(reduceMotion || step.status !== 'completed' ? (step.status === 'completed' ? 1 : 0) : 0)).current;
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (reduceMotion) {
+      appear.setValue(1);
+      lineFill.setValue(step.status === 'completed' ? 1 : 0);
+      return;
+    }
+
+    Animated.timing(appear, {
+      toValue: 1,
+      duration: 320,
+      delay,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+
+    if (step.status === 'completed' && !isLast) {
+      Animated.timing(lineFill, {
+        toValue: 1,
+        duration: 420,
+        delay: delay + 220,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: false,
+      }).start();
+    }
+  }, [appear, lineFill, delay, reduceMotion, step.status, isLast]);
+
+  useEffect(() => {
+    if (reduceMotion || step.status !== 'active') {
+      pulse.stopAnimation();
+      pulse.setValue(0);
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.timing(pulse, {
+        toValue: 1,
+        duration: 1400,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse, reduceMotion, step.status]);
+
+  const isPending = step.status === 'pending';
+
+  return (
+    <Animated.View
+      style={[
+        styles.stepContainer,
+        {
+          opacity: appear,
+          transform: [{ translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
+        },
+      ]}
+      accessible={step.status !== 'failed'}
+      accessibilityLabel={`${step.label}. ${step.description}${step.date ? `. ${step.date}` : ''}${step.status === 'active' ? '. En proceso' : step.status === 'completed' ? '. Completado' : ''}`}
+    >
+      <View style={styles.stepIndicator}>
+        <View style={styles.iconWrapper}>
+          {step.status === 'active' && !reduceMotion && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.pulseRing,
+                {
+                  borderColor: statusColor,
+                  opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] }),
+                  transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.6] }) }],
+                },
+              ]}
+            />
+          )}
+          <Animated.View
+            style={[
+              styles.iconCircle,
+              {
+                backgroundColor,
+                borderColor: statusColor,
+                borderWidth: step.status === 'active' ? 2 : 1.5,
+                transform: [{ scale: appear.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }],
+              },
+            ]}
+          >
+            <Icon
+              size={step.status === 'active' ? 20 : 18}
+              color={statusColor}
+              strokeWidth={step.status === 'completed' ? 3 : 2}
+            />
+          </Animated.View>
+        </View>
+
+        {!isLast && (
+          <View style={styles.line}>
+            <Animated.View
+              style={[
+                styles.lineFill,
+                {
+                  backgroundColor: step.status === 'completed' ? statusColor : 'transparent',
+                  height: lineFill.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+                },
+              ]}
+            />
+          </View>
+        )}
+      </View>
+
+      <View style={styles.stepContent}>
+        <View style={styles.stepTextContainer}>
+          <Text
+            style={[
+              styles.stepLabel,
+              {
+                color: !isPending ? colors.text : colors.textTertiary,
+                fontFamily: step.status === 'active' ? 'Inter-Bold' : 'Inter-SemiBold',
+              },
+            ]}
+          >
+            {step.label}
+          </Text>
+          {step.date && <Text style={styles.stepDate}>{step.date}</Text>}
+        </View>
+
+        <Text style={[styles.stepDescription, { color: !isPending ? colors.textSecondary : colors.textTertiary }]}>
+          {step.description}
+        </Text>
+
+        {showActiveBadge && (
+          <View style={styles.activeBadge}>
+            <View style={styles.activeDot} />
+            <Text style={styles.activeText}>En proceso</Text>
+          </View>
+        )}
+
+        {step.status === 'failed' && (
+          <TouchableOpacity style={styles.retryButton} onPress={onRetry} activeOpacity={0.7} accessibilityRole="button">
+            <RefreshCw size={18} color={colors.onPrimary} strokeWidth={2.5} />
+            <Text style={styles.retryButtonText}>{retryLabel}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </Animated.View>
+  );
+};
+
 export const OrderTracking: React.FC<OrderTrackingProps> = ({
   orderStatus,
   orderType = 'product_purchase',
@@ -34,6 +232,12 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
   lastPaymentUrl,
   onRetryPayment
 }) => {
+  const reduceMotion = useReduceMotion();
+  // Solo la primera vez escalonamos la entrada; los cambios en vivo animan sin demora.
+  const hasAnimatedRef = useRef(false);
+  useEffect(() => {
+    hasAnimatedRef.current = true;
+  }, []);
   const isPaymentFailed = orderStatus === 'payment_failed';
   const isInsufficientStock = orderStatus === 'insufficient_stock';
   const isPaymentPending = orderStatus === 'pending';
@@ -351,105 +555,77 @@ export const OrderTracking: React.FC<OrderTrackingProps> = ({
     }
   };
 
+  const visibleSteps = steps.filter((step) => step.id !== 'cancelled' || isCancelled);
+  const hasProblem = visibleSteps.some((step) => step.status === 'cancelled' || step.status === 'failed');
+  const completedCount = visibleSteps.filter((step) => step.status === 'completed').length;
+  const activeStep = visibleSteps.find((step) => step.status === 'active');
+  const progressValue = visibleSteps.length > 0
+    ? Math.min(1, (completedCount + (activeStep ? 0.5 : 0)) / visibleSteps.length)
+    : 0;
+
   return (
     <View style={styles.container}>
-      {steps.map((step, index) => {
-        const Icon = step.icon;
-        const isLast = index === steps.length - 1;
-        const statusColor = getStatusColor(step.status);
-        const backgroundColor = getBackgroundColor(step.status);
+      {!hasProblem && visibleSteps.length > 1 && (
+        <TrackingProgress
+          value={progressValue}
+          label={activeStep?.label || (completedCount === visibleSteps.length ? '¡Listo!' : visibleSteps[completedCount]?.label || '')}
+          reduceMotion={reduceMotion}
+        />
+      )}
 
-        // Hide cancelled step if not cancelled
-        if (step.id === 'cancelled' && !isCancelled) {
-          return null;
-        }
+      {visibleSteps.map((step, index) => (
+        <TrackingStepRow
+          key={`${step.id}-${step.status}`}
+          step={step}
+          isLast={index === visibleSteps.length - 1}
+          delay={hasAnimatedRef.current ? 0 : index * STEP_STAGGER_MS}
+          reduceMotion={reduceMotion}
+          statusColor={getStatusColor(step.status)}
+          backgroundColor={getBackgroundColor(step.status)}
+          showActiveBadge={step.status === 'active' && !isPaymentFailed}
+          retryLabel={isPaymentLinkExpired ? 'Generar nuevo link' : 'Reintentar pago'}
+          onRetry={handleRetryPayment}
+        />
+      ))}
+    </View>
+  );
+};
 
-        return (
-          <View
-            key={step.id}
-            style={styles.stepContainer}
-            accessible={step.status !== 'failed'}
-            accessibilityLabel={`${step.label}. ${step.description}${step.date ? `. ${step.date}` : ''}${step.status === 'active' ? '. En proceso' : step.status === 'completed' ? '. Completado' : ''}`}
-          >
-            <View style={styles.stepIndicator}>
-              <View
-                style={[
-                  styles.iconCircle,
-                  {
-                    backgroundColor,
-                    borderColor: statusColor,
-                    borderWidth: step.status === 'active' ? 2 : 1.5
-                  }
-                ]}
-              >
-                <Icon
-                  size={step.status === 'active' ? 20 : 18}
-                  color={statusColor}
-                  strokeWidth={step.status === 'completed' ? 3 : 2}
-                />
-              </View>
+// Barra de progreso arriba del seguimiento ("En preparación", 60%).
+const TrackingProgress: React.FC<{ value: number; label: string; reduceMotion: boolean }> = ({
+  value,
+  label,
+  reduceMotion,
+}) => {
+  const progress = useRef(new Animated.Value(reduceMotion ? value : 0)).current;
 
-              {!isLast && (
-                <View
-                  style={[
-                    styles.line,
-                    { backgroundColor: statusColor }
-                  ]}
-                />
-              )}
-            </View>
+  useEffect(() => {
+    if (reduceMotion) {
+      progress.setValue(value);
+      return;
+    }
+    Animated.timing(progress, {
+      toValue: value,
+      duration: 700,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [progress, value, reduceMotion]);
 
-            <View style={styles.stepContent}>
-              <View style={styles.stepTextContainer}>
-                <Text
-                  style={[
-                    styles.stepLabel,
-                    {
-                      color: step.status !== 'pending' ? colors.text : colors.textTertiary,
-                      fontFamily: step.status === 'active' ? 'Inter-Bold' : 'Inter-SemiBold'
-                    }
-                  ]}
-                >
-                  {step.label}
-                </Text>
-                {step.date && (
-                  <Text style={styles.stepDate}>{step.date}</Text>
-                )}
-              </View>
-
-              <Text
-                style={[
-                  styles.stepDescription,
-                  { color: step.status !== 'pending' ? colors.textSecondary : colors.textTertiary }
-                ]}
-              >
-                {step.description}
-              </Text>
-
-              {step.status === 'active' && !isPaymentFailed && (
-                <View style={styles.activeBadge}>
-                  <View style={styles.activeDot} />
-                  <Text style={styles.activeText}>En proceso</Text>
-                </View>
-              )}
-
-              {step.status === 'failed' && (
-                <TouchableOpacity
-                  style={styles.retryButton}
-                  onPress={handleRetryPayment}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                >
-                  <RefreshCw size={18} color={colors.onPrimary} strokeWidth={2.5} />
-                  <Text style={styles.retryButtonText}>
-                    {isPaymentLinkExpired ? 'Generar nuevo link' : 'Reintentar pago'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        );
-      })}
+  return (
+    <View style={styles.progressContainer} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Math.round(value * 100) }}>
+      <View style={styles.progressHeader}>
+        <Text style={styles.progressLabel} numberOfLines={1}>{label}</Text>
+        <Text style={styles.progressPercent}>{Math.round(value * 100)}%</Text>
+      </View>
+      <View style={styles.progressTrack}>
+        <Animated.View
+          style={[
+            styles.progressFill,
+            { width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) },
+          ]}
+        />
+      </View>
     </View>
   );
 };
@@ -466,6 +642,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: spacing.lg,
   },
+  iconWrapper: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pulseRing: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+  },
   iconCircle: {
     width: 40,
     height: 40,
@@ -479,6 +668,46 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     marginBottom: spacing.xs,
     minHeight: 24,
+    borderRadius: 1,
+    backgroundColor: colors.border,
+    overflow: 'hidden',
+  },
+  lineFill: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  progressContainer: {
+    marginBottom: spacing.lg,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  progressLabel: {
+    ...typography.bodyStrong,
+    color: colors.primaryStrong,
+    flex: 1,
+  },
+  progressPercent: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: colors.textSecondary,
+    marginLeft: spacing.sm,
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
   },
   stepContent: {
     flex: 1,

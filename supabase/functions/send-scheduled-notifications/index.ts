@@ -84,6 +84,19 @@ Deno.serve(async (req: Request) => {
 
     for (const notification of pendingNotifications) {
       try {
+        // Reclamamos la notificación antes de enviarla: si otra ejecución
+        // (cron o despacho inmediato) ya la tomó, la saltamos para no duplicar.
+        const { data: claimed, error: claimError } = await supabase
+          .from('scheduled_notifications')
+          .update({ status: 'sent', updated_at: new Date().toISOString() })
+          .eq('id', notification.id)
+          .eq('status', 'pending')
+          .select('id');
+
+        if (claimError || !claimed || claimed.length === 0) {
+          continue;
+        }
+
         // Obtener tokens del usuario - PRIORIZAR fcm_token (FCM v1 API)
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
@@ -285,10 +298,11 @@ Deno.serve(async (req: Request) => {
           const maxRetries = 3;
 
           if (retryCount < maxRetries) {
-            // Reintentar más tarde
+            // Reintentar más tarde (vuelve a 'pending' porque la reclamamos al empezar)
             await supabase
               .from('scheduled_notifications')
               .update({
+                status: 'pending',
                 retry_count: retryCount,
                 error_message: errorMessage,
                 updated_at: new Date().toISOString(),
@@ -329,6 +343,7 @@ Deno.serve(async (req: Request) => {
         await supabase
           .from('scheduled_notifications')
           .update({
+            status: retryCount < 3 ? 'pending' : 'failed',
             retry_count: retryCount,
             error_message: error.message,
             updated_at: new Date().toISOString(),

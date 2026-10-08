@@ -19,6 +19,7 @@ import { useNotifications } from '../../contexts/NotificationContext';
 import { Send, ArrowLeft, User } from 'lucide-react-native';
 import { IconButton, Skeleton } from '../../components/ui';
 import { colors, radius, spacing, typography, maxFontScale } from '../../constants/theme';
+import { isOrderChatOpen } from '../../utils/orderChat';
 
 interface Message {
   id: string;
@@ -31,7 +32,8 @@ interface Message {
 
 interface ConversationDetails {
   id: string;
-  adoption_pet_id: string;
+  adoption_pet_id: string | null;
+  order_id?: string | null;
   partner_id: string;
   user_id: string;
   status: string;
@@ -49,9 +51,10 @@ type ChatListItem =
     };
 
 export default function ChatScreen() {
-  const { id: conversationId, petName } = useLocalSearchParams<{ 
-    id: string; 
-    petName?: string; 
+  const { id: conversationId, petName, orderNumber: orderNumberParam } = useLocalSearchParams<{
+    id: string;
+    petName?: string;
+    orderNumber?: string;
   }>();
   const { currentUser } = useAuth();
   const { sendNotificationToUser } = useNotifications();
@@ -62,6 +65,8 @@ export default function ChatScreen() {
   const [conversationDetails, setConversationDetails] = useState<ConversationDetails | null>(null);
   const [recipientId, setRecipientId] = useState<string>('');
   const [recipientName, setRecipientName] = useState<string>('');
+  // Solo para chats de pedidos: número y si todavía se puede escribir.
+  const [orderInfo, setOrderInfo] = useState<{ number: string; open: boolean } | null>(null);
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
 
   // Helper function to format dates like WhatsApp
@@ -168,6 +173,18 @@ export default function ChatScreen() {
       console.log('Conversation data:', conversation);
       setConversationDetails(conversation);
 
+      if (conversation.order_id) {
+        const { data: orderData } = await supabaseClient
+          .from('orders')
+          .select('order_number, status')
+          .eq('id', conversation.order_id)
+          .single();
+        setOrderInfo({
+          number: orderData?.order_number || orderNumberParam || `#${String(conversation.order_id).slice(-6)}`,
+          open: isOrderChatOpen(orderData?.status),
+        });
+      }
+
       // Determine recipient based on current user
       if (conversation.user_id === currentUser?.id) {
         // Current user is the customer, recipient is the partner
@@ -176,11 +193,14 @@ export default function ChatScreen() {
         // Get partner name
         const { data: partnerData } = await supabaseClient
           .from('partners')
-          .select('business_name')
+          .select('business_name, user_id')
           .eq('id', conversation.partner_id)
           .single();
-        
-        setRecipientName(partnerData?.business_name || 'Refugio');
+        // El push va al dueño del local (su usuario), no al id del negocio.
+        if (partnerData?.user_id) {
+          setRecipientId(partnerData.user_id);
+        }
+        setRecipientName(partnerData?.business_name || (conversation.order_id ? 'La tienda' : 'Refugio'));
       } else {
         // Current user is the partner, recipient is the customer
         setRecipientId(conversation.user_id);
@@ -313,13 +333,19 @@ export default function ChatScreen() {
 
       if (error) {
         console.error('Error sending message:', error);
+        if (error.message?.includes('order_chat_closed')) {
+          setOrderInfo((prev) => (prev ? { ...prev, open: false } : prev));
+          Alert.alert('Chat cerrado', 'Este pedido ya terminó, así que el chat quedó cerrado.');
+          return;
+        }
         throw error;
       }
 
       console.log('Message sent successfully');
 
-      // Send push notification to recipient
-      if (recipientId && recipientName) {
+      // Send push notification to recipient.
+      // En los chats de pedidos el push lo envía la base de datos al guardar el mensaje.
+      if (recipientId && recipientName && !conversationDetails?.order_id) {
         try {
           await sendNotificationToUser(
             recipientId,
@@ -437,11 +463,15 @@ export default function ChatScreen() {
             <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">
               {recipientName || 'Chat'}
             </Text>
-            {petName && (
+            {orderInfo ? (
+              <Text style={styles.headerSubtitle} numberOfLines={1}>
+                Pedido {orderInfo.number}
+              </Text>
+            ) : petName ? (
               <Text style={styles.headerSubtitle} numberOfLines={1}>
                 Sobre la adopción de {petName}
               </Text>
-            )}
+            ) : null}
           </View>
           
           <View style={styles.headerAvatar}>
@@ -460,6 +490,13 @@ export default function ChatScreen() {
           showsVerticalScrollIndicator={false}
         />
 
+        {orderInfo && !orderInfo.open ? (
+          <View style={styles.closedBanner}>
+            <Text style={styles.closedBannerText}>
+              Este pedido ya terminó, así que el chat quedó cerrado. Si necesitás ayuda, escribinos desde Ayuda y soporte.
+            </Text>
+          </View>
+        ) : (
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.textInput}
@@ -489,12 +526,25 @@ export default function ChatScreen() {
             />
           </TouchableOpacity>
         </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  closedBanner: {
+    padding: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+  },
+  closedBannerText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

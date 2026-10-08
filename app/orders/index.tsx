@@ -13,6 +13,7 @@ import { supabaseClient } from '../../lib/supabase';
 import { regeneratePaymentLink } from '../../utils/mercadoPago';
 import { useBackToHome } from '../../hooks/useBackToHome';
 import { getOrderFulfillmentMode, getOrderStatusLabel } from '../../utils/orderFulfillment';
+import { OrderProgressMini } from '../../components/OrderProgressMini';
 import { isServiceBookingOrder, resolveOrderType } from '../../utils/orderClassification';
 
 export default function MyOrders() {
@@ -429,6 +430,10 @@ export default function MyOrders() {
           size="small"
         />
       </View>
+
+      {!isServiceOrder(order) && (
+        <OrderProgressMini status={order.status} fulfillmentMode={order.fulfillmentMode} />
+      )}
 
       <View style={styles.orderItems}>
         <Text style={styles.itemsTitle}>
