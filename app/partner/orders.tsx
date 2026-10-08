@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Package, DollarSign, Truck, Clock, MapPin, User, Phone } from 'lucide-react-native';
+import { ArrowLeft, Package, DollarSign, Truck, Clock, MapPin, User, Phone, MessageCircle, ChevronRight } from 'lucide-react-native';
 import { Card, Button, IconButton, EmptyState, SkeletonList, toast } from '../../components/ui';
 import { formatMoney, formatNumber } from '../../components/partner/format';
 import { colors, radius, spacing, typography } from '../../constants/theme';
@@ -323,11 +323,15 @@ export default function PartnerOrders() {
     return ['delivered', 'cancelled', 'refunded'].includes(order.status);
   };
 
-  const filteredOrders = orders.filter(order => {
-    if (activeTab === 'pending') return isPendingTabOrder(order);
-    if (activeTab === 'processing') return isProcessingTabOrder(order);
-    return isCompletedTabOrder(order);
-  });
+  const filteredOrders = orders
+    .filter(order => {
+      if (activeTab === 'pending') return isPendingTabOrder(order);
+      if (activeTab === 'processing') return isProcessingTabOrder(order);
+      return isCompletedTabOrder(order);
+    })
+    // Los pedidos con mensajes sin leer van primero para que no se pierdan.
+    // sort es estable: el resto mantiene su orden original.
+    .sort((a, b) => (orderChatUnread.byOrder[b.id] ? 1 : 0) - (orderChatUnread.byOrder[a.id] ? 1 : 0));
 
   useEffect(() => {
     if (!initialOpenOrderId || orders.length === 0) return;
@@ -383,7 +387,15 @@ export default function PartnerOrders() {
           <>
       <View style={styles.orderHeader}>
         <View style={styles.orderInfo}>
-          <Text style={styles.orderNumber}>Pedido {order.orderNumber || `#${order.id.slice(-6)}`}</Text>
+          <View style={styles.orderNumberRow}>
+            <Text style={styles.orderNumber}>Pedido {order.orderNumber || `#${order.id.slice(-6)}`}</Text>
+            {orderChatUnread.byOrder[order.id] > 0 && (
+              <View style={styles.unreadBadgeSmall} accessibilityLabel={`${orderChatUnread.byOrder[order.id]} mensajes sin leer`}>
+                <MessageCircle size={12} color={colors.white} />
+                <Text style={styles.unreadBadgeSmallText}>{orderChatUnread.byOrder[order.id]}</Text>
+              </View>
+            )}
+          </View>
           <Text style={styles.customerName}>Cliente</Text>
         </View>
         <View style={[
@@ -558,20 +570,35 @@ export default function PartnerOrders() {
           </View>
         )}
 
-        {(isOrderChatOpen(order.status) || orderChatUnread.conversationByOrder[order.id]) && (
-          <Button
-            title={
-              orderChatUnread.byOrder[order.id]
-                ? `Responder al cliente (${orderChatUnread.byOrder[order.id]} ${orderChatUnread.byOrder[order.id] === 1 ? 'mensaje nuevo' : 'mensajes nuevos'})`
-                : orderChatUnread.conversationByOrder[order.id]
-                  ? 'Ver chat con el cliente'
-                  : 'Chatear con el cliente'
-            }
-            onPress={() => handleOpenOrderChat(order)}
-            variant={orderChatUnread.byOrder[order.id] ? 'primary' : 'outline'}
-            size="small"
-          />
-        )}
+        {(isOrderChatOpen(order.status) || orderChatUnread.conversationByOrder[order.id]) && (() => {
+          const unreadCount = orderChatUnread.byOrder[order.id] || 0;
+          const hasConversation = Boolean(orderChatUnread.conversationByOrder[order.id]);
+          return (
+            <TouchableOpacity
+              style={[styles.chatButton, unreadCount > 0 && styles.chatButtonUnread]}
+              onPress={() => handleOpenOrderChat(order)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={
+                unreadCount > 0
+                  ? `Chat con el cliente, ${unreadCount} ${unreadCount === 1 ? 'mensaje sin leer' : 'mensajes sin leer'}`
+                  : 'Chat con el cliente'
+              }
+            >
+              <MessageCircle size={18} color={colors.primary} />
+              <Text style={styles.chatButtonText} numberOfLines={1}>
+                {hasConversation ? 'Ver chat con el cliente' : 'Chatear con el cliente'}
+              </Text>
+              {unreadCount > 0 ? (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                </View>
+              ) : (
+                <ChevronRight size={18} color={colors.textTertiary} />
+              )}
+            </TouchableOpacity>
+          );
+        })()}
 
         {order.status === 'pending' && !isServiceOrder(order) && (
           <>
@@ -1035,6 +1062,60 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     gap: spacing.sm,
     marginTop: spacing.sm,
+  },
+  orderNumberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  chatButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  chatButtonUnread: {
+    borderColor: colors.primaryBorder,
+    backgroundColor: colors.primarySoft,
+  },
+  chatButtonText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: colors.primaryStrong,
+  },
+  unreadBadge: {
+    minWidth: 24,
+    height: 24,
+    paddingHorizontal: 7,
+    borderRadius: 12,
+    backgroundColor: colors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unreadBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+    color: colors.white,
+  },
+  unreadBadgeSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    height: 20,
+    paddingHorizontal: 7,
+    borderRadius: 10,
+    backgroundColor: colors.success,
+  },
+  unreadBadgeSmallText: {
+    fontSize: 11,
+    fontFamily: 'Inter-Bold',
+    color: colors.white,
   },
   readyForDeliveryInfo: {
     backgroundColor: colors.successSoft,
