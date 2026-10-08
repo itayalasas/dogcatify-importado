@@ -18,6 +18,14 @@ export default function ShareMedicalHistory() {
     expiresAt?: string;
   }>();
 
+  // El QR se arma acá con el enlace real. Antes llegaba ya armado por
+  // parámetro de navegación, que decodifica el enlace interno y el QR podía
+  // apuntar a una URL rota. Negro sobre blanco y corrección alta: es lo que
+  // mejor leen las cámaras.
+  const scanUrl = shareUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=16&ecc=Q&format=png&data=${encodeURIComponent(shareUrl)}`
+    : qrCodeUrl;
+
   const [copying, setCopying] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<string>('');
 
@@ -147,7 +155,7 @@ Saludos cordiales.`;
           
           <View style={styles.qrContainer}>
             <Image 
-              source={{ uri: qrCodeUrl }} 
+              source={{ uri: scanUrl }} 
               style={styles.qrImage}
               resizeMode="contain"
             />
@@ -155,7 +163,7 @@ Saludos cordiales.`;
           
           <View style={styles.urlContainer}>
             <Text style={styles.urlLabel}>Enlace directo:</Text>
-            <Text style={styles.shortUrl}>{shortUrl}</Text>
+            <Text style={styles.shortUrl} selectable numberOfLines={2}>{shareUrl || shortUrl}</Text>
           </View>
         </Card>
 
@@ -194,7 +202,7 @@ Saludos cordiales.`;
               1. Escaneá el código QR con la cámara del teléfono
             </Text>
             <Text style={styles.instructionItem}>
-              2. O entrá directamente al enlace: {shortUrl}
+              2. O abrí el enlace que le compartas desde esta pantalla
             </Text>
             <Text style={styles.instructionItem}>
               3. Podrá ver toda la información médica actualizada

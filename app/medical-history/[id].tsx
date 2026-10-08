@@ -546,6 +546,11 @@ export default function MedicalHistoryShared() {
                 setError(data.error || 'Error al cargar los datos');
               }
             }
+          } else {
+            // medical-history-data no está desplegada: antes la pantalla
+            // quedaba vacía. Caemos a la carga directa.
+            console.warn('medical-history-data respondió', response.status, '- usando carga directa');
+            await fetchMedicalHistoryDirectly();
           }
         } catch (edgeError) {
           console.error('Edge Function error:', edgeError);

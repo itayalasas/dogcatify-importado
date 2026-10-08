@@ -416,3 +416,8 @@ enabled = true
 # las notificaciones de pago se rechazan con 401 y los pedidos quedan pendientes.
 [functions.mercadopago-webhook]
 verify_jwt = false
+
+# Historia clínica por QR: la abre el veterinario sin cuenta. La función
+# exige el token temporal del dueño.
+[functions.medical-history]
+verify_jwt = false
