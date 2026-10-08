@@ -109,6 +109,65 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     };
   }, [authInitialized, currentUser?.id]);
 
+  const tokenSyncInFlightRef = useRef(false);
+
+  // Guarda en profiles solo los tokens que se pudieron obtener (no pisa con
+  // null un token válido) y confirma que la fila se actualizó: con RLS, si la
+  // sesión todavía no está lista el update no da error pero afecta 0 filas.
+  const saveTokensToProfile = async (
+    userId: string,
+    tokens: { pushToken?: string | null; fcmToken?: string | null }
+  ): Promise<boolean> => {
+    const updates: Record<string, any> = {
+      notification_preferences: { push: true, email: true },
+      updated_at: new Date().toISOString(),
+    };
+    if (tokens.pushToken) updates.push_token = tokens.pushToken;
+    if (tokens.fcmToken) updates.fcm_token = tokens.fcmToken;
+
+    if (!updates.push_token && !updates.fcm_token) {
+      console.warn('⚠️ No hay tokens para guardar en el perfil');
+      return false;
+    }
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const { data: sessionData } = await supabaseClient.auth.getSession();
+        const sessionUserId = sessionData?.session?.user?.id;
+
+        if (sessionUserId !== userId) {
+          console.log(`⏳ Sesión todavía no lista para guardar tokens (intento ${attempt}/3)`);
+        } else {
+          const { data, error } = await supabaseClient
+            .from('profiles')
+            .update(updates)
+            .eq('id', userId)
+            .select('id');
+
+          if (!error && data && data.length > 0) {
+            console.log('✅ Tokens guardados en profiles:', {
+              push_token: Boolean(updates.push_token),
+              fcm_token: Boolean(updates.fcm_token),
+            });
+            return true;
+          }
+
+          console.warn(
+            `⚠️ No se guardaron los tokens (intento ${attempt}/3):`,
+            error ?? 'el update no afectó ninguna fila'
+          );
+        }
+      } catch (saveError) {
+        console.warn(`⚠️ Error guardando tokens (intento ${attempt}/3):`, saveError);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+    }
+
+    console.error('❌ No se pudieron guardar los tokens de notificación en profiles');
+    return false;
+  };
+
   const extractNotificationValue = (value: any): string => {
     if (Array.isArray(value)) {
       return extractNotificationValue(value[0]);
@@ -567,18 +626,43 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       return;
     }
 
-    if (currentUser) {
+    if (currentUser?.id) {
       console.log('✅ Usuario logueado, validando y registrando tokens FCM...');
       // Ejecutar validación y actualización de tokens de forma asíncrona
       (async () => {
+        if (tokenSyncInFlightRef.current) return;
+        tokenSyncInFlightRef.current = true;
         try {
           await validateAndUpdateTokens();
         } catch (error) {
           console.error('Error al validar tokens:', error);
+        } finally {
+          tokenSyncInFlightRef.current = false;
         }
       })();
     }
-  }, [currentUser]);
+  }, [currentUser?.id]);
+
+  // Firebase puede rotar el token del dispositivo: lo mantenemos al día.
+  useEffect(() => {
+    if (isExpoGo || Platform.OS === 'web' || !Notifications || !currentUser?.id) {
+      return;
+    }
+
+    const userId = currentUser.id;
+    const subscription = Notifications.addPushTokenListener?.(async () => {
+      try {
+        const fcmToken = await getNativeFcmToken();
+        if (fcmToken) {
+          await saveTokensToProfile(userId, { fcmToken });
+        }
+      } catch (error) {
+        console.warn('⚠️ No se pudo actualizar el token rotado:', error);
+      }
+    });
+
+    return () => subscription?.remove?.();
+  }, [currentUser?.id]);
 
   const checkNotificationStatus = async () => {
     try {
@@ -823,56 +907,28 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           console.log(`✅ ${tokenType} token obtained:`, fcmToken ? fcmToken.substring(0, 30) + '...' : 'null');
 
           if (!fcmToken) {
-            console.error('❌ CRÍTICO: No se pudo obtener un FCM token');
-            throw new Error('No se pudo obtener el token FCM. Las notificaciones podrían no funcionar.');
+            console.warn('⚠️ No se pudo obtener un FCM token; se guarda solo el token de Expo');
           }
         } catch (fcmError: any) {
-          console.error('❌ Error obteniendo token FCM:', fcmError);
-          throw new Error('Error al obtener token FCM: ' + fcmError.message);
+          // Antes esto cortaba el registro y no se guardaba ningún token.
+          console.warn('⚠️ Error obteniendo token FCM (se guarda solo el de Expo):', fcmError?.message ?? fcmError);
+          fcmToken = null;
         }
 
         // Store tokens in user profile if user is logged in
         if (currentUser) {
           console.log('💾 Storing push tokens in user profile...');
+          const saved = await saveTokensToProfile(currentUser.id, {
+            pushToken: tokenData.data,
+            fcmToken,
+          });
 
-          // iOS y Android necesitan un FCM token real para usar el sender v1.
-          if (!fcmToken) {
-            console.error('❌ CRÍTICO: No se puede registrar notificaciones sin FCM token');
-            throw new Error('No se pudo obtener el token FCM requerido para notificaciones.');
-          }
-
-          const fcmTokenToStore = fcmToken;
-
-          console.log('- Expo Push Token (legacy):', tokenData.data ? tokenData.data.substring(0, 30) + '...' : 'null');
-          if (fcmTokenToStore) {
-            console.log('- FCM Token (PRIORITARIO):', fcmToken.substring(0, 30) + '...');
-          } else if (fcmToken && Platform.OS === 'ios') {
-            console.log('- APNs Token detectado en iOS:', fcmToken.substring(0, 30) + '...');
-          }
-
-          const { error: updateError } = await supabaseClient
-            .from('profiles')
-            .update({
-              push_token: tokenData.data,
-              fcm_token: fcmTokenToStore,
-              notification_preferences: {
-                push: true,
-                email: true
-              },
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', currentUser.id);
-
-          if (updateError) {
-            console.error('❌ Error updating push tokens:', updateError);
+          if (!saved) {
             throw new Error('No se pudo guardar el token de notificación.');
           }
 
-          console.log('✅ Push tokens saved successfully');
-          if (fcmTokenToStore) {
-            console.log('✅ FCM v1 API ready on', Platform.OS);
-          } else {
-            console.warn('⚠️ Sin FCM token - usando Expo legacy API (descontinuada)');
+          if (!fcmToken) {
+            console.warn('⚠️ Sin FCM token - el envío v1 necesita fcm_token en este dispositivo');
           }
         }
 
@@ -1152,29 +1208,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       if (needsUpdate) {
         console.log('💾 Actualizando tokens en base de datos...');
 
-        const { error: updateError } = await supabaseClient
-          .from('profiles')
-          .update({
-            push_token: currentExpoToken,
-            fcm_token: currentFcmToken,
-            notification_preferences: {
-              push: true,
-              email: true
-            },
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', currentUser.id);
+        const saved = await saveTokensToProfile(currentUser.id, {
+          pushToken: currentExpoToken,
+          fcmToken: currentFcmToken,
+        });
 
-        if (updateError) {
-          console.error('❌ Error actualizando tokens:', updateError);
-        } else {
-          console.log('✅ Tokens actualizados exitosamente');
-          setExpoPushToken(currentExpoToken);
+        if (saved) {
+          setExpoPushToken(currentExpoToken || storedPushToken || null);
           setNotificationsEnabled(true);
-
-          if (currentFcmToken) {
-            console.log('✅ FCM v1 API listo para Android');
-          }
         }
       } else {
         console.log('✅ Tokens válidos, no se requiere actualización');
