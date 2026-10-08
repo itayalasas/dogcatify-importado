@@ -1331,7 +1331,8 @@ export default function PetDetail() {
       }
     } catch (error) {
       console.error('Error updating pet photo:', error);
-      Alert.alert('Error', 'No se pudo actualizar la foto de perfil');
+      const detail = (error as any)?.message || (error as any)?.error || String(error);
+      Alert.alert('Error', `No se pudo actualizar la foto de perfil.\n\nDetalle: ${detail}`);
     }
   };
 

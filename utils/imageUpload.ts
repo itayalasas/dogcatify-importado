@@ -3,6 +3,8 @@
  * Compatible with React Native
  */
 
+import { Platform } from 'react-native';
+import { File as ExpoFile } from 'expo-file-system';
 import { supabaseClient } from '../lib/supabase';
 import { logger } from './datadogLogger';
 
@@ -12,6 +14,58 @@ export interface UploadImageOptions {
   cacheControl?: string;
   upsert?: boolean;
 }
+
+/**
+ * Lee la imagen local como ArrayBuffer. En el celular usa expo-file-system,
+ * que lee el archivo directo del disco: fetch + FileReader falla en iOS con
+ * las fotos del selector. Si eso no anda, usa el método anterior.
+ */
+const readImageAsArrayBuffer = async (imageUri: string, path: string): Promise<ArrayBuffer> => {
+  if (Platform.OS !== 'web' && imageUri.startsWith('file://')) {
+    try {
+      return await new ExpoFile(imageUri).arrayBuffer();
+    } catch (fileError) {
+      logger.warn('expo-file-system could not read image, falling back to fetch', {
+        path,
+        error: String(fileError),
+      });
+    }
+  }
+
+  return readImageWithFetch(imageUri, path);
+};
+
+const readImageWithFetch = async (imageUri: string, path: string): Promise<ArrayBuffer> => {
+  // Fetch the image and convert to blob
+  const response = await fetch(imageUri);
+  if (!response.ok) {
+    logger.error('Failed to fetch image', new Error(`HTTP ${response.status}`), { path, imageUri });
+    throw new Error(`Failed to fetch image: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  logger.debug('Image fetched successfully', { path, blobSize: blob.size, blobType: blob.type });
+
+  // Verify blob has content
+  if (blob.size === 0) {
+    logger.error('Empty image blob', new Error('La imagen está vacía'), { path });
+    throw new Error('La imagen está vacía');
+  }
+
+  // Convert blob to ArrayBuffer for React Native compatibility
+  return await new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (reader.result instanceof ArrayBuffer) {
+        resolve(reader.result);
+      } else {
+        reject(new Error('Failed to convert blob to ArrayBuffer'));
+      }
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(blob);
+  });
+};
 
 /**
  * Uploads an image to Supabase Storage
@@ -38,35 +92,7 @@ export const uploadImage = async (
     const fileExtension = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
     const mimeType = fileExtension === 'png' ? 'image/png' : 'image/jpeg';
 
-    // Fetch the image and convert to blob
-    const response = await fetch(imageUri);
-    if (!response.ok) {
-      logger.error('Failed to fetch image', new Error(`HTTP ${response.status}`), { path, imageUri });
-      throw new Error(`Failed to fetch image: ${response.status}`);
-    }
-
-    const blob = await response.blob();
-    logger.debug('Image fetched successfully', { path, blobSize: blob.size, blobType: blob.type });
-
-    // Verify blob has content
-    if (blob.size === 0) {
-      logger.error('Empty image blob', new Error('La imagen está vacía'), { path });
-      throw new Error('La imagen está vacía');
-    }
-
-    // Convert blob to ArrayBuffer for React Native compatibility
-    const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (reader.result instanceof ArrayBuffer) {
-          resolve(reader.result);
-        } else {
-          reject(new Error('Failed to convert blob to ArrayBuffer'));
-        }
-      };
-      reader.onerror = reject;
-      reader.readAsArrayBuffer(blob);
-    });
+    const arrayBuffer = await readImageAsArrayBuffer(imageUri, path);
 
     logger.debug('ArrayBuffer created', { path, size: arrayBuffer.byteLength });
 
